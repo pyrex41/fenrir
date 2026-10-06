@@ -4,7 +4,16 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"strconv"
 )
+
+func parseBuildFuel(raw string) (int, error) {
+	fuel, e := strconv.Atoi(raw)
+	if e != nil || fuel < 0 || fuel > 200 || strconv.Itoa(fuel) != raw {
+		return 0, fmt.Errorf("BuildFuelBounds")
+	}
+	return fuel, nil
+}
 
 // Source maps must cover the entire current implementation, not merely the
 // entries a retained report happens to supply. Added/removed Go files invalidate

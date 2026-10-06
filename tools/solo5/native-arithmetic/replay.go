@@ -77,6 +77,9 @@ func replayCLIContext(ctx context.Context, args []string) error {
 	if f.NArg() != 0 || *original == "" || *build == "" || *artifact == "" || *input == "" || *shen == "" || *output == "" {
 		return fmt.Errorf("ReplayFlags")
 	}
+	if *mode != "normal" && *mode != "mutant" {
+		return fmt.Errorf("CandidateMode")
+	}
 	for _, p := range []*string{root, original, build, artifact, input, shen, output} {
 		a, e := filepath.Abs(*p)
 		if e != nil {
@@ -152,7 +155,7 @@ func replayCLIContext(ctx context.Context, args []string) error {
 	if e != nil {
 		return e
 	}
-	fuel, e := strconv.Atoi(report.Fuel)
+	fuel, e := parseBuildFuel(report.Fuel)
 	if e != nil {
 		return e
 	}

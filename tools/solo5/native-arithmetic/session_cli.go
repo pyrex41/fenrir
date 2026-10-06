@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strconv"
 	"time"
 )
 
@@ -46,6 +45,9 @@ func sessionCLIContext(ctx context.Context, args []string) error {
 	if f.NArg() != 0 || *build == "" || *artifact == "" || *input == "" || *shen == "" || *output == "" {
 		return fmt.Errorf("required session flags missing or extra arguments")
 	}
+	if *mode != "normal" && *mode != "mutant" {
+		return fmt.Errorf("CandidateMode")
+	}
 	for _, p := range []*string{root, build, artifact, input, shen, output} {
 		a, e := filepath.Abs(*p)
 		if e != nil {
@@ -72,9 +74,9 @@ func sessionCLIContext(ctx context.Context, args []string) error {
 	if e != nil {
 		return e
 	}
-	fuel, e := strconv.Atoi(report.Fuel)
-	if e != nil || fuel < 0 || fuel > 200 {
-		return fmt.Errorf("BuildFuelBounds")
+	fuel, e := parseBuildFuel(report.Fuel)
+	if e != nil {
+		return e
 	}
 	files, e := requiredSessionFiles(*root, *build, *artifact, *input, *shen)
 	if e != nil {

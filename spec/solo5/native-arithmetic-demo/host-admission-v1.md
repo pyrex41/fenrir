@@ -43,6 +43,23 @@ under a changed host; their preserved pre-change replay evidence remains histori
 Executable set vectors: `TestReplayRequiresIndependentInventory`. These are unit
 checks, not proof of live CLI rejection or complete mode/image/command binding.
 
+## Checked CLI mode and build fuel
+
+Session/replay flags admit only `normal` or `mutant` before source/path admission
+or external tooling. An invalid mode is `CandidateMode`, not a later oracle or
+candidate failure. `TestModeRejectedBeforeInputAdmission` checks this ordering.
+
+Build receipts use the builder's canonical decimal string for fuel: `0` through
+`200`, without signs, leading zeroes, fractions or exponent notation. The shared
+`parseBuildFuel` rejects contradictions as `BuildFuelBounds`; native admission
+checks this before dependency/Node tooling, and session/replay use the same
+parser before model evaluation. `TestBuildFuelCanonicalBound` checks the bounds
+and lexical policy. This policy is specific to the build's adapter-generated
+field, not a prohibition on ordinary JSON numbers in diagnostic envelopes.
+
+These checks do not establish independent binary-to-fuel/command binding or full
+launch identity closure. Historical reports remain bound to their original host.
+
 ## Captured output
 
 Synchronous commands and guest sessions share one 1 MiB budget between stdout and

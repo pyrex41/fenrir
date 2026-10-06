@@ -354,6 +354,9 @@ func admitNative(root, path, artifact, input string) (report buildReport, data m
 			return report, nil, e
 		}
 	}
+	if _, e := parseBuildFuel(report.Fuel); e != nil {
+		return report, nil, e
+	}
 	dep, e := admitDependency(root, filepath.Join(root, report.DependencyPath))
 	if e != nil {
 		return report, nil, e

@@ -16,12 +16,12 @@ func TestCleanupDiagnosticPreservesRejectedRow(t *testing.T) {
 		t.Fatal(e)
 	}
 	t.Setenv("PATH", dir)
-	err := confirmGroupAbsent(999999)
+	err := confirmGroupAbsent(456)
 	var detail *cleanupInspectionError
 	if !errors.As(err, &detail) {
 		t.Fatalf("lost typed inspection: %v", err)
 	}
-	if detail.Reason != "CleanupInspectionShape" || detail.TargetPGID != 999999 || detail.OffendingRow != body || detail.Result.Stdout != body+"\n" || detail.Result.Stderr != "inspection note" || detail.Result.Exit != 0 {
+	if detail.Reason != "ProcessGroupCleanupUnresolved" || detail.TargetPGID != 456 || detail.OffendingRow != body || detail.Result.Stdout != body+"\n" || detail.Result.Stderr != "inspection note" || detail.Result.Exit != 0 {
 		t.Fatalf("lost first evidence: %+v", detail)
 	}
 	wrapped := fmt.Errorf("DockerInspect: %w", err)

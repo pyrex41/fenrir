@@ -121,9 +121,22 @@ func runOwnedCommandCapture(root string, argv []string, timeout time.Duration, i
 }
 
 func confirmGroupAbsent(pgid int) error {
+	if pgid <= 0 {
+		return inspectionFailure(pgid, commandResult{}, "InvalidOwnedProcessGroup", "")
+	}
 	r, err := runOwnedCommand("", []string{"ps", "-axo", "pid=,pgid=,stat="}, 5*time.Second, false)
 	if err != nil {
 		return inspectionFailure(pgid, r, fmt.Sprintf("CleanupInspection: %v", err), "")
+	}
+	return checkGroupSnapshot(pgid, r)
+}
+
+// Identity columns must be unambiguous for every row. State only affects the
+// exact owned group; an unrelated host process's transient state cannot prove
+// either presence or absence of our children.
+func checkGroupSnapshot(pgid int, r commandResult) error {
+	if pgid <= 0 {
+		return inspectionFailure(pgid, r, "InvalidOwnedProcessGroup", "")
 	}
 	rows := 0
 	for _, line := range strings.Split(r.Stdout, "\n") {
@@ -136,11 +149,11 @@ func confirmGroupAbsent(pgid int) error {
 		}
 		pid, pe := strconv.Atoi(f[0])
 		group, ge := strconv.Atoi(f[1])
-		if pe != nil || ge != nil || pid <= 0 || group < 0 || !strings.ContainsAny(f[2][:1], "RSDTtWXZUIP") {
+		if pe != nil || ge != nil || pid <= 0 || group < 0 || f[0] != strconv.Itoa(pid) || f[1] != strconv.Itoa(group) {
 			return inspectionFailure(pgid, r, "CleanupInspectionShape", line)
 		}
 		rows++
-		if group == pgid && !strings.HasPrefix(f[2], "Z") {
+		if group == pgid && !knownZombieState(f[2]) {
 			return inspectionFailure(pgid, r, "ProcessGroupCleanupUnresolved", line)
 		}
 	}
@@ -148,4 +161,16 @@ func confirmGroupAbsent(pgid int) error {
 		return inspectionFailure(pgid, r, "CleanupInspectionEmpty", "")
 	}
 	return nil
+}
+
+func knownZombieState(state string) bool {
+	if state == "" || state[0] != 'Z' {
+		return false
+	}
+	for _, modifier := range state[1:] {
+		if !strings.ContainsRune("sSlL+<>NAEVWX", modifier) {
+			return false
+		}
+	}
+	return true
 }

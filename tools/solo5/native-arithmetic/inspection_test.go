@@ -31,8 +31,12 @@ func TestCleanupInspectionRejectsMalformed(t *testing.T) {
 				t.Fatal(e)
 			}
 			t.Setenv("PATH", dir)
-			if e := confirmGroupAbsent(999999); e == nil {
-				t.Fatal("malformed inspection proved absence")
+			target := 999999
+			if name == "state" {
+				target = 456
+			} // Unknown owned state remains unresolved.
+			if e := confirmGroupAbsent(target); e == nil {
+				t.Fatal("malformed identity or unknown owned state proved absence")
 			}
 		})
 	}

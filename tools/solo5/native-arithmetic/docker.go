@@ -135,6 +135,12 @@ func removeContainer(root, name string) error {
 		return fmt.Errorf("ContainerRemovalUnresolved: %s", r.Stderr)
 	}
 	r, e = synchronous(root, []string{"docker", "inspect", name}, 15*time.Second)
+	return validateContainerAbsence(name, r, e)
+}
+
+// Shared by removal and explicitly authorized read-only ownership review.
+// The subprocess error must retain its exact class; text alone proves nothing.
+func validateContainerAbsence(name string, r commandResult, e error) error {
 	expected := "no such object: " + name
 	s := strings.ToLower(strings.TrimSpace(r.Stderr))
 	s = strings.TrimPrefix(s, "error: ")
