@@ -53,6 +53,12 @@ observation, not a command failure; inspect `execution`, `conformance`, and
 `first_error`. Admission/cleanup failures return nonzero and do not publish a
 successful session bundle.
 
+Fresh builds emit development build receipt v2 with required `compile_command`
+bound to the fixed isolated recipe and canonical fuel. `command` remains advisory
+CLI argv. Current admission requires v2; historical v1 receipts are not rewritten
+or reinterpreted. See `spec/solo5/native-arithmetic-demo/build-receipt-v2.md`.
+This command consistency is not independent binary-to-fuel attestation.
+
 Build admission binds the complete current Go/C/protocol/validator source set,
 data header, dependency receipt, immutable image provenance and guest bytes.
 The host compiles twice in network-none, nonroot, readonly-root containers with

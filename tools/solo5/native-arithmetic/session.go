@@ -89,6 +89,9 @@ func runSessionContext(parent context.Context, root string, report buildReport, 
 	}
 	expected, replies := expectations(data, model, mode)
 	if tape != nil {
+		if e := validateRecordedSessionLaunch(tape.Command, mode, report.Image, binary); e != nil {
+			return result, e
+		}
 		if e := validateTape(data, model, mode, *tape); e != nil {
 			return result, e
 		}
@@ -103,7 +106,8 @@ func runSessionContext(parent context.Context, root string, report buildReport, 
 	}
 	name := "fenrir-solo5-native-" + id[:16]
 	mounts := []mount{{binary, "/guest/guest.spt"}}
-	argv := append(dockerArgs(name, owner, report.Image, mounts, false, true), "/opt/fenrir/solo5-spt-control", "--mem=16", "--fenrir-control-stdin", "/guest/guest.spt", "--solo5:quiet", mode)
+	launch := []string{"/opt/fenrir/solo5-spt-control", "--mem=16", "--fenrir-control-stdin", "/guest/guest.spt", "--solo5:quiet", mode}
+	argv := append(dockerArgs(name, owner, report.Image, mounts, false, true), launch...)
 	result = sessionResult{Trace: []map[string]any{}, Choices: []map[string]any{}, Command: argv, Conformance: "Unknown"}
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
@@ -287,7 +291,7 @@ loop:
 	if info.Image != report.Image || info.Config.Labels["org.fenrir.probe.owner"] != owner {
 		return result, fmt.Errorf("SessionContainerIdentity")
 	}
-	if e = checkPolicy(info, mounts, false, true); e != nil {
+	if e = checkPolicy(info, mounts, false, true, launch); e != nil {
 		return result, e
 	}
 	result.Exit = strconv.Itoa(cmd.ProcessState.ExitCode())
@@ -344,7 +348,7 @@ func admitNative(root, path, artifact, input string) (report buildReport, data m
 	if e := loadJSON(path, &report); e != nil {
 		return report, nil, e
 	}
-	if report.Schema != "fenrir.solo5.native-arithmetic-build/1" || report.Profile != profile || report.Qualification != "UNKNOWN" || report.Cleanup != "confirmed" || !report.Equal || !reflect.DeepEqual(report.Before, report.After) {
+	if report.Schema != nativeBuildSchema || report.Profile != profile || report.Qualification != "UNKNOWN" || report.Cleanup != "confirmed" || !report.Equal || !reflect.DeepEqual(report.Before, report.After) {
 		return report, nil, fmt.Errorf("NativeBuildReceipt")
 	}
 	if e := verifyBuildSources(root, report); e != nil {
@@ -357,7 +361,7 @@ func admitNative(root, path, artifact, input string) (report buildReport, data m
 			return report, nil, e
 		}
 	}
-	if _, e := parseBuildFuel(report.Fuel); e != nil {
+	if e := validateBuildCompileCommand(report); e != nil {
 		return report, nil, e
 	}
 	dep, e := admitDependency(root, filepath.Join(root, report.DependencyPath))

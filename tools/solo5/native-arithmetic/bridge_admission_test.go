@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -13,14 +14,14 @@ func bridgeFixture(t *testing.T, change func(map[string]any)) []byte {
 	t.Helper()
 	data := map[string]any{
 		"schema":          "fenrir.solo5.native-arithmetic-lowering/1",
-		"artifact_sha256": "artifact", "input_sha256": "input",
+		"artifact_sha256": strings.Repeat("a", 64), "input_sha256": strings.Repeat("b", 64),
 		"parameter": "1", "input": []any{"unit"}, "root": 0,
 		"rows": []any{map[string]any{"tag": "unit", "id": "2", "binding": "0", "op": "none", "literal": []any{"unit"}, "label": "", "children": []any{}}},
 	}
 	if change != nil {
 		change(data)
 	}
-	b, e := json.Marshal(map[string]any{"data": data, "header": "h"})
+	b, e := json.Marshal(map[string]any{"data": data, "header": unitBridgeHeader})
 	if e != nil {
 		t.Fatal(e)
 	}

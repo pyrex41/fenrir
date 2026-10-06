@@ -358,7 +358,7 @@ func campaignInspectCLI(args []string) error {
 			expectedExecutions += len(c.Modes)
 		}
 	}
-	if len(s.Observations) > expectedRows || len(s.Observations) > s.Executions || (s.Error == "" && (len(s.Observations) != expectedRows || s.Executions != expectedExecutions || s.Builds != len(s.Plan.Cases))) {
+	if s.Builds > len(s.Plan.Cases) || s.Executions > expectedExecutions || len(s.Observations) > expectedRows || len(s.Observations) > s.Executions || (s.Error == "" && (len(s.Observations) != expectedRows || s.Executions != expectedExecutions || s.Builds != len(s.Plan.Cases))) {
 		return fmt.Errorf("CampaignSummaryCounts")
 	}
 	seen := map[string]bool{}

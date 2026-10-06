@@ -25,6 +25,9 @@ func validateTape(data map[string]any, model referenceResult, mode string, tape 
 	if tape.Cleanup != "confirmed" {
 		return fmt.Errorf("ReplayCleanup")
 	}
+	if e := validateRecordedSessionLaunch(tape.Command, mode, "", ""); e != nil {
+		return e
+	}
 	rows, replies := expectations(data, model, mode)
 	if len(tape.Trace) == 0 || len(tape.Trace) > len(rows) {
 		return fmt.Errorf("ReplayTraceBounds")
@@ -153,6 +156,9 @@ func replayCLIContext(ctx context.Context, args []string) error {
 	}
 	report, data, e := admitNative(*root, *build, *artifact, *input)
 	if e != nil {
+		return e
+	}
+	if e := validateRecordedSessionLaunch(old.Result.Command, *mode, report.Image, filepath.Join(filepath.Dir(*build), "guest.spt")); e != nil {
 		return e
 	}
 	fuel, e := parseBuildFuel(report.Fuel)

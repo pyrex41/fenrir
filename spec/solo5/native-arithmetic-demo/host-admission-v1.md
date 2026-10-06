@@ -41,8 +41,19 @@ negative and boundary vectors. `TestNativeBridgeRealNodeLowering`, enabled with
 `FENRIR_BRIDGE_FIXTURES`, checks all 13 real Node-generated hand lowerings and
 unchanged retained map/header values. These are adapter tests, not guest execution
 or hand-trace verification. Node remains the artifact/semantic authority: this
-check does not validate graph topology, tag/operator/literal semantics, digest
-correctness, or regenerate the header independently from the returned data.
+check does not validate graph topology, tag/operator/literal semantics or digest
+correctness. The adapter now independently renders the bounded data-only C
+representation and requires byte-exact equality with the returned header. It binds
+digest claims, all ordered rows, child padding, root/count/parameter and input to
+that header; appended code and alternate C spellings reject. Rendering requires
+canonical uint64 identifiers, lowercase 64-hex digest claims, the existing closed
+tag/operator encoding, ASCII label domain and exact Unit/Bool/I64 literal forms.
+These are safe representation checks, not a replacement AST/type/graph validator,
+independent input/artifact hashing, compiler verification or binary attestation.
+`TestNativeBridgeHeaderContradictions` and `TestNativeBridgeDataContradictions`
+reproduce 19 previously accepted contradictions; hand-written literal byte vectors
+cover I64 boundaries and unsafe tokens. Real Node hand vectors check compatibility.
+No arbitrary C parser or oracle transitions are introduced.
 
 ## Required capture/replay inventory
 
@@ -90,6 +101,53 @@ field, not a prohibition on ordinary JSON numbers in diagnostic envelopes.
 
 These checks do not establish independent binary-to-fuel/command binding or full
 launch identity closure. Historical reports remain bound to their original host.
+
+## Daemon-reported launch identity
+
+Production build and session policy checks now receive the exact command array
+used to construct Docker argv. Inspection retains `Config.Cmd`, `Config.Entrypoint`,
+`Path` and `Args`; it requires no inherited entrypoint, exact Cmd, executable Path
+and argument sequence. Build checks bind `sh -c` and the actual script (including
+fuel); session checks bind the tender, memory/stdin switches, guest path, quiet
+flag and mode. `TestContainerLaunchContradictions` reproduces 14 prior acceptances
+of swapped/missing command metadata for build/session commands.
+
+These checks run at the existing **post-launch inspection** point and fail
+publication on contradiction. They do not prevent a substituted process from
+starting, attest compiled binary fuel, validate historical advisory `os.Args`
+receipt strings or establish trust beyond daemon-reported metadata. No guest
+launch or live command-identity validation is claimed by these unit vectors.
+Sandbox policy and historical receipt schemas remain unchanged.
+
+## Retained session launch command admission
+
+Replay now checks the recorded `result.command` as the exact Docker session argv,
+including policy switches, tender/memory/stdin/quiet flags and selected mode.
+Only the existing run-local container name/owner and separately bound image/guest
+source fields vary. Names/owners/image IDs have closed lexical shapes; missing,
+extra, reordered or substituted tokens reject. Production replay compares image
+and guest mount source to independently admitted launch inputs before fresh Shen
+model evaluation and again before native execution. This does not launch a guest
+to inspect a saved command, normalize old argv or rehabilitate old receipts.
+
+`TestStrictTape` reproduces seven previously ignored command contradictions;
+`TestReplayLaunchInputsBeforeExecution` separately distinguishes well-shaped
+swapped image/guest identities with no executable available. Existing source-set,
+trace/choice/footer and exact-original identity checks remain required. Valid
+shape is not historical command authenticity, binary attestation or live isolation.
+The original build-report `Command` field remains advisory `os.Args`, not the
+isolated compilation command; that separate obligation remains open.
+
+## Saved partial campaign counters
+
+Saved campaign inspection now bounds executions and two-build attempts by the
+selected plan as well as the unchanged v1 cumulative 100/40 caps, even when
+`first_error` is nonempty. `TestCampaignPartialCountsCannotExceedSelection`
+reproduces two prior over-selection acceptances and retains selected-ceiling and
+cancelled-zero-attempt controls. This is no-launch diagnostic consistency, not
+independent attempt-ledger reconciliation or full partial-report verification.
+Historical summaries and budget interpretation are unchanged; no larger envelope
+or effective cap increase is introduced.
 
 ## Captured output
 

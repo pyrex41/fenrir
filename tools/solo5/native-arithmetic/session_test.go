@@ -43,7 +43,7 @@ func TestInvalidModeBeforeLaunch(t *testing.T) {
 func TestIncompleteAdmissionBeforeNodeOrDocker(t *testing.T) {
 	root := t.TempDir()
 	p := filepath.Join(root, "build.json")
-	r := buildReport{Schema: "fenrir.solo5.native-arithmetic-build/1", Qualification: "UNKNOWN", Profile: profile, Cleanup: "confirmed", Equal: true, Before: map[string]string{}, After: map[string]string{}}
+	r := buildReport{Schema: nativeBuildSchema, Qualification: "UNKNOWN", Profile: profile, Cleanup: "confirmed", Equal: true, Before: map[string]string{}, After: map[string]string{}}
 	if e := writeJSONFresh(p, r); e != nil {
 		t.Fatal(e)
 	}

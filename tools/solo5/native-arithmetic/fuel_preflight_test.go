@@ -9,7 +9,7 @@ import (
 // Data-only fake inventory: source identities are internally consistent, but
 // the transport receipt is deliberately invalid. No Node/Docker is available.
 func TestNativeFuelRejectedBeforeDependencyTooling(t *testing.T) {
-	for _, fuel := range []string{"04", "+4", "-0", "201"} {
+	for _, fuel := range []string{"04", "+4", "-0", "201", "4"} {
 		t.Run(fuel, func(t *testing.T) {
 			root := t.TempDir()
 			files := []string{}
@@ -34,7 +34,7 @@ func TestNativeFuelRejectedBeforeDependencyTooling(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			r := buildReport{Schema: "fenrir.solo5.native-arithmetic-build/1", Qualification: "UNKNOWN", Profile: profile, Cleanup: "confirmed", Equal: true, Before: hashes, After: hashes, DataPath: "data.h", DependencyPath: "dependency.json", Data: hashes["data.h"], Dependency: hashes["dependency.json"], Fuel: fuel}
+			r := buildReport{Schema: nativeBuildSchema, Qualification: "UNKNOWN", Profile: profile, Cleanup: "confirmed", Equal: true, Before: hashes, After: hashes, DataPath: "data.h", DependencyPath: "dependency.json", Data: hashes["data.h"], Dependency: hashes["dependency.json"], Fuel: fuel}
 			build := filepath.Join(root, "build.json")
 			if e = writeJSONFresh(build, r); e != nil {
 				t.Fatal(e)
@@ -46,8 +46,12 @@ func TestNativeFuelRejectedBeforeDependencyTooling(t *testing.T) {
 				}
 			}
 			t.Setenv("PATH", t.TempDir())
-			if _, _, e := admitNative(root, build, artifact, input); e == nil || e.Error() != "BuildFuelBounds" {
-				t.Fatalf("fuel was not rejected before transport/Node tooling: %v", e)
+			want := "BuildFuelBounds"
+			if fuel == "4" {
+				want = "BuildCompileCommand"
+			}
+			if _, _, e := admitNative(root, build, artifact, input); e == nil || e.Error() != want {
+				t.Fatalf("fuel/command was not rejected before transport/Node tooling: %v", e)
 			}
 		})
 	}

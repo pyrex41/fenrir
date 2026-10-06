@@ -65,7 +65,7 @@ func TestNativeInputPreflightBeforeDependency(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			r := buildReport{Schema: "fenrir.solo5.native-arithmetic-build/1", Profile: profile, Qualification: "UNKNOWN", Cleanup: "confirmed", Equal: true, Before: hashes, After: hashes, DataPath: "data.h", DependencyPath: "dependency.json", Data: hashes["data.h"], Dependency: hashes["dependency.json"]}
+			r := buildReport{Schema: nativeBuildSchema, Profile: profile, Qualification: "UNKNOWN", Cleanup: "confirmed", Equal: true, Before: hashes, After: hashes, DataPath: "data.h", DependencyPath: "dependency.json", Data: hashes["data.h"], Dependency: hashes["dependency.json"]}
 			build := filepath.Join(root, "build.json")
 			if e := writeJSONFresh(build, r); e != nil {
 				t.Fatal(e)

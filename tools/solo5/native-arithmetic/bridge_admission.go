@@ -1,12 +1,15 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+)
 
 const maxNativeAdmissionBytes = 131072
 
 // Adapter envelope shape only: Node remains artifact/semantic authority. These
 // types close the nested bridge keys and bound indices consumed by the host.
-// They do not validate AST transitions or independently regenerate the header.
+// They do not validate AST transitions. Header comparison checks the data-only
+// representation, not artifact semantics or the correctness of claimed hashes.
 type loweringRow struct {
 	Tag      string `json:"tag"`
 	ID       string `json:"id"`
@@ -56,6 +59,13 @@ func checkLoweringEnvelope(b []byte) error {
 				return fmt.Errorf("NativeAdmissionChildBounds")
 			}
 		}
+	}
+	header, e := loweringDataHeader(d)
+	if e != nil {
+		return e
+	}
+	if envelope.Header != header {
+		return fmt.Errorf("NativeAdmissionHeaderMismatch")
 	}
 	return nil
 }

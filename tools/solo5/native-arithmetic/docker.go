@@ -17,13 +17,17 @@ type mount struct {
 }
 type dockerInfo struct {
 	ID     string `json:"Id"`
+	Path   string
+	Args   []string
 	Image  string
 	RootFS struct{ Layers []string }
 	Config struct {
-		User      string
-		OpenStdin bool
-		Tty       bool
-		Labels    map[string]string
+		User       string
+		Cmd        []string
+		Entrypoint []string
+		OpenStdin  bool
+		Tty        bool
+		Labels     map[string]string
 	}
 	HostConfig struct {
 		NetworkMode    string
@@ -72,8 +76,17 @@ func token() (string, error) {
 	}
 	return hex.EncodeToString(b), nil
 }
-func checkPolicy(info dockerInfo, mounts []mount, writable, stdin bool) error {
+func checkPolicy(info dockerInfo, mounts []mount, writable, stdin bool, launch ...[]string) error {
 	h, c := info.HostConfig, info.Config
+	if len(launch) > 1 {
+		return fmt.Errorf("ContainerLaunchIdentity")
+	}
+	if len(launch) == 1 {
+		command := launch[0]
+		if len(command) == 0 || len(c.Entrypoint) != 0 || !reflect.DeepEqual(c.Cmd, command) || info.Path != command[0] || !reflect.DeepEqual(info.Args, command[1:]) {
+			return fmt.Errorf("ContainerLaunchIdentity")
+		}
+	}
 	if h.NetworkMode != "none" || h.Privileged || !h.ReadonlyRootfs || !reflect.DeepEqual(h.CapDrop, []string{"ALL"}) || c.User != "65534:65534" || !contains(h.SecurityOpt, "no-new-privileges") || len(h.Devices) != 0 || h.Memory != 134217728 || h.PidsLimit != 32 || c.OpenStdin != stdin || c.Tty {
 		return fmt.Errorf("ContainerPolicy")
 	}
@@ -167,7 +180,8 @@ func isolatedBuild(root, image string, mounts []mount, command, diagnosticsDir s
 	}
 	name := "fenrir-solo5-native-build-" + id[:16]
 	pgid := 0
-	argv := append(dockerArgs(name, owner, image, mounts, true, false), "sh", "-c", command)
+	launch := []string{"sh", "-c", command}
+	argv := append(dockerArgs(name, owner, image, mounts, true, false), launch...)
 	defer func() {
 		primary := err
 		cleanup := removeContainer(root, name)
@@ -186,7 +200,7 @@ func isolatedBuild(root, image string, mounts []mount, command, diagnosticsDir s
 	if info.Image != image || info.Config.Labels["org.fenrir.probe.owner"] != owner {
 		return result, fmt.Errorf("ContainerIdentity")
 	}
-	if e = checkPolicy(info, mounts, true, false); e != nil {
+	if e = checkPolicy(info, mounts, true, false, launch); e != nil {
 		return result, e
 	}
 	return result, err

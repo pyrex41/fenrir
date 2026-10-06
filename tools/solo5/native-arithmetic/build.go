@@ -55,6 +55,7 @@ type buildReport struct {
 	After          map[string]string `json:"sources_after"`
 	Equal          bool              `json:"two_builds_equal"`
 	Command        []string          `json:"command"`
+	CompileCommand []string          `json:"compile_command"`
 	Limitations    []string          `json:"limitations"`
 }
 
@@ -259,18 +260,7 @@ func compileGuest(root, data, dest, dependency string, fuel int) (r buildReport,
 			err = e
 		}
 	}()
-	command := `set -eu
-cd /work
-export TMPDIR=/work PATH=/opt/solo5-install/bin:$PATH
-for source in guest machine format protocol; do
- aarch64-solo5-none-static-cc -std=c99 -Wall -Wextra -Werror -DNA_FUEL=` + strconv.Itoa(fuel) + ` -I/inputs -c /inputs/$source.c -o $source.o
-done
-printf '{"type":"solo5.manifest","version":1,"devices":[]}\n' > manifest.json
-solo5-elftool gen-manifest manifest.json manifest.c
-aarch64-solo5-none-static-cc -c manifest.c -o manifest.o
-aarch64-solo5-none-static-ld -z solo5-abi=spt manifest.o guest.o machine.o format.o protocol.o -o guest.spt
-printf 'FG_BINARY_BEGIN\n'; base64 guest.spt; printf 'FG_BINARY_END\n'
-`
+	command := nativeCompileScript(fuel)
 	binaries := [][]byte{}
 	for i := 0; i < 2; i++ {
 		out, e := isolatedBuild(root, dep.Image, mounts, command, dest)
@@ -328,7 +318,7 @@ printf 'FG_BINARY_BEGIN\n'; base64 guest.spt; printf 'FG_BINARY_END\n'
 	if e != nil {
 		return r, e
 	}
-	r = buildReport{Schema: "fenrir.solo5.native-arithmetic-build/1", Qualification: "UNKNOWN", Profile: profile, Cleanup: "confirmed", Image: dep.Image, Dependency: deph, DependencyPath: depRel, DataPath: dataRel, Tender: dep.Tender, Guest: gh, Data: dh, Fuel: strconv.Itoa(fuel), Before: before, After: before, Equal: true, Command: os.Args, Limitations: []string{"Native startup/counters unmediated", "Not TC0/G4/G5 qualification"}}
+	r = buildReport{Schema: nativeBuildSchema, Qualification: "UNKNOWN", Profile: profile, Cleanup: "confirmed", Image: dep.Image, Dependency: deph, DependencyPath: depRel, DataPath: dataRel, Tender: dep.Tender, Guest: gh, Data: dh, Fuel: strconv.Itoa(fuel), Before: before, After: before, Equal: true, Command: os.Args, CompileCommand: []string{"sh", "-c", command}, Limitations: []string{"Native startup/counters unmediated", "Not TC0/G4/G5 qualification"}}
 	if e = writeJSONFresh(filepath.Join(dest, "build.json"), r); e != nil {
 		return r, e
 	}
