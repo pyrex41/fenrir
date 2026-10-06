@@ -330,6 +330,9 @@ type nativeAdmission struct {
 
 func decodeNativeAdmission(b []byte) (nativeAdmission, error) {
 	var admitted nativeAdmission
+	if e := checkLoweringEnvelope(b); e != nil {
+		return admitted, e
+	}
 	e := decodeHostJSON(b, &admitted)
 	if e == nil && admitted.Data == nil {
 		e = fmt.Errorf("NativeAdmissionDataRequired")
@@ -369,7 +372,7 @@ func admitNative(root, path, artifact, input string) (report buildReport, data m
 		return report, nil, fmt.Errorf("GuestBinaryDrift")
 	}
 	out, e := synchronous(root, []string{"node", filepath.Join(root, "tools/solo5/native-arithmetic/admit.mjs"), artifact, input}, 30*time.Second)
-	if e != nil || len(out.Stdout) > 131072 {
+	if e != nil || len(out.Stdout) > maxNativeAdmissionBytes {
 		return report, nil, fmt.Errorf("ClosedArtifactAdmission: %v", e)
 	}
 	admitted, e := decodeNativeAdmission([]byte(out.Stdout))

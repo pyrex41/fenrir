@@ -27,6 +27,23 @@ Executable vectors: `TestHostJSONDistinguishingNegatives` and
 `TestHostJSONAllowsDiagnosticNumbers` in
 `tools/solo5/native-arithmetic/json_admission_test.go`.
 
+## Nested Node lowering bridge
+
+The shared native/peer bridge decoder caps the complete response at 128 KiB and
+checks a closed typed envelope down through lowering-data and row fields. It
+requires the existing lowering schema, nonnull input/rows/literals/children,
+1–100 rows, a root within the row set, and at most three in-range integer child
+indices per row. Missing/extra keys, null scalar fields, fractional indices and
+wrong field types are rejected before those values are used by the host.
+
+`TestNativeBridgeNestedClosedShape` and `TestNativeBridgeSharedByteLimit` provide
+negative and boundary vectors. `TestNativeBridgeRealNodeLowering`, enabled with
+`FENRIR_BRIDGE_FIXTURES`, checks all 13 real Node-generated hand lowerings and
+unchanged retained map/header values. These are adapter tests, not guest execution
+or hand-trace verification. Node remains the artifact/semantic authority: this
+check does not validate graph topology, tag/operator/literal semantics, digest
+correctness, or regenerate the header independently from the returned data.
+
 ## Required capture/replay inventory
 
 `requiredSessionFiles` derives host Go sources/module, host executable, selected

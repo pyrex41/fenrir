@@ -21,7 +21,7 @@ func TestNativeBridgeClosedEnvelope(t *testing.T) {
 			}
 		})
 	}
-	if _, e := decodeNativeAdmission([]byte(`{"data":{"root":0},"header":"h"}`)); e != nil {
+	if _, e := decodeNativeAdmission(bridgeFixture(t, nil)); e != nil {
 		t.Fatal(e)
 	}
 }
