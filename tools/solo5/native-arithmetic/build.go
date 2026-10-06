@@ -7,11 +7,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 const profile = "fenrir.solo5.native-arithmetic-demo/1"
@@ -58,11 +60,25 @@ type buildReport struct {
 
 func hashBytes(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
 func digest(p string) (string, error) {
-	b, e := os.ReadFile(p)
+	// Nonblocking open lets us reject FIFOs without waiting for a writer.
+	// Inspect the opened descriptor, not the path, before streaming bytes.
+	f, e := os.OpenFile(p, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if e != nil {
 		return "", e
 	}
-	return hashBytes(b), nil
+	defer f.Close()
+	info, e := f.Stat()
+	if e != nil {
+		return "", e
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("DigestRegularFileRequired")
+	}
+	h := sha256.New()
+	if _, e = io.Copy(h, f); e != nil {
+		return "", e
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 func within(root, p string) bool {
 	r, e := filepath.Rel(root, p)

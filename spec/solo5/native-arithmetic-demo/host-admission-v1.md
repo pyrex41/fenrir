@@ -43,6 +43,20 @@ under a changed host; their preserved pre-change replay evidence remains histori
 Executable set vectors: `TestReplayRequiresIndependentInventory`. These are unit
 checks, not proof of live CLI rejection or complete mode/image/command binding.
 
+## Resource hashing
+
+`digest` hashes regular files incrementally rather than allocating their entire
+contents. It opens nonblocking and checks the opened descriptor's file type before
+reading, rejecting directories, FIFOs and other nonregular resources as
+`DigestRegularFileRequired`. Symlinks to regular files retain their previous byte
+identity; source confinement remains the separate `sealedPath` policy.
+`TestDigestRegularFileRequired` and `TestDigestStreamingIdentity` cover file-type
+rejection and unchanged SHA-256 identities across chunk boundaries.
+
+This bounds hashing memory, not total bytes or elapsed time. It does not establish
+atomic snapshots under concurrent mutation, safe device-open behavior on every OS,
+or complete preflight resource closure. Those remain separate audit obligations.
+
 ## Checked CLI mode and build fuel
 
 Session/replay flags admit only `normal` or `mutant` before source/path admission
