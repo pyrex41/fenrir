@@ -1,0 +1,19 @@
+{
+  "contract": "0.2",
+  "status": "development-hand-vectors-not-qualified",
+  "rule": "TC0-VALIDATE",
+  "accept": [
+    {"id": "ascii-key-order", "input": " {\"z\":true,\"A\":\"1\",\"_\":null,\"a\":false} ", "canonical": "{\"A\":\"1\",\"_\":null,\"a\":false,\"z\":true}"},
+    {"id": "long-control-escapes", "input": "[\"\\n\",\"\\t\",\"\\u001F\"]", "canonical": "[\"\\u000a\",\"\\u0009\",\"\\u001f\"]"},
+    {"id": "scalar-unicode", "input": "[\"\\/\",\"\\u00e9\",\"\\ud83d\\ude00\"]", "canonical": "[\"/\",\"é\",\"😀\"]"},
+    {"id": "no-normalization", "input": "\"e\\u0301\"", "canonical": "\"é\""}
+  ],
+  "reject": [
+    {"id": "decoded-duplicate", "input": "{\"a\":null,\"\\u0061\":true}"},
+    {"id": "numeric-token", "input": "[1]"},
+    {"id": "bom", "input_hex": "efbbbf6e756c6c"},
+    {"id": "overlong-utf8", "input_hex": "22c0af22"},
+    {"id": "surrogate-utf8", "input_hex": "22eda08022"},
+    {"id": "unpaired-surrogate-escape", "input": "\"\\ud800\""}
+  ]
+}

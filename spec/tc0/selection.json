@@ -1,0 +1,41 @@
+{
+  "version": "1",
+  "scope": "TC0-A arithmetic foundation; development only, not qualified TC0-A",
+  "rules": ["TC0-EVAL", "TC0-VALIDATE", "TC0-REPLAY", "TC0-CAPTURE-SUPPORT"],
+  "current_component": {
+    "reference": "models/tc0/arithmetic.shen",
+    "candidate": "runtime/tc0/arithmetic-candidate.mjs",
+    "hand_fixtures": "fixtures/tc0/arithmetic-boundaries.json",
+    "development_probe": "tools/check-tc0-arithmetic.py"
+  },
+  "next_file_boundaries": {
+    "encoding_and_closed_schemas": "spec/tc0/schemas/",
+    "frame_catalog_and_hand_traces": "spec/tc0/frames.json",
+    "shen_machine": "models/tc0/machine.shen",
+    "independent_candidate": "runtime/tc0/machine.mjs",
+    "process_adapter_and_evaluator": "tools/tc0/",
+    "retained_failure_and_tape_bundles": ".pi/fenrir-workflow-runs/",
+    "generated_campaigns_and_reducer": "campaigns/tc0/",
+    "language_tests": "tests/tc0/"
+  },
+  "first_full_program_expectation": {
+    "program": "add(div(1,0), let(ignored, emit(rhs,7), 2))",
+    "normal": "DivZero; no rhs emission; explicit root join/unwind and termination trace",
+    "reversed_operands_mutant": "rhs emitted before DivZero; exact reference-step divergence retained",
+    "required_trace_review": "Concrete frame, event, tape and footer schemas must be checked before oracle qualification"
+  },
+  "selected_shen": {
+    "source": "${FENRIR_SHEN_SOURCE}",
+    "commit": "65628a49c7269e1f2e0303a3fec37fa0f1a0eacb",
+    "executable": "${FENRIR_SHEN_EXECUTABLE}",
+    "boot": "${FENRIR_SHEN_BOOT}",
+    "caveat": "Native fractional division rounds; exact quotient is explicit integer-only Shen code. Published paths are environment-variable placeholders; actual source/executable/boot paths are supplied locally and captured by the runners. Built artifacts are hashed, not asserted reproducibly rebuilt."
+  },
+  "known_blockers": [
+    "G0 baseline and isolation are not qualified; sandbox-exec startup alone proves no access policy",
+    "Native C compiler launch is blocked by unaccepted Xcode license; candidate is currently Node BigInt, not native compiled Fenrir",
+    "SBCL launches fail fixed-address allocation; Shen/Go rounds above 2^53",
+    "Full TC0-A artifacts, closures, frame traces, reduction and semantic replay are not implemented",
+    "Required tc0-a-qualification evaluator is not configured; registration needs separate human review/approval"
+  ]
+}

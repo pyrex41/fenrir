@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "requireContinuousContext": true,
+  "protectedPaths": ["tests/fenrir-workflow"],
+  "ignoredPaths": ["node_modules", "build"],
+  "requiredChecks": ["tc0-a-qualification"],
+  "requiredClaims": [
+    "canonical-program",
+    "hand-derived-trace",
+    "model-candidate-agreement",
+    "defect-discovered-and-reduced",
+    "exact-original-failure-replay",
+    "fresh-repair-evaluation"
+  ],
+  "checks": {
+    "workflow-tests": {
+      "kind": "development",
+      "command": [
+        "node", "--test",
+        "tests/fenrir-workflow/core.test.mjs",
+        "tests/fenrir-workflow/runner.test.mjs",
+        "tests/fenrir-workflow/extension.test.mjs"
+      ],
+      "timeoutSeconds": 60,
+      "authorityPaths": ["tests/fenrir-workflow"]
+    }
+  }
+}

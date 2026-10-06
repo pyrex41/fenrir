@@ -1,0 +1,49 @@
+{
+  "version":"arithmetic-demo-frames/1",
+  "status":"development-proposal-not-qualified",
+  "contract":"0.2",
+  "target_profile":"TC0-REF-STEP/0.2",
+  "scope":"Closed arithmetic-demo sublanguage, NOT complete TC0-A catalog",
+  "artifact_validator":"tools/tc0/artifact.mjs",
+  "schema_version":"tc0-a-arithmetic-demo/1",
+  "closed_artifact_fields":["contract_version","schema_version","slice","module","datatypes","effects","functions","entry","input_schema","source_map"],
+  "closed_function_fields":["id","name","parameter_id","argument_type","result_type","effects","body"],
+  "closed_source_map_fields":["id","file","line","column"],
+  "source_map_coordinates":"Unsigned decimal strings; no coordinate interpretation qualified yet",
+  "ast_shapes":[
+    ["unit","node_id"],
+    ["bool","node_id","boolean"],
+    ["int","node_id","I64_decimal"],
+    ["var","node_id","binding_id"],
+    ["let","node_id","binding_id","initializer","body"],
+    ["if","node_id","condition","then","else"],
+    ["prim","node_id","operation","operands_by_checked_arity"],
+    ["emit","node_id","label","value_expression"]
+  ],
+  "types":["Unit","Bool","I64"],
+  "effects":["Emit"],
+  "controls":["Eval","Value","Ready","Unwind","Join","Terminate","Terminal"],
+  "frames":[
+    {"kind":"Collect","semantic_fields":["node","operation","label_or_none","remaining_operands","collected_values","saved_environment"],"step":"Store ONE value; enter next operand or set Ready; never execute operation in this step"},
+    {"kind":"Let","semantic_fields":["node","binding_id","body","saved_environment"],"step":"Extend immutable environment and enter body"},
+    {"kind":"If","semantic_fields":["node","then","else","saved_environment"],"step":"Choose ONE branch using Bool and restore saved environment"}
+  ],
+  "dispatch_rules":[
+    {"tags":["unit","bool","int","var"],"step":"Produce Value without consuming continuation"},
+    {"tags":["prim","emit"],"step":"Push Collect frame and enter first operand; metadata is not evaluated"},
+    {"tags":["let"],"step":"Push Let frame and enter initializer"},
+    {"tags":["if"],"step":"Push If frame and enter condition"}
+  ],
+  "ready_rules":[
+    {"operations":["add","sub","mul","div","neg","lt","le","gt","ge","not"],"step":"Produce exact typed Value or begin Unwind with Overflow/DivZero"},
+    {"operations":["emit"],"step":"Invoke, application Emit, Commit(Unit), then produce Unit; no continuation consumed"}
+  ],
+  "root_rules":[
+    "Value/Unwind with empty continuation enters implicit root Join",
+    "Join exits root scope (no child tasks supported) and propagates saved outcome",
+    "Next Run emits root termination and disables all decisions",
+    "Unwind discards exactly one ordinary frame per Run, without executing code"
+  ],
+  "unsupported":"Calls, closures, tuples, datatypes, Bytes and all B/C tags are rejected by this demo validator; rejection is not full TC0-A conformance",
+  "review_obligations":["Concrete field and event schemas","Root entry/exit and trap diagnostic identities","Every remaining A frame including true tail calls and closure capture_support=[]","Independent catalog/fixture review before authority promotion"]
+}

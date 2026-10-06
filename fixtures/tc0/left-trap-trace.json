@@ -1,0 +1,22 @@
+{
+  "status":"hand-derived-development-proposal-not-qualified",
+  "rules":["TC0-EVAL","TC0-SCOPE"],
+  "input":["unit"],
+  "expected_execution":"Completed",
+  "expected_outcome":["Trap","DivZero"],
+  "steps":[
+    {"epoch":"0","site":{"node":"2","rule":"Dispatch"},"after":"Eval","depth":"1","events":[]},
+    {"epoch":"1","site":{"node":"3","rule":"Dispatch"},"after":"Eval","depth":"2","events":[]},
+    {"epoch":"2","site":{"node":"4","rule":"Dispatch"},"after":"Value","depth":"2","events":[]},
+    {"epoch":"3","site":{"node":"3","rule":"CollectReturn"},"after":"Eval","depth":"2","events":[]},
+    {"epoch":"4","site":{"node":"5","rule":"Dispatch"},"after":"Value","depth":"2","events":[]},
+    {"epoch":"5","site":{"node":"3","rule":"CollectReturn"},"after":"Ready","depth":"1","events":[]},
+    {"epoch":"6","site":{"node":"3","rule":"Ready"},"after":"Unwind","depth":"1","events":[]},
+    {"epoch":"7","site":{"node":"2","rule":"UnwindFrame"},"after":"Unwind","depth":"0","events":[]},
+    {"epoch":"8","site":{"machine":"RootJoinEntry","rule":"Unwind"},"after":"Join","depth":"0","events":[]},
+    {"epoch":"9","site":{"machine":"Join","rule":"Join"},"after":"Terminate","depth":"0","events":[{"kind":"ScopeExit","task":"0","scope":"0","outcome":["Trap","DivZero"]}]},
+    {"epoch":"10","site":{"machine":"Terminate","rule":"Terminate"},"after":"Terminal","depth":"0","events":[{"kind":"TaskTermination","task":"0","outcome":["Trap","DivZero"]}]}
+  ],
+  "distinctions":["No node 6, 7, 8 or 9 executes normally","Operand return and Ready division are different steps","Discard add frame in one unwind step","Root join precedes terminal","Fuel 10 is incomplete; fuel 11 completes on last step"],
+  "limits":["Proposed concrete root/event shapes require independent review","No full state checkpoints or tape identity yet","This covers an arithmetic sublanguage, not all TC0-A"]
+}

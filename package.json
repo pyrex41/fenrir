@@ -1,0 +1,11 @@
+{
+  "name": "fenrir-gleipnir-bootstrap",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.19" },
+  "scripts": {
+    "test": "node --test tests/fenrir-workflow/*.test.mjs",
+    "test:workflow": "node --test tests/fenrir-workflow/*.test.mjs",
+    "test:pi": "node tools/check-fenrir-extension-load.mjs"
+  }
+}

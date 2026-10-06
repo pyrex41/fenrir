@@ -1,0 +1,70 @@
+{
+  "schema": "fenrir.solo5.clock-mediation-review/1",
+  "status": "PREPARATION_ONLY_REQUIRES_NEW_REVIEW_AND_DRIVE",
+  "qualification": "UNKNOWN",
+  "completed_dependency": "S2 cooperative input transport development, not D1/D2/G4 qualification",
+  "current_evidence": {
+    "tender_build": "build/solo5/control-build-5b98ecf8/build.json",
+    "interactive": "build/solo5/interactive-5b98ecf8-complete/interactive.json",
+    "independent_repeat": "build/solo5/interactive-5b98ecf8-complete-repeat/interactive.json",
+    "replay": "build/solo5/control-replay-5b98ecf8-complete.json",
+    "cold_replay": "build/solo5/control-replay-5b98ecf8-complete-cold.json",
+    "repeat_comparison": "build/solo5/control-repeat-comparison-5b98ecf8.json",
+    "admission_negatives": "build/solo5/control-admission-5b98ecf8.json",
+    "unit_log": "build/solo5/control-build-5b98ecf8/units-complete-admission.log"
+  },
+  "target": "Pinned Solo5 SPT/Linux/AArch64, explicit cooperative host pipe, no devices/network/privilege",
+  "unresolved_time_sources": [
+    "bindings/spt/bindings.c clock APIs call Linux CLOCK_MONOTONIC/CLOCK_REALTIME",
+    "bindings/spt/net.c yield uses host timerfd_settime/epoll readiness",
+    "bindings/crt_init.h startup stack canary uses native CPU ticks",
+    "bindings/cpu_aarch64.h direct cntvct_el0 is not intercepted by seccomp",
+    "Additional linked libraries/instructions require measured audit; inventory is not exhaustive closure"
+  ],
+  "proposed_first_slice": {
+    "goal": "New explicit environment-demo profile with mediated clock reads and recorded virtual-time updates; preserve existing transport identity and stock defaults",
+    "allowed_project_boundaries": [
+      "backends/solo5/overlays/virtual-environment/",
+      "backends/solo5/virtual-env.h",
+      "backends/solo5/virtual-env.c",
+      "backends/solo5/environment-guest.c",
+      "tools/solo5/environment.py",
+      "spec/solo5/environment-demo.json",
+      "tests/solo5/"
+    ],
+    "original_sources_to_inspect_not_edit": [
+      "build/vendor/solo5/bindings/spt/bindings.c",
+      "build/vendor/solo5/bindings/spt/net.c",
+      "build/vendor/solo5/bindings/crt_init.h",
+      "build/vendor/solo5/tenders/spt/spt_core.c"
+    ],
+    "constraints": [
+      "Apply overlays only to isolated copies and produce separately identified bindings/tender/image/guest artifacts",
+      "Clock API values come exclusively from recorded virtual state, never host wall time or watchdog durations",
+      "Remove direct clock syscall permissions only in a separately reviewed opt-in environment profile after dependencies are audited",
+      "Virtual readiness and yield behavior must be explicitly defined; do not retain timerfd host-time behavior and claim closure",
+      "Transport availability is not a semantic event or reason to advance virtual time",
+      "Synthetic environment tests do not establish TC0-C idle-time scheduling or task conformance",
+      "Keep old transport catalog/tapes and stock vendor/image/default policy unchanged",
+      "No new host descriptors, network/block devices, privilege or evaluator-authority changes"
+    ]
+  },
+  "hand_derived_expectations": [
+    "Initialize virtual monotonic time0 and an explicit recorded wall origin",
+    "Repeated reads give the same modeled values; an injected real host delay changes none",
+    "An explicit recorded virtual advance10 yields10; repeated reads still yield10",
+    "Backward advance, wrong response identity and missing environment response fail closed",
+    "Direct unmediated clock syscalls are denied in the reviewed environment mode",
+    "Cold exact environment replay binds bindings/tender/catalog/clock state/environment responses and bounds",
+    "Unexpected guest requests, crash/watchdog and resource caps remain independent infrastructure outcomes",
+    "Source/input identities remain stable and all owned execution resources are removed"
+  ],
+  "security_and_claim_review_required": [
+    "Decide whether to remove startup CPU-tick canary seeding. A deterministic recorded/public canary can weaken a security mitigation; do not silently replace it with zero or a fixed reusable secret",
+    "If native tick reads remain, disclose them explicitly and limit the supported cooperative claim; semantic traces alone do not prove equal hidden machine state",
+    "Arbitrary untrusted native counter/entropy instructions require the separate D2 instruction-control track, not seccomp or candidate-inserted counters",
+    "Review the environment message/profile and virtual yield/readiness rules before freezing them as acceptance inputs"
+  ],
+  "stop_boundary": "Stop after a bounded virtual-clock/environment demonstration or on canary/native-bypass/descriptor policy ambiguity. Do not automatically start a TC0 native port, compiler, emulator or qualification registration.",
+  "authorization": "Task preparation only. The current drive stops at S2 exit. Human must approve the environment-policy/canary scope and separately review/confirm a finite next drive. No automatic resume/renewal, push or deployment."
+}

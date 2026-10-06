@@ -1,0 +1,19 @@
+[
+  {"id":"zero-add","op":"add","args":["0","0"],"expected":{"status":"Ok","value":"0"}},
+  {"id":"above-double-integer-limit","op":"add","args":["9007199254740992","1"],"expected":{"status":"Ok","value":"9007199254740993"}},
+  {"id":"max-minus-one","op":"sub","args":["9223372036854775807","1"],"expected":{"status":"Ok","value":"9223372036854775806"}},
+  {"id":"max-add-overflow","op":"add","args":["9223372036854775807","1"],"expected":{"status":"Trap","code":"Overflow"}},
+  {"id":"min-sub-overflow","op":"sub","args":["-9223372036854775808","1"],"expected":{"status":"Trap","code":"Overflow"}},
+  {"id":"wide-product-overflow","op":"mul","args":["9223372036854775807","9223372036854775807"],"expected":{"status":"Trap","code":"Overflow"}},
+  {"id":"multiply-zero","op":"mul","args":["-9223372036854775808","0"],"expected":{"status":"Ok","value":"0"}},
+  {"id":"exact-wide-quotient","op":"div","args":["9223372036854775807","3"],"expected":{"status":"Ok","value":"3074457345618258602"}},
+  {"id":"negative-wide-quotient","op":"div","args":["-9223372036854775808","3"],"expected":{"status":"Ok","value":"-3074457345618258602"}},
+  {"id":"negative-divisor","op":"div","args":["9223372036854775807","-3"],"expected":{"status":"Ok","value":"-3074457345618258602"}},
+  {"id":"both-negative","op":"div","args":["-7","-3"],"expected":{"status":"Ok","value":"2"}},
+  {"id":"negative-truncation","op":"div","args":["-7","3"],"expected":{"status":"Ok","value":"-2"}},
+  {"id":"small-quotient-zero","op":"div","args":["-1","2"],"expected":{"status":"Ok","value":"0"}},
+  {"id":"minimum-divide-minus-one","op":"div","args":["-9223372036854775808","-1"],"expected":{"status":"Trap","code":"Overflow"}},
+  {"id":"divide-zero","op":"div","args":["1","0"],"expected":{"status":"Trap","code":"DivZero"}},
+  {"id":"negate-minimum","op":"neg","args":["-9223372036854775808"],"expected":{"status":"Trap","code":"Overflow"}},
+  {"id":"negate-maximum","op":"neg","args":["9223372036854775807"],"expected":{"status":"Ok","value":"-9223372036854775807"}}
+]

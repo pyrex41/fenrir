@@ -1,0 +1,62 @@
+{
+ "version":"pure-call-demo-catalog/1",
+ "status":"development-proposal-not-qualified",
+ "contract":"0.2",
+ "schema_version":"tc0-a-pure-call-demo/1",
+ "profile":"pure-call-demo-step/1",
+ "target_profile":"TC0-REF-STEP/0.2",
+ "scope":"Closed integrated Unit/Bool/I64, Arrow, named call/closure, arithmetic, if/let/emit demo; NOT full TC0-A",
+ "artifact_validator":"tools/tc0/pure-call-artifact.mjs",
+ "candidate":"runtime/tc0/pure-call-machine.mjs",
+ "model":"models/tc0/pure-call-machine.shen",
+ "closed_artifact_fields":["contract_version","schema_version","slice","module","datatypes","effects","functions","entry","input_schema","source_map"],
+ "closed_function_fields":["id","name","parameter_id","argument_type","result_type","effects","body"],
+ "closed_source_map_fields":["id","file","line","column"],
+ "source_map_locations":"Exactly all function and AST-node IDs, no binding IDs; unsigned coordinates without qualified interpretation",
+ "types":["Unit","Bool","I64",["Arrow","argument_type","result_type","effects"]],
+ "effects":["Emit"],
+ "ast_shapes":[["unit","node_id"],["bool","node_id","boolean"],["int","node_id","I64_decimal"],["var","node_id","binding_id"],["let","node_id","binding_id","initializer","body"],["if","node_id","condition","then","else"],["prim","node_id","operation","operands_by_arity"],["emit","node_id","label","value_expression"],["lambda","node_id","parameter_id","argument_type","result_type","effects","capture_support_empty","body"],["apply","node_id","callee","argument"],["call","node_id","function_name","argument"]],
+ "primitive_arities":{"add":"2","sub":"2","mul":"2","div":"2","neg":"1","lt":"2","le":"2","gt":"2","ge":"2","not":"1"},
+ "closure_descriptor_fields":["code_id","captures","capture_support"],
+ "closure_rules":["Lambda code_id is its node ID; named code_id is function ID","Captures are exactly free lexical bindings, numerically ordered","Capture support is always []; captured closures retain the same descriptor recursively","Named function entry starts with only its parameter, not caller bindings"],
+ "controls":[
+  {"kind":"Eval","fields":["expr","tail"]},
+  {"kind":"Value","fields":["value"]},
+  {"kind":"Ready","fields":["node","operation","metadata","values","tail"]},
+  {"kind":"Unwind","fields":["code"]},
+  {"kind":"Join","fields":["outcome"]},
+  {"kind":"Terminate","fields":["outcome"]},
+  {"kind":"Terminal","fields":[]}
+ ],
+ "frames":[
+  {"kind":"Let","fields":["node","binding","body","env","tail"],"return":"Restore saved env; add binding; enter body at saved tail flag"},
+  {"kind":"If","fields":["node","yes","no","env","tail"],"return":"Restore saved env; enter exactly selected branch at saved tail flag"},
+  {"kind":"Collect","fields":["node","operation","metadata","remaining","values","env","tail"],"return":"Restore env; store one value; enter next operand non-tail or Ready without executing operation"},
+  {"kind":"Return","fields":["node","env"],"return":"Restore caller environment and produce same Value in its own step"}
+ ],
+ "dispatch_rules":[
+  {"tags":["unit","bool","int","var","lambda"],"step":"Produce Value only"},
+  {"tags":["let"],"step":"Push Let, enter initializer non-tail"},
+  {"tags":["if"],"step":"Push If, enter condition non-tail"},
+  {"tags":["prim","emit","apply","call"],"step":"Collect operands left-to-right non-tail; metadata never executes"}
+ ],
+ "ready_rules":[
+  {"operations":["add","sub","mul","div","neg","lt","le","gt","ge","not"],"step":"Exact primitive Value or Unwind(Overflow/DivZero)"},
+  {"operations":["emit"],"step":"Invoke then Emit then Commit(Unit); produce Unit"},
+  {"operations":["call","apply"],"step":"Enter body tail=true with checked argument/captures; push Return only if call site is non-tail"}
+ ],
+ "tail_positions":["Entry/named/lambda function body","Let body inherits flag","Chosen If branch inherits flag","Operand expressions and let initializer/if condition are non-tail"],
+ "root_rules":["Empty continuation Value or Unwind enters Join with saved outcome","Join emits ScopeExit and enters Terminate","Terminate emits TaskTermination and disables decisions","Unwind discards one frame and restores its env per step; executes no user code"],
+ "site_rules":["Eval: node/Dispatch","Ready: node/Ready","Value with frame: frame node/kindReturn","Unwind with frame: frame node/UnwindFrame","Empty Value/Unwind: machine RootJoinEntry and Value/Unwind rule","Join/Terminate: matching machine and rule"],
+ "step_record_fields":["epoch","site","after","depth","events"],
+ "event_shapes":[
+  {"kind":"Invoke","fields":["task","node","operation","label","value"]},
+  {"kind":"Emit","fields":["task","node","label","value"]},
+  {"kind":"Commit","fields":["task","node","operation","value"]},
+  {"kind":"ScopeExit","fields":["task","scope","outcome"]},
+  {"kind":"TaskTermination","fields":["task","outcome"]}
+ ],
+ "bounds":{"default_nodes":"200","default_AST_depth":"64","type_depth":"16","functions":"32","probe_reference_steps":"200"},
+ "unsupported":["Bytes","Tuples","Datatypes","construct/match/project","Equality/byte primitives","All B/C operations","Native stack theorem","Qualified catalog/evaluator/isolation"],
+ "review_obligations":["Independent catalog and fixture review","Strict source-bound integrated tape schema/admission","Full A constructor coverage and exhaustive-small monitor product","Enforced protected evaluator boundary before qualification"]
+}

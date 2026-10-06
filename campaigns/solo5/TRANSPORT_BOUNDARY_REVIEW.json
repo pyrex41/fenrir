@@ -1,0 +1,70 @@
+{
+  "schema": "fenrir.solo5.transport-boundary-review/1",
+  "status": "REVIEW_REQUIRED_NO_OVERLAY_APPLIED",
+  "qualification": "UNKNOWN",
+  "selected_target": "Solo5 v0.9.3 SPT/Linux/AArch64",
+  "solo5_commit": "38e0c348be231a2a3c59510a5caabf562792679f",
+  "measured_inputs": {
+    "baseline": "build/solo5/baseline-0bd83525/baseline.json",
+    "capability_report": "build/solo5/transport-0bd83525-retry/feasibility.json",
+    "capability_diagnostics": "build/solo5/transport-0bd83525-retry/diagnostics.json",
+    "unit_results": "build/solo5/unit-logs-0bd83525/tests-fixed-cleanup.log"
+  },
+  "observed_boundary": {
+    "stock_console_control": "Completed, exit0, ProbeReady then Terminal",
+    "stock_read_fd0": "Two runs emit ProbeReady/InputAttempt then SIGSYS159, no terminal",
+    "startup_invalid_mode": "exit1, no semantic frames",
+    "container_policy": "No network/devices/privilege; UID65534; readonly root/input; bounded tmpfs only for build",
+    "live_input_supplied": false,
+    "qualification_scope": "Capability-denial preflight only; no interactive exchange or TC0 conformance"
+  },
+  "proposed_transport": {
+    "input": "Explicit host-controlled pipe on guest fd0, Docker interactive stdin without TTY; never inherited terminal, host file or network input",
+    "output": "Existing write-fd1 path with a new bounded frame identity; stock tender banner is retained as explicitly allowed diagnostics outside semantic frames",
+    "limitations": "This is a stdio transport, not a new device ABI. Physically separate semantic/diagnostic channels would require a separately reviewed descriptor layout. Guest cooperative behavior is assumed, not enforced native instruction control.",
+    "upstream_overlay": "Project-owned pinned-source overlay, immutable new development image; leave vendor checkout and stock image pristine",
+    "tender_change": "Opt-in --fenrir-control-stdin flag that adds only bounded read(fd=0) to core seccomp policy; default stock mode retains denial",
+    "descriptor_preconditions": "Verify the exact input descriptor is an explicitly supplied pipe/socket, reject TTY and regular files, no open/socket/connect/new descriptors; record actual wiring and limits",
+    "read_limit": "Proposed per-read maximum65536 bytes, host cumulative/record/frame caps independently enforced; no arbitrary unbounded read permission",
+    "guest_api": "Project-only bounded read wrapper and versioned transport adapter, not a claimed upstream Solo5 API",
+    "clocks": "Stock clocks/yield/startup CPU ticks remain unmediated until S3; this transport extension does not establish D1 or D2"
+  },
+  "proposed_allowed_files_after_explicit_approval": [
+    "backends/solo5/overlays/control-stdin/",
+    "backends/solo5/interactive-probe.c",
+    "backends/solo5/protocol.h",
+    "backends/solo5/protocol.c",
+    "tools/solo5/interactive.py",
+    "tools/solo5/build-control-stdin.py",
+    "spec/solo5/protocol-demo.json",
+    "tests/solo5/"
+  ],
+  "must_remain_unchanged": [
+    "build/vendor/solo5 pinned pristine source",
+    "stock Solo5 image and historical evidence",
+    ".pi/extensions/fenrir-workflow",
+    ".pi/fenrir-workflow.json",
+    "01_FULL_VISION.md",
+    "02_TINY_LANGUAGE_CORE.md",
+    "03_PHASED_EXECUTION_PLAN.md",
+    "tests/fenrir-workflow",
+    "qualified model/catalog/golden authority"
+  ],
+  "next_slice_hand_expectations": [
+    "Default unextended mode still kills fd0 read with SIGSYS",
+    "Opt-in mode Hello/Init then request0/response0 and request1/response1, Terminal/ack, clean exit",
+    "No next transition while guest is blocked awaiting its response; host delay changes no semantic payload",
+    "Only explicit recorded response bytes enter guest; replay uses the same responses",
+    "Malformed lengths, duplicates, wrong run/epoch/sequence/domain, unknown fields, early EOF/terminal and suffix fail closed",
+    "fd2/other-fd reads, oversized reads, open/socket/connect and ambient network remain denied under proposed policy",
+    "Regular-file or TTY input fails startup before guest execution",
+    "Watchdog/crash/output cap are infrastructure outcomes, not language traps or semantic kills",
+    "All owned process groups and containers are joined/removed, source/input identities unchanged"
+  ],
+  "review_questions": [
+    "Approve this opt-in fd0 policy extension and project-owned overlay, or require a physically separate descriptor channel instead?",
+    "Approve the fixed read/frame/aggregate bounds and diagnostic separation rules before freezing a transport identity?",
+    "Is cooperative D1 the initial goal, with arbitrary untrusted native code and D2 explicitly outside this slice?"
+  ],
+  "authorization": "Proposal only. Requires explicit human approval before implementing/building the expanded tender policy. No privilege, networking, deployment, evaluator registration or automatic drive renewal is authorized."
+}

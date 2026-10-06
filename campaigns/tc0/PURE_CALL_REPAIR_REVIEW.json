@@ -1,0 +1,47 @@
+{
+  "schema": "pure-call-repair-review-packet/1",
+  "status": "PREPARATION_ONLY_REQUIRES_HUMAN_REVIEW",
+  "qualification": "UNKNOWN",
+  "goal": "Candidate-only operand-order repair, with independently frozen fresh evaluation and preserved exact-original replay",
+  "original_candidate": {
+    "source": "runtime/tc0/pure-call-machine.mjs",
+    "identity_source": "build/tc0/pure-call-reduction-bounded.json:sources",
+    "options": {"reverseOperands": true},
+    "preserve": "Copy and independently hash the original source/options before any patch; do not overwrite retained source-bound evidence"
+  },
+  "proposed_allowed_patch_paths": ["runtime/tc0/pure-call-machine.mjs"],
+  "proposed_read_only_inputs": [
+    "models/tc0/arithmetic.shen",
+    "models/tc0/pure-call-machine.shen",
+    "spec/tc0/pure-call-demo.json",
+    "tools/tc0/pure-call-artifact.mjs",
+    "tools/tc0/pure-call-replay.mjs",
+    "tools/tc0/pure-call-replay-header.mjs",
+    "tools/check-tc0-pure-call-reduction.py",
+    "tools/check-tc0-pure-call.py",
+    "fixtures/tc0",
+    "tests/tc0",
+    ".pi"
+  ],
+  "retained_failure_report": "build/tc0/pure-call-reduction-bounded.json",
+  "retained_replay": "build/tc0/pure-call-failure-replay.json",
+  "repeat_evidence": "build/tc0/pure-call-s2-repeat-comparison.json",
+  "replay_command_before_patch": ["node", "tools/tc0/check-pure-call-failure-replay.mjs", "build/tc0/pure-call-reduction-bounded.json", "build/tc0/REVIEW_CHOSEN_FRESH_REPLAY_OUTPUT.json"],
+  "expected_original_replay": {"replay": "Exact", "conformance": "Diverged", "execution": "StoppedAtDivergence"},
+  "review_required_before_execution": [
+    "Approve genuinely independent repair agent arrangement; no nested paid session is authorized",
+    "Freeze independent evaluator inputs and a fresh evaluation family before exposing held-out cases",
+    "Implement and measure an enforced evaluator boundary, read-only inputs, forbidden access/write and credential-exclusion probes",
+    "Independently build/hash candidate patch and preserve original mutant source/options in a separately bound replay environment",
+    "Keep repaired-candidate scenario replay distinct from exact-original replay",
+    "Decide full-A prerequisites and reviewed qualification registration separately; do not alter controller authority in this development packet"
+  ],
+  "candidate_acceptance_expectations": [
+    "Baseline and explicitly enabled original operand-order mutant path must both follow left-to-right evaluation after repair",
+    "Original/minimized programs produce I64 zero with emits left then right against fresh independent Shen observations",
+    "Fresh valid generated cases, equivalent control, applicable mutation controls and hand regressions agree within declared bounds",
+    "Source/toolchain drift, incomplete execution, protocol errors and cap hits cannot be promoted to semantic success"
+  ],
+  "known_gaps": ["No independent repair executed", "No enforced evaluator isolation", "Qualification evaluator not registered", "Demo is not full TC0-A", "No exhaustive-small monitor-product claim"],
+  "authorization": "This packet grants no execution, renewal, evaluator change, push or deployment authority"
+}

@@ -1,0 +1,16 @@
+{
+  "schema": "fenrir.solo5.control-catalog/1",
+  "qualification": "UNKNOWN",
+  "profile": "fenrir.solo5.control-demo/1",
+  "scope": "Closed cooperative transport probe, NOT TC0 semantics or machine determinism",
+  "run_id": "demo-0",
+  "config": {"boundaries": "2", "profile": "fenrir.solo5.control-demo/1"},
+  "framing": {"prefix": "FGCTL/1 ", "header": "canonical decimal byte length followed by LF", "payload": "canonical compact sorted-key ASCII JSON followed by LF", "maximum_payload_bytes": "65500", "maximum_wire_frame_bytes": "65536", "maximum_header_bytes": "32", "maximum_total_input_bytes": "262144", "maximum_output_bytes": "8388608"},
+  "guest_sequence": ["Hello", "Boundary epoch0 Probe0", "Boundary epoch1 Probe1", "Terminal epoch2 accepted2"],
+  "host_sequence": ["Init", "Proceed epoch0 Probe0 selection[Proceed,0]", "Proceed epoch1 Probe1 selection[Proceed,1]", "Ack then input EOF"],
+  "domains": [[["Proceed", "0"]], [["Proceed", "1"]]],
+  "closure": "Only exact published record shapes/values and canonical wire bytes accepted; alternate escapes/key order, duplicate keys, numeric tokens, BOM, unknown fields/kinds rejected",
+  "diagnostics": "Guest launched with --solo5:quiet: allowed stdout diagnostic prefix is EMPTY. Unexpected stdout bytes anywhere fail closed. Bounded stderr retained separately, never normalized into semantic records.",
+  "terminal": "Guest emits Terminal only after two responses, requires exact Ack and input EOF, then exit0/output EOF; early terminal/EOF/suffix rejected",
+  "assumptions": ["Audited single-threaded cooperative guest", "No guest clock APIs used by this probe", "Stock binding startup CPU ticks and allowed clock syscalls remain uncontrolled", "No enforced native instruction budget", "No complete semantic evaluator isolation or qualified language claim"]
+}

@@ -1,0 +1,21 @@
+{
+  "schema":"fenrir.solo5.development-profile/1",
+  "status":"feasibility-demonstrated-not-qualified",
+  "target":"spt",
+  "platform":"Linux/AArch64",
+  "upstream":"https://github.com/Solo5/solo5.git",
+  "commit":"38e0c348be231a2a3c59510a5caabf562792679f",
+  "license":"ISC",
+  "base_image":"alpine@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8",
+  "image_policy":"Resolve build-spec-verified local image to immutable ID for execution",
+  "guest_devices":[],
+  "transport":"Startup command-line request; length-prefixed console response; NOT interactive Run control",
+  "network":"none",
+  "privilege":"UID/GID 65534, all capabilities dropped, no-new-privileges, no privileged container",
+  "filesystem":"Read-only root and bind inputs; compile scratch in bounded tmpfs; no checkout/credentials/Docker socket mounted",
+  "clocks":"Stock wall/monotonic clocks and native CPU counters are NOT mediated",
+  "metering":"Wall watchdog only; no reproducible instruction budget",
+  "measured_probes":["Boot/exit","Framed Pong and terminal handshake","Malformed startup rejection","Ten repeated semantic payloads","Forbidden openat/socket SIGSYS","Read-only sentinel unchanged","Stock wall-clock variation"],
+  "qualification":"UNKNOWN",
+  "remaining":["Interactive semantic transport","Clock/yield/CPU-counter closure","TC0 native candidate integration","Host-perturbation replay","Broader isolation probes","Independent evaluator review"]
+}

@@ -1,0 +1,17 @@
+{
+  "schema": "fenrir.solo5.environment-demo/1",
+  "status": "UNQUALIFIED_DEVELOPMENT_PROFILE",
+  "identity": "fenrir.solo5.cooperative-environment/1",
+  "transport": "FGCTL/1",
+  "time_unit": "nanoseconds",
+  "time_range": "0..9223372036854775807",
+  "initial_monotonic": "0",
+  "wall_origin": "1000",
+  "advance_semantics": "Explicit recorded absolute monotonic update only; equal allowed, backward or wall overflow rejected without mutation",
+  "read_semantics": "monotonic=recorded state; wall=origin+monotonic; no host elapsed-time input",
+  "yield_semantics": "No devices. Only deadlines at or before current virtual time supported; returns empty readiness without time progress. Future deadlines fail closed, not a host wait or virtual advance.",
+  "hand_reads": [["0", "1000"], ["0", "1000"], ["10", "1010"], ["10", "1010"]],
+  "security": "Existing pipe-only tender and native-tick startup canary unchanged. No descriptor/seccomp changes.",
+  "unfulfilled_expectations": ["Direct clock syscalls remain permitted by existing tender; denial requires separate security-policy review"],
+  "claims_excluded": ["TC0-A conformance", "TC0-C idle-time scheduling", "G4 qualification", "native counter closure", "equal hidden startup state", "arbitrary native-code determinism", "instruction-control termination"]
+}

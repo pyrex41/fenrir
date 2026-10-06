@@ -1,0 +1,19 @@
+{
+  "schema": "fenrir.solo5.native-arithmetic-profile/1",
+  "status": "UNQUALIFIED_DEVELOPMENT",
+  "identity": "fenrir.solo5.native-arithmetic-demo/1",
+  "artifact_schema": "tc0-a-arithmetic-demo/1",
+  "model": "models/tc0/expression-machine.shen",
+  "arithmetic_model": "models/tc0/arithmetic.shen",
+  "catalog": "spec/tc0/arithmetic-demo-frames.json",
+  "validator": "tools/tc0/artifact.mjs",
+  "supported_tags": ["unit", "bool", "int", "var", "let", "if", "prim", "emit"],
+  "unsupported": ["calls", "closures", "Bytes", "tuples", "datatypes", "all TC0-B/C tags"],
+  "native_input": "Host-validated immutable AST lowered to bounded indexed data tables; no precomputed semantic results or oracle transitions",
+  "observation": "Each guest transition supplies epoch, site, after-control, continuation depth and ordered events, compared externally to independent Shen samples",
+  "initial_bounds": {"nodes": "100", "depth": "32", "reference_steps": "200", "generated_cases": "16", "label_bytes": "64", "id_digits": "20"},
+  "adapter_restrictions": "IDs must fit unsigned 64-bit; labels use ASCII identifier grammar for demonstrated existing Shen transport; rejected inputs are unsupported by this adapter, not invalid in full TC0",
+  "integer_policy": "Exact checked I64 without C signed-overflow undefined behavior; decimal input/output and explicit overflow/divzero traps",
+  "security": "Unchanged immutable stock bindings and pipe-only tender; no clocks/devices/network or extra descriptors used by candidate; native startup counter/canary remain unmediated",
+  "claims_excluded": ["G1", "G4", "G5", "full TC0-A", "native-machine determinism", "native stack/tail-call guarantees", "qualified evaluator isolation", "independent repair"]
+}

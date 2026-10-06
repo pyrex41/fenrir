@@ -1,0 +1,17 @@
+{
+  "contract_version": "0.2", "schema_version": "tc0-a-pure-call-demo/1", "slice": "TC0-A", "module": "hand-forward", "datatypes": [], "effects": [],
+  "functions": [
+    {"id":"0","name":"main","parameter_id":"1","argument_type":"I64","result_type":"I64","effects":[],"body":["call","2","inc",["var","3","1"]]},
+    {"id":"4","name":"inc","parameter_id":"5","argument_type":"I64","result_type":"I64","effects":[],"body":["prim","6","add",["var","7","5"],["int","8","1"]]}
+  ],
+  "entry":"main", "input_schema":{"type":"I64"},
+  "source_map":[
+    {"id":"0","file":"hand-forward","line":"0","column":"0"},
+    {"id":"2","file":"hand-forward","line":"0","column":"0"},
+    {"id":"3","file":"hand-forward","line":"0","column":"0"},
+    {"id":"4","file":"hand-forward","line":"0","column":"0"},
+    {"id":"6","file":"hand-forward","line":"0","column":"0"},
+    {"id":"7","file":"hand-forward","line":"0","column":"0"},
+    {"id":"8","file":"hand-forward","line":"0","column":"0"}
+  ]
+}
