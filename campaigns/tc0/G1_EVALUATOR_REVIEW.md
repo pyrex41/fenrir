@@ -18,11 +18,14 @@ evaluator itself runs trusted-local (decision 6).
   Exit codes: 0 PASS, 1 FAIL, 2 UNKNOWN/BLOCKED (the controller's contract). Under the
   controller it prints exactly one `fenrir.check.v1` report.
 
-## Latest run
+## Registered run (TC0-A qualification)
 
-Run `6c825e756997` (`build/tc0/gate/6c825e756997-20261011T073648Z/`, 5.9 minutes, flake-pinned Shen):
-**proposed verdict UNKNOWN**. Fourteen of fifteen required rows pass on fresh evidence; the
-remaining one has no attestation of enforced repairer isolation.
+The registered check ran through the workflow controller's own runner at `1db7471`
+(`build/tc0/gate/1db7471fa850-20261011T161722Z/`, 5.2 minutes, flake-pinned Shen).
+The receipt is a qualification **PASS**: fresh and source-bound, with stable evidence
+and confirmed cleanup. All six required claims are credited, and the controller's
+`qualification()` gate returns PASS with no reasons. It carries one waiver:
+instruction-only repairer isolation (decision 3).
 
 | Row | | Result | Evidence |
 | --- | --- | --- | --- |
@@ -40,15 +43,15 @@ remaining one has no attestation of enforced repairer isolation.
 | Candidate sandbox probes | required | PASS |  |
 | Requirement ledger check | required | PASS |  |
 | Retained independent patch through a fresh S3 packet | required | PASS | S3 evaluator DEVELOPMENT-PASS, 10/10 steps |
-| Enforced repairer isolation attested | required | UNKNOWN | No attestation at campaigns/tc0/s3/enforced-isolation-attestation.json |
+| Repair isolation record | required | PASS | owner waiver: instruction-only isolation |
 | Exact arithmetic on the shaken shen-cl port (optional) | optional | PASS | 2908 cases |
 
-Negative control: the same gate on a throwaway local commit that swapped
-`bytes_concat` operands gave **FAIL**. The unit suite failed 7 tests and the hand
-cases disagreed with Shen. That run also showed the exhaustive scope missed the
-swap, because grammar G had only the bytes literals `""` and `ff`. G now has a third
-literal, `01`; on the defective candidate the enlarged scope finds 2 disagreeing
-programs at 4 nodes.
+An earlier unregistered run at `6c825e7` gave UNKNOWN, before the waiver existed.
+A negative control on a throwaway commit with swapped `bytes_concat` operands gave
+FAIL. That run also led to grammar G gaining the bytes literal `01`.
+
+This verdict holds for `1db7471`. Any later source change needs a fresh run, which
+the controller enforces through source hashes.
 
 ## Decisions (2026-10-11)
 
