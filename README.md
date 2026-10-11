@@ -81,8 +81,11 @@ are absent. The local archive search did not locate an image backup. No pull,
 rebuild, replacement image or guest execution was performed during restore review.
 
 An exact restore needs the original Docker/OCI archive or a registry recovery
-source containing those immutable identities. A rebuild would require a separately
-reviewed dependency epoch, not rewriting historical receipts to match new images.
+source containing those immutable identities. **Planned remedy (direction amendment,
+11 October 2026):** instead of further recovery attempts, open a new reviewed
+dependency epoch that rebuilds the images from a pinned Nix flake, records new
+identities and leaves the old receipts historical (never rewritten). That epoch has
+not been opened yet; see the [execution plan §4 and §18](03_PHASED_EXECUTION_PLAN.md#18-first-concrete-implementation-assignment).
 
 Other outstanding gates before live work:
 
@@ -102,7 +105,16 @@ Other outstanding gates before live work:
 The larger project milestone is still a **qualified pure TC0-A repair loop**:
 complete model/candidate/evaluator coverage, retain discovery/reduction/exact-original
 replay, obtain an independent repair and validate it freshly. Broader native-host
-work does not substitute for that milestone.
+work does not substitute for that milestone. Under the direction amendment, native
+hardening outside named blockers is frozen until G1, and the workflow controller is
+to gain semantic development checks for the pure slice so the agent loop is checked
+against language behavior rather than only controller tests.
+
+The amendment also sets the long-term direction: Fenrir programs deploy as
+single-application unikernels whose declared effects determine the image's
+capabilities. This is a plan, not an implemented or qualified property; see
+[vision §7](01_FULL_VISION.md#7-solo5-as-the-first-isolated-backend) and
+[plan §19](03_PHASED_EXECUTION_PLAN.md#19-direction-amendment-unikernel-target-and-agent-back-pressure).
 
 Overall language qualification and native startup/counter closure remain
 **UNKNOWN**; independent candidate repair remains **NOT EXECUTED**.
