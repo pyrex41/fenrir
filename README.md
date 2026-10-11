@@ -108,6 +108,13 @@ target were each caught at bound 4: a bytes `eq` that ignores the last octet
 (4 programs disagree) and `bytes_length` of empty bytes returning 1
 (37 programs disagree).
 
+**Second Shen port.** The Yggdrasil-shaken oracle was rebuilt for the schema `/2`
+model: an eval-free shen-cl/SBCL slice that matched host Shen on all 19 hand cases.
+On all 3,869 exhaustive-small programs it produced traces identical to
+shen-scheme v0.26. The bootstrap steps are in the
+[workflow README](.pi/extensions/fenrir-workflow/README.md). Two ports agreeing
+supports portability only, not semantic truth (core §17).
+
 **Invalid programs.** `tools/tc0/pure-data-invalid.mjs` applies 27 named single
 mutations to a generated seed: duplicate IDs, bad hex, tuple arity, projection
 range, unknown or ill-typed constructors, non-exhaustive, duplicate or
@@ -116,9 +123,7 @@ non-serializable entry and source-map gaps. Each case records the rejection it
 must produce. The tests check the exact rejection class, and that the runner
 exits nonzero without output, so invalid artifacts never execute.
 
-Not established: an independent (non-self-authored) candidate repair (S3), a refreshed
-Yggdrasil-shaken oracle (its stamp is now stale, so the check falls back to
-host Shen), and anything at the B/C level (`Outcome`, `SendResult`,
+Not established: an independent (non-self-authored) candidate repair (S3), and anything at the B/C level (`Outcome`, `SendResult`,
 `ReceiveResult` and the runtime operations). Qualification remains **UNKNOWN**.
 
 ## Latest native-host progress

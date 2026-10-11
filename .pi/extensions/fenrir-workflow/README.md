@@ -137,6 +137,19 @@ The build admits the artifact only if its observations are byte-identical to hos
 
 Measured on the 9 hand cases, on a 4-CPU machine running other builds: the oracle alone went from ~4.9 s (one Shen process per case, ~600 `-e` expressions each) to ~0.64 s batched on host Shen and ~0.43 s shaken. End to end, the check went from ~15 s to ~8–9 s; the shaken and batched host runs are within noise of each other, because the remaining time is candidate runs and strict replay. A stat-keyed digest cache (`tools/tc0/digest-cache.mjs`, `build/cache/`) avoids rehashing large toolchain binaries such as the 123 MB Node executable on every run.
 
+Bootstrapping shen-cl without a prior shen-cl build (verified in a Linux cloud session on 11 October 2026, environment evidence only):
+
+```sh
+git clone https://github.com/pyrex41/yggdrasil && (cd yggdrasil && nix shell nixpkgs#go -c go build -o ../ygg .)
+git clone https://github.com/Shen-Language/shen-cl && cd shen-cl
+make fetch FetchCmd="curl -sSOL"          # kernel 41.2 sources
+mkdir -p compiled                          # precompile with nixpkgs' Tarver S41.2 SBCL port:
+printf '(load "scripts/build.shen")\n(build)\n' | $(nix build --no-link --print-out-paths nixpkgs#shen-sbcl)/bin/shen-sbcl
+nix shell nixpkgs#sbcl -c make build-sbcl  # bin/sbcl/shen
+```
+
+The REPL reports `empty stream` and exits once stdin ends; check that `compiled/` holds every kernel file before building. With Yggdrasil `a40d8c5`, shen-cl `dff7445` and SBCL 2.6.8, the schema /2 model shook to an eval-free slice (`needs-eval=false`, `cannot-reach=eval`, kernel `42-s42.20260825`) and passed parity on all 19 hand cases. It also produced per-program traces identical to shen-scheme v0.26 on all 3,869 exhaustive-small programs (`tools/check-tc0-pure-data-exhaustive.py --oracle-artifact`). On that large batch, the shaken artifact was slower than host shen-scheme (about 62 s versus 45 s), so batch size decides which oracle is faster.
+
 A development check MAY declare `blockedExitCode` (an integer from 2 to 125) for an unavailable prerequisite. Only that exact exit maps to BLOCKED; every other nonzero exit is FAIL. Qualification checks cannot declare it; their JSON report owns the verdict.
 
 After a real evaluator exists, stop the run and separately review its implementation, fixtures and authority. Add a qualification check, for example:

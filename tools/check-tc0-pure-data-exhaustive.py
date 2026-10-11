@@ -31,7 +31,9 @@ def trace_hash(steps):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--shen-executable', required=True)
+    which = parser.add_mutually_exclusive_group(required=True)
+    which.add_argument('--shen-executable')
+    which.add_argument('--oracle-artifact', help='Directory from tools/tc0/build-shaken-oracle.mjs')
     parser.add_argument('--max-nodes', type=int, default=5)
     parser.add_argument('--output', required=True)
     args = parser.parse_args()
@@ -40,7 +42,7 @@ def main():
     dest = Path(args.output).resolve()
     if not dest.is_relative_to(ROOT/'build') or dest.suffix != '.json' or dest.exists():
         raise ValueError('Fresh output JSON below build required')
-    oracle = pc.Oracle(shen=args.shen_executable)
+    oracle = pc.Oracle(shen=args.shen_executable, artifact=args.oracle_artifact)
     node = Path(shutil.which('node')).resolve(strict=True)
     paths = [Path(__file__), ROOT/'tools/check-tc0-pure-call.py', ROOT/'tools/check-tc0-expression.py',
              *[ROOT/'tools/tc0'/p for p in ['pure-data-enumerate.mjs', 'run-pure-data-exhaustive.mjs',
