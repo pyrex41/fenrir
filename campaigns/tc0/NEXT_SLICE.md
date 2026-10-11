@@ -46,6 +46,8 @@ Development exit: closed validator negative tests, catalog coverage and hand tra
 
 ## S2 — bounded valid generation, reduction and discovery
 
+Status (development): runs for the pure-call family and the schema /2 data family with two candidate-only mutants (`reverse-operands`, `arm-by-position`) plus the default equivalent control. Each mutant was discovered from its generated family, reduced against fresh Shen observations and replayed Exact for both the original and the minimized failure; the data campaigns were also cold-repeated. Measured results are in README.md. Invalid-program generation and exhaustive-small scope remain open.
+
 Begin only after S1's development exit. Start with a deterministic, explicitly finite family of at most 32 cases, 200 AST nodes/case, 200 reference steps/run, and 100 reduction attempts per selected failure. Keep a wall-time watchdog and output caps; lower bounds if measured throughput requires it. Caps/truncation remain visible and cannot imply exhaustive coverage.
 
 Generate typed named-call/closure combinations including alias retention, returned closures, tail/non-tail calls and arithmetic/emit. Validate each case; document enumeration order/seed. Avoid recursive programs without a declared terminating family or explicit budget-outcome test.
@@ -68,7 +70,7 @@ Freeze evaluator inputs and fresh evaluation campaign before exposing held-out c
 
 | Stage | Next deliverable | Dependency / stop boundary |
 | --- | --- | --- |
-| S4 | Remaining full-A constructors/values, declarations, primitives, effects/serialization and complete frame/source-map catalog. **In progress:** schema `tc0-a-pure-call-demo/2` / catalog `/2` adds Bytes, TrapCode, tuples, datatypes, construct/match/project, byte primitives and eq with 10 Shen-agreeing hand fixtures; generated coverage of these constructs is still open | S1/S2 development; introduce explicit versions and distinguishing fixtures for each extension; do not assume this demo covers full A |
+| S4 | Remaining full-A constructors/values, declarations, primitives, effects/serialization and complete frame/source-map catalog. **In progress:** schema `tc0-a-pure-call-demo/2` / catalog `/2` adds Bytes, TrapCode, tuples, datatypes, construct/match/project, byte primitives and eq with 10 Shen-agreeing hand fixtures; S2 discovery/reduction over these constructs now runs (`--family pure-data`, `--mutant arm-by-position`, see README) | S1/S2 development; introduce explicit versions and distinguishing fixtures for each extension; do not assume this demo covers full A |
 | S5 | G0 exact-arithmetic/provenance ledger and enforced evaluator boundary; benign protected-write/access/credential probes | Required qualification prerequisites; platform enforcement must be measured, not replaced by path rules |
 | S6 | Independently reviewed evaluator/requirement manifest, protocol and replay mutants, finite exhaustive-small scope and fresh repair evaluation | Separate authority review before protecting/registering evaluator inputs or changing .pi/fenrir-workflow.json; no synthesized claims |
 | G1 | Source-bound TC0-A qualification via an actually registered evaluator | All required A/G0 rows and six controller claims; any required missing evidence remains UNKNOWN/BLOCKED |

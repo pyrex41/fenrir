@@ -10,12 +10,14 @@ function free(e,bound=new Set(),out=new Set()){
 // Structural equality on checked equality-compatible values (no closures).
 function equal(a,b){if(a.length!==b.length||a[0]!==b[0])return false;for(let i=1;i<a.length;i++){const x=a[i],y=b[i];if(Array.isArray(x)?!Array.isArray(y)||!equal(x,y):x!==y)return false;}return true;}
 export class PureCallMachine {
- constructor(artifact,input,{reverseOperands=false}={}){
-  this.artifact=artifact;this.input=input;this.functions=new Map(artifact.functions.map(f=>[f.name,f]));this.codes=new Map();this.frames=[];this.epoch=0n;this.terminal=null;this.events=[];this.descriptors=[];this.reverseOperands=reverseOperands;
+ constructor(artifact,input,{reverseOperands=false,armByPosition=false}={}){
+  this.artifact=artifact;this.input=input;this.functions=new Map(artifact.functions.map(f=>[f.name,f]));this.codes=new Map();this.frames=[];this.epoch=0n;this.terminal=null;this.events=[];this.descriptors=[];this.reverseOperands=reverseOperands;this.armByPosition=armByPosition;
   const collect=e=>{if(e[0]==='lambda')this.codes.set(e[1],{parameter:e[2],body:e[7]});for(const c of children(e))collect(c);};
   for(const f of artifact.functions){this.codes.set(f.id,{parameter:f.parameter_id,body:f.body});collect(f.body);}
   const entry=this.functions.get(artifact.entry);this.env=new Map([[entry.parameter_id,input]]);this.control={kind:'Eval',expr:entry.body,tail:true};
  }
+ // Mutant support only (armByPosition): a constructor's position in its declaration.
+ constructorIndex(type,name){const names=type==='TrapCode'?['Overflow','DivZero','Bounds','InvalidDuration','TaskLimit','ChildFailed']:this.artifact.datatypes.find(d=>d.name===type).constructors.map(c=>c.name);return names.indexOf(name);}
  site(){const c=this.control;if(c.kind==='Eval')return {node:c.expr[1],rule:'Dispatch'};if(c.kind==='Ready')return {node:c.node,rule:'Ready'};if(c.kind==='Value'&&this.frames.length)return {node:this.frames.at(-1).node,rule:this.frames.at(-1).kind+'Return'};if(c.kind==='Unwind'&&this.frames.length)return {node:this.frames.at(-1).node,rule:'UnwindFrame'};return {machine:c.kind==='Value'||c.kind==='Unwind'?'RootJoinEntry':c.kind,rule:c.kind};}
  step(){
   if(this.terminal)throw new Error('Already terminal');const c=this.control,site=this.site(),events=[];
@@ -38,7 +40,7 @@ export class PureCallMachine {
    else {const f=this.frames.pop();this.env=f.env;
     if(f.kind==='Let'){this.env=new Map(this.env);this.env.set(f.binding,c.value);enter(f.body,f.tail);}
     else if(f.kind==='If')enter(c.value[1]?f.yes:f.no,f.tail);
-    else if(f.kind==='Match'){const arm=f.arms.find(arm=>arm[0]===c.value[2]);if(!arm)throw new Error('No match arm');this.env=new Map(this.env);arm[1].forEach((b,i)=>this.env.set(b,c.value[3+i]));enter(arm[2],f.tail);}
+    else if(f.kind==='Match'){const arm=this.armByPosition?f.arms[this.constructorIndex(c.value[1],c.value[2])]:f.arms.find(arm=>arm[0]===c.value[2]);if(!arm)throw new Error('No match arm');this.env=new Map(this.env);arm[1].forEach((b,i)=>this.env.set(b,c.value[3+i]));enter(arm[2],f.tail);}
     else if(f.kind==='Return')value(c.value);
     else {const values=[...f.values,c.value];if(f.remaining.length){this.frames.push({...f,values,remaining:f.remaining.slice(1)});enter(f.remaining[0],false);}else this.control={kind:'Ready',node:f.node,operation:f.operation,metadata:f.metadata,values:this.reverseOperands?[...values].reverse():values,tail:f.tail};}
    }

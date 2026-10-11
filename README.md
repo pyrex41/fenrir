@@ -58,11 +58,43 @@ Evidence from this pass (development only):
 - `tests/tc0/pure-data.test.mjs` adds 25 validator, machine, reducer and replay
   tests; the full TC0 suite passes (108 tests).
 
-Not established: generated discovery over the new constructs, bounded
-exhaustive exploration, a refreshed Yggdrasil-shaken oracle (its stamp is now
-stale, so the check falls back to host Shen), and anything at the B/C level
-(`Outcome`, `SendResult`, `ReceiveResult` and the runtime operations).
-Qualification remains **UNKNOWN**.
+**Generated discovery and reduction (S2) over the data constructs.** A finite
+deterministic family (`tools/tc0/pure-data-generate.mjs`, 24 configurations)
+uses every schema `/2` construct in each case. The campaign driver
+`tools/check-tc0-pure-call-reduction.py` now takes `--family` and `--mutant`.
+It adds a data-specific candidate-only mutant, `--arm-by-position`, which
+selects a match arm by the constructor's declared position instead of its
+name. Each reduction proposal is revalidated and confirmed against fresh Shen
+and candidate observations. A proposal is accepted when it keeps the same
+discrepancy class; the outcome may change. New typed rules: `if-to-branch`,
+`project-tuple-literal`, `match-to-arm`, `prim-to-operand`,
+`call-to-argument` and `drop-tuple-element`, plus pruning of unused datatypes.
+
+```sh
+python3 -I tools/check-tc0-pure-call-reduction.py --shen-executable build/toolchain/shen-scheme \
+  --family pure-data --mutant arm-by-position --max-cases 24 --wall-seconds 300 --output build/tc0/s2/arm.json
+node tools/tc0/check-pure-call-failure-replay.mjs build/tc0/s2/arm.json build/tc0/s2/arm-replay.json
+```
+
+| Family / mutant | Discovered at | Attempts (accepted) | Nodes | Exact replay (first divergence) |
+| --- | --- | --- | --- | --- |
+| pure-data / arm-by-position | case 12 of 24 (cases 0–11 are equivalent declared-order survivors) | 35 (18) | 64 → 17 | original epoch 88, minimized epoch 29 |
+| pure-data / reverse-operands | case 0 | 30 (10) | 64 → 15 | original epoch 20, minimized epoch 2 |
+| pure-call / reverse-operands (regression) | case 0 | 36 (8) | 37 → 18 | original epoch 27, minimized epoch 9 |
+
+The minimized arm-by-position failure returns the same value as the model
+(`Rect`'s arm returns the same field as `Sq`'s). Only the step trace shows the
+wrong arm was entered. A cold repeat of both pure-data campaigns reproduced
+every observation, the reduction history and both failures identically. The
+only difference was the Shen loader's nonsemantic `run time:` line. The
+reverse-operands discovery at case 0 is trivial: every case emits from a
+tuple. Reductions are smallest-found by typed rules, not globally minimal.
+
+Not established: bounded exhaustive exploration, invalid-program generation,
+an independent (non-self-authored) candidate repair (S3), a refreshed
+Yggdrasil-shaken oracle (its stamp is now stale, so the check falls back to
+host Shen), and anything at the B/C level (`Outcome`, `SendResult`,
+`ReceiveResult` and the runtime operations). Qualification remains **UNKNOWN**.
 
 ## Latest native-host progress
 

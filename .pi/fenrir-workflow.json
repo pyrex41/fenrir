@@ -42,6 +42,7 @@
         "tests/tc0/pure-call-machine.test.mjs",
         "tests/tc0/pure-call-replay-runner.test.mjs",
         "tests/tc0/pure-call-replay.test.mjs",
+        "tests/tc0/pure-data-generation.test.mjs",
         "tests/tc0/pure-data.test.mjs",
         "tests/tc0/reduce.test.mjs",
         "tests/tc0/reduction-bridge.test.mjs",

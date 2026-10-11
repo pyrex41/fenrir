@@ -23,15 +23,34 @@ def emissions(run):
     return [e['label'] for s in run['steps'] for e in s['events'] if e['kind'] == 'Emit']
 
 
-def classify(reference, mutant):
+# Candidate-only mutants (run-pure-call.mjs flags) and the one discrepancy class each
+# is expected to produce. A mutant trace matching the reference is a survivor.
+MUTANTS = {'reverse-operands': ('--reverse-operands', 'reversed-emissions-same-outcome'),
+           'arm-by-position': ('--arm-by-position', 'wrong-match-arm')}
+FAMILIES = {'pure-call': 'tools/tc0/pure-call-generate.mjs', 'pure-data': 'tools/tc0/pure-data-generate.mjs'}
+
+
+def classify(reference, mutant, kind='reverse-operands'):
     if mutant['execution'] != 'Completed':
         raise RuntimeError('Mutant incomplete; no semantic kill')
-    if reference['candidate']['steps'] == mutant['steps']:
+    model = reference['model_steps']
+    if model == mutant['steps']:
         return None
-    if (emissions(reference['candidate']) == ['left', 'right']
-            and emissions(mutant) == ['right', 'left']
-            and mutant['outcome'] == reference['hand_outcome']):
-        return 'reversed-emissions-same-outcome'
+    if kind == 'reverse-operands':
+        if (emissions(reference['candidate']) == ['left', 'right']
+                and emissions(mutant) == ['right', 'left']
+                and mutant['outcome'] == reference['hand_outcome']):
+            return 'reversed-emissions-same-outcome'
+        return None
+    # wrong-match-arm: the traces agree through a MatchReturn step, then dispatch
+    # different nodes, i.e. the mutant entered a different arm body.
+    steps = mutant['steps']
+    k = next((i for i, (a, b) in enumerate(zip(model, steps)) if a != b), None)
+    if (k is not None and k > 0
+            and model[k-1]['site']['rule'] == 'MatchReturn'
+            and model[k]['site']['rule'] == steps[k]['site']['rule'] == 'Dispatch'
+            and model[k]['site']['node'] != steps[k]['site']['node']):
+        return 'wrong-match-arm'
     return None
 
 
@@ -41,9 +60,14 @@ def main():
     parser.add_argument('--output', required=True)
     parser.add_argument('--max-cases', type=int, default=32)
     parser.add_argument('--max-attempts', type=int, default=100)
+    parser.add_argument('--family', choices=sorted(FAMILIES), default='pure-call')
+    parser.add_argument('--mutant', choices=sorted(MUTANTS), default='reverse-operands')
+    parser.add_argument('--wall-seconds', type=int, default=120)
     args = parser.parse_args()
-    if not 1 <= args.max_cases <= 32 or not 1 <= args.max_attempts <= 100:
-        raise ValueError('Caps: cases1..32, attempts1..100')
+    if not 1 <= args.max_cases <= 32 or not 1 <= args.max_attempts <= 100 or not 1 <= args.wall_seconds <= 600:
+        raise ValueError('Caps: cases1..32, attempts1..100, wall seconds1..600')
+    wall = args.wall_seconds
+    flag, expected_discrepancy = MUTANTS[args.mutant]
     dest = Path(args.output).resolve()
     if not dest.is_relative_to(ROOT/'build') or dest.suffix != '.json' or dest.exists():
         raise ValueError('Fresh output JSON below build required')
@@ -51,7 +75,7 @@ def main():
     oracle = pc.Oracle(shen=executable)
     node = Path(shutil.which('node')).resolve(strict=True)
     paths = [Path(__file__), ROOT/'tools/check-tc0-pure-call.py', ROOT/'tools/check-tc0-expression.py',
-             *[ROOT/'tools/tc0'/p for p in ['pure-call-generate.mjs', 'pure-call-reduce.mjs',
+             *[ROOT/'tools/tc0'/p for p in ['pure-call-generate.mjs', 'pure-data-generate.mjs', 'pure-call-reduce.mjs',
                'pure-call-campaign-bridge.mjs', 'run-pure-call.mjs', 'pure-call-artifact.mjs', 'canonical.mjs']],
              *pc.MODEL_FILES,
              ROOT/'runtime/tc0/pure-call-machine.mjs', ROOT/'spec/tc0/pure-call-demo.json',
@@ -59,7 +83,7 @@ def main():
     before = {str(p): probe.digest(p) for p in paths}
     start = time.monotonic()
     def bounded_synchronous(argv, timeout=30, stdin=None, cwd=None):
-        remaining = 120-(time.monotonic()-start)
+        remaining = wall-(time.monotonic()-start)
         if remaining <= 0:
             raise TimeoutError('Campaign watchdog')
         deadline = time.monotonic()+min(timeout, remaining)
@@ -98,7 +122,7 @@ def main():
     scratch = dest.with_suffix('.inputs')
     scratch.mkdir(exist_ok=False)
     def run(argv):
-        if time.monotonic()-start > 120:
+        if time.monotonic()-start > wall:
             raise TimeoutError('Campaign wall watchdog, not semantic outcome')
         out, err = probe.synchronous(argv, timeout=30)
         if len(out.encode())+len(err.encode()) > 8388608:
@@ -108,7 +132,7 @@ def main():
         return run([str(node), str(ROOT/'tools/tc0/pure-call-campaign-bridge.mjs'), action, str(arg)])[0]
     observations = []
     def observe(case):
-        if time.monotonic()-start > 120:
+        if time.monotonic()-start > wall:
             raise TimeoutError('Campaign watchdog')
         measured = pc.observe(case, oracle, node, scratch)
         if len(measured['shen_stdout'].encode())+len(measured['shen_stderr'].encode()) > 8388608:
@@ -119,19 +143,25 @@ def main():
         control, control_err = run([str(node), str(ROOT/'tools/tc0/run-pure-call.mjs'), str(path)])
         if control != measured['candidate']:
             raise RuntimeError('Equivalent control disagrees with fresh baseline')
-        mutant, mutant_err = run([str(node), str(ROOT/'tools/tc0/run-pure-call.mjs'), str(path), '--reverse-operands'])
+        mutant, mutant_err = run([str(node), str(ROOT/'tools/tc0/run-pure-call.mjs'), str(path), flag])
         metric = bridge('reduce', path)['metric']
         if metric['nodes'] > 200:
             raise RuntimeError('AST node bound exceeded')
         measured.update(metric=metric, equivalent_control=control, equivalent_control_stderr=control_err,
-                        mutant=mutant, mutant_stderr=mutant_err, discrepancy=classify(measured, mutant))
+                        mutant=mutant, mutant_stderr=mutant_err, discrepancy=classify(measured, mutant, args.mutant))
+        # Generated cases may carry an independently derived mutant outcome.
+        predicted = case.get(args.mutant.replace('-', '_')+'_outcome')
+        if predicted is not None and measured['discrepancy'] and mutant['outcome'] != predicted:
+            raise RuntimeError('Mutant outcome differs from the generator-derived prediction')
         observations.append(measured)
         return measured
-    family = bridge('generate', args.max_cases)
+    family = run([str(node), str(ROOT/'tools/tc0/pure-call-campaign-bridge.mjs'), 'generate', str(args.max_cases), args.family])[0]
     original = None
     discovery_index = None
     for i, case in enumerate(family['cases']):
         measured = observe({k:v for k,v in case.items() if k != 'parameters'})
+        if measured['discrepancy'] not in (None, expected_discrepancy):
+            raise RuntimeError('Unexpected discrepancy class')
         if measured['discrepancy']:
             original, discovery_index = measured, i
             break
@@ -147,8 +177,9 @@ def main():
                 break
             case = {'name':'reduction-'+str(len(history)), 'program':proposal['program']}
             trial = observe(case)
-            accepted = (trial['discrepancy'] == original['discrepancy']
-                        and trial['hand_outcome'] == original['hand_outcome'])
+            # Acceptance keeps the discrepancy class on fresh model/candidate
+            # observations; the model outcome itself may change under reduction.
+            accepted = trial['discrepancy'] == original['discrepancy']
             if trial['metric']['nodes'] >= current['metric']['nodes']:
                 raise RuntimeError('Reduction did not decrease node metric')
             history.append({'observation_index':str(len(observations)-1), 'rule':proposal['rule'],
@@ -163,11 +194,13 @@ def main():
     after = {str(p):probe.digest(p) for p in paths}
     if before != after:
         raise RuntimeError('Source/toolchain drift')
-    report = {'schema':'pure-call-reduction-development/1', 'qualification':'UNKNOWN',
-              'scope':'Trusted-local finite pure-call family, not full TC0-A', 'sources':before,
+    report = {'schema':'pure-call-reduction-development/2', 'qualification':'UNKNOWN',
+              'scope':'Trusted-local finite '+args.family+' family, not full TC0-A', 'family':args.family,
+              'mutant':args.mutant, 'expected_discrepancy':expected_discrepancy,
+              'acceptance':'same discrepancy class on fresh Shen/candidate observations; outcome may change', 'sources':before,
               'sources_after':after, 'command':sys.argv, 'bounds':{'cases':str(args.max_cases),
               'ast_nodes':'200','reference_steps':'200','attempts':str(args.max_attempts),
-              'wall_seconds':'120','per_process_seconds':'30','output_bytes_per_process':'8388608'},
+              'wall_seconds':str(wall),'per_process_seconds':'30','output_bytes_per_process':'8388608'},
               'generation':{k:v for k,v in family.items() if k != 'cases'},
               'discovered_index':str(discovery_index), 'stopped_at_first_failure':True,
               'original':original,'minimized':current,'observations':observations,'history':history,
@@ -180,7 +213,7 @@ def main():
         raise RuntimeError('Late source drift')
     with dest.open('x') as f:
         f.write(json.dumps(report,indent=2)+'\n')
-    print(json.dumps({'qualification':'UNKNOWN','discovered_index':str(discovery_index),
+    print(json.dumps({'qualification':'UNKNOWN','family':args.family,'mutant':args.mutant,'discovered_index':str(discovery_index),
                       'attempts':len(history),'original_metric':original['metric'],
                       'minimized_metric':current['metric'],'reduction_cap_hit':cap_hit,'report':str(dest)}))
 
