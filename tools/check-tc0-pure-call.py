@@ -58,33 +58,74 @@ def normalize(s,i):
     return probe.normalize(s,i)
 
 
-def observe(case,executable,node,scratch):
-    a=case['program']
-    filename=scratch/(case['name']+'.json')
-    filename.write_text(json.dumps(a,separators=(',',':')))
-    # Host validation occurs before translation or model execution.
-    stdout,stderr=probe.synchronous([str(node),str(ROOT/'tools/tc0/run-pure-call.mjs'),str(filename)])
-    candidate=json.loads(stdout)
+MODEL_FILES=[ROOT/'models/tc0/arithmetic.shen',ROOT/'models/tc0/pure-call-machine.shen',ROOT/'models/tc0/pure-call-oracle.shen']
+REFERENCE_STEPS=200
+
+
+class Oracle:
+    """Runs models/tc0/pure-call-oracle.shen over a batch of initial states.
+
+    Exactly one of: a host Shen launcher (runs the driver source), or a
+    Yggdrasil-shaken artifact directory built by tools/tc0/build-shaken-oracle.mjs,
+    admitted only while its stamp matches the current model sources."""
+    def __init__(self,shen=None,artifact=None):
+        if (shen is None)==(artifact is None):
+            raise ValueError('Exactly one oracle: host Shen executable or shaken artifact')
+        self.shen=Path(shen).resolve(strict=True) if shen else None
+        self.artifact=Path(artifact).resolve(strict=True) if artifact else None
+        if self.artifact:
+            stamp=json.loads((self.artifact/'oracle-stamp.json').read_text())
+            current={str(p.relative_to(ROOT)):probe.digest(p) for p in MODEL_FILES}
+            if stamp.get('schema')!='fenrir.shaken-oracle.v1' or stamp.get('sources')!=current:
+                raise RuntimeError('Shaken oracle is stale or foreign; rebuild with tools/tc0/build-shaken-oracle.mjs')
+            if probe.digest(self.artifact/'app-lisp')!=stamp.get('artifact_sha256') or probe.digest(self.artifact/'yggdrasil.manifest.txt')!=stamp.get('manifest_sha256'):
+                raise RuntimeError('Shaken oracle artifact does not match its stamp')
+
+    def identity_paths(self):
+        if self.shen:
+            return [self.shen,self.shen.parent.parent/'lib/shen-scheme/shen.boot']
+        return [self.artifact/'app-lisp',self.artifact/'yggdrasil.manifest.txt',self.artifact/'oracle-stamp.json']
+
+    def describe(self):
+        return {'kind':'host-shen','executable':str(self.shen)} if self.shen else {'kind':'yggdrasil-shaken','artifact':str(self.artifact)}
+
+    def run(self,initials,timeout=30):
+        argv=[str(self.shen),'script',str(ROOT/'models/tc0/pure-call-oracle.shen')] if self.shen else [str(self.artifact/'app-lisp')]
+        stdin=''.join(f'{REFERENCE_STEPS} {i}\n' for i in initials)+'end\n'
+        # Through probe.synchronous so callers that bound subprocesses also bound the oracle.
+        out,err=probe.synchronous(argv,timeout=timeout*max(1,len(initials)),stdin=stdin,cwd=ROOT/'models/tc0')
+        chunks=out.split('[case-end]\n')
+        if len(chunks)!=len(initials)+1:
+            raise RuntimeError('Oracle returned '+str(len(chunks)-1)+' cases for '+str(len(initials)))
+        return chunks[:-1],err
+
+
+def initial_state(a):
     codes=[]
     for f in a['functions']:
         body=translate(f['body'],codes)
         codes.append('['+f['id']+' ['+f['parameter_id']+' '+body+']]')
     names='['+' '.join('['+atom(f['name'])+' '+f['id']+']' for f in a['functions'])+']'
     entry=next(f for f in a['functions'] if f['name']==a['entry'])
-    initial='[pure-call-state [eval '+translate(entry['body'],[])+' true] [['+entry['parameter_id']+' [int 0]]] [] ['+' '.join(codes)+'] '+names+']'
-    state='(value tc0.pc.probe)'
-    terminal='(= (hd (hd (tl '+state+'))) terminal)'
-    argv=[str(executable),'eval','-l',str(ROOT/'models/tc0/arithmetic.shen'),'-l',str(ROOT/'models/tc0/pure-call-machine.shen'),'-e','(set tc0.pc.probe '+initial+')']
-    for _ in range(200):
-        argv += ['-e','(if '+terminal+' [] (tc0.pc.sample '+state+'))',
-                 '-e','(if '+terminal+' [] (set tc0.pc.probe (hd (tl (tc0.pc.step '+state+')))))',
-                 '-e','(if (= (hd (hd (tl '+state+'))) value) (hd (tl (hd (tl '+state+')))) [])']
-    argv += ['-e','(hd (hd (tl '+state+')))']
-    model_stdout,model_stderr=probe.synchronous(argv,timeout=30)
-    if model_stdout.splitlines()[-1].strip()!='terminal':
-        raise RuntimeError('Independent model incomplete within200 steps: '+case['name'])
-    steps=[normalize(probe.parse_list(line),i) for i,line in enumerate(x for x in model_stdout.splitlines() if x.startswith('[sample '))]
-    descriptors=[model_value(probe.parse_list(line)) for line in model_stdout.splitlines() if line.startswith('[closure ')]
+    return '[pure-call-state [evaluate '+translate(entry['body'],[])+' true] [['+entry['parameter_id']+' [int 0]]] [] ['+' '.join(codes)+'] '+names+']'
+
+
+def observe(case,oracle,node,scratch,model=None):
+    a=case['program']
+    filename=scratch/(case['name']+'.json')
+    filename.write_text(json.dumps(a,separators=(',',':')))
+    # Host validation occurs before translation or model execution.
+    stdout,stderr=probe.synchronous([str(node),str(ROOT/'tools/tc0/run-pure-call.mjs'),str(filename)])
+    candidate=json.loads(stdout)
+    if model is None:
+        outs,errs=oracle.run([initial_state(a)])
+        model=(outs[0],errs)
+    model_stdout,model_stderr=model
+    lines=model_stdout.splitlines()
+    if not lines or lines[-1].strip()!='terminal':
+        raise RuntimeError('Independent model incomplete within '+str(REFERENCE_STEPS)+' steps: '+case['name'])
+    steps=[normalize(probe.parse_list(line),i) for i,line in enumerate(x for x in lines if x.startswith('[sample '))]
+    descriptors=[model_value(probe.parse_list(line)) for line in lines if line.startswith('[closure ')]
     # Hand fixtures supply an independent expectation; structural reduction trials
     # may instead use the freshly observed model terminal outcome (never candidate).
     expected=case.get('expected_outcome',steps[-1]['events'][0]['outcome'])
@@ -109,22 +150,24 @@ def observe(case,executable,node,scratch):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--shen-executable',required=True)
+    which=parser.add_mutually_exclusive_group(required=True)
+    which.add_argument('--shen-executable')
+    which.add_argument('--oracle-artifact',help='Directory from tools/tc0/build-shaken-oracle.mjs')
     parser.add_argument('--output',required=True)
     args=parser.parse_args()
     dest=Path(args.output).resolve()
     if not dest.is_relative_to(ROOT/'build') or dest.suffix!='.json':
         raise ValueError('Output must be JSON below build')
-    executable=Path(args.shen_executable).resolve(strict=True)
+    oracle=Oracle(shen=args.shen_executable,artifact=args.oracle_artifact)
     node=Path(shutil.which('node')).resolve(strict=True)
     fixture=ROOT/'fixtures/tc0/pure-call-forward.json'
     hand=ROOT/'fixtures/tc0/pure-call-hand-cases.mjs'
     paths=[Path(__file__),ROOT/'tools/check-tc0-expression.py',fixture,hand,
            ROOT/'tools/tc0/run-pure-call.mjs',ROOT/'tools/tc0/pure-call-artifact.mjs',
            ROOT/'tools/tc0/canonical.mjs',ROOT/'runtime/tc0/pure-call-machine.mjs',
-           ROOT/'models/tc0/pure-call-machine.shen',ROOT/'models/tc0/arithmetic.shen',ROOT/'spec/tc0/pure-call-demo.json',
+           *MODEL_FILES,ROOT/'spec/tc0/pure-call-demo.json',
            ROOT/'tests/tc0/pure-call-machine.test.mjs',ROOT/'tests/tc0/pure-call-artifact.test.mjs',
-           executable,node,executable.parent.parent/'lib/shen-scheme/shen.boot']
+           *oracle.identity_paths(),node]
     before={str(p):probe.digest(p) for p in paths}
     fixture_stdout,_=probe.synchronous([str(node),'--input-type=module','-e',
         'import {cases} from '+json.dumps(hand.as_uri())+'; console.log(JSON.stringify(cases));'])
@@ -138,11 +181,12 @@ def main():
         raise ValueError('Unique safe case IDs required')
     scratch=ROOT/'build/tc0/pure-call-inputs'
     scratch.mkdir(parents=True,exist_ok=True)
-    results=[observe(c,executable,node,scratch) for c in cases]
+    outs,errs=oracle.run([initial_state(c['program']) for c in cases])
+    results=[observe(c,oracle,node,scratch,(out,errs)) for c,out in zip(cases,outs)]
     if before!={str(p):probe.digest(p) for p in paths}:
         raise RuntimeError('Source/toolchain drift')
     report={'qualification':'UNKNOWN','scope':'tc0-a-pure-call-demo/1 hand cases; trusted-local development',
-            'sources':before,'bounds':{'reference_steps':'200','cases':str(len(cases)),'wall_seconds_per_process':'30'},
+            'sources':before,'oracle':oracle.describe(),'bounds':{'reference_steps':str(REFERENCE_STEPS),'cases':str(len(cases)),'wall_seconds_per_process':'30'},
             'cases':results,'limitations':['No complete catalog or integrated strict replay yet','Hand cases are not generated discovery/exhaustive scope','Not full TC0-A or qualified evaluator/isolation']}
     dest.parent.mkdir(parents=True,exist_ok=True)
     dest.write_text(json.dumps(report,indent=2)+'\n')

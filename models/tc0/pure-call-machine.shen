@@ -1,5 +1,7 @@
 \\ UNQUALIFIED integrated pure-call demo. Load arithmetic.shen first.
 \\ Explicit target continuations; names/codes are ordered host-validated tables.
+\\ The evaluation phase is tagged `evaluate`, not `eval`: a literal `eval` symbol
+\\ makes Yggdrasil keep the whole compiler, since a symbol may be applied.
 (define tc0.pc.lookup
  Id [[Id V] | Rest] -> V
  Id [_ | Rest] -> (tc0.pc.lookup Id Rest)
@@ -43,7 +45,7 @@
  [return Node Env] -> Env)
 (define tc0.pc.collect
  Node Op Meta [First | Rest] Tail Env Frames Codes Names ->
- (tc0.pc.transition [eval First false] Env [[collect Node Op Meta Rest [] Env Tail] | Frames] Codes Names [])
+ (tc0.pc.transition [evaluate First false] Env [[collect Node Op Meta Rest [] Env Tail] | Frames] Codes Names [])
  Node Op Meta [] Tail Env Frames Codes Names ->
  (tc0.pc.transition [ready Node Op Meta [] Tail] Env Frames Codes Names []))
 (define tc0.pc.dispatch
@@ -54,9 +56,9 @@
  [lambda Node Id Body] Tail Env Frames Codes Names ->
  (tc0.pc.transition [value [closure Node (tc0.pc.capture (tc0.pc.ordered (tc0.pc.remove Id (tc0.pc.free Body))) Env) []]] Env Frames Codes Names [])
  [let Node Id Init Body] Tail Env Frames Codes Names ->
- (tc0.pc.transition [eval Init false] Env [[bind Node Id Body Env Tail] | Frames] Codes Names [])
+ (tc0.pc.transition [evaluate Init false] Env [[bind Node Id Body Env Tail] | Frames] Codes Names [])
  [if Node Cond Yes No] Tail Env Frames Codes Names ->
- (tc0.pc.transition [eval Cond false] Env [[branch Node Yes No Env Tail] | Frames] Codes Names [])
+ (tc0.pc.transition [evaluate Cond false] Env [[branch Node Yes No Env Tail] | Frames] Codes Names [])
  [prim Node Op | Args] Tail Env Frames Codes Names -> (tc0.pc.collect Node Op none Args Tail Env Frames Codes Names)
  [apply Node A B] Tail Env Frames Codes Names -> (tc0.pc.collect Node apply none [A B] Tail Env Frames Codes Names)
  [call Node Name Arg] Tail Env Frames Codes Names -> (tc0.pc.collect Node call Name [Arg] Tail Env Frames Codes Names)
@@ -77,19 +79,19 @@
  [trap Code] Env Frames Codes Names -> (tc0.pc.transition [unwind Code] Env Frames Codes Names []))
 (define tc0.pc.enter
  [Id Body] Captures Arg true Node Env Frames Codes Names ->
- (tc0.pc.transition [eval Body true] [[Id Arg] | Captures] Frames Codes Names [])
+ (tc0.pc.transition [evaluate Body true] [[Id Arg] | Captures] Frames Codes Names [])
  [Id Body] Captures Arg false Node Env Frames Codes Names ->
- (tc0.pc.transition [eval Body true] [[Id Arg] | Captures] [[return Node Env] | Frames] Codes Names []))
+ (tc0.pc.transition [evaluate Body true] [[Id Arg] | Captures] [[return Node Env] | Frames] Codes Names []))
 (define tc0.pc.step
- [pure-call-state [eval E Tail] Env Frames Codes Names] -> (tc0.pc.dispatch E Tail Env Frames Codes Names)
+ [pure-call-state [evaluate E Tail] Env Frames Codes Names] -> (tc0.pc.dispatch E Tail Env Frames Codes Names)
  [pure-call-state [value V] Env [[bind Node Id Body OldEnv Tail] | Frames] Codes Names] ->
- (tc0.pc.transition [eval Body Tail] [[Id V] | OldEnv] Frames Codes Names [])
+ (tc0.pc.transition [evaluate Body Tail] [[Id V] | OldEnv] Frames Codes Names [])
  [pure-call-state [value [bool B]] Env [[branch Node Yes No OldEnv Tail] | Frames] Codes Names] ->
- (tc0.pc.transition [eval (if B Yes No) Tail] OldEnv Frames Codes Names [])
+ (tc0.pc.transition [evaluate (if B Yes No) Tail] OldEnv Frames Codes Names [])
  [pure-call-state [value V] Env [[return Node OldEnv] | Frames] Codes Names] ->
  (tc0.pc.transition [value V] OldEnv Frames Codes Names [])
  [pure-call-state [value V] Env [[collect Node Op Meta [Next | Rest] Values OldEnv Tail] | Frames] Codes Names] ->
- (tc0.pc.transition [eval Next false] OldEnv [[collect Node Op Meta Rest [V | Values] OldEnv Tail] | Frames] Codes Names [])
+ (tc0.pc.transition [evaluate Next false] OldEnv [[collect Node Op Meta Rest [V | Values] OldEnv Tail] | Frames] Codes Names [])
  [pure-call-state [value V] Env [[collect Node Op Meta [] Values OldEnv Tail] | Frames] Codes Names] ->
  (tc0.pc.transition [ready Node Op Meta (reverse [V | Values]) Tail] OldEnv Frames Codes Names [])
  [pure-call-state [value V] Env [] Codes Names] -> (tc0.pc.transition [join [ok V]] Env [] Codes Names [])
@@ -107,7 +109,7 @@
  [pure-call-state [join Outcome] Env [] Codes Names] -> (tc0.pc.transition [terminate Outcome] Env [] Codes Names [[scope-exit Outcome]])
  [pure-call-state [terminate Outcome] Env [] Codes Names] -> (tc0.pc.transition [terminal Outcome] Env [] Codes Names [[task-termination Outcome]]))
 (define tc0.pc.site
- [pure-call-state [eval [Tag Node | Args] Tail] Env Frames Codes Names] -> [node Node dispatch]
+ [pure-call-state [evaluate [Tag Node | Args] Tail] Env Frames Codes Names] -> [node Node dispatch]
  [pure-call-state [ready Node Op Meta Values Tail] Env Frames Codes Names] -> [node Node ready]
  [pure-call-state [value V] Env [[bind Node | Rest] | Frames] Codes Names] -> [node Node let-return]
  [pure-call-state [value V] Env [[branch Node | Rest] | Frames] Codes Names] -> [node Node if-return]
