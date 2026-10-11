@@ -107,3 +107,31 @@ test('schema /2 same-mutant failure replay rechecks wrong-match-arm and fails cl
   ]){const bad=structuredClone(report);mutate(bad);const r=go(bad);assert.notEqual(r.result.status,0);assert.equal(existsSync(r.out),false);}
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
+
+test('invalid family: each named mutation is rejected with its expected class and never executes',async()=>{
+ const {generateInvalidPureData}=await import('../../tools/tc0/pure-data-invalid.mjs');
+ const {InvalidPureCallArtifact}=await import('../../tools/tc0/pure-call-artifact.mjs');
+ const family=generateInvalidPureData();assert.deepEqual(generateInvalidPureData(),family);assert.equal(Number(family.count),family.cases.length);
+ const parent=resolve('build/tc0');mkdirSync(parent,{recursive:true});const dir=mkdtempSync(resolve(parent,'pure-data-invalid-'));
+ try{
+  for(const c of family.cases){
+   assert.throws(()=>validatePureCallArtifact(encode(c.program),['int','0']),e=>e instanceof InvalidPureCallArtifact&&e.message===c.expected_rejection,c.name);
+   const file=resolve(dir,c.name+'.json');writeFileSync(file,JSON.stringify(c.program));
+   const r=spawnSync(process.execPath,['tools/tc0/run-pure-call.mjs',file],{encoding:'utf8',timeout:10000});
+   assert.notEqual(r.status,0,c.name);assert.equal(r.stdout,'',c.name);assert.match(r.stderr,/InvalidPureCallArtifact/,c.name);
+  }
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('exhaustive-small enumeration: exact counts, deterministic, valid, completing, cap fails closed',async()=>{
+ const {enumeratePureData}=await import('../../tools/tc0/pure-data-enumerate.mjs');
+ // Hand-derived: size 1 = 4 I64 leaves + true + 2 bytes + None = 8; size 2 adds tap(4) +
+ // bytes_length(2) + not(1) + Some(4) = 11; size 3 adds I64 46 (tap 6, add/div 32,
+ // bytes_index 8), Bool 38 (not 1, lt 16, eq 16+4+1), Bytes 4, Opt 6, Pair 16 = 110.
+ assert.deepEqual([1,2,3].map(n=>enumeratePureData(n).count),['8','19','129']);
+ assert.deepEqual(enumeratePureData(3).counts_by_result_and_nodes,{'I64/1':'4','Bool/1':'1','Bytes/1':'2','Opt/1':'1','I64/2':'6','Bool/2':'1','Opt/2':'4','I64/3':'46','Bool/3':'38','Bytes/3':'4','Opt/3':'6','Pair/3':'16'});
+ const e=enumeratePureData(3);assert.deepEqual(enumeratePureData(3),e);assert.equal(e.truncated,false);
+ const bodies=new Set(e.cases.map(c=>c.result+JSON.stringify(c.program.functions[0].body)));assert.equal(bodies.size,e.cases.length);
+ for(const c of e.cases){const r=run(c.program);assert.equal(r.execution,'Completed',c.name);}
+ assert.throws(()=>enumeratePureData(5,{maxCases:100}),RangeError);assert.throws(()=>enumeratePureData(7),TypeError);
+});

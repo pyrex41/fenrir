@@ -90,8 +90,33 @@ only difference was the Shen loader's nonsemantic `run time:` line. The
 reverse-operands discovery at case 0 is trivial: every case emits from a
 tuple. Reductions are smallest-found by typed rules, not globally minimal.
 
-Not established: bounded exhaustive exploration, invalid-program generation,
-an independent (non-self-authored) candidate repair (S3), a refreshed
+**Exhaustive-small scope.** `tools/check-tc0-pure-data-exhaustive.py` runs every
+program of a bounded grammar G (defined in `tools/tc0/pure-data-enumerate.mjs`;
+I64/Bool/Bytes/Opt/Pair expressions over all schema `/2` constructs plus an
+emitting `tap` call). It uses one Shen batch and one candidate batch. Counts per
+size are hand-derived in the tests.
+
+| Max nodes | Programs | Shen/candidate agreement | Outcomes | reverse-operands killed / survived | arm-by-position killed / survived | Time |
+| --- | --- | --- | --- | --- | --- | --- |
+| 4 | 611 | 611 / 611 | 519 Ok, 48 DivZero, 27 Bounds, 17 Overflow | 510 / 101 | 20 / 591 | ~7 s |
+| 5 | 3,869 | 3,869 / 3,869 (max 47 steps) | 2,717 Ok, 572 DivZero, 364 Bounds, 216 Overflow | 3,303 / 566 | 198 / 3,671 | ~51 s |
+
+Survivors are programs on which that mutant is equivalent, for example
+programs with no collected operand pair or no `Some`-first match; no mutant
+crashed. Two subtle injected candidate defects that the hand fixtures do not
+target were each caught at bound 4: a bytes `eq` that ignores the last octet
+(4 programs disagree) and `bytes_length` of empty bytes returning 1
+(37 programs disagree).
+
+**Invalid programs.** `tools/tc0/pure-data-invalid.mjs` applies 27 named single
+mutations to a generated seed: duplicate IDs, bad hex, tuple arity, projection
+range, unknown or ill-typed constructors, non-exhaustive, duplicate or
+ill-scoped match arms, `eq`/byte primitive typing, datatype declaration errors,
+non-serializable entry and source-map gaps. Each case records the rejection it
+must produce. The tests check the exact rejection class, and that the runner
+exits nonzero without output, so invalid artifacts never execute.
+
+Not established: an independent (non-self-authored) candidate repair (S3), a refreshed
 Yggdrasil-shaken oracle (its stamp is now stale, so the check falls back to
 host Shen), and anything at the B/C level (`Outcome`, `SendResult`,
 `ReceiveResult` and the runtime operations). Qualification remains **UNKNOWN**.
