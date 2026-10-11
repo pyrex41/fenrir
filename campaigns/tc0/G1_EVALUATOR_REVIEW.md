@@ -70,7 +70,7 @@ the controller enforces through source hashes.
    the generated families and three mutants.
 5. **Protected inputs** (decided by the packet author): the registered check's
    `authorityPaths` cover the gate, `spec/tc0` (manifest, ledger, catalog),
-   `models/tc0`, `fixtures/tc0`, `tools/tc0`, every TC0 Python checker, `tests/tc0`,
+   `models/tc0`, `fixtures/tc0`, `tools/tc0`, the TC0 Python checkers invoked by this gate, `tests/tc0`,
    `campaigns/tc0/s3` and the toolchain flake and lock. The repairable candidate,
    `runtime/tc0/pure-call-machine.mjs`, is deliberately outside that set.
 6. **Evaluator isolation:** accepted as trusted-local for now. Candidate executions
