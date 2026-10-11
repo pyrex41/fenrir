@@ -6,6 +6,8 @@ Version 0.2 • Vertical-slice revision • Dependency ordered implementation pr
 
 **Revision status:** This plan adopts [review.md](review.md) and replaces the v0.1 bootstrap dependency chain. Gates below are requirements, not completed work or existing commands. The specification ZIP remains a historical v0.1 bundle. Old evidence does not satisfy revised gates without explicit compatibility review and reruns.
 
+**Direction amendment (11 October 2026):** See [§19](#19-direction-amendment-unikernel-target-and-agent-back-pressure). It sets the unikernel production target, effects as the capability manifest, a semantic per-change check for the agent loop, a host-hardening freeze until G1, and a new dependency-epoch rule for unrecoverable inputs. It replaces the first concrete assignment in §18. Gate requirements are unchanged except where this document explicitly adds rows to G4, G6, G7 and G10.
+
 ## 1 Mission and operating rules
 
 Implement Fenrir and its Gleipnir harness according to the architecture in [01_FULL_VISION.md](01_FULL_VISION.md), beginning with the normative contract in [02_TINY_LANGUAGE_CORE.md](02_TINY_LANGUAGE_CORE.md). Continue in vertical slices: model, evaluator, candidate implementation, adversarial evidence, then the next feature. This plan includes the bootstrap and the phases after the tiny core so a fresh implementation agent has the complete dependency chain.
@@ -13,6 +15,8 @@ Implement Fenrir and its Gleipnir harness according to the architecture in [01_F
 Do not rewrite ShenCheck without a source-grounded reason. Do not claim existing documentation proves a gate passes. Do not start with a new hypervisor, a complete surface language, or aggressive reference-count reuse. Make the semantic machine independently useful first.
 
 Each phase ends with a gate. PASS requires current evidence bound to source and toolchain hashes. FAIL, UNKNOWN, BLOCKED and DEFERRED are distinct. Deferred optional work cannot satisfy a required gate. No dates or estimates substitute for acceptance evidence.
+
+Measure progress by closed feedback loops, not by subsystems added or hardening passes completed. Every agent run has a registered per-change check that exercises the component it is changing (see 01_FULL_VISION.md §13, back pressure). Once a run's scope, protected inputs, sandbox and budget are approved, candidate-only iterations proceed without per-step human approval; humans review authority changes, dependency epochs and stops.
 
 ## 2 Dependency order
 
@@ -31,6 +35,8 @@ Each phase ends with a gate. PASS requires current evidence bound to source and 
 | P10 | Interactive development and production qualification | P6–P9 |
 
 P1–P3 each include model, independent candidate, evaluator, applicable mutants, reduction and strict replay. They are not separate model-first/evaluator-second/candidate-last phases. The first useful release is G1; full TC0 is G3.
+
+After G1, a bounded **thin unikernel slice** may run as a development spike, extending the existing native-arithmetic spike rather than replacing it: one pure function plus one output effect, lowered to C, linked against Solo5 hvt with a device manifest derived from that effect, run, strictly replayed and compared with Shen. It establishes the end-to-end shape of the production target early. It is not P4 work, does not satisfy G4, and stops at its budget with retained blockers.
 
 P4 and early P5 work can proceed independently after P3 interfaces freeze. P0 performs a bounded Solo5 spike only; backend blockers do not prevent process-backed P1 work unless they affect its actual prerequisites. P9 experiments may begin earlier, but cannot replace the conservative compiler baseline. Optional emulation and Unikraft tracks have explicit triggers below.
 
@@ -63,7 +69,9 @@ Path restrictions are workflow controls, not isolation. Build and run candidates
 
 ### Work
 
-Pin ShenCheck, Koka, Solo5, the selected Shen port, C compiler, Rust toolchain where used, and any Jepsen checker artifacts. Record exact commits, license obligations, build commands, file hashes and platform details. Keep upstream source adaptations explicit. Use a Nix flake and lockfile for reproducible dependencies where supported; provide a documented non-Nix build path if platform support requires it.
+Pin ShenCheck, Koka, Solo5, the selected Shen port, C compiler, Rust toolchain where used, and any Jepsen checker artifacts. Record exact commits, license obligations, build commands, file hashes and platform details. Keep upstream source adaptations explicit. Use a Nix flake and lockfile for reproducible dependencies where supported; provide a documented non-Nix build path if platform support requires it. Backend container and guest images are built from the flake, so a lost image is rebuilt rather than recovered. Keep local upstream fixes as named overlays or patch files with review records.
+
+**Dependency epochs.** A pinned input set is an epoch with its own identity. When a retained input cannot be restored exactly, a reviewer opens a new epoch: rebuild from pinned sources, record the new identities and the reason, mark evidence bound to the old epoch historical, and rerun what the next gate needs. Old receipts are never rewritten or reinterpreted to match new artifacts, and earlier failures or uncertainties stay recorded. Opening an epoch is the remedy for the current native-host blocker (missing exact stock/control images); it does not by itself authorize live runs, which still require the remaining gates in the native closure packet.
 
 Inspect ShenCheck choices, replay, model sets, corpus/minimizer, cooperative protocol, Antithesis shim, Jepsen bridge and current tests. Classify each as reusable unchanged, requires adapter, requires repair, or unrelated. Inspect Koka's runtime assumptions before deciding whether code can be reused on Solo5. Inspect Solo5 clocks, bindings, tender, toolchain and target support.
 
@@ -94,6 +102,10 @@ Integrate structured recorded choices, including singleton Run choices, strict h
 Use scripted peers to test malformed/truncated streams, duplicate sequence IDs, wrong artifact hashes, oracle failure, missing/extra tapes, early terminal contradictions and unknown-to-pass promotion. Add reversed-evaluation-order and arithmetic mutants plus one equivalent control. Implement small exhaustive finite input/configuration exploration and explicit truncation reporting. Search identity includes the A machine, property-monitor state and remaining bounds from the start; P2 extends rather than introduces that product. Saved-history checking must not require candidate execution.
 
 Give an agent a generated failure against a protected oracle, retain its task packet and revisions, independently build its patch, and rerun retained plus fresh cases. A scenario tape may be reissued against the repaired candidate, but exact-original replay remains bound to the original candidate identity.
+
+Register the slice's semantic development checks with the Pi workflow controller as development-tier commands: validator negative tests, hand-fixture Shen-vs-candidate agreement, and strict replay of retained cases. They give the agent loop semantic back pressure without being the `tc0-a-qualification` evaluator, which stays a separate deliverable and is never approximated by these checks. Measure their wall time; the per-change set targets about a minute on the process backend.
+
+Until G1 passes, native-host and Solo5 hardening is frozen except for work that removes a named blocker for G1 or for the dependency epoch above. The pure process-backed loop is the critical path.
 
 ### Gate G1 — first useful release
 
@@ -147,11 +159,15 @@ Port only the minimum candidate/runtime support required. Establish boot paramet
 
 Document the protocol request fields, response fields, validation limits, startup handshake, profile hashes, termination handshake, and error behavior. Replay rejects drift. Start by restarting from initial state; do not depend on unimplemented VM snapshots.
 
+Derive the guest device manifest from the program's residual effect row (01_FULL_VISION.md §7, effects as the capability manifest). Link only handlers for residual effects. Configure the tender to grant only the derived devices. Write the boundary inventory for the image: tender, hypervisor and host kernel assumptions, single privilege level inside the guest, runtime-internal operations and any unsafe code.
+
 Run host perturbation experiments: vary host load, scheduling delays, run directory, process placement and repeated cold boots while keeping the semantic profile fixed. Normalize only fields explicitly outside the semantic contract. Audit instructions/libraries that could bypass mediation. State precisely which cooperative or trusted-code assumptions remain.
 
 ### Gate G4
 
 The same compatible artifact and tape produce identical semantic traces across a declared repeat suite, including failure cases. Guest crashes remain isolated and diagnosed. No live network/filesystem input enters replay. Boundary bypass tests fail closed where enforceable; any remaining unmediated native instruction capability limits the claim explicitly.
+
+A program whose residual effects lack a permitted handler is rejected at image build. Each image's device manifest matches its derived effect set, and attempted use of an undeclared device fails closed in tests.
 
 Repeat counts provide empirical evidence, not proof of universal determinism. Publish the supported profile and audit inventory. Do not label the profile machine-level deterministic unless an independent backend establishes that stronger claim.
 
@@ -165,7 +181,7 @@ If the product requires deterministic termination of non-yielding native code, p
 
 Implement a conservative compiler from validated TC0 to an explicit state-machine IR and C/native code targeting `TC0-REF-STEP/0.2`. Preserve semantic node mappings and its published scheduler checkpoints. This is a reference-profile compiler, not the permanent production scheduling design. Separate validation, lowering, code generation, runtime linking and execution. Compare the generated candidate against both Shen and the conservative interpreter.
 
-Use simple safe memory management first. Pin ABI, integer representation, closure layout conventions and error propagation. Test tail calls, alias preservation and stack limits. Use available sanitizers, allocator poisoning and guarded allocations in suitable process builds; document which tools cannot run in the guest configuration.
+Use simple safe memory management first. Pin ABI, integer representation, closure layout conventions and error propagation. Generated C is acceptable; hand-written runtime C runs under sanitizers in the per-change tier on the process backend, or that component moves to a language whose compiler rejects the same errors. Record the choice per runtime component. Test tail calls, alias preservation and stack limits. Use available sanitizers, allocator poisoning and guarded allocations in suitable process builds; document which tools cannot run in the guest configuration.
 
 ### Gate G5
 
@@ -181,9 +197,13 @@ Before adding polymorphism/effect rows, review an elaboration/lowering contract:
 
 Add local type inference, polymorphism, algebraic datatypes and effect rows incrementally. Every addition has a reviewed semantics-preserving desugaring or a new model rule. Build a formatter, package manifest/lockfile, diagnostic source mapping, language server essentials and a standard CLI. Separate compiler-internal types from stable public APIs.
 
+Design the surface for agents as primary authors (01_FULL_VISION.md §15): checked module interface files with effect rows, a versioned grammar card, and a skill pack per release with migration guidance and mechanical rewrites. Prefer explicit, regular constructs that the type and effect checker can reject over syntax sugar that mainly helps human reading. Track richer type-level checking (refinements, then dependent types) as a later research option for added back pressure; it is not a P6 requirement.
+
+Before committing to a syntax, a time-boxed throwaway prototype MAY be built after G1: a minimal frontend lowering to the existing TC0-A artifacts, used to test whether agents write correct programs from the grammar card alone. It produces design evidence only, is discarded afterwards, and cannot satisfy G6.
+
 ### Gate G6
 
-The elaboration/lowering contract has independent distinguishing fixtures for every admitted surface extension, not only target-validator success. A new developer can install, build, run, test, explore and replay a sample with documented commands. Parser round trips and formatter stability hold. Effect diagnostics identify missing handlers and relevant call sites. Dependency resolution is reproducible. All generated surface examples reduce to validated artifacts and pass the semantic suites.
+The elaboration/lowering contract has independent distinguishing fixtures for every admitted surface extension, not only target-validator success. A new developer can install, build, run, test, explore and replay a sample with documented commands. An agent given only the grammar card, interface files and skill pack writes the declared sample suite so that it passes the semantic suites, with the attempt count recorded. Parser round trips and formatter stability hold. Effect diagnostics identify missing handlers and relevant call sites. Dependency resolution is reproducible. All generated surface examples reduce to validated artifacts and pass the semantic suites.
 
 ## 11 P7 Build production concurrency
 
@@ -193,11 +213,13 @@ First qualify a separate compiled/production scheduling contract: task-switch an
 
 Specify asynchronous I/O, elapsed-time deadlines, cancellation shielding if needed, realistic finalizers, bounded channels/mailboxes, supervisor restart policies and overload behavior as new versions/profiles. Keep one documented default policy for application developers. Distinguish production elapsed time from TC0 idle-advance time; fairness cannot make the latter progress while runnable tasks remain.
 
+The elapsed-time contract for unikernel deployment cannot assume a host time service. Specify time as an effect handler that combines several clock sources, reports their disagreement and bounds its error; Gleipnir replaces the same handler with virtual time. Persisted virtual actors (actors addressed by identity and rehydrated from a storage handler on demand) are a candidate later profile on top of supervision; specify them as a separate profile if adopted, not as an extension of TC0 tasks.
+
 Implement a production scheduler separately from the deterministic scheduler, sharing validated state transitions where appropriate but retaining independent checking. Capture causal histories and map them to the abstract model. Add actual parallel stress tests if multiple native threads are introduced. A serial simulator cannot establish weak-memory correctness by itself.
 
 ### Gate G7
 
-The compiled/production scheduling and elapsed-time profiles are published and qualified, with reviewed trace abstraction and independent boundary/progress tests. Long-running service tests demonstrate graceful shutdown, bounded queues, cancellation completion, no leaked tasks/resources, and defined restart behavior under fault campaigns. Production histories are admitted by the model. Latency, throughput, memory and telemetry overhead are measured with reproducible workloads and hardware details. Timer behavior under CPU load is explicitly tested against the production contract.
+The compiled/production scheduling and elapsed-time profiles are published and qualified, with reviewed trace abstraction and independent boundary/progress tests. Long-running service tests demonstrate graceful shutdown, bounded queues, cancellation completion, no leaked tasks/resources, and defined restart behavior under fault campaigns. Production histories are admitted by the model. The multi-source time handler's disagreement and error reporting is tested under injected clock faults. Latency, throughput, memory and telemetry overhead are measured with reproducible workloads and hardware details. Timer behavior under CPU load is explicitly tested against the production contract.
 
 ## 12 P8 Add persistence and distributed histories
 
@@ -205,13 +227,15 @@ The compiled/production scheduling and elapsed-time profiles are published and q
 
 Add a versioned storage model: write visibility, flush/durability, crash loss, recovery, and allowed corruption faults. Network models distinguish channel semantics from packet loss, partitions, delayed responses and retransmission. Distinguish logical requests from retry attempts and client knowledge from internal state.
 
+For cloud-shaped deployments, evaluate an object-store-primary storage profile: an S3-compatible store as the durable source of truth with a local block cache, modeled as a storage effect with explicit visibility, durability and cache-loss semantics. Use NixOS machine tests, or an equivalent pinned multi-machine harness, to run fleets of images against network rules and fault schedules.
+
 Build a small durable service, first a register or queue, then a lease/fencing or transactional workload. Use Shen domain models plus the existing Jepsen bridge for supported Elle/Knossos histories. Validate at least one history that passes, one known anomaly and one indeterminate case. Preserve each checker's distinct verdict.
 
 ### Gate G8
 
 Crash-after-commit-before-response, retry duplication, stale fencing, partition recovery and incomplete histories all have explicit outcomes and fixtures. Independent checkers detect seeded anomalies. Replayed environmental faults are exact within the declared profile. Unmodeled external services are marked opaque rather than implied deterministic.
 
-This is the trigger point for evaluating a Unikraft backend if a concrete library or compatibility workload justifies it. Adoption requires the same boundary inventory and conformance gates as Solo5, plus the new OS components' semantics. It does not replace the small reference backend.
+This is the trigger point for the network/storage library decision in 01_FULL_VISION.md §8: reuse MirageOS libraries through an OCaml backend, or port handler libraries against an existing implementation used as a differential oracle. Compare boundary inventories and determinism audit cost for the chosen workload, and record the decision. It is also the trigger point for evaluating a Unikraft backend if a concrete library or compatibility workload justifies it. Adoption requires the same boundary inventory and conformance gates as Solo5, plus the new OS components' semantics. It does not replace the small reference backend.
 
 ## 13 P9 Optimize ownership and execution
 
@@ -231,11 +255,11 @@ Optimized and baseline implementations agree over fresh generated campaigns and 
 
 Add interactive inspection, source-level suspended-task views, effect-context diagnostics and module replacement for new requests. Defer replacement of active suspended frames until a separate migration model exists. Complete package signing/provenance policy, compatibility/deprecation policy, supported-platform matrix, release documentation and operational guides.
 
-Conduct a review of boundary enforcement, dependency updates, malformed artifacts, FFI profiles, sensitive trace data, resource exhaustion and denial-of-service behavior. Add supported real I/O libraries and independent integration tests. Retain reproducible old failure bundles across releases or publish explicit migration limits.
+Conduct a review of boundary enforcement, dependency updates, malformed artifacts, FFI profiles, sensitive trace data, resource exhaustion and denial-of-service behavior. Publish the unikernel deployment threat model: what removing the shell and interpreter does and does not prevent, memory-safety and code-reuse exposure, guest privilege levels, tender/hypervisor/host trust, and the patch process for each. Ship the redacting logging handler as the default and test that declared secrets never reach log output. Add supported real I/O libraries and independent integration tests. Retain reproducible old failure bundles across releases or publish explicit migration limits.
 
 ### Gate G10
 
-Release qualification includes clean-machine installation, reproducible builds, compatibility fixtures, realistic long-duration services, fault recovery, performance budgets, and no unresolved required UNKNOWN rows. The product documentation states precisely which replay guarantees apply to which execution profiles.
+Release qualification includes clean-machine installation, reproducible builds, compatibility fixtures, realistic long-duration services, fault recovery, performance budgets, and no unresolved required UNKNOWN rows. The product documentation states precisely which replay guarantees apply to which execution profiles. A breaking change between two supported releases is migrated by its skill pack across the retained corpus with recorded results. No security property of unikernel deployment is advertised beyond what the published threat model and adversarial tests support.
 
 ## 15 Campaign tiers and cost controls
 
@@ -245,6 +269,8 @@ Release qualification includes clean-machine installation, reproducible builds, 
 | Integration | Exhaustive-small models, differential generation, replay perturbation | Required before feature promotion |
 | Scheduled deep run | Larger exploration, fault schedules, optimization stress | Results bound to exact revision |
 | Release | Full required matrix, real services, platform and performance qualification | Required for declared supported release |
+
+The per-change tier is the agent loop's back pressure and is held to a latency target (about a minute for the current slice on the process backend). Work that cannot meet it moves to the integration tier rather than slowing every iteration.
 
 Choose initial concrete budgets during P0/P1 from measured throughput and refine them in P2/P3. Preserve seeds and tapes for discovery, but use strict tapes for exact replay. Increasing a budget is useful only when it addresses an identified gap. Search reduction techniques such as partial-order reduction require an independence relation and comparison against unreduced exhaustive cases before they can support completeness claims.
 
@@ -276,13 +302,50 @@ Never report PASS for timeout, unknown, skipped, or truncated required work.
 
 ## 18 First concrete implementation assignment
 
-1. Complete G0 core readiness and retain the bounded arithmetic, isolation and Solo5 reports.
-2. Define TC0-A encoding, arithmetic, pure transitions, event/tape schemas and hand fixtures.
-3. Build the Shen model and independent minimal process candidate together with strict replay and a small reducer.
-4. Discover an evaluation-order/arithmetic defect, minimize it, exactly replay the original, obtain an agent patch and independently gather fresh passing evidence (G1).
-5. Add dynamic handlers and explicit context rules through the same vertical stack (G2).
-6. Add tasks/channels/cancellation, conservative resource lifetimes and distinct idle-time rules; demonstrate the stale-waiter repair and qualify full TC0 (G3).
+Revised by the 11 October 2026 direction amendment (§19). Items are in dependency order; 1 and 2 can proceed in parallel.
+
+1. **Open a new dependency epoch** for the native host (§4): pin Shen, Solo5, the C toolchain and image recipes in the flake, rebuild the stock/control images, record new identities and mark old native receipts historical. This removes the missing-image blocker only; the remaining native closure gates still apply before any live run.
+2. **Give the agent loop semantic back pressure** (§5): register validator, hand-fixture Shen-vs-candidate and strict-replay development checks for the pure-call/closure slice in the workflow manifest, and measure their latency. Leave `tc0-a-qualification` unconfigured until a real evaluator exists.
+3. **Close G1** on the process backend, completing or explicitly blocking the G0 core-readiness rows it needs (exact arithmetic, evaluator boundary, requirement ledger), through `campaigns/tc0/NEXT_SLICE.md` S1–S3: closed pure-call/closure validator and catalog, generated discovery, reduction, strict original replay, then one independently built candidate-only repair with fresh passing evidence. Freeze unrelated host hardening until then.
+4. **Reduce host languages:** keep the Go host; retire Python runners as their slices are touched, and add no new semantic harness logic in Node. Move harness responsibilities toward the Shen/ShenCheck boundary in §3 as each slice is rebuilt.
+5. **Thin unikernel slice** after G1 (§2): one pure function plus one output effect, compiled to C, linked with Solo5 hvt using an effect-derived device manifest, replayed and compared with Shen. Development spike only.
+6. **Optional surface kata** after G1 (§10): a throwaway frontend tested on whether agents write correct programs from a grammar card. Design evidence only.
+7. Add dynamic handlers and explicit context rules through the same vertical stack (G2).
+8. Add tasks/channels/cancellation, conservative resource lifetimes and distinct idle-time rules; demonstrate the stale-waiter repair and qualify full TC0 (G3).
 
 The next executable demonstration packet contains: (1) a canonical TC0-A program, (2) its hand-derived expected trace, (3) agreement between the Shen evaluator and independent candidate, (4) an injected arithmetic/evaluation-order defect, (5) Gleipnir discovery and reduction, (6) exact replay of the original failure, and (7) a repair passing fresh evaluation. Schemas, concrete frames and byte vectors are checked implementation artifacts; do not delay this packet for B/C ownership fixtures or another large specification revision.
 
 Strict replay is part of step 3, not deferred integration work. The first demonstration must show an actual generated implementation failure, a small deterministic counterexample, original-failure replay, an agent patch, and current passing evidence. A diagram or manually selected happy path is insufficient. Authority comes from reviewed explicit rules and the qualified evaluator, never whichever implementation arrives first. Keep backend work bounded until these slices establish useful evidence.
+
+## 19 Direction amendment: unikernel target and agent back pressure
+
+**Source.** Geoffrey Huntley, ["unikernels were hard. key word: were."](https://ghuntley.com/unikernels/), 11 October 2026: a write-up of a conversation with Justin Cormack (MirageOS). Its arguments are opinion and anecdote, not measured evidence. This section records which ideas the plan adopts, where they land, and what it does not adopt.
+
+**Assessment.** The article's central method, "if you have an oracle, porting is a loop," is Gleipnir's existing design: Shen is the oracle and candidates are checked against it. The gap it exposes is not rigor but loop speed. The project has a strong evidence vocabulary around a small arithmetic/closure slice, while its agent loop has no registered semantic check, recent passes hardened the native host rather than closing G1, and the native path is blocked on unrecoverable images. The amendment keeps acceptance authority strict and makes the inner candidate loop fast and unattended.
+
+| Article idea | Adopted as | Where |
+| --- | --- | --- |
+| The application is the OS; the general-purpose OS is design debt; no shell means no next hop | Unikernel as intended production target, with an explicit threat model before any security claim | Vision §2, §3, §7; plan P10 |
+| Every service is a library | Effect rows as the image's capability manifest; device manifest derived from residual effects | Vision §7; plan P4/G4 |
+| If you have an oracle, porting is a loop | Existing implementations as differential oracles for handler libraries; MirageOS reuse vs port decided at P4/P8 | Vision §8, §13; plan P8 |
+| Back pressure; compile time is a tax | Semantic per-change check registered with the controller; latency target; heavy work in later tiers | Vision §13; plan §1, P1, §15 |
+| C gives too little back pressure | Sanitizers on hand-written runtime C, or a safer language for that component | Vision §13; plan P5 |
+| Tool-calling a human is not AGI | No per-iteration human approval inside an approved run; humans keep authority changes | Vision §13; plan §1 |
+| Nix overlays; Nix machine tests | Flake-built images, dependency epochs, overlays for upstream fixes; machine tests for fleets | Vision §16; plan P0, P8 |
+| `.mli` files as agent context | Checked module interface files with effect rows | Vision §15; plan P6 |
+| Grammar lookup table; languages designed for agents | Versioned grammar card, tested by agents writing the sample suite | Vision §15; plan P6/G6 |
+| Breaking changes with skill packs | Skill pack per release with migration tested on the retained corpus | Vision §15; plan P6, G10 |
+| Multi-source time (NTP, RADclock, TigerBeetle) | Production time handler over several sources with disagreement reporting | Vision §18; plan P7/G7 |
+| PII wrapper at the logging boundary | Redacting logging handler by default, policy as a pluggable module | Vision §15; plan P10 |
+| S3-primary storage with local cache | Candidate object-store storage profile | Plan P8 |
+| Orleans-style virtual actors (Spaceleans) | Candidate later profile on top of supervision | Plan P7 |
+| Projects as katas, redone as models improve | Optional throwaway surface prototype after G1 | Plan P6, §18 |
+
+**Not adopted or deferred.**
+
+- Claims that porting is trivial or that in-guest privilege separation is "a prompt away" are not planning assumptions; each port and each privilege profile carries its own oracle, boundary inventory and gate evidence.
+- Dependent types are recorded as a later research option for added back pressure, not a P6 requirement.
+- Self-hosting the compiler (the T-diagram path) is out of scope until a stable surface language and G6 exist.
+- Choosing OCaml as an implementation language is not decided here; it is one option at the §8 library decision.
+- Nothing in this amendment changes TC0 0.2 semantics, profile identities, the evidence contract (§16) or the rule that only the external evaluator issues verdicts.
+

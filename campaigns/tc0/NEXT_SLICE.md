@@ -14,7 +14,7 @@ Human command in Pi:
 
 No reload is needed for this task packet. Review the displayed authority manifest and confirm the drive. In non-UI mode the controller requires explicit human approval. This command authorizes one finite run, not each future row in the roadmap. Follow-ons may proceed within that budget only when their development dependencies are measured; later drives require fresh authorization.
 
-Use existing controller tools: select → build → measure; failed development checks → repair → measure. The only registered check is `workflow-tests` (development). A fresh PASS with missing qualification returns to build. Do not call the unconfigured `tc0-a-qualification`. No controller/configuration/protected-test changes are required by this packet.
+Use existing controller tools: select → build → measure; failed development checks → repair → measure. Registered development checks: `workflow-tests` (controller only), `tc0-candidate-tests` (TC0 unit tests) and `tc0-pure-call-oracle` (fresh Shen agreement plus strict replay on the pure-call hand cases; BLOCKED without `build/toolchain/shen-scheme`). Use the two TC0 checks at measure boundaries; a fresh PASS with missing qualification returns to build. Do not call the unconfigured `tc0-a-qualification`. No controller/configuration/protected-test changes are required by this packet.
 
 ## Read and baseline
 
@@ -86,7 +86,7 @@ Synchronous development commands (not qualification):
 node --test tests/tc0/*.test.mjs
 ```
 
-Inspect the existing tools/check-tc0-closure.py and tools/check-tc0-reduction.py for baseline commands. Add an integration runner for the new identity instead of silently feeding integrated artifacts into old demo runners. Keep fresh independent model reports and source-verified replay admission. Run `fenrir_check` with checkId `workflow-tests` at development measure boundaries; its PASS checks the controller, not TC0 semantics. Record TC0 evidence separately with `fenrir_progress` and `fenrir_checkpoint`.
+Inspect the existing tools/check-tc0-closure.py and tools/check-tc0-reduction.py for baseline commands. Add an integration runner for the new identity instead of silently feeding integrated artifacts into old demo runners. Keep fresh independent model reports and source-verified replay admission. Run `fenrir_check` with `tc0-candidate-tests` and `tc0-pure-call-oracle` at development measure boundaries; when S1 adds a new integration runner, propose extending the oracle launcher to cover it in a separately reviewed manifest change. `workflow-tests` checks the controller, not TC0 semantics. Record TC0 evidence separately with `fenrir_progress` and `fenrir_checkpoint`.
 
 Each completed substep records current files/hashes, actual test counts, measured bounds/cap hits, semantic outcomes, source/toolchain identities, cleanup and the next executable action. Checkpoint before budget exhaustion, large handoffs and context compaction. Report phase progress, not only status, to avoid the controller's stall guard.
 

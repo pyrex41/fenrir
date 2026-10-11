@@ -30,12 +30,14 @@ export function validateConfig(raw) {
   const checks = {};
   for (const [id, spec] of Object.entries(raw.checks)) {
     if (!/^[a-z][a-z0-9-]{0,63}$/.test(id)) throw new Error(`Invalid check ID: ${id}`);
-    keys(spec, ['kind', 'command', 'timeoutSeconds', 'authorityPaths'], `check ${id}`);
+    keys(spec, ['kind', 'command', 'timeoutSeconds', 'authorityPaths', 'blockedExitCode'], `check ${id}`);
     if (!['development', 'qualification'].includes(spec.kind)) throw new Error(`Invalid check kind: ${id}`);
     if (!Array.isArray(spec.command) || !spec.command.length || spec.command.length > 64 || spec.command.some(x => typeof x !== 'string' || x.includes('\0') || x.length > 4096) || !nonempty(spec.command[0])) throw new Error(`Invalid argv for ${id}`);
     if (!Number.isSafeInteger(spec.timeoutSeconds) || spec.timeoutSeconds < 1 || spec.timeoutSeconds > 3600) throw new Error(`Invalid timeout for ${id}`);
     const authorityPaths = strings(spec.authorityPaths, `${id}.authorityPaths`).map(localPath);
     if (spec.kind === 'qualification' && !authorityPaths.length) throw new Error(`Qualification check ${id} needs declared evaluator authority paths`);
+    // Opt-in only: an unavailable prerequisite is not a candidate failure. Qualification reports own their verdict.
+    if (spec.blockedExitCode !== undefined && (spec.kind !== 'development' || !Number.isSafeInteger(spec.blockedExitCode) || spec.blockedExitCode < 2 || spec.blockedExitCode > 125)) throw new Error(`Invalid blockedExitCode for ${id}`);
     checks[id] = { ...spec, command: [...spec.command], authorityPaths };
   }
   if (raw.requireContinuousContext !== undefined && typeof raw.requireContinuousContext !== 'boolean') throw new Error('requireContinuousContext must be boolean');

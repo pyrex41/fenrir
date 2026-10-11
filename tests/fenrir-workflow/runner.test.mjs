@@ -53,6 +53,36 @@ test('development checks observe exit status without inventing qualification', a
   assert.equal((await runCheck(data)).verdict, 'FAIL');
 });
 
+test('development checks map only an opted-in exit code to BLOCKED', async t => {
+  const data = await fixture(t, 'process.exitCode = 2;');
+  assert.equal((await runCheck(data)).verdict, 'FAIL');
+  data.config.checks.check.blockedExitCode = 2;
+  const receipt = await runCheck(data);
+  assert.equal(receipt.verdict, 'BLOCKED');
+  assert.deepEqual(receipt.claims, []);
+  assert.match(receipt.summary, /unavailable prerequisite/);
+  data.config.checks.check.command = [process.execPath, '-e', 'process.exit(1)'];
+  assert.equal((await runCheck(data)).verdict, 'FAIL');
+  data.config.checks.check.command = [process.execPath, '-e', ''];
+  assert.equal((await runCheck(data)).verdict, 'PASS');
+});
+
+test('blockedExitCode is limited to development checks and a narrow range', async t => {
+  const cwd = await mkdtemp(resolve(tmpdir(), 'fenrir-runner-test-'));
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  await mkdir(resolve(cwd, '.pi'));
+  const write = check => writeFile(resolve(cwd, '.pi/fenrir-workflow.json'), JSON.stringify({ version: 1, requiredChecks: ['check'], checks: { check } }));
+  const base = { kind: 'development', command: [process.execPath, '-e', ''], timeoutSeconds: 5, authorityPaths: [] };
+  await write({ ...base, blockedExitCode: 2 });
+  assert.equal((await loadConfig(cwd)).config.checks.check.blockedExitCode, 2);
+  for (const bad of [0, 1, 126, 2.5, '2']) {
+    await write({ ...base, blockedExitCode: bad });
+    await assert.rejects(loadConfig(cwd), /Invalid blockedExitCode/);
+  }
+  await write({ ...base, kind: 'qualification', authorityPaths: ['x.mjs'], blockedExitCode: 2 });
+  await assert.rejects(loadConfig(cwd), /Invalid blockedExitCode/);
+});
+
 test('qualification checks validate nonce/source/config, retain and hash external evidence', async t => {
   const data = await fixture(t, qualificationProgram(), 'qualification');
   const receipt = await runCheck(data);

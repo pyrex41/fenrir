@@ -6,6 +6,8 @@ Version 0.2 • Semantic and execution-plan revision • Proposed architecture a
 
 **Revision status:** This is a substantive revision responding to [review.md](review.md), not a naming-only change. Version 0.1 tapes and gate evidence are not automatically compatible. These documents propose requirements; no executable schema, oracle, backend or gate is claimed to be qualified by this revision. The existing specification ZIP is a historical v0.1 bundle and is not the current authority.
 
+**Direction amendment (11 October 2026):** Adopts a single-application unikernel as the intended production deployment target, makes declared effects the capability manifest of a deployed image, and adds agent-loop requirements (back pressure, loop latency, agent-facing language tooling). The review that produced it is recorded in [03_PHASED_EXECUTION_PLAN.md §19](03_PHASED_EXECUTION_PLAN.md#19-direction-amendment-unikernel-target-and-agent-back-pressure). This amendment changes product direction and plan ordering only. It does not alter the TC0 0.2 contract, any profile identity or any gate requirement, and it qualifies nothing.
+
 ## 1 Purpose and reading order
 
 Build Fenrir, a practical native language inspired by Koka whose semantics, runtime, and standard services are specified through executable Shen models. Gleipnir explores legal executions, checks independently observed behavior, minimizes counterexamples, and supplies precise feedback to implementation agents. The intended result combines efficient functional programming and effects with straightforward builds, structured concurrency, useful diagnostics, and reliable deployment.
@@ -31,6 +33,10 @@ Borrow these qualities without attempting to clone the entire source languages:
 | Elixir | Owned tasks, supervision, bounded communication, operational inspection |
 | Common Lisp | Interactive evaluation, inspection, rapid iteration, carefully scoped code replacement |
 | Shen | Executable semantics, typed model construction, logic relations, portable oracle implementation |
+| MirageOS | The application is the operating system: no userland, every service a library, a small deployed image |
+| OCaml | Typed module interfaces as compact context, fast compiles, functors for pluggable policy |
+
+The intended production form is a single-application unikernel whose only route to the environment is the set of effects the program declares (§7). A process backend remains a supported development and test target implementing the same contracts.
 
 The initial implementation MUST NOT require end users to understand continuations, reference counts, or model checking to write ordinary programs. Advanced mechanisms must remain accessible to library and runtime authors.
 
@@ -51,7 +57,7 @@ The initial implementation MUST NOT require end users to understand continuation
 
 Arbitrary cloud applications, unrestricted C FFI, shared-memory atomics, multicore weak-memory exploration, durable distributed execution, full POSIX, unrestricted multi-shot continuations, hot replacement of suspended frames, and a new production hypervisor are excluded. These can be future profiles, not implicit promises of version 0.2.
 
-The language need not deploy as a unikernel in production. Solo5 is initially an execution and validation backend. A Linux process backend and a production scheduler can implement the same semantic contracts.
+A unikernel is the intended production deployment target (§7), but the first core does not depend on it. Solo5 is initially an execution and validation backend. A Linux process backend and a production scheduler can implement the same semantic contracts and remain supported for development, testing and deployments that do not need the unikernel boundary.
 
 ## 4 The key idea
 
@@ -127,13 +133,34 @@ Both guest bindings and host tender require inspection. Intercepting a host call
 
 Solo5's existing API is not to be assumed to include our event protocol, semantic snapshots, deterministic instruction budgets, or replay exploration. Those are project work. Prefer a small extension or dedicated test adapter after a compatibility spike; do not publish an upstream compatibility claim without verification.
 
-## 8 Unikraft and instruction emulation
+### Unikernel production target
+
+The long-term deployment form is one Fenrir application linked with its runtime and selected effect handlers into a single guest image, with no shell, interpreter, process spawning or general filesystem. The rationale is attack-surface inversion: instead of hardening a general multi-user OS, deploy only the functionality the application uses, so a compromised application has no general-purpose next hop. The same image design also serves determinism, because every environmental interaction already crosses a mediated boundary.
+
+This is a direction, not a security claim. Removing the shell does not remove memory-safety defects, code-reuse gadgets, logic bugs in linked handlers, or defects in the tender, hypervisor and host kernel; KVM itself is part of the trusted base. Single-privilege-level execution of application and library OS code is a known weakness of early unikernel designs; any privilege separation inside the guest is a separately specified and tested profile. No production security property is claimed until a published threat model, boundary inventory and adversarial tests support it.
+
+### Effects as the capability manifest
+
+In a unikernel every environmental capability is a linked library. In Fenrir every environmental dependency is a declared effect. The production profile joins these: the effect row of the program entry point, after handler discharge, determines which environment handlers are linked and which guest devices the image may request. Solo5 already declares an application's devices in a manifest checked by the tender; the target is that this manifest is derived from the checked effect row, not written by hand.
+
+Requirements before claiming this property:
+
+- A reviewed mapping from residual effects to handler libraries and device requests, with distinguishing fixtures for discharged, forwarded and unhandled effects.
+- An image build that rejects a program whose residual effects have no permitted handler, and links no handler for an absent effect.
+- A tender configuration that grants only the derived devices; attempted use of an undeclared device fails closed in tests.
+- Explicit treatment of unsafe code, FFI and runtime-internal operations, which bypass the effect discipline unless separately mediated.
+
+The same declaration then serves three roles: the type checker's effect contract, Gleipnir's simulation boundary, and the deployed image's capability set.
+
+## 8 Unikraft, MirageOS and instruction emulation
 
 Unikraft is a later backend candidate when existing OS libraries or application compatibility materially reduce implementation effort. Its selected scheduler, timers, drivers, libraries, and device interfaces all become part of the behavior under test. A small image alone does not establish determinism.
 
 An instruction-counted emulator is a complementary backend for native code that loops without yielding, machine-level replay, and reverse debugging. QEMU documents record/replay using instruction counting and logged nondeterministic inputs. A compatible pinned machine/device configuration must be demonstrated. Record/replay does not by itself explore alternative executions or support arbitrary schedule mutation.
 
-Decision rule: use Solo5 for the small runtime and isolation; add emulation when independent instruction control is required; adopt Unikraft only for a documented compatibility use case. Do not block the semantic core on constructing a novel hypervisor.
+MirageOS already targets Solo5 and supplies OCaml libraries for networking, TLS, DNS, HTTP and storage. Two routes to a networked Fenrir image are open: an OCaml/MirageOS backend that reuses those libraries, or Fenrir-native handler libraries ported against an existing implementation used as a differential oracle. The first is faster to a working network stack but brings the OCaml runtime, its garbage collector and its concurrency library into the behavior Gleipnir must audit for determinism. The second keeps the boundary small at the cost of porting work. Record the decision at P4/P5 with a boundary inventory for each option; do not decide it before full TC0.
+
+Decision rule: use Solo5 for the small runtime and isolation; add emulation when independent instruction control is required; adopt Unikraft or a MirageOS backend only for a documented compatibility use case. Do not block the semantic core on constructing a novel hypervisor.
 
 ## 9 Determinism and conformance claims
 
@@ -196,6 +223,19 @@ A suspected specification defect becomes a separate proposal with a distinguishi
 
 This is counterexample-driven development. It resembles counterexample-guided synthesis but is not automatically a complete synthesis procedure: the language, search domain, and candidate space may be unbounded.
 
+### Back pressure and loop latency
+
+An agent loop improves an implementation only as fast as its checks reject wrong attempts. Every check that can reject a hallucinated change (type and effect checking, artifact validation, Shen-vs-candidate differential runs, strict replay, sanitizers) is back pressure, and its latency bounds how many attempts fit in a working session. Requirements:
+
+- The per-change check the agent runs on each iteration exercises the component under development, not only the workflow controller. A loop whose only registered check tests its own controller has no semantic back pressure.
+- The per-change tier runs on the process backend with a reused Shen process where the oracle allows it, and SHOULD complete in about a minute for the current slice. Container builds, guest boots and long campaigns belong to the integration and deep tiers.
+- An oracle is what makes porting and repair a loop. Where an existing implementation is the reference for a library or handler, it is used as a differential oracle with the same retention and replay rules as the Shen model, and its own limitations are recorded.
+- Hand-written C runtime code gives weak feedback; memory errors surface late and far from their cause. Generated C is acceptable. Hand-written runtime C runs under sanitizers in the per-change tier, or the runtime component moves to a language whose compiler rejects those errors.
+
+### Human authority boundary
+
+Humans own acceptance authority: oracle rules, goldens, property catalogs, gate configuration, specification amendments and dependency epochs. Humans do not need to approve each iteration of a candidate-only repair loop. Once the candidate path set, protected inputs, sandbox and budget are approved for a run, the loop proceeds without per-step human calls until it reaches an authority boundary, exhausts its budget or stops on ambiguity. Waiting on an upstream maintainer is not a dependency: a defect in a pinned upstream is patched locally as an explicit, reviewed overlay (§16) and reported upstream separately.
+
 ## 14 Compiler and memory management strategy
 
 Start with an explicit monomorphic core AST, a straightforward reference interpreter, and a conservative native implementation developed together by slice. An independently tested artifact validator guards the execution boundary; formal verification is not an initial claim. The first production-oriented backend should use the existing Koka/C experience where reusable; compatibility is a spike, not an assumption.
@@ -208,6 +248,13 @@ Differential tests compare reference evaluation, conservative compilation, and o
 
 The mature distribution needs package resolution and lockfiles; hermetic toolchains; formatter and language server; readable effect/type errors; supported platforms; standard networking, storage, serialization, and telemetry; stable cancellation/resource conventions; source-level debugging; compatibility policy; and security maintenance.
 
+Agents are expected to write most Fenrir code, so agent-facing tooling is part of usability, not an add-on:
+
+- **Interface files.** Each module has a typed interface listing its exported types, functions and effect rows. It is the compact context an agent reads instead of the implementation, and the compiler checks the module against it.
+- **Grammar card.** Each language version ships a short, versioned reference of its lexical structure, grammar and core idioms, sized to fit in an agent's context. The working hypothesis is that a model can write a language absent from its training data when given such a reference; the card is tested by having agents write the sample suite from it alone.
+- **Skill packs and migration.** Each release that changes syntax or library APIs ships an agent-readable migration guide plus mechanical rewrites where possible, and is tested by migrating the retained sample and regression corpus. Breaking changes remain versioned and reviewed; the skill pack lowers their cost but does not make them free.
+- **Redacting logging boundary.** The standard logging effect handler redacts secrets and declared sensitive fields by default, with redaction policy supplied as a pluggable module. This applies the evidence rule in §16 to production telemetry.
+
 Interactive development should first support evaluating code and routing new work to a new module version. Replacing live suspended continuations is a separate semantic feature. Production record capture is opt-in with sensitive-data policy and bounded overhead; arbitrary production executions are not promised to replay unless all required nondeterminism was captured.
 
 ## 16 Evidence and reproducibility
@@ -217,6 +264,8 @@ A failure bundle contains the manifest, source or content-addressed source refer
 Canonical encoding, schema version, hashing algorithm, and normalization rules are explicit. Snapshot state includes runtime state, event queues, virtual clocks, environment state, tape cursor, and checker obligations. Guest RAM alone is not a complete snapshot. Version 0.2 uses restart-and-replay; snapshots are a later optimization validated against that baseline.
 
 Secrets and production data are excluded by default. Redaction changes an artifact and may break exact replay; label the resulting limitation rather than claiming byte identity.
+
+Toolchains and backend images are rebuilt from a pinned Nix flake rather than preserved only as opaque binary artifacts. A pinned set of inputs is a dependency epoch. When a retained image or input is unrecoverable, open a new reviewed epoch: rebuild from pinned sources, record new identities, and leave old receipts historical. Never rewrite an old receipt to match a rebuilt artifact. Local fixes to upstream sources (for example Solo5 or a Shen port) are kept as named overlays or patch files with their own review record, never as untracked edits inside a vendored tree.
 
 ## 17 Risks and mitigations
 
@@ -229,12 +278,16 @@ Secrets and production data are excluded by default. Redaction changes an artifa
 | Agent overfits tests | Fresh generators, held-out campaigns, mutant evaluation, protected acceptance rules |
 | Runtime grows before semantics settle | Vertical slices and phase gates |
 | Kernel work dominates language work | Start with a process adapter, then Solo5, keep emulator optional until needed |
+| Harness hardening displaces language progress | Freeze host hardening outside named blockers until the next language gate passes; judge progress by closed feedback loops |
+| Slow checks starve the agent loop | Per-change tier on the process backend with a latency target; heavy work in integration and deep tiers |
+| Lost or unrecoverable build inputs block work | Nix-pinned rebuilds and explicit dependency epochs; old evidence stays historical |
+| Unikernel security overstated | Publish a threat model and boundary inventory; test undeclared-device and bypass attempts before any claim |
 
 ## 18 Definition of project success
 
 The first success is an independent pure candidate for a qualified TC0-A slice: Gleipnir finds, minimizes and strictly replays an evaluation-order or arithmetic defect, an agent repairs it, and fresh evidence confirms the repair. The next bootstrap successes qualify handlers (TC0-B), structured concurrency and conservative lifetimes (TC0-C), then full TC0. Mutant requirements expand with each implemented component rather than delaying the first candidate until the whole core exists.
 
-TC0 uses idle-advance virtual time. Production deadlines require a separate elapsed-time contract; scheduler fairness alone cannot make idle-only time progress. A later success is a supervised service whose real fault histories are independently checked. Production success additionally requires usability, performance, compatibility, and operational gates in the execution plan.
+TC0 uses idle-advance virtual time. Production deadlines require a separate elapsed-time contract; scheduler fairness alone cannot make idle-only time progress. A unikernel fleet has no host clock service to rely on, so the production time contract SHOULD combine several clock sources and report disagreement explicitly, and the time library is itself an effect handler that Gleipnir can replace with virtual time. A later success is a supervised service whose real fault histories are independently checked, deployed as a unikernel image whose capabilities match its declared effects. Production success additionally requires usability, performance, compatibility, and operational gates in the execution plan.
 
 ## 19 Source grounding and limitations
 
@@ -247,3 +300,5 @@ These references were inspected during the design discussion on 2 October 2026. 
 - [Antithesis SDK](https://antithesis.com/docs/reference/sdk/), [properties](https://antithesis.com/docs/reference/sdk/define_test_properties/), [structured randomness](https://antithesis.com/docs/reference/sdk/generate_randomness/): instrumentation and guidance ideas.
 - [Jepsen](https://github.com/jepsen-io/jepsen): workloads, faults and history checking.
 - [ShenCheck](https://github.com/pyrex41/shencheck), [choices](https://github.com/pyrex41/shencheck/blob/main/crates/shencheck-core/src/choice.rs), [model sets](https://github.com/pyrex41/shencheck/blob/main/crates/shencheck-core/src/model.rs), [replay](https://github.com/pyrex41/shencheck/blob/main/crates/shencheck-runner/src/replay.rs), [Antithesis integration](https://github.com/pyrex41/shencheck/blob/main/docs/ANTITHESIS.md), [Jepsen integration](https://github.com/pyrex41/shencheck/blob/main/docs/JEPSEN.md): inspected reuse candidates. Existing SDK-randomness replay does not control OS scheduling or I/O. The new language-specific machine and deterministic Solo5 backend remain proposed work.
+- [Geoffrey Huntley, "unikernels were hard. key word: were."](https://ghuntley.com/unikernels/) (11 October 2026), read 11 October 2026: source of the direction amendment. Opinion and anecdote, not measured evidence; its security and productivity claims are hypotheses here.
+- [MirageOS](https://mirage.io/): OCaml library OS with a Solo5 target; reuse candidate for network and storage libraries, subject to the §8 decision.
