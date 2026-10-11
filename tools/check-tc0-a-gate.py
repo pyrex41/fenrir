@@ -6,11 +6,19 @@ committed source, into a new run directory under build/tc0/gate/, and aggregates
 any required FAIL -> FAIL; else any BLOCKED -> BLOCKED; else any UNKNOWN -> UNKNOWN;
 else PASS. All row reasons are reported whatever the aggregate.
 
-The result is a `proposed_verdict` with authority UNREVIEWED-PROPOSAL. It is not a
-qualification verdict: `qualification` stays UNKNOWN until this evaluator and its
-manifest pass authority review and are registered (03 §16, campaigns/tc0/NEXT_SLICE.md S6).
+The manifest also maps the workflow controller's six required claims to rows: a
+claim is credited only when every row it names, and every claim prerequisite, PASS.
+
+Authority: the verdict is a qualification verdict only when the manifest is
+owner-reviewed AND .pi/fenrir-workflow.json registers this script as
+`tc0-a-qualification`; otherwise `qualification` stays UNKNOWN. Waivers (such as
+accepted instruction-only repairer isolation) are listed in every report.
+
+Under the workflow controller (FENRIR_CHECK_NONCE set) stdout carries exactly one
+fenrir.check.v1 report; logs go to stderr. Exit: PASS 0, FAIL 1, UNKNOWN/BLOCKED 2.
 """
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -50,7 +58,7 @@ def last_json(text):
 class Gate:
     def __init__(self, out, shen):
         self.out, self.shen, self.node = out, shen, shutil.which('node')
-        self.memo = {}
+        self.memo, self.waivers = {}, []
 
     def need_shen(self):
         return None if self.shen and Path(self.shen).exists() else Row('BLOCKED', ['No Shen executable at build/toolchain/shen-scheme'])
@@ -217,20 +225,29 @@ class Gate:
             return Row('FAIL', ['S3 evaluator: '+', '.join(k for k, v in s['steps'].items() if v != 'PASS')])
         return Row('UNKNOWN', [err.strip().splitlines()[-1] if err.strip() else f'exit {code}'])
 
-    def attestation(self, path):
+    def repair_isolation(self, path):
         p = ROOT/path
         if not p.exists():
-            return Row('UNKNOWN', [f'No attestation at {path}'])
+            return Row('UNKNOWN', [f'No isolation record at {path}'])
         a = json.loads(p.read_text())
-        if a.get('isolation') == 'enforced' and a.get('reviewed_by') and a.get('patch_sha256'):
-            return Row('PASS', attestation=a)
-        return Row('UNKNOWN', [f'{path} does not attest enforced, reviewed isolation'])
+        patch = ROOT/a.get('patch', '')
+        if not patch.is_file() or hashlib.sha256(patch.read_bytes()).hexdigest() != a.get('patch_sha256'):
+            return Row('UNKNOWN', [f'{path} does not match the retained patch'])
+        if not a.get('accepted_by'):
+            return Row('UNKNOWN', [f'{path} names no reviewer'])
+        if a.get('isolation') == 'enforced':
+            return Row('PASS', isolation='enforced', accepted_by=a['accepted_by'])
+        if a.get('isolation') == 'instruction-only' and a.get('decision') == 'owner-waiver':
+            waiver = f"Repair isolation: instruction-only accepted by {a['accepted_by']} on {a.get('accepted_on')}; revisit: {a.get('revisit')}"
+            self.waivers.append(waiver)
+            return Row('PASS', isolation='instruction-only', waiver=waiver)
+        return Row('UNKNOWN', [f'{path} records neither enforced isolation nor an owner waiver'])
 
     def check(self, name):
         if name.startswith('mutant:'):
             return self.mutant(name.split(':', 1)[1])
-        if name.startswith('attestation:'):
-            return self.attestation(name.split(':', 1)[1])
+        if name.startswith('repair-isolation:'):
+            return self.repair_isolation(name.split(':', 1)[1])
         return getattr(self, name.replace('-', '_'))()
 
 
@@ -265,13 +282,32 @@ def main():
     if gate.source_identity().detail.get('head') != getattr(gate, 'head', None) or subprocess.run(['git', 'status', '--porcelain'], cwd=ROOT, capture_output=True, text=True).stdout.strip():
         verdict = 'UNKNOWN' if verdict == 'PASS' else verdict
         rows.append({'id': 'source-drift', 'required': True, 'status': 'UNKNOWN', 'reasons': ['Source changed during evaluation'], 'detail': {}, 'seconds': 0})
-    report = {'schema': 'tc0-a-gate-run/1', 'authority': 'UNREVIEWED-PROPOSAL', 'qualification': 'UNKNOWN', 'proposed_verdict': verdict,
+    status = {r['id']: r['status'] for r in rows}
+    claims = sorted(c for c, ids in manifest['claims'].items()
+                    if all(status.get(i) == 'PASS' for i in [*ids, *manifest['claim_prerequisites']]))
+    config = json.loads((ROOT/'.pi/fenrir-workflow.json').read_text())
+    registered = (manifest.get('status') == 'owner-reviewed' and
+                  'tools/check-tc0-a-gate.py' in config.get('checks', {}).get('tc0-a-qualification', {}).get('command', []))
+    report = {'schema': 'tc0-a-gate-run/2', 'authority': 'owner-reviewed, registered' if registered else 'UNREGISTERED',
+              'qualification': verdict if registered else 'UNKNOWN', 'verdict': verdict, 'claims': claims, 'waivers': gate.waivers,
               'head': getattr(gate, 'head', None), 'manifest': str(manifest_path.relative_to(ROOT)), 'evaluator': 'tools/check-tc0-a-gate.py',
               'aggregation': manifest['aggregation'], 'seconds': round(time.monotonic()-started, 2), 'rows': rows}
     (out/'gate.json').write_text(json.dumps(report, indent=1)+'\n')
-    print(json.dumps({'authority': 'UNREVIEWED-PROPOSAL', 'qualification': 'UNKNOWN', 'proposed_verdict': verdict,
-                      'rows': {r['id']: r['status'] for r in rows}, 'report': str(out/'gate.json')}))
-    sys.exit({'PASS': 0, 'FAIL': 1, 'BLOCKED': 2, 'UNKNOWN': 3}[verdict])
+    evidence = [str(p.relative_to(ROOT)) for p in [out/'gate.json', *[out/n for n in ('hand.json', 'hand-replay.json', 'arith.json', 'exhaustive-5.json', 'coverage.json',
+                's2-arm-by-position.json', 's2-arm-by-position-replay.json', 's2-reverse-operands.json', 's2-reverse-operands-replay.json',
+                'sandbox.json', 's3-evaluation.json')]] if p.is_file()]
+    summary = (f"TC0-A gate at {report['head']}: {verdict}; {sum(r['status'] == 'PASS' for r in required)}/{len(required)} required rows PASS; "
+               f"claims {', '.join(claims) or 'none'}" + (f"; waivers: {' | '.join(gate.waivers)}" if gate.waivers else '') +
+               ''.join(f"; {r['id']}: {r['status']} ({'; '.join(r['reasons'])})" for r in rows if r['status'] not in ('PASS',) and r['required']))[:7900]
+    if os.environ.get('FENRIR_CHECK_NONCE'):
+        print(json.dumps({'schema': 'fenrir.check.v1', 'nonce': os.environ['FENRIR_CHECK_NONCE'], 'checkId': os.environ.get('FENRIR_CHECK_ID'),
+                          'sourceHash': os.environ.get('FENRIR_SOURCE_SHA256'), 'configHash': os.environ.get('FENRIR_CONFIG_SHA256'),
+                          'verdict': verdict if registered else 'UNKNOWN', 'cleanup': 'confirmed', 'claims': claims if registered else [],
+                          'evidence': evidence, 'summary': summary}))
+    else:
+        print(json.dumps({'authority': report['authority'], 'qualification': report['qualification'], 'verdict': verdict, 'claims': claims,
+                          'waivers': gate.waivers, 'rows': status, 'report': str(out/'gate.json')}))
+    sys.exit({'PASS': 0, 'FAIL': 1}.get(verdict, 2))
 
 
 if __name__ == '__main__':

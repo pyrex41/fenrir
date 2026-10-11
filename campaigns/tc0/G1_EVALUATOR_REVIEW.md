@@ -1,9 +1,10 @@
 # TC0-A gate evaluator — authority review packet
 
-Status: **proposal, unreviewed.** Nothing here is registered with the workflow
-controller, and no qualification verdict exists. `tc0-a-qualification` stays
-unconfigured in `.pi/fenrir-workflow.json` until a reviewer accepts this packet
-(03 §16; `campaigns/tc0/NEXT_SLICE.md` S6).
+Status: **owner-reviewed and registered (2026-10-11).** The project owner answered the
+review questions below; the gate and manifest are registered as `tc0-a-qualification`
+in `.pi/fenrir-workflow.json`. Its verdicts count as TC0-A qualification verdicts
+only under the recorded decisions and waivers. They are development-grade: the
+evaluator itself runs trusted-local (decision 6).
 
 ## What is proposed
 
@@ -12,9 +13,10 @@ unconfigured in `.pi/fenrir-workflow.json` until a reviewer accepts this packet
   serves, the check that produces fresh evidence and its acceptance rule.
 - **Evaluator:** [`tools/check-tc0-a-gate.py`](../../tools/check-tc0-a-gate.py). It runs
   every row freshly into `build/tc0/gate/<head>-<time>/` and aggregates per
-  TC0-GATE. Its output is a `proposed_verdict` with
-  `authority: UNREVIEWED-PROPOSAL`, and it always reports `qualification: UNKNOWN`.
-  Exit codes: 0 PASS, 1 FAIL, 2 BLOCKED, 3 UNKNOWN.
+  TC0-GATE. Its `qualification` field equals the verdict only while the manifest is
+  owner-reviewed and the check is registered; otherwise it stays UNKNOWN.
+  Exit codes: 0 PASS, 1 FAIL, 2 UNKNOWN/BLOCKED (the controller's contract). Under the
+  controller it prints exactly one `fenrir.check.v1` report.
 
 ## Latest run
 
@@ -48,33 +50,39 @@ swap, because grammar G had only the bytes literals `""` and `ff`. G now has a t
 literal, `01`; on the defective candidate the enlarged scope finds 2 disagreeing
 programs at 4 nodes.
 
-## What a reviewer must decide
+## Decisions (2026-10-11)
 
-1. **Aggregation precedence.** TC0-GATE names FAIL, UNKNOWN and BLOCKED but no order
-   between BLOCKED and UNKNOWN. The proposal uses FAIL > BLOCKED > UNKNOWN > PASS and
-   always lists every row's reasons.
-2. **Mutant survivors.** A mutant killed on no program is treated as FAIL (detection
-   failure). Crashes are never kills.
-3. **Repair independence.** Two required rows cover the G1 repair. The first re-runs
-   the retained independent patch through a freshly built S3 packet. The second
-   requires a reviewed attestation of *enforced* repairer isolation, and none exists.
-   Repair 1 used instruction-only isolation, so the second row is UNKNOWN by design.
-   The reviewer decides whether instruction-only isolation can ever satisfy it, or
-   whether an enforced re-run is required.
-4. **Scope sufficiency.** The rows cover hand fixtures, the exact-arithmetic boundary
-   product, the exhaustive-small grammar (≤ 5 nodes), catalog transition coverage,
-   generated discovery and reduction, the candidate sandbox and the ledger. Are
-   these scopes enough for G1, or must some be widened, for example to larger
-   exhaustive bounds or more mutants?
-5. **Protected inputs.** Registration should list the model, catalog, fixtures,
-   manifest, evaluator and S3 tooling as `authorityPaths`, so candidate repairs
-   cannot change them.
-6. **Evaluator isolation.** The evaluator runs trusted-local. Candidate executions are
-   sandboxed, but the evaluator process itself, the regression suite and Shen are
-   not isolated from the host.
-7. **Six controller claims.** `NEXT_SLICE.md` lists "all required A/G0 rows and six
-   controller claims" for G1. This manifest covers the A/G0 rows only. The controller
-   claims need their own rows once they are spelled out.
+1. **Aggregation precedence:** FAIL > BLOCKED > UNKNOWN > PASS, kept. The owner had no
+   preference.
+2. **Mutant survivors:** a mutant killed on no program is FAIL, because the evaluator
+   is blind to that defect class. The owner was unsure, so the packet author decided.
+   Crashes are never kills.
+3. **Repair independence:** the owner took the faster route. Instruction-only isolation
+   is accepted for now as a recorded waiver
+   ([`s3/repair-isolation-acceptance.json`](s3/repair-isolation-acceptance.json)),
+   bound to the retained patch's SHA-256. Every gate report lists the waiver. Revisit
+   with an enforced re-run before relying on the gate beyond G1.
+4. **Scope sufficiency:** the current scopes are accepted for now: hand fixtures,
+   the exact-arithmetic boundary product, grammar G up to 5 nodes, catalog coverage,
+   the generated families and three mutants.
+5. **Protected inputs** (decided by the packet author): the registered check's
+   `authorityPaths` cover the gate, `spec/tc0` (manifest, ledger, catalog),
+   `models/tc0`, `fixtures/tc0`, `tools/tc0`, every TC0 Python checker, `tests/tc0`,
+   `campaigns/tc0/s3` and the toolchain flake and lock. The repairable candidate,
+   `runtime/tc0/pure-call-machine.mjs`, is deliberately outside that set.
+6. **Evaluator isolation:** accepted as trusted-local for now. Candidate executions
+   are sandboxed; the evaluator, the regression suite and Shen are not.
+7. **Controller claims** (decided by the packet author): the manifest maps each of
+   the six required claims to rows. A claim is credited only when all its rows and
+   the prerequisites (source identity, candidate boundary, ledger) PASS.
+   - `canonical-program`: unit suite, hand cases
+   - `hand-derived-trace`: hand cases, catalog coverage
+   - `model-candidate-agreement`: pinned toolchain, hand cases, exact arithmetic,
+     exhaustive scope
+   - `defect-discovered-and-reduced`: discovery/reduction/replay, three mutant rows
+   - `exact-original-failure-replay`: discovery/reduction/replay, fresh S3 repair run
+     (its exact-original replay step)
+   - `fresh-repair-evaluation`: fresh S3 repair run, repair-isolation record
 
 ## Not claimed
 

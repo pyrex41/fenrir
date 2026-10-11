@@ -1,0 +1,12 @@
+{
+ "schema": "tc0-repair-isolation-acceptance/1",
+ "repair_record": "campaigns/tc0/s3/independent-repair-1.md",
+ "patch": "campaigns/tc0/s3/independent-repair-1.patch",
+ "patch_sha256": "5991317d47198014a1109b530ecd2354eb0a64b6f1142c30c69ea81c11cdcc50",
+ "isolation": "instruction-only",
+ "decision": "owner-waiver",
+ "accepted_by": "project owner (pyrex41)",
+ "accepted_on": "2026-10-11",
+ "rationale": "Owner chose the faster route for now: instruction-only isolation of the local repair subagent is accepted for G1.",
+ "revisit": "Re-run the repair under enforced isolation (a separate container receiving only the workspace) before relying on this gate beyond G1."
+}

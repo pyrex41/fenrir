@@ -71,8 +71,8 @@
    "evidence": [], "gaps": ["02 §16: runtime/time mutants start in C. A has no time semantics, and the sandbox does not deny clock reads"]},
   {"id": "TC0-SHEN-INDEPENDENCE", "source": "02 §17", "requirement": "Explicit Shen model; candidate imports no Shen transitions; port agreement claims only portability", "status": "DEVELOPMENT-EVIDENCE",
    "evidence": ["models/tc0/pure-call-machine.shen", "runtime/tc0/pure-call-machine.mjs", "tools/tc0/check-sandbox.mjs", "tools/check-tc0-pure-data-exhaustive.py"], "gaps": []},
-  {"id": "TC0-GATE", "source": "02 §14 TC0-GATE; 03 §16", "requirement": "Aggregate verdicts from a versioned requirement manifest with fresh source-bound evidence", "status": "UNKNOWN",
-   "evidence": ["spec/tc0/tc0-a-requirements.json", "tools/check-tc0-a-gate.py", "campaigns/tc0/G1_EVALUATOR_REVIEW.md"], "gaps": ["The proposed gate evaluator and manifest are unreviewed and unregistered; tc0-a-qualification stays unconfigured", "Latest proposed verdict is UNKNOWN: no attestation of enforced repairer isolation"]},
+  {"id": "TC0-GATE", "source": "02 §14 TC0-GATE; 03 §16", "requirement": "Aggregate verdicts from a versioned requirement manifest with fresh source-bound evidence", "status": "DEVELOPMENT-EVIDENCE",
+   "evidence": ["spec/tc0/tc0-a-requirements.json", "tools/check-tc0-a-gate.py", "campaigns/tc0/G1_EVALUATOR_REVIEW.md", ".pi/fenrir-workflow.json"], "gaps": ["Owner-reviewed and registered under recorded waivers: instruction-only repairer isolation, current scopes and a trusted-local evaluator", "The ledger records evidence, not verdicts; the registered gate issues them"]},
   {"id": "TC0-B-HANDLERS", "source": "02 §5", "requirement": "User effects and handlers", "status": "DEFERRED-TO-B-C", "evidence": [], "gaps": []},
   {"id": "TC0-C-RUNTIME", "source": "02 §§6-11", "requirement": "Tasks, scopes, channels, cancellation, resources and virtual time", "status": "DEFERRED-TO-B-C", "evidence": [], "gaps": []}
  ]
