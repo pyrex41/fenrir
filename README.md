@@ -120,6 +120,27 @@ Both Shen ports and the candidate were exact on all 2,908: 2,587 Ok, 302 Overflo
 19 DivZero, and the correct capture order. An injected off-by-one I64 bound in the
 model was flagged on the 15 results equal to the maximum.
 
+**Candidate execution boundary (G0 row, measured).** `tools/tc0/sandbox.mjs` runs a
+candidate inside a fresh network namespace (`unshare -n`) under Node's permission
+model, with an empty environment. Reads are limited to the candidate tree and its
+inputs; there are no writes beyond a named output, and no child processes, workers
+or addons. `tools/tc0/check-sandbox.mjs` measures it with eight benign probes
+packaged as candidate patches. Each probe first runs without the sandbox as a
+control, to show the action really happens. Effects are measured from outside
+where possible: file hashes, a local TCP listener, and canary strings only a
+successful probe could print. All eight capabilities are obtained in the control
+and denied in the sandbox: writing the protected model, writing a new file,
+reading a secret file, reading the model source, reading an environment
+credential, spawning a process, starting a worker thread and connecting to the
+network. The baseline candidate's output is byte-identical inside and outside the
+sandbox. The hand-case and exhaustive checkers take `--sandbox`, and the S3
+evaluator uses it for every step that runs the untrusted repaired candidate. Its
+regression suite needs processes and scratch files, so it gets the network and
+environment isolation only, and the report says so. Not bounded: CPU, memory and
+time (watchdogs remain), Node's own startup reads, side channels, and defects in
+the kernel or the permission model. This is measured development evidence, not a
+qualified isolation claim.
+
 **Second Shen port.** The Yggdrasil-shaken oracle was rebuilt for the schema `/2`
 model: an eval-free shen-cl/SBCL slice that matched host Shen on all 19 hand cases.
 On all 5,051 exhaustive-small programs it produced traces identical to

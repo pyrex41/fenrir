@@ -48,7 +48,8 @@
         "tests/tc0/reduce.test.mjs",
         "tests/tc0/reduction-bridge.test.mjs",
         "tests/tc0/replay.test.mjs",
-        "tests/tc0/s3-repair.test.mjs"
+        "tests/tc0/s3-repair.test.mjs",
+        "tests/tc0/sandbox.test.mjs"
       ],
       "timeoutSeconds": 120,
       "authorityPaths": []

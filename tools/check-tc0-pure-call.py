@@ -116,6 +116,18 @@ def normalize(s,i):
     return row
 
 
+# When true, every candidate run goes through tools/tc0/sandbox.mjs: no network, no
+# environment, reads only the candidate tree and the program, no writes or processes.
+SANDBOX=False
+
+
+def candidate_argv(node,filename):
+    script=ROOT/'tools/tc0/run-pure-call.mjs'
+    if not SANDBOX:
+        return [str(node),str(script),str(filename)]
+    return [str(node),str(ROOT/'tools/tc0/sandbox.mjs'),'--read',str(ROOT/'tools/tc0'),str(ROOT/'runtime/tc0'),str(filename),'--',str(script),str(filename)]
+
+
 MODEL_FILES=[ROOT/'models/tc0/arithmetic.shen',ROOT/'models/tc0/pure-call-machine.shen',ROOT/'models/tc0/pure-call-oracle.shen']
 REFERENCE_STEPS=200
 
@@ -184,7 +196,7 @@ def observe(case,oracle,node,scratch,model=None):
     filename=scratch/(case['name']+'.json')
     filename.write_text(json.dumps(a,separators=(',',':')))
     # Host validation occurs before translation or model execution.
-    stdout,stderr=probe.synchronous([str(node),str(ROOT/'tools/tc0/run-pure-call.mjs'),str(filename)])
+    stdout,stderr=probe.synchronous(candidate_argv(node,filename))
     candidate=json.loads(stdout)
     if model is None:
         outs,errs=oracle.run([initial_state(a)])
@@ -223,7 +235,10 @@ def main():
     which.add_argument('--shen-executable')
     which.add_argument('--oracle-artifact',help='Directory from tools/tc0/build-shaken-oracle.mjs')
     parser.add_argument('--output',required=True)
+    parser.add_argument('--sandbox',action='store_true',help='Run each candidate inside tools/tc0/sandbox.mjs')
     args=parser.parse_args()
+    global SANDBOX
+    SANDBOX=args.sandbox
     dest=Path(args.output).resolve()
     if not dest.is_relative_to(ROOT/'build') or dest.suffix!='.json':
         raise ValueError('Output must be JSON below build')
@@ -260,7 +275,7 @@ def main():
     if before!={str(p):probe.digest(p) for p in paths}:
         raise RuntimeError('Source/toolchain drift')
     report={'qualification':'UNKNOWN','scope':'tc0-a-pure-call-demo/1 and /2 hand cases; trusted-local development',
-            'sources':before,'oracle':oracle.describe(),'bounds':{'reference_steps':str(REFERENCE_STEPS),'cases':str(len(cases)),'wall_seconds_per_process':'30'},
+            'sources':before,'oracle':oracle.describe(),'candidate_sandboxed':SANDBOX,'bounds':{'reference_steps':str(REFERENCE_STEPS),'cases':str(len(cases)),'wall_seconds_per_process':'30'},
             'cases':results,'limitations':['No complete catalog or integrated strict replay yet','Hand cases are not generated discovery/exhaustive scope','Not full TC0-A or qualified evaluator/isolation']}
     dest.parent.mkdir(parents=True,exist_ok=True)
     dest.write_text(json.dumps(report,indent=2)+'\n')

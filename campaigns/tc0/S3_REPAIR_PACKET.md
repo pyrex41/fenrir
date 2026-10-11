@@ -42,7 +42,11 @@ runs these steps in order:
    defective original.
 
 Steps 3 and 7–8 run in a trusted export of the start revision with the candidate
-file substituted, never with workspace tooling.
+file substituted, never with workspace tooling. Every step that executes the
+repaired candidate (4, 5 and 7) runs it inside `tools/tc0/sandbox.mjs`: no network,
+no inherited environment, reads limited to the candidate tree and inputs, and no
+writes or processes. The regression suite (6) runs with network and environment
+isolation only; each step's report row names its boundary.
 
 ## Dry runs (evaluator self-checks, not repairs)
 

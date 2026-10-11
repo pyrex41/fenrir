@@ -36,6 +36,7 @@ def main():
     which.add_argument('--oracle-artifact', help='Directory from tools/tc0/build-shaken-oracle.mjs')
     parser.add_argument('--max-nodes', type=int, default=5)
     parser.add_argument('--output', required=True)
+    parser.add_argument('--sandbox', action='store_true', help='Run the candidate batch inside tools/tc0/sandbox.mjs')
     args = parser.parse_args()
     if not 1 <= args.max_nodes <= 5:
         raise ValueError('Node bound 1..5')
@@ -52,7 +53,10 @@ def main():
     before = {str(p): probe.digest(p) for p in paths}
     batch = dest.with_suffix('.candidate.jsonl')
     started = time.monotonic()
-    probe.synchronous([str(node), str(ROOT/'tools/tc0/run-pure-data-exhaustive.mjs'), str(args.max_nodes), str(batch)], timeout=300)
+    runner = [str(ROOT/'tools/tc0/run-pure-data-exhaustive.mjs'), str(args.max_nodes), str(batch)]
+    if args.sandbox:
+        runner = [str(ROOT/'tools/tc0/sandbox.mjs'), '--read', str(ROOT/'tools/tc0'), str(ROOT/'runtime/tc0'), '--write', str(batch), '--', *runner]
+    probe.synchronous([str(node), *runner], timeout=300)
     candidate_seconds = time.monotonic()-started
     header, *rows = [json.loads(line) for line in batch.read_text().splitlines()]
     if len(rows) != int(header['count']) or header['truncated']:
@@ -94,7 +98,7 @@ def main():
     report = {'schema': 'pure-data-exhaustive-small-development/1', 'qualification': 'UNKNOWN',
               'scope': 'Every program of grammar G (tools/tc0/pure-data-enumerate.mjs) with at most '+str(args.max_nodes)+' AST nodes; nothing wider',
               'sources': before, 'sources_after': after, 'oracle': oracle.describe(), 'command': sys.argv,
-              'enumeration': header, 'bounds': {'max_nodes': str(args.max_nodes), 'reference_steps': str(pc.REFERENCE_STEPS)},
+              'enumeration': header, 'bounds': {'max_nodes': str(args.max_nodes), 'reference_steps': str(pc.REFERENCE_STEPS)}, 'candidate_sandboxed': args.sandbox,
               'seconds': {'candidate_batch': round(candidate_seconds, 2), 'model_batch': round(model_seconds, 2)},
               'agreeing': str(len(cases)), 'disagreements': disagreements, 'outcomes': outcomes,
               'max_steps': str(max(int(c['steps']) for c in cases)) if cases else '0',
