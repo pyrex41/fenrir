@@ -123,6 +123,19 @@ non-serializable entry and source-map gaps. Each case records the rejection it
 must produce. The tests check the exact rejection class, and that the runner
 exits nonzero without output, so invalid artifacts never execute.
 
+**S3 repair packet (prepared, repair not executed).** See
+[`campaigns/tc0/S3_REPAIR_PACKET.md`](campaigns/tc0/S3_REPAIR_PACKET.md).
+`tools/tc0/s3-prepare.mjs` builds a clean-room workspace: a history-free export
+with the arm-by-position defect made unconditional in the candidate, the retained
+original and minimized failures, and evaluator-side tooling withheld.
+`tools/check-tc0-s3-repair.py` is the frozen evaluator. It checks protected inputs
+and the allowed path, replays the exact original failures against the preserved
+defective original, then checks the patch fresh: retained failures, hand cases,
+regressions, held-out generated and exhaustive scopes, and a mutation control.
+Dry runs fail the untouched, overfit and tampered workspaces, and pass the reference
+and a minimal one-line fix. Both passing patches are self-authored evaluator
+checks, not independent repairs.
+
 Not established: an independent (non-self-authored) candidate repair (S3), and anything at the B/C level (`Outcome`, `SendResult`,
 `ReceiveResult` and the runtime operations). Qualification remains **UNKNOWN**.
 
