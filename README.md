@@ -35,6 +35,35 @@ The current pure candidates are development machines, not a production Fenrir
 compiler or end-user language distribution. See [`runtime/tc0/`](runtime/tc0/),
 [`models/tc0/`](models/tc0/) and [`tools/tc0/`](tools/tc0/) for the executable work.
 
+## Latest pure-language progress
+
+The integrated pure-call demo now has a second closed schema,
+`tc0-a-pure-call-demo/2`. It adds the remaining TC0-A built-in data surface:
+`Bytes`, the `TrapCode` enum, tuples (`tuple`/`project`), declared and
+recursive datatypes (`construct`/`match` with exhaustive, duplicate-free
+arms), `bytes_length`, `bytes_index` (`Bounds` trap), `bytes_concat` and
+structural `eq` over equality-compatible types. Schema `/1` is unchanged and
+still rejects all of these. Each feature is implemented independently in the
+validator, the JS candidate and the Shen model, and is recorded in
+[`spec/tc0/pure-call-demo.json`](spec/tc0/pure-call-demo.json) (catalog `/2`).
+
+Evidence from this pass (development only):
+
+- 10 new hand fixtures (`fixtures/tc0/pure-data-hand-cases.mjs`) agree step for
+  step with the Shen model (shen-scheme v0.26 Linux binary), and all 19
+  pure-call hand cases pass strict replay through `tc0-pure-call-oracle`.
+- Five injected candidate defects were each caught by that check: a
+  `bytes_index` off-by-one bound, a non-tail match arm, reversed tuple fields,
+  a shallow `eq` and swapped constructor metadata.
+- `tests/tc0/pure-data.test.mjs` adds 25 validator, machine, reducer and replay
+  tests; the full TC0 suite passes (108 tests).
+
+Not established: generated discovery over the new constructs, bounded
+exhaustive exploration, a refreshed Yggdrasil-shaken oracle (its stamp is now
+stale, so the check falls back to host Shen), and anything at the B/C level
+(`Outcome`, `SendResult`, `ReceiveResult` and the runtime operations).
+Qualification remains **UNKNOWN**.
+
 ## Latest native-host progress
 
 The recent Go host pass added executable checks for:

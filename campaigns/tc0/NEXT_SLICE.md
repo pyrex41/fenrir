@@ -68,7 +68,7 @@ Freeze evaluator inputs and fresh evaluation campaign before exposing held-out c
 
 | Stage | Next deliverable | Dependency / stop boundary |
 | --- | --- | --- |
-| S4 | Remaining full-A constructors/values, declarations, primitives, effects/serialization and complete frame/source-map catalog | S1/S2 development; introduce explicit versions and distinguishing fixtures for each extension; do not assume this demo covers full A |
+| S4 | Remaining full-A constructors/values, declarations, primitives, effects/serialization and complete frame/source-map catalog. **In progress:** schema `tc0-a-pure-call-demo/2` / catalog `/2` adds Bytes, TrapCode, tuples, datatypes, construct/match/project, byte primitives and eq with 10 Shen-agreeing hand fixtures; generated coverage of these constructs is still open | S1/S2 development; introduce explicit versions and distinguishing fixtures for each extension; do not assume this demo covers full A |
 | S5 | G0 exact-arithmetic/provenance ledger and enforced evaluator boundary; benign protected-write/access/credential probes | Required qualification prerequisites; platform enforcement must be measured, not replaced by path rules |
 | S6 | Independently reviewed evaluator/requirement manifest, protocol and replay mutants, finite exhaustive-small scope and fresh repair evaluation | Separate authority review before protecting/registering evaluator inputs or changing .pi/fenrir-workflow.json; no synthesized claims |
 | G1 | Source-bound TC0-A qualification via an actually registered evaluator | All required A/G0 rows and six controller claims; any required missing evidence remains UNKNOWN/BLOCKED |

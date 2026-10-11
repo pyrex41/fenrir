@@ -18,9 +18,32 @@ def atom(s):
     return 'fn-'+s
 
 
+def name(s):
+    # Datatype/constructor names travel as Shen strings and print bare with ~A.
+    if not isinstance(s,str) or not re.fullmatch('[A-Za-z_][A-Za-z0-9_]*',s):
+        raise ValueError('Name outside demonstrated Shen string scope')
+    return json.dumps(s)
+
+
+def octets(h):
+    if not re.fullmatch('(?:[0-9a-f]{2})*',h):
+        raise ValueError('Bytes outside canonical hex')
+    return '['+' '.join(str(b) for b in bytes.fromhex(h))+']'
+
+
 def translate(e,codes):
     tag,node,*x=e
-    if tag=='lambda':
+    if tag=='bytes':
+        rest=octets(x[0])
+    elif tag=='tuple':
+        rest=' '.join(translate(c,codes) for c in x)
+    elif tag=='project':
+        rest=translate(x[0],codes)+' '+str(int(x[1]))
+    elif tag=='construct':
+        rest=' '.join([name(x[0]),name(x[1])]+[translate(c,codes) for c in x[2:]])
+    elif tag=='match':
+        rest=translate(x[0],codes)+' ['+' '.join('['+name(c)+' ['+' '.join(b)+'] '+translate(body,codes)+']' for c,b,body in x[1:])+']'
+    elif tag=='lambda':
         body=translate(x[5],codes)
         codes.append('['+node+' ['+x[0]+' '+body+']]')
         rest=x[0]+' '+body
@@ -46,16 +69,51 @@ def translate(e,codes):
 def model_value(v):
     if isinstance(v,list) and len(v)==4 and v[0]=='closure' and v[3]==[]:
         return {'code_id':v[1],'captures':[[k,model_value(x)] for k,x in v[2]],'capture_support':[]}
+    if isinstance(v,list) and len(v)==2 and v[0]=='bytes' and isinstance(v[1],list):
+        return ['bytes',bytes(int(o) for o in v[1]).hex()]
+    if isinstance(v,list) and len(v)>=2 and v[0]=='tuple':
+        return ['tuple',*map(model_value,v[1:])]
+    if isinstance(v,list) and len(v)>=3 and v[0]=='data':
+        return ['data',v[1],v[2],*map(model_value,v[3:])]
     return probe.value(v)
 
 
-def normalize(s,i):
-    if s[1][2]=='return-return':
-        s[1][2]='collect-return'
-        row=probe.normalize(s,i)
-        row['site']['rule']='ReturnReturn'
+TRAPS={'div-zero':'DivZero','overflow':'Overflow','bounds':'Bounds'}
+
+
+def outcome(o):
+    return ['Ok',model_value(o[1])] if o[0]=='ok' else ['Trap',TRAPS[o[1]]]
+
+
+def event(e):
+    if e[0] in ('scope-exit','task-termination'):
+        row={'kind':{'scope-exit':'ScopeExit','task-termination':'TaskTermination'}[e[0]],'task':'0','outcome':outcome(e[1])}
+        if e[0]=='scope-exit': row['scope']='0'
         return row
-    return probe.normalize(s,i)
+    if e[0] in ('invoke','emit'):
+        row={'kind':'Invoke' if e[0]=='invoke' else 'Emit','task':'0','node':e[1],'label':e[2],'value':model_value(e[3])}
+        if e[0]=='invoke': row['operation']='emit'
+        return row
+    if e[0]=='commit':
+        return {'kind':'Commit','task':'0','node':e[1],'operation':'emit','value':model_value(e[2])}
+    raise ValueError('Unknown model event')
+
+
+RULES={'return-return':'ReturnReturn','match-return':'MatchReturn'}
+
+
+def normalize(s,i):
+    # Shared site/phase spelling from the expression probe; values, outcomes and
+    # pure-call-only frame rules are decoded here.
+    events,s[4]=s[4],[]
+    special=RULES.get(s[1][2]) if s[1][0]=='node' else None
+    if special:
+        s[1][2]='collect-return'
+    row=probe.normalize(s,i)
+    if special:
+        row['site']['rule']=special
+    row['events']=[event(e) for e in events]
+    return row
 
 
 MODEL_FILES=[ROOT/'models/tc0/arithmetic.shen',ROOT/'models/tc0/pure-call-machine.shen',ROOT/'models/tc0/pure-call-oracle.shen']
@@ -100,14 +158,25 @@ class Oracle:
         return chunks[:-1],err
 
 
-def initial_state(a):
+def initial_value(v):
+    tag,*x=v
+    if tag=='int': return '[int '+x[0]+']'
+    if tag=='bool': return '[bool '+('true' if x[0] else 'false')+']'
+    if tag=='unit': return '[unit]'
+    if tag=='bytes': return '[bytes '+octets(x[0])+']'
+    if tag=='tuple': return '[tuple '+' '.join(map(initial_value,x))+']'
+    if tag=='data': return '[data '+' '.join([name(x[0]),name(x[1])]+[initial_value(f) for f in x[2:]])+']'
+    raise ValueError('Unsupported input value')
+
+
+def initial_state(a,input_value=('int','0')):
     codes=[]
     for f in a['functions']:
         body=translate(f['body'],codes)
         codes.append('['+f['id']+' ['+f['parameter_id']+' '+body+']]')
     names='['+' '.join('['+atom(f['name'])+' '+f['id']+']' for f in a['functions'])+']'
     entry=next(f for f in a['functions'] if f['name']==a['entry'])
-    return '[pure-call-state [evaluate '+translate(entry['body'],[])+' true] [['+entry['parameter_id']+' [int 0]]] [] ['+' '.join(codes)+'] '+names+']'
+    return '[pure-call-state [evaluate '+translate(entry['body'],[])+' true] [['+entry['parameter_id']+' '+initial_value(list(input_value))+']] [] ['+' '.join(codes)+'] '+names+']'
 
 
 def observe(case,oracle,node,scratch,model=None):
@@ -162,21 +231,26 @@ def main():
     node=Path(shutil.which('node')).resolve(strict=True)
     fixture=ROOT/'fixtures/tc0/pure-call-forward.json'
     hand=ROOT/'fixtures/tc0/pure-call-hand-cases.mjs'
-    paths=[Path(__file__),ROOT/'tools/check-tc0-expression.py',fixture,hand,
+    data_hand=ROOT/'fixtures/tc0/pure-data-hand-cases.mjs'
+    paths=[Path(__file__),ROOT/'tools/check-tc0-expression.py',fixture,hand,data_hand,
            ROOT/'tools/tc0/run-pure-call.mjs',ROOT/'tools/tc0/pure-call-artifact.mjs',
            ROOT/'tools/tc0/canonical.mjs',ROOT/'runtime/tc0/pure-call-machine.mjs',
            *MODEL_FILES,ROOT/'spec/tc0/pure-call-demo.json',
-           ROOT/'tests/tc0/pure-call-machine.test.mjs',ROOT/'tests/tc0/pure-call-artifact.test.mjs',
+           ROOT/'tests/tc0/pure-call-machine.test.mjs',ROOT/'tests/tc0/pure-call-artifact.test.mjs',ROOT/'tests/tc0/pure-data.test.mjs',
            *oracle.identity_paths(),node]
     before={str(p):probe.digest(p) for p in paths}
-    fixture_stdout,_=probe.synchronous([str(node),'--input-type=module','-e',
-        'import {cases} from '+json.dumps(hand.as_uri())+'; console.log(JSON.stringify(cases));'])
-    cases=json.loads(fixture_stdout)
-    if len(cases)>8:
-        raise ValueError('Hand case cap')
+    def load(module,cap):
+        out,_=probe.synchronous([str(node),'--input-type=module','-e',
+            'import {cases} from '+json.dumps(module.as_uri())+'; console.log(JSON.stringify(cases));'])
+        rows=json.loads(out)
+        if len(rows)>cap:
+            raise ValueError('Hand case cap')
+        return rows
+    cases=load(hand,8)
+    data_cases=load(data_hand,12)
     forward={'name':'hand-forward','program':json.loads(fixture.read_text()),'expected_outcome':['Ok',['int','1']],
              'expected_staging':[['Eval','1'],['Value','1'],['Ready','0'],['Eval','0'],['Eval','1'],['Value','1'],['Eval','1'],['Value','1'],['Ready','0'],['Value','0'],['Join','0'],['Terminate','0'],['Terminal','0']]}
-    cases=[forward]+cases
+    cases=[forward]+cases+data_cases
     if len({c['name'] for c in cases})!=len(cases) or any(not re.fullmatch('[a-z][a-z0-9-]*',c['name']) for c in cases):
         raise ValueError('Unique safe case IDs required')
     scratch=ROOT/'build/tc0/pure-call-inputs'
@@ -185,7 +259,7 @@ def main():
     results=[observe(c,oracle,node,scratch,(out,errs)) for c,out in zip(cases,outs)]
     if before!={str(p):probe.digest(p) for p in paths}:
         raise RuntimeError('Source/toolchain drift')
-    report={'qualification':'UNKNOWN','scope':'tc0-a-pure-call-demo/1 hand cases; trusted-local development',
+    report={'qualification':'UNKNOWN','scope':'tc0-a-pure-call-demo/1 and /2 hand cases; trusted-local development',
             'sources':before,'oracle':oracle.describe(),'bounds':{'reference_steps':str(REFERENCE_STEPS),'cases':str(len(cases)),'wall_seconds_per_process':'30'},
             'cases':results,'limitations':['No complete catalog or integrated strict replay yet','Hand cases are not generated discovery/exhaustive scope','Not full TC0-A or qualified evaluator/isolation']}
     dest.parent.mkdir(parents=True,exist_ok=True)

@@ -2,8 +2,11 @@
 import {encode} from './canonical.mjs';
 import {validatePureCallArtifact,InvalidPureCallArtifact,PureCallValidationLimit} from './pure-call-artifact.mjs';
 const clone=x=>JSON.parse(JSON.stringify(x));
-function operands(e){const t=e[0];if(t==='let')return [3,4];if(t==='lambda')return [7];if(t==='if')return [2,3,4];if(t==='prim')return e.slice(3).map((_,i)=>i+3);if(t==='apply')return [2,3];if(t==='call'||t==='emit')return [3];return [];}
-export function repairPureCallSourceMap(p){const ids=new Set(p.functions.map(f=>f.id));const walk=e=>{ids.add(e[1]);for(const i of operands(e))walk(e[i]);};for(const f of p.functions)walk(f.body);p.source_map=p.source_map.filter(r=>ids.has(r.id));return p;}
+// Child expression key paths; match arm bodies sit one level down in their arm.
+function operands(e){const t=e[0],from=k=>e.slice(k).map((_,i)=>[i+k]);if(t==='let')return [[3],[4]];if(t==='lambda')return [[7]];if(t==='if')return [[2],[3],[4]];if(t==='prim')return from(3);if(t==='apply')return [[2],[3]];if(t==='call'||t==='emit')return [[3]];
+ if(t==='tuple')return from(2);if(t==='project')return [[2]];if(t==='construct')return from(4);if(t==='match')return [[2],...e.slice(3).map((_,i)=>[i+3,2])];return [];}
+const at=(e,keys)=>keys.reduce((x,k)=>x[k],e);
+export function repairPureCallSourceMap(p){const ids=new Set(p.functions.map(f=>f.id));const walk=e=>{ids.add(e[1]);for(const k of operands(e))walk(at(e,k));};for(const f of p.functions)walk(f.body);p.source_map=p.source_map.filter(r=>ids.has(r.id));return p;}
 export function pureCallMetric(p){const checked=validatePureCallArtifact(encode(p),['int','0']);return {nodes:Number(checked.node_count),bytes:encode(p).length};}
 export function pureCallReductions(program){
  const original=pureCallMetric(program),proposals=[],seen=new Set();
@@ -16,7 +19,7 @@ export function pureCallReductions(program){
    if(e[0]==='let')replace(e[4],'drop-let-if-still-typed');
    if(e[0]==='if'&&e[2][0]==='bool')replace(e[e[2][2]?3:4],'constant-if');
    if(e[0]==='prim'&&e[2]==='add')for(const [zero,other] of [[3,4],[4,3]])if(e[zero][0]==='int'&&e[zero][2]==='0')replace(e[other],'add-zero');
-   for(const i of operands(e))walk(e[i],[...path,i]);
+   for(const k of operands(e))walk(at(e,k),[...path,...k]);
   }
   walk(program.functions[f].body,[]);
  }
