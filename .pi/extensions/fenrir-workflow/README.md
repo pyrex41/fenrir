@@ -107,7 +107,7 @@ The manifest is `.pi/fenrir-workflow.json`. It registers three **development** c
 | --- | --- | --- |
 | `workflow-tests` | The controller itself; no language behavior | ~30 s |
 | `tc0-candidate-tests` | TC0 validators, candidate machines, generation, reduction and replay unit tests | ~15 s |
-| `tc0-pure-call-oracle` | Fresh Shen-vs-candidate agreement on the pure-call hand cases, then strict replay of that fresh report | see below |
+| `tc0-pure-call-oracle` | Fresh Shen-vs-candidate agreement on the pure-call hand cases, then strict replay of that fresh report | ~13 s |
 
 The two TC0 checks give the agent loop semantic back pressure at measure boundaries (03_PHASED_EXECUTION_PLAN.md §5). They are development evidence only: no claims, no qualification credit. The required `tc0-a-qualification` entry is intentionally absent: there is no TC0-A evaluator yet, and the controller must not invent one or turn development checks into language qualification.
 
@@ -117,6 +117,8 @@ The two TC0 checks give the agent loop semantic back pressure at measure boundar
 mkdir -p build/toolchain
 ln -s "$FENRIR_SHEN_SOURCE/_build/bin/shen-scheme" build/toolchain/shen-scheme
 ```
+
+The existing checker tools expect the older shen-scheme layout with `lib/shen-scheme/shen.boot`. shen-scheme 0.50 no longer ships that file and is reported as BLOCKED; the v0.26 Linux binary release has the expected layout and was used to verify this check (9/9 hand cases agree and replay; an injected `sub` operand-order mutant fails on `mutual-tail-countdown`). That verification is environment evidence only: the project has not yet recorded its pinned Shen version, which belongs in the dependency epoch (03_PHASED_EXECUTION_PLAN.md §4).
 
 Without that link, or if the link does not resolve to a `shen-scheme` build with `lib/shen-scheme/shen.boot`, the check exits 2 and the controller records **BLOCKED** (its `blockedExitCode`), which pauses the drive rather than starting a repair. A missing oracle is never PASS and never a candidate failure. A real exit 1 can be a semantic disagreement or an oracle/tool error; read the check's stderr before repairing. Outputs go to `build/tc0/dev-check/` and are deleted at the start of each run, so stale reports cannot stand in for fresh observations.
 
