@@ -26,7 +26,7 @@ language release**.
 | Area | What exists | What is not established |
 | --- | --- | --- |
 | Specification | v0.2 architecture, core contract and phased plan | Full frozen, executable acceptance authority |
-| Pure-language development | Shen models and an independent candidate for the whole TC0-A expression grammar (schema `/2`: calls, closures, Bytes, TrapCode, tuples, datatypes, match, byte primitives, eq); closed validator; 24 hand fixtures; catalog coverage 112/112; every program of a bounded grammar up to 5 nodes (5,051) agreeing on two Shen ports; an exact-arithmetic ledger | Qualified TC0-A evaluation; independent catalog review |
+| Pure-language development | Shen models and an independent candidate for the whole TC0-A expression grammar (schema `/2`: calls, closures, Bytes, TrapCode, tuples, datatypes, match, byte primitives, eq); closed validator; 24 hand fixtures; catalog coverage 112/112; every program of a bounded grammar up to 5 nodes (5,695) agreeing on two Shen ports; an exact-arithmetic ledger | Qualified TC0-A evaluation; independent catalog review |
 | Counterexample loop | Generated discovery and typed reduction for three candidate mutants, exact original/minimized replay, and an S3 clean-room repair packet with a frozen, sandboxed evaluator; one independent repair evaluated DEVELOPMENT-PASS | Enforced repairer isolation (repair 1 used instruction-only isolation) and qualified acceptance |
 | Native arithmetic spike | Small C/Solo5 candidate; historical model comparisons, hand cases, generated failure and cold replay | Full language backend, machine-level determinism, native startup/counter closure |
 | Native host | Go orchestration, bounded readers/output, source inventories, owned process/container cleanup, session/replay and selected campaigns | Current-source live validation of recent repairs; full hostile-peer/corpus/perturbation obligations |
@@ -101,8 +101,7 @@ size are hand-derived in the tests.
 
 | Max nodes | Programs | Shen/candidate agreement | Outcomes | reverse-operands killed / survived | arm-by-position killed / survived | Time |
 | --- | --- | --- | --- | --- | --- | --- |
-| 4 | 632 | 632 / 632 | 540 Ok, 48 DivZero, 27 Bounds, 17 Overflow | 528 / 104 | 20 / 612 | ~7 s |
-| 5 | 5,051 | 5,051 / 5,051 (max 47 steps) | 3,899 Ok, 572 DivZero, 364 Bounds, 216 Overflow | 3,330 / 1,721 | 966 / 4,085 | ~71 s |
+| 5 | 5,695 | 5,695 / 5,695 (max 47 steps) | 4,350 Ok, 595 DivZero, 517 Bounds, 233 Overflow | 3,940 / 1,755 | 975 / 4,720 | ~82 s |
 
 Survivors are programs on which that mutant is equivalent, for example
 programs with no collected operand pair or no `Some`-first match; no mutant
@@ -129,7 +128,7 @@ cited file exists, and every open row states its gap. Current rows: 23 with
 development evidence, 1 UNKNOWN (the gate itself: no registered TC0-A evaluator),
 and 3 deferred to B/C. The mandatory bad-overflow mutant (`--wrap-overflow`, two's-complement wrap
 instead of the trap) is now in the candidate; it is killed on exactly the Overflow
-programs of the exhaustive scope (17 at 4 nodes, 216 at 5).
+programs of the exhaustive scope (233 at 5 nodes).
 
 **Candidate execution boundary (G0 row, measured).** `tools/tc0/sandbox.mjs` runs a
 candidate inside a fresh network namespace (`unshare -n`) under Node's permission
@@ -154,7 +153,7 @@ qualified isolation claim.
 
 **Second Shen port.** The Yggdrasil-shaken oracle was rebuilt for the schema `/2`
 model: an eval-free shen-cl/SBCL slice that matched host Shen on all 19 hand cases.
-On all 5,051 exhaustive-small programs it produced traces identical to
+On all 5,695 exhaustive-small programs it produced traces identical to
 shen-scheme v0.26. The bootstrap steps are in the
 [workflow README](.pi/extensions/fenrir-workflow/README.md). Two ports agreeing
 supports portability only, not semantic truth (core §17).
@@ -171,7 +170,7 @@ exits nonzero without output, so invalid artifacts never execute.
 the Shen-agreeing traces to a catalog transition: dispatch by tag, collect/ready by
 operation, trap routing by code, frame kinds (from a frame stack simulated from the
 step records and checked against each step's depth), tail-call contexts, emit and
-root event sequences. These come from the 24 hand cases and the 5,051
+root event sequences. These come from the 24 hand cases and the 5,695
 exhaustive-small programs; each exhaustive program is admitted only when its trace
 hash matches the Shen-agreeing one. It covers **112 of 112** transitions the catalog
 defines for schema `/2`, and no step maps outside the catalog. Five fixtures were
@@ -179,6 +178,18 @@ added for the last 18 gaps: `gt`/`ge`/`mul`, Overflow from `sub`, `neg` minimum,
 `mul` and minimum ÷ −1, exact values around 2^53, and unwinding through `let`
 initializers and `if` conditions. This covers the catalog's named transitions, not
 every frame/context combination.
+
+**Proposed TC0-A gate (unreviewed).** [`spec/tc0/tc0-a-requirements.json`](spec/tc0/tc0-a-requirements.json)
+is a versioned manifest of 15 required rows and 1 optional row.
+[`tools/check-tc0-a-gate.py`](tools/check-tc0-a-gate.py) runs every row freshly
+against a clean, committed HEAD and aggregates per TC0-GATE. That includes
+rebuilding an S3 packet and re-evaluating the retained independent patch. The
+latest run gives **proposed verdict UNKNOWN**: 14 of 15 required rows pass, and
+the open one is the attestation of enforced repairer isolation. A negative control
+with a subtly broken candidate gave FAIL. The verdict is labeled
+`UNREVIEWED-PROPOSAL`; qualification stays UNKNOWN until the authority review in
+[`campaigns/tc0/G1_EVALUATOR_REVIEW.md`](campaigns/tc0/G1_EVALUATOR_REVIEW.md) accepts
+and registers it.
 
 **S3 repair packet and independent repair 1.** See
 [`campaigns/tc0/S3_REPAIR_PACKET.md`](campaigns/tc0/S3_REPAIR_PACKET.md).

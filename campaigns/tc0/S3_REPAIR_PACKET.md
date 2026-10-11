@@ -38,7 +38,8 @@ runs these steps in order:
 5. Fresh Shen agreement on the hand cases.
 6. The workspace regression suite.
 7. Held-out scopes against fresh Shen: the generated pure-call (32) and pure-data
-   (24) families, and all 5,051 exhaustive-small programs up to 5 nodes.
+   (24) families, and every exhaustive-small program up to 5 nodes (5,695 since
+   grammar G gained a third bytes literal; 5,051 when repair 1 was evaluated).
 8. Mutation control: the held-out exhaustive scope at 4 nodes must reject the
    defective original.
 
