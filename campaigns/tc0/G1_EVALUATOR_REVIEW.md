@@ -3,10 +3,10 @@
 Status: **owner-reviewed and registered (2026-10-11).** The project owner answered the
 review questions below; the gate and manifest are registered as `tc0-a-qualification`
 in `.pi/fenrir-workflow.json`. Its verdicts count as TC0-A qualification verdicts
-only under the recorded decisions and waivers. They are development-grade: the
-evaluator itself runs trusted-local (decision 6).
+only under the recorded decisions and waivers. The evaluator runs trusted-local
+(decision 6); candidate sandbox probes do not establish evaluator isolation.
 
-## What is proposed
+## Evaluator and manifest
 
 - **Manifest:** [`spec/tc0/tc0-a-requirements.json`](../../spec/tc0/tc0-a-requirements.json),
   16 rows (15 required, 1 optional). Each row names the ledger requirements it
@@ -25,7 +25,7 @@ The registered check ran through the workflow controller's own runner at `1db747
 The receipt is a qualification **PASS**: fresh and source-bound, with stable evidence
 and confirmed cleanup. All six required claims are credited, and the controller's
 `qualification()` gate returns PASS with no reasons. It carries one waiver:
-instruction-only repairer isolation (decision 3).
+instruction-only repairer isolation (decision 3). The repair result is candidate-only repair evaluated under an instruction-only independence waiver; enforced repairer independence remains unestablished.
 
 | Row | | Result | Evidence |
 | --- | --- | --- | --- |
@@ -87,7 +87,24 @@ the controller enforces through source hashes.
      (its exact-original replay step)
    - `fresh-repair-evaluation`: fresh S3 repair run, repair-isolation record
 
-## Not claimed
+## Scope boundary
 
-No TC0-A qualification, no G1 release, no isolation guarantee beyond the measured
-probes, and no global minimality or exhaustive exploration beyond the stated bounds.
+The registered run is a TC0-A qualification PASS for the exact source identity and
+manifest recorded above, under the listed owner waivers. It does not qualify B, C,
+full TC0, native execution, or production readiness. It provides no isolation
+guarantee beyond the measured probes and does not establish global minimality or
+exhaustive exploration beyond the stated bounds. Re-run the gate for a later source
+identity; until then, current-source qualification is UNKNOWN.
+
+## Qualification artifact and next refresh
+
+Retain the workflow controller receipt together with the gate report. Qualification
+admission requires the receipt's source/configuration hashes, executable identities,
+evidence hashes and confirmed cleanup; the standalone report is supporting evidence.
+The current toolchain path requires Linux x86-64 with Nix and the pinned Shen output.
+A refresh run stops after its receipt for review. P2 needs a separate reviewed task
+packet and finite run; protected-source edits invalidate affected G1 evidence, and
+G2 must rerun the required A rows against final P2 source.
+
+The reported 112/112 coverage counts named catalog-transition keys; it does not
+cover every frame/context combination or the full state space.

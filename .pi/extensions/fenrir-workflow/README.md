@@ -16,7 +16,7 @@ Keep `pi-clm` loaded. No global settings or extensions need modification. Loadin
 
 ```text
 /reload
-/fenrir-workflow drive --turns=120 --minutes=120 Build TC0-A and the bounded Solo5 backend spike; keep missing qualification UNKNOWN.
+/fenrir-workflow drive --turns=120 --minutes=120 --repairs=6 Verify the Linux x86-64 runner and pinned toolchain; run only tc0-a-qualification on clean HEAD, retain its controller receipt, then checkpoint and stop for review. No P2 edits in this run.
 ```
 
 `drive` displays the full command/authority manifest and finite budgets, asks one human confirmation in UI mode, and starts autonomous continuation. Non-UI mode requires prior explicit `approve`. Reload is needed once after installing code; do not reuse the old approval after controller changes. No repeat nudges are needed within the authorized budget. Budget exhaustion, cancellation, unavailable prerequisites, unresolved cleanup and authority changes still stop the drive.
@@ -101,15 +101,16 @@ CLM may summarize old conversation content while the controller retains phase, b
 
 ## Configure trusted checks
 
-The manifest is `.pi/fenrir-workflow.json`. It registers three **development** checks:
+The manifest is `.pi/fenrir-workflow.json`. It registers three **development** checks and the separate owner-reviewed **qualification** check:
 
 | Check | Exercises | Typical time |
 | --- | --- | --- |
 | `workflow-tests` | The controller itself; no language behavior | ~30 s |
 | `tc0-candidate-tests` | TC0 validators, candidate machines, generation, reduction and replay unit tests | ~15 s |
 | `tc0-pure-call-oracle` | Fresh Shen-vs-candidate agreement on the pure-call hand cases, then strict replay of that fresh report | ~13 s |
+| `tc0-a-qualification` | Fresh source-bound TC0-A gate across all required manifest rows and six claims | Up to 30 min; last recorded run took about 5.2 min |
 
-The two TC0 checks give the agent loop semantic back pressure at measure boundaries (03_PHASED_EXECUTION_PLAN.md §5). They are development evidence only: no claims, no qualification credit. The required `tc0-a-qualification` entry is intentionally absent: there is no TC0-A evaluator yet, and the controller must not invent one or turn development checks into language qualification.
+The two TC0 checks give the agent loop semantic back pressure at measure boundaries (03_PHASED_EXECUTION_PLAN.md §5). They are development evidence only: no claims, no qualification credit. `tc0-a-qualification` is a distinct registered evaluator configured as a required check. Its last documented PASS is source-bound to `1db7471` and carries the waivers described in [`campaigns/tc0/G1_EVALUATOR_REVIEW.md`](../../../campaigns/tc0/G1_EVALUATOR_REVIEW.md); run it again on clean HEAD on a supported Linux x86-64 runner before treating G1 as current. Review the controller receipt, then approve P2 as a separate bounded run. The first protected-source edit makes affected G1 evidence historical; G2 must evaluate A and B rows against final source.
 
 `tc0-pure-call-oracle` needs a Shen oracle. Because checks run with a minimal environment, it reads a fixed, ignored path instead of an environment variable:
 
@@ -118,11 +119,11 @@ mkdir -p build/toolchain
 ln -s "$FENRIR_SHEN_SOURCE/_build/bin/shen-scheme" build/toolchain/shen-scheme
 ```
 
-The existing checker tools expect the older shen-scheme layout with `lib/shen-scheme/shen.boot`. shen-scheme 0.50 no longer ships that file and is reported as BLOCKED; the v0.26 Linux binary release has the expected layout and was used to verify this check (9/9 hand cases agree and replay; an injected `sub` operand-order mutant fails on `mutual-tail-countdown`). That verification is environment evidence only: the project has not yet recorded its pinned Shen version, which belongs in the dependency epoch (03_PHASED_EXECUTION_PLAN.md §4).
+The existing checker tools expect the older shen-scheme layout with `lib/shen-scheme/shen.boot`. shen-scheme 0.50 no longer ships that file and is reported as BLOCKED. The repository flake now pins shen-scheme v0.26, whose Linux binary has the expected layout; the original check measured 9/9 hand cases agreeing and replaying, with an injected `sub` operand-order mutant failing on `mutual-tail-countdown`. That is environment evidence; the registered G1 gate separately exercises the current schema `/2` scope (24 hand cases in its latest documented run).
 
 Without that link, or if the link does not resolve to a `shen-scheme` build with `lib/shen-scheme/shen.boot`, the check exits 2 and the controller records **BLOCKED** (its `blockedExitCode`), which pauses the drive rather than starting a repair. A missing oracle is never PASS and never a candidate failure. A real exit 1 can be a semantic disagreement or an oracle/tool error; read the check's stderr before repairing. Outputs go to `build/tc0/dev-check/` and are deleted at the start of each run, so stale reports cannot stand in for fresh observations.
 
-Authority: only the launcher `tools/tc0/dev-check-pure-call-oracle.mjs` is protected. The Shen model, fixtures and checker tools stay writable because the current S1 slice develops model and candidate together; protect them when the candidate-only repair phase begins, after authority review.
+For the fast development oracle check, only the launcher `tools/tc0/dev-check-pure-call-oracle.mjs` is in that check's `authorityPaths`. The qualification check has its own wider authority set in `.pi/fenrir-workflow.json`, including the evaluator, manifest, ledger, catalog, model, fixtures, tools, tests, S3 packet and toolchain flake. Changes to those inputs require a fresh source-bound qualification run; review authority changes before modifying the trusted evaluator or its inputs.
 
 ### Faster oracle: Yggdrasil-shaken pure-call model
 
@@ -154,18 +155,7 @@ The REPL reports `empty stream` and exits once stdin ends; check that `compiled/
 
 A development check MAY declare `blockedExitCode` (an integer from 2 to 125) for an unavailable prerequisite. Only that exact exit maps to BLOCKED; every other nonzero exit is FAIL. Qualification checks cannot declare it; their JSON report owns the verdict.
 
-After a real evaluator exists, stop the run and separately review its implementation, fixtures and authority. Add a qualification check, for example:
-
-```json
-"tc0-a-qualification": {
-  "kind": "qualification",
-  "command": ["node", "tools/qualify-tc0-a.mjs"],
-  "timeoutSeconds": 300,
-  "authorityPaths": ["tools/qualify-tc0-a.mjs", "model", "fixtures/hand-derived", "schemas"]
-}
-```
-
-This is a registration example, not an existing evaluator. The authority set must actually cover the trusted runner, oracle, goldens and gate definitions. The candidate must not import those implementations as its own transition engine. Re-inspect/reapprove after any authority change and start a fresh run; candidate repair never rewrites acceptance authority.
+The registered `tc0-a-qualification` entry runs `python3 -I tools/check-tc0-a-gate.py` with the authority paths listed in `.pi/fenrir-workflow.json`. That set must continue to cover the trusted runner, oracle, goldens and gate definitions. The candidate must not import those implementations as its own transition engine. Re-inspect/reapprove after any authority change and start a fresh run; candidate repair never rewrites acceptance authority.
 
 Check definitions accept fixed argv only; the model supplies just a check ID. No shell expansion is performed by the controller. Development checks use exit status and have no conformance claims. Qualification commands must print **one JSON report** to stdout, send logs to stderr, and exit consistently: PASS=0, FAIL=1, UNKNOWN/BLOCKED=2.
 
