@@ -125,11 +125,13 @@ test('invalid family: each named mutation is rejected with its expected class an
 
 test('exhaustive-small enumeration: exact counts, deterministic, valid, completing, cap fails closed',async()=>{
  const {enumeratePureData}=await import('../../tools/tc0/pure-data-enumerate.mjs');
- // Hand-derived: size 1 = 4 I64 leaves + true + 2 bytes + None = 8; size 2 adds tap(4) +
- // bytes_length(2) + not(1) + Some(4) = 11; size 3 adds I64 46 (tap 6, add/div 32,
- // bytes_index 8), Bool 38 (not 1, lt 16, eq 16+4+1), Bytes 4, Opt 6, Pair 16 = 110.
- assert.deepEqual([1,2,3].map(n=>enumeratePureData(n).count),['8','19','129']);
- assert.deepEqual(enumeratePureData(3).counts_by_result_and_nodes,{'I64/1':'4','Bool/1':'1','Bytes/1':'2','Opt/1':'1','I64/2':'6','Bool/2':'1','Opt/2':'4','I64/3':'46','Bool/3':'38','Bytes/3':'4','Opt/3':'6','Pair/3':'16'});
+ // Hand-derived: size 1 = 4 I64 leaves + true + 2 bytes + None + A/B/C = 11; size 2 adds
+ // tap(4) + bytes_length(2) + not(1) + Some(4) = 11; size 3 adds I64 46 (tap 6, add/div 32,
+ // bytes_index 8), Bool 47 (not 1, lt 16, eq 16+4+1+9), Bytes 4, Opt 6, Pair 16 = 119.
+ assert.deepEqual([1,2,3].map(n=>enumeratePureData(n).count),['11','22','141']);
+ assert.deepEqual(enumeratePureData(3).counts_by_result_and_nodes,{'I64/1':'4','Bool/1':'1','Bytes/1':'2','Opt/1':'1','Tri/1':'3','I64/2':'6','Bool/2':'1','Opt/2':'4','I64/3':'46','Bool/3':'47','Bytes/3':'4','Opt/3':'6','Pair/3':'16'});
+ // The smallest Tri match is 5 nodes: 3 scrutinees x 4^3 leaf bodies x 6 arm orders.
+ const tri=enumeratePureData(5).cases.filter(c=>c.program.functions[0].body[0]==='match'&&c.program.functions[0].body[2][2]==='Tri');assert.equal(tri.length,3*64*6);
  const e=enumeratePureData(3);assert.deepEqual(enumeratePureData(3),e);assert.equal(e.truncated,false);
  const bodies=new Set(e.cases.map(c=>c.result+JSON.stringify(c.program.functions[0].body)));assert.equal(bodies.size,e.cases.length);
  for(const c of e.cases){const r=run(c.program);assert.equal(r.execution,'Completed',c.name);}

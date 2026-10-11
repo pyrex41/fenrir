@@ -8,16 +8,20 @@
 //           | tap(I64) | add(I64,I64) | div(I64,I64) | bytes_length(Bytes)
 //           | bytes_index(Bytes,I64) | project(Pair,0|1) | if(Bool,I64,I64)
 //           | match Opt {None => I64; Some x => I64}   (both arm orders)
-//   Bool  ::= true | not(Bool) | lt(I64,I64) | eq(T,T) for T in I64, Bytes, Opt, Pair
+//           | match Tri {A => I64; B => I64; C => I64}  (all six arm orders)
+//   Bool  ::= true | not(Bool) | lt(I64,I64) | eq(T,T) for T in I64, Bytes, Opt, Pair, Tri
 //   Bytes ::= "" | ff | bytes_concat(Bytes,Bytes)
 //   Opt   ::= None | Some(I64)
 //   Pair  ::= tuple(I64,I64)
+//   Tri   ::= A | B | C                     (a nullary three-constructor datatype)
 // `tap` is a named I64 -> I64 function that emits its argument and returns it, so
 // evaluation order is observable. p is main's parameter (input 0).
 import {encode} from './canonical.mjs';
 import {validatePureCallArtifact} from './pure-call-artifact.mjs';
 const Opt={name:'Opt',constructors:[{name:'None',fields:[]},{name:'Some',fields:['I64']}]};
-const TYPES={I64:'I64',Bool:'Bool',Bytes:'Bytes',Opt:['Data','Opt'],Pair:['Tuple','I64','I64']};
+const Tri={name:'Tri',constructors:['A','B','C'].map(name=>({name,fields:[]}))};
+const TYPES={I64:'I64',Bool:'Bool',Bytes:'Bytes',Opt:['Data','Opt'],Pair:['Tuple','I64','I64'],Tri:['Data','Tri']};
+const ORDERS=[['A','B','C'],['A','C','B'],['B','A','C'],['B','C','A'],['C','A','B'],['C','B','A']];
 const MAX='9223372036854775807';
 // Templates: [tag,...operands] without node IDs; binders are '$p' or '$v<depth>'.
 function enumerate(maxNodes){
@@ -39,11 +43,13 @@ function enumerate(maxNodes){
    product([['Bool',depth],['I64',depth],['I64',depth]],(c,a,b)=>['if',c,a,b]);
    product([['Opt',depth],['I64',depth],['I64',depth+1]],(o,none,some)=>{const x='$v'+depth;return ['match',o,['None',[],none],['Some',[x],some]];});
    product([['Opt',depth],['I64',depth],['I64',depth+1]],(o,none,some)=>{const x='$v'+depth;return ['match',o,['Some',[x],some],['None',[],none]];});
+   // Arm bodies are paired with constructors A, B, C; each order lists the same arms.
+   for(const order of ORDERS)product([['Tri',depth],['I64',depth],['I64',depth],['I64',depth]],(t,a,b,c)=>{const body={A:a,B:b,C:c};return ['match',t,...order.map(k=>[k,[],body[k]])];});
   }else if(t==='Bool'){
    if(n===1)out.push(['bool',true]);
    product([['Bool',depth]],b=>['prim','not',b]);
    product([['I64',depth],['I64',depth]],(a,b)=>['prim','lt',a,b]);
-   for(const ty of ['I64','Bytes','Opt','Pair'])product([[ty,depth],[ty,depth]],(a,b)=>['prim','eq',a,b]);
+   for(const ty of ['I64','Bytes','Opt','Pair','Tri'])product([[ty,depth],[ty,depth]],(a,b)=>['prim','eq',a,b]);
   }else if(t==='Bytes'){
    if(n===1)out.push(['bytes',''],['bytes','ff']);
    product([['Bytes',depth],['Bytes',depth]],(a,b)=>['prim','bytes_concat',a,b]);
@@ -51,6 +57,7 @@ function enumerate(maxNodes){
    if(n===1)out.push(['construct','Opt','None']);
    product([['I64',depth]],a=>['construct','Opt','Some',a]);
   }else if(t==='Pair')product([['I64',depth],['I64',depth]],(a,b)=>['tuple',a,b]);
+  else if(t==='Tri'&&n===1)out.push(...['A','B','C'].map(k=>['construct','Tri',k]));
   return out;
  }
  const rows=[];
@@ -73,11 +80,11 @@ function artifact(row,name){
  const tapId=fresh(),tapParam=fresh(),letId=fresh(),bind=fresh(),emitId=fresh(),v1=fresh(),v2=fresh();locations.push(tapId,letId,emitId,v1,v2);
  const tap={id:tapId,name:'tap',parameter_id:tapParam,argument_type:'I64',result_type:'I64',effects:['Emit'],body:['let',letId,bind,['emit',emitId,'tap',['var',v1,tapParam]],['var',v2,tapParam]]};
  const uses=s=>JSON.stringify(row.body).includes(s);
- return {contract_version:'0.2',schema_version:'tc0-a-pure-call-demo/2',slice:'TC0-A',module:name,datatypes:uses('"Opt"')?[Opt]:[],effects:[],
+ return {contract_version:'0.2',schema_version:'tc0-a-pure-call-demo/2',slice:'TC0-A',module:name,datatypes:[...uses('"Opt"')?[Opt]:[],...uses('"Tri"')?[Tri]:[]],effects:[],
   functions:[{...main,argument_type:'I64',result_type:TYPES[row.result],effects:['Emit'],body},tap],entry:'main',input_schema:{type:'I64'},
   source_map:locations.map(id=>({id,file:'exhaustive-small',line:'0',column:'0'}))};
 }
-export function enumeratePureData(maxNodes=4,{maxCases=5000}={}){
+export function enumeratePureData(maxNodes=4,{maxCases=8000}={}){
  if(!Number.isSafeInteger(maxNodes)||maxNodes<1||maxNodes>6)throw new TypeError('Node bound 1..6');
  const rows=enumerate(maxNodes);
  if(rows.length>maxCases)throw new RangeError(`Exhaustive scope has ${rows.length} programs, above the ${maxCases} cap; lower the node bound rather than truncating`);

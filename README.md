@@ -92,14 +92,15 @@ tuple. Reductions are smallest-found by typed rules, not globally minimal.
 
 **Exhaustive-small scope.** `tools/check-tc0-pure-data-exhaustive.py` runs every
 program of a bounded grammar G (defined in `tools/tc0/pure-data-enumerate.mjs`;
-I64/Bool/Bytes/Opt/Pair expressions over all schema `/2` constructs plus an
-emitting `tap` call). It uses one Shen batch and one candidate batch. Counts per
+I64/Bool/Bytes/Opt/Pair/Tri expressions over all schema `/2` constructs plus an
+emitting `tap` call). `Tri` is a three-constructor enum matched in all six arm
+orders. It uses one Shen batch and one candidate batch. Counts per
 size are hand-derived in the tests.
 
 | Max nodes | Programs | Shen/candidate agreement | Outcomes | reverse-operands killed / survived | arm-by-position killed / survived | Time |
 | --- | --- | --- | --- | --- | --- | --- |
-| 4 | 611 | 611 / 611 | 519 Ok, 48 DivZero, 27 Bounds, 17 Overflow | 510 / 101 | 20 / 591 | ~7 s |
-| 5 | 3,869 | 3,869 / 3,869 (max 47 steps) | 2,717 Ok, 572 DivZero, 364 Bounds, 216 Overflow | 3,303 / 566 | 198 / 3,671 | ~51 s |
+| 4 | 632 | 632 / 632 | 540 Ok, 48 DivZero, 27 Bounds, 17 Overflow | 528 / 104 | 20 / 612 | ~7 s |
+| 5 | 5,051 | 5,051 / 5,051 (max 47 steps) | 3,899 Ok, 572 DivZero, 364 Bounds, 216 Overflow | 3,330 / 1,721 | 966 / 4,085 | ~71 s |
 
 Survivors are programs on which that mutant is equivalent, for example
 programs with no collected operand pair or no `Some`-first match; no mutant
@@ -108,9 +109,20 @@ target were each caught at bound 4: a bytes `eq` that ignores the last octet
 (4 programs disagree) and `bytes_length` of empty bytes returning 1
 (37 programs disagree).
 
+**G0 exact-arithmetic ledger.** `tools/check-tc0-exact-arithmetic.py` runs 2,908
+programs through the full pure-call machine (core §17). They are the boundary
+product V × V for `add`/`sub`/`mul`/`div`/`lt`/`le`/`gt`/`ge` and `neg` over V.
+V spans the I64 extremes, ±2^53 and 2^53 + 1, the multiplication boundary
+±3037000499/3037000500, 2^62 and small signed values. One more program carries
+function, node and binding IDs above 2^53 and 2^64, with a closure whose captures
+must be ordered numerically. Expected outcomes come from Python's exact integers.
+Both Shen ports and the candidate were exact on all 2,908: 2,587 Ok, 302 Overflow,
+19 DivZero, and the correct capture order. An injected off-by-one I64 bound in the
+model was flagged on the 15 results equal to the maximum.
+
 **Second Shen port.** The Yggdrasil-shaken oracle was rebuilt for the schema `/2`
 model: an eval-free shen-cl/SBCL slice that matched host Shen on all 19 hand cases.
-On all 3,869 exhaustive-small programs it produced traces identical to
+On all 5,051 exhaustive-small programs it produced traces identical to
 shen-scheme v0.26. The bootstrap steps are in the
 [workflow README](.pi/extensions/fenrir-workflow/README.md). Two ports agreeing
 supports portability only, not semantic truth (core §17).
@@ -127,7 +139,7 @@ exits nonzero without output, so invalid artifacts never execute.
 the Shen-agreeing traces to a catalog transition: dispatch by tag, collect/ready by
 operation, trap routing by code, frame kinds (from a frame stack simulated from the
 step records and checked against each step's depth), tail-call contexts, emit and
-root event sequences. These come from the 24 hand cases and the 3,869
+root event sequences. These come from the 24 hand cases and the 5,051
 exhaustive-small programs; each exhaustive program is admitted only when its trace
 hash matches the Shen-agreeing one. It covers **112 of 112** transitions the catalog
 defines for schema `/2`, and no step maps outside the catalog. Five fixtures were

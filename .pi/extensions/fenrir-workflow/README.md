@@ -148,7 +148,7 @@ printf '(load "scripts/build.shen")\n(build)\n' | $(nix build --no-link --print-
 nix shell nixpkgs#sbcl -c make build-sbcl  # bin/sbcl/shen
 ```
 
-The REPL reports `empty stream` and exits once stdin ends; check that `compiled/` holds every kernel file before building. With Yggdrasil `a40d8c5`, shen-cl `dff7445` and SBCL 2.6.8, the schema /2 model shook to an eval-free slice (`needs-eval=false`, `cannot-reach=eval`, kernel `42-s42.20260825`) and passed parity on all 19 hand cases. It also produced per-program traces identical to shen-scheme v0.26 on all 3,869 exhaustive-small programs (`tools/check-tc0-pure-data-exhaustive.py --oracle-artifact`). On that large batch, the shaken artifact was slower than host shen-scheme (about 62 s versus 45 s), so batch size decides which oracle is faster.
+The REPL reports `empty stream` and exits once stdin ends; check that `compiled/` holds every kernel file before building. With Yggdrasil `a40d8c5`, shen-cl `dff7445` and SBCL 2.6.8, the schema /2 model shook to an eval-free slice (`needs-eval=false`, `cannot-reach=eval`, kernel `42-s42.20260825`) and passed parity on all 19 hand cases. It also produced per-program traces identical to shen-scheme v0.26 on all 5,051 exhaustive-small programs (`tools/check-tc0-pure-data-exhaustive.py --oracle-artifact`) and on the 2,908-program exact-arithmetic ledger. On the large exhaustive batch, the shaken artifact was slower than host shen-scheme (about 88 s versus 66 s), so batch size decides which oracle is faster.
 
 A development check MAY declare `blockedExitCode` (an integer from 2 to 125) for an unavailable prerequisite. Only that exact exit maps to BLOCKED; every other nonzero exit is FAIL. Qualification checks cannot declare it; their JSON report owns the verdict.
 
