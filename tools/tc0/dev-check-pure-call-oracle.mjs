@@ -4,7 +4,8 @@
 // invoked tools. Exit 0 = both passed, 1 = a check failed, 2 = a prerequisite
 // is unavailable (registered as the check's blockedExitCode).
 import {spawnSync} from 'node:child_process';
-import {existsSync,mkdirSync,realpathSync,rmSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {existsSync,mkdirSync,readFileSync,realpathSync,rmSync} from 'node:fs';
 import {dirname,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -28,12 +29,33 @@ function run(label,argv,timeoutSeconds){
   console.error(`ok: ${label} (${seconds}s)`);
 }
 
-if(!existsSync(shenLink))blocked(`no Shen executable at ${shenLink}; link a pinned shen-scheme build there (see .pi/extensions/fenrir-workflow/README.md)`);
-const shen=realpathSync(shenLink);
-if(!shen.endsWith('/bin/shen-scheme')||!existsSync(resolve(shen,'../../lib/shen-scheme/shen.boot')))blocked(`${shen} is not a shen-scheme build with lib/shen-scheme/shen.boot`);
+// Prefer the Yggdrasil-shaken oracle (tools/tc0/build-shaken-oracle.mjs) while its
+// stamp still matches the model sources; otherwise run the driver on host Shen.
+const shaken=resolve(root,'build/toolchain/tc0-pure-call-oracle');
+const digest=p=>createHash('sha256').update(readFileSync(p)).digest('hex');
+function shakenFresh(){
+  try{
+    const stamp=JSON.parse(readFileSync(resolve(shaken,'oracle-stamp.json'),'utf8'));
+    return stamp.schema==='fenrir.shaken-oracle.v1'&&stamp.parity?.identical===true&&
+      Object.entries(stamp.sources).every(([p,h])=>digest(resolve(root,p))===h)&&
+      ['models/tc0/arithmetic.shen','models/tc0/pure-call-machine.shen','models/tc0/pure-call-oracle.shen'].every(p=>p in stamp.sources);
+  }catch{return false;}
+}
+let oracleArgs;
+if(shakenFresh()){
+  oracleArgs=['--oracle-artifact',shaken];
+  console.error('oracle: Yggdrasil-shaken artifact '+shaken);
+}else{
+  if(existsSync(shaken))console.error('oracle: shaken artifact is stale (model changed); using host Shen. Rebuild with tools/tc0/build-shaken-oracle.mjs');
+  if(!existsSync(shenLink))blocked(`no fresh shaken oracle and no Shen executable at ${shenLink}; link a pinned shen-scheme build there (see .pi/extensions/fenrir-workflow/README.md)`);
+  const shen=realpathSync(shenLink);
+  if(!shen.endsWith('/bin/shen-scheme')||!existsSync(resolve(shen,'../../lib/shen-scheme/shen.boot')))blocked(`${shen} is not a shen-scheme build with lib/shen-scheme/shen.boot`);
+  oracleArgs=['--shen-executable',shen];
+  console.error('oracle: host Shen '+shen);
+}
 
 // Stale outputs must never stand in for this run's observations.
 rmSync(agreement,{force:true});rmSync(replay,{force:true});mkdirSync(out,{recursive:true});
-run('Shen/candidate hand-case agreement',['python3','-I',resolve(root,'tools/check-tc0-pure-call.py'),'--shen-executable',shen,'--output',agreement],240);
+run('Shen/candidate hand-case agreement',['python3','-I',resolve(root,'tools/check-tc0-pure-call.py'),...oracleArgs,'--output',agreement],240);
 run('strict replay of fresh agreement report',[process.execPath,resolve(root,'tools/tc0/check-pure-call-replay.mjs'),agreement,replay],60);
 console.log(JSON.stringify({qualification:'UNKNOWN',scope:'pure-call hand cases: fresh Shen agreement + strict replay (development)',outputs:[agreement,replay]}));

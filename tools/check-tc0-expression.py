@@ -13,16 +13,47 @@ import subprocess
 ROOT = Path(__file__).resolve().parent.parent
 
 
+_DIGEST_CACHE = ROOT/'build/cache/sha256-stat.json'
+_digests = None
+
+
+def _signature(st):
+    return [str(x) for x in (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)]
+
+
 def digest(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    # Large files (toolchain binaries) reuse a digest only while dev/ino/size/
+    # mtime/ctime are unchanged; shared with tools/tc0/digest-cache.mjs.
+    global _digests
+    real = Path(path).resolve()
+    st = real.stat()
+    if st.st_size < 1 << 20:
+        return hashlib.sha256(real.read_bytes()).hexdigest()
+    if _digests is None:
+        try:
+            _digests = json.loads(_DIGEST_CACHE.read_text())
+        except (OSError, ValueError):
+            _digests = {}
+    sig, hit = _signature(st), _digests.get(str(real))
+    if hit and hit.get('stat') == sig:
+        return hit['sha256']
+    sha256 = hashlib.sha256(real.read_bytes()).hexdigest()
+    if _signature(real.stat()) == sig:
+        _digests[str(real)] = {'stat': sig, 'sha256': sha256}
+        _DIGEST_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _DIGEST_CACHE.with_name(_DIGEST_CACHE.name + f'.{os.getpid()}')
+        tmp.write_text(json.dumps(_digests))
+        os.replace(tmp, _DIGEST_CACHE)
+    return sha256
 
 
-def synchronous(argv, timeout=30):
+def synchronous(argv, timeout=30, stdin=None, cwd=None):
     # Join owned process group even on timeout; never run background candidate work.
     process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                               text=True, start_new_session=True, cwd=ROOT)
+                               stdin=None if stdin is None else subprocess.PIPE,
+                               text=True, start_new_session=True, cwd=cwd or ROOT)
     try:
-        out, err = process.communicate(timeout=timeout)
+        out, err = process.communicate(input=stdin, timeout=timeout)
         if process.returncode:
             raise RuntimeError(f'Process exit {process.returncode}: {err[-2000:]}')
         return out, err
@@ -129,7 +160,7 @@ def normalize(sample, epoch):
         'root-join-entry':'RootJoinEntry','join':'Join','terminate':'Terminate'}[site[1]],
         'rule':rules[site[2]]}
     return {'epoch':str(epoch),'site':normalized_site,'after':{
-        'eval':'Eval','value':'Value','ready':'Ready','unwind':'Unwind','join':'Join',
+        'eval':'Eval','evaluate':'Eval','value':'Value','ready':'Ready','unwind':'Unwind','join':'Join',
         'terminate':'Terminate','terminal':'Terminal'}[after], 'depth':depth,
         'events':list(map(event, events))}
 

@@ -48,22 +48,27 @@ def main():
     if not dest.is_relative_to(ROOT/'build') or dest.suffix != '.json' or dest.exists():
         raise ValueError('Fresh output JSON below build required')
     executable = Path(args.shen_executable).resolve(strict=True)
+    oracle = pc.Oracle(shen=executable)
     node = Path(shutil.which('node')).resolve(strict=True)
     paths = [Path(__file__), ROOT/'tools/check-tc0-pure-call.py', ROOT/'tools/check-tc0-expression.py',
              *[ROOT/'tools/tc0'/p for p in ['pure-call-generate.mjs', 'pure-call-reduce.mjs',
                'pure-call-campaign-bridge.mjs', 'run-pure-call.mjs', 'pure-call-artifact.mjs', 'canonical.mjs']],
-             ROOT/'models/tc0/pure-call-machine.shen', ROOT/'models/tc0/arithmetic.shen',
+             *pc.MODEL_FILES,
              ROOT/'runtime/tc0/pure-call-machine.mjs', ROOT/'spec/tc0/pure-call-demo.json',
              executable, node, executable.parent.parent/'lib/shen-scheme/shen.boot', Path(sys.executable).resolve()]
     before = {str(p): probe.digest(p) for p in paths}
     start = time.monotonic()
-    def bounded_synchronous(argv, timeout=30):
+    def bounded_synchronous(argv, timeout=30, stdin=None, cwd=None):
         remaining = 120-(time.monotonic()-start)
         if remaining <= 0:
             raise TimeoutError('Campaign watchdog')
         deadline = time.monotonic()+min(timeout, remaining)
-        with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
-            process = subprocess.Popen(argv, stdout=stdout, stderr=stderr, start_new_session=True, cwd=ROOT)
+        with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr, tempfile.TemporaryFile() as given:
+            if stdin is not None:
+                given.write(stdin.encode())
+                given.seek(0)
+            process = subprocess.Popen(argv, stdout=stdout, stderr=stderr, start_new_session=True, cwd=cwd or ROOT,
+                                       stdin=None if stdin is None else given)
             try:
                 while True:
                     size = os.fstat(stdout.fileno()).st_size+os.fstat(stderr.fileno()).st_size
@@ -105,7 +110,7 @@ def main():
     def observe(case):
         if time.monotonic()-start > 120:
             raise TimeoutError('Campaign watchdog')
-        measured = pc.observe(case, executable, node, scratch)
+        measured = pc.observe(case, oracle, node, scratch)
         if len(measured['shen_stdout'].encode())+len(measured['shen_stderr'].encode()) > 8388608:
             raise RuntimeError('Model output cap')
         path = scratch/(case['name']+'.json')

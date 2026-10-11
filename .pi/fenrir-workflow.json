@@ -33,6 +33,7 @@
         "tests/tc0/closure-replay-runner.test.mjs",
         "tests/tc0/closure-replay.test.mjs",
         "tests/tc0/closure.test.mjs",
+        "tests/tc0/digest-cache.test.mjs",
         "tests/tc0/expression.test.mjs",
         "tests/tc0/generate.test.mjs",
         "tests/tc0/pure-call-artifact.test.mjs",

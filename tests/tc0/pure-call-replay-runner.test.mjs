@@ -12,7 +12,7 @@ test('integrated runner mock admission, required identities and stale inputs fai
  try {
   // Deliberately fake toolchain files exercise identity framing, NOT Shen execution.
   mkdirSync(resolve(dir,'bin'));const shen=resolve(dir,'bin/shen-scheme'),boot=resolve(dir,'shen.boot');writeFileSync(shen,'mock unit toolchain');writeFileSync(boot,'mock boot');
-  const paths=['tools/check-tc0-pure-call.py','tools/check-tc0-expression.py','tools/tc0/run-pure-call.mjs','tools/tc0/pure-call-artifact.mjs','tools/tc0/canonical.mjs','models/tc0/pure-call-machine.shen','models/tc0/arithmetic.shen','runtime/tc0/pure-call-machine.mjs','spec/tc0/pure-call-demo.json','fixtures/tc0/pure-call-forward.json','fixtures/tc0/pure-call-hand-cases.mjs','tests/tc0/pure-call-machine.test.mjs','tests/tc0/pure-call-artifact.test.mjs'].map(p=>resolve(root,p));
+  const paths=['tools/check-tc0-pure-call.py','tools/check-tc0-expression.py','tools/tc0/run-pure-call.mjs','tools/tc0/pure-call-artifact.mjs','tools/tc0/canonical.mjs','models/tc0/pure-call-machine.shen','models/tc0/arithmetic.shen','models/tc0/pure-call-oracle.shen','runtime/tc0/pure-call-machine.mjs','spec/tc0/pure-call-demo.json','fixtures/tc0/pure-call-forward.json','fixtures/tc0/pure-call-hand-cases.mjs','tests/tc0/pure-call-machine.test.mjs','tests/tc0/pure-call-artifact.test.mjs'].map(p=>resolve(root,p));
   const program=JSON.parse(readFileSync('fixtures/tc0/pure-call-forward.json'));
   const report={qualification:'UNKNOWN',scope:'Mock unit transport only',sources:Object.fromEntries([...paths,process.execPath,shen,boot].map(p=>[p,digest(p)])),cases:[{name:'mock-unit-only',program,input:['int','0'],model_steps:new PureCallMachine(program,['int','0']).run().steps}]};
   const input=resolve(dir,'input.json'),output=resolve(dir,'output.json');
@@ -28,6 +28,13 @@ test('integrated runner mock admission, required identities and stale inputs fai
    x=>x.cases[0].program.schema_version='pure-closure-demo/1',
    x=>x.cases[0].model_steps[0].depth='99'
   ]){const bad=structuredClone(report);mutate(bad);r=run(bad);assert.notEqual(r.status,0,r.stderr);assert.deepEqual(readFileSync(output),saved,'failed admission must not publish a replacement');}
+  // A Yggdrasil-shaken oracle is admitted only with all three identity files.
+  const app=resolve(dir,'app-lisp'),manifest=resolve(dir,'yggdrasil.manifest.txt'),stamp=resolve(dir,'oracle-stamp.json');
+  writeFileSync(app,'mock shaken artifact');writeFileSync(manifest,'needs-eval=false');writeFileSync(stamp,'{}');
+  const shaken=structuredClone(report);delete shaken.sources[shen];delete shaken.sources[boot];
+  for(const p of [app,manifest,stamp])shaken.sources[p]=digest(p);
+  const shakenOut=resolve(dir,'shaken.json');r=run(shaken,shakenOut);assert.equal(r.status,0,r.stderr);
+  for(const p of [app,manifest,stamp]){const partial=structuredClone(shaken);delete partial.sources[p];r=run(partial,resolve(dir,'partial.json'));assert.notEqual(r.status,0,'shaken identity without '+p);}
   const absent=resolve(dir,'absent.json'),bad=structuredClone(report);bad.sources[shen]='0'.repeat(64);r=run(bad,absent);assert.notEqual(r.status,0);assert.equal(existsSync(absent),false);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });

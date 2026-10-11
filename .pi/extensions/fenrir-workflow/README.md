@@ -124,6 +124,19 @@ Without that link, or if the link does not resolve to a `shen-scheme` build with
 
 Authority: only the launcher `tools/tc0/dev-check-pure-call-oracle.mjs` is protected. The Shen model, fixtures and checker tools stay writable because the current S1 slice develops model and candidate together; protect them when the candidate-only repair phase begins, after authority review.
 
+### Faster oracle: Yggdrasil-shaken pure-call model
+
+The pure-call model runs through `models/tc0/pure-call-oracle.shen`, a batch driver that reads every case's initial state as data on stdin and runs them all in one process. Optionally, [Yggdrasil](https://github.com/pyrex41/yggdrasil) tree-shakes that driver and the model into an eval-free standalone SBCL executable (manifest `needs-eval=false`, `cannot-reach=eval`):
+
+```sh
+nix shell nixpkgs#sbcl -c node tools/tc0/build-shaken-oracle.mjs \
+  --yggdrasil /path/to/yggdrasil --shen-cl /path/to/built/shen-cl
+```
+
+The build admits the artifact only if its observations are byte-identical to host Shen (`build/toolchain/shen-scheme`) running the same driver on every hand case. It writes `build/toolchain/tc0-pure-call-oracle/` with a stamp binding it to the SHA-256 of the three model sources. `tc0-pure-call-oracle` uses the artifact while that stamp matches and falls back to host Shen (saying so on stderr) once any model file changes; the checker refuses a stale artifact outright. Use a host with exact integers: shen-go uses float64 and silently loses the I64 overflow traps, while shen-cl/SBCL and shen-scheme are exact.
+
+Measured on the 9 hand cases, on a 4-CPU machine running other builds: the oracle alone went from ~4.9 s (one Shen process per case, ~600 `-e` expressions each) to ~0.64 s batched on host Shen and ~0.43 s shaken. End to end, the check went from ~15 s to ~8–9 s; the shaken and batched host runs are within noise of each other, because the remaining time is candidate runs and strict replay. A stat-keyed digest cache (`tools/tc0/digest-cache.mjs`, `build/cache/`) avoids rehashing large toolchain binaries such as the 123 MB Node executable on every run.
+
 A development check MAY declare `blockedExitCode` (an integer from 2 to 125) for an unavailable prerequisite. Only that exact exit maps to BLOCKED; every other nonzero exit is FAIL. Qualification checks cannot declare it; their JSON report owns the verdict.
 
 After a real evaluator exists, stop the run and separately review its implementation, fixtures and authority. Add a qualification check, for example:
