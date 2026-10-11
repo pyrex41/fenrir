@@ -120,6 +120,15 @@ Both Shen ports and the candidate were exact on all 2,908: 2,587 Ok, 302 Overflo
 19 DivZero, and the correct capture order. An injected off-by-one I64 bound in the
 model was flagged on the 15 results equal to the maximum.
 
+**Requirement ledger (G0 row).** [`spec/tc0/requirement-ledger-a.json`](spec/tc0/requirement-ledger-a.json)
+lists each TC0-A and G1-relevant G0 requirement with its evidence or its gap, and
+`tools/tc0/check-requirement-ledger.mjs` keeps it honest: no verdict statuses, every
+cited file exists, and every open row states its gap. Current rows: 22 with
+development evidence, 1 UNKNOWN (the gate itself: no registered TC0-A evaluator),
+1 NOT-EXECUTED (independent repair), 3 deferred to B/C. The mandatory bad-overflow mutant (`--wrap-overflow`, two's-complement wrap
+instead of the trap) is now in the candidate; it is killed on exactly the Overflow
+programs of the exhaustive scope (17 at 4 nodes, 216 at 5).
+
 **Candidate execution boundary (G0 row, measured).** `tools/tc0/sandbox.mjs` runs a
 candidate inside a fresh network namespace (`unshare -n`) under Node's permission
 model, with an empty environment. Reads are limited to the candidate tree and its
@@ -297,6 +306,23 @@ npm test
 
 # TC0 and native-lowering Node regressions.
 node --test tests/tc0/*.test.mjs tests/solo5/native-arithmetic-lowering.test.mjs
+```
+
+The TC0 Shen toolchain is pinned by the repository flake (x86-64 Linux): shen-scheme
+v0.26, shen-cl `dff7445` built from the S41.2 kernel, Yggdrasil `a40d8c5`, and SBCL,
+Node 22, Python and Go 1.27 from one nixpkgs release. Sources are fetched by Nix
+and locked in `flake.lock`.
+
+```sh
+nix run .            # links build/toolchain/shen-scheme to the pinned host oracle
+node tools/tc0/dev-check-pure-call-oracle.mjs
+python3 -I tools/check-tc0-pure-data-exhaustive.py --shen-executable build/toolchain/shen-scheme \
+  --max-nodes 5 --output build/tc0/exhaustive-5.json
+python3 -I tools/check-tc0-exact-arithmetic.py --shen-executable build/toolchain/shen-scheme \
+  --output build/tc0/exact-arithmetic.json
+nix shell nixpkgs#sbcl -c node tools/tc0/build-shaken-oracle.mjs \
+  --yggdrasil "$(nix build --no-link --print-out-paths .#yggdrasil)/bin/yggdrasil" \
+  --shen-cl "$(nix build --no-link --print-out-paths .#shen-cl)"
 ```
 
 For Go host tests, pinned toolchain instructions and optional explicit Shen/Node

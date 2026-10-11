@@ -13,7 +13,7 @@ function data(x){
  if(typeof x==='bigint')return String(x);if(Array.isArray(x))return x.map(data);
  if(x&&typeof x==='object')return Object.fromEntries(Object.entries(x).map(([k,v])=>[k,data(v)]));return x;
 }
-export function stateHash(m){return hash(data({artifact:m.artifact,input:m.input,control:m.control,environment:m.env,frames:m.frames,codes:m.codes,functions:m.functions,epoch:m.epoch,terminal:m.terminal,descriptors:m.descriptors,events:m.events,reverse_operands:m.reverseOperands,arm_by_position:m.armByPosition===true}));}
+export function stateHash(m){return hash(data({artifact:m.artifact,input:m.input,control:m.control,environment:m.env,frames:m.frames,codes:m.codes,functions:m.functions,epoch:m.epoch,terminal:m.terminal,descriptors:m.descriptors,events:m.events,reverse_operands:m.reverseOperands,wrap_overflow:m.wrapOverflow===true,arm_by_position:m.armByPosition===true}));}
 function check(h,m,reference){
  closed(h,keys);closed(h.bounds,['steps']);decimal(h.bounds.steps,{unsigned:true});
  if(h.schema!=='pure-call-demo-tape/1'||h.profile!=='pure-call-demo-step/1'||BigInt(h.bounds.steps)>1000n)throw new PureCallReplayIncompatible('Profile/bound');

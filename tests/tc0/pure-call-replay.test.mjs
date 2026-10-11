@@ -36,3 +36,11 @@ test('same step prefix but corrupt descriptor state cannot replay footer Exact',
  m.step=()=>{const r=original();if(m.terminal)m.descriptors[0].captures[0][1]=['int','999'];return r;};
  assert.throws(()=>replayPureCall(m,s.reference,s.header,s.bundle),PureCallReplayDiverged);
 });
+test('scripted fake early terminal: an identical prefix that claims completion is rejected, never Admitted',()=>{
+ // Evaluator/protocol mutant (02 §16): the peer reproduces the reference exactly, then
+ // declares itself terminal while the reference trace continues.
+ class EarlyTerminal extends PureCallMachine{step(){const r=super.step();if(this.epoch===3n){this.terminal=['Ok',['int','1']];}return r;}}
+ const reference=new PureCallMachine(base,['int','0']).run().steps,m=()=>new EarlyTerminal(base,['int','0']);
+ const header=pureCallHeader(m(),base,['int','0'],reference,{unit_mock:true});
+ assert.throws(()=>recordPureCall(m(),reference,header),e=>e instanceof PureCallReplayDiverged&&/Completed reference suffix/.test(e.message));
+});

@@ -101,7 +101,10 @@ def main():
             out = scratch/f'{mode}-replay.json'
             replay = [str(evaluated/'tools/tc0/s3-replay.mjs'), str(bundle_path), str(cand), mode, str(out)]
             if mode == 'repaired':
-                replay = [str(evaluated/'tools/tc0/sandbox.mjs'), '--read', str(evaluated/'tools/tc0'), str(cand), str(bundle_path), '--write', str(out), '--', *replay]
+                # s3-replay also reads the catalog and the Node binary (header identity) and
+                # checks that its output does not exist yet.
+                replay = [str(evaluated/'tools/tc0/sandbox.mjs'), '--read', str(evaluated/'tools/tc0'), str(evaluated/'spec/tc0'), str(cand), str(bundle_path),
+                          str(out), str(Path(node).resolve()), '--write', str(out), '--', *replay]
             r, secs = run([node, *replay], evaluated)
             record(f'{mode}-replay', r.returncode == 0, seconds=secs, boundary='sandbox' if mode == 'repaired' else 'trusted defective original',
                    stdout=r.stdout[-2000:], stderr=r.stderr[-2000:])

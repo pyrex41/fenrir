@@ -2,7 +2,7 @@
 // match selects the arm at the constructor's declared position instead of by name,
 // with every trace of the mutant option removed. Refuses if the source moved.
 const EDITS=[
- ['constructor(artifact,input,{reverseOperands=false,armByPosition=false}={}){','constructor(artifact,input,{reverseOperands=false}={}){'],
+ ['constructor(artifact,input,{reverseOperands=false,armByPosition=false,wrapOverflow=false}={}){','constructor(artifact,input,{reverseOperands=false,wrapOverflow=false}={}){'],
  ['this.armByPosition=armByPosition;',''],
  [' // Mutant support only (armByPosition): a constructor\'s position in its declaration.\n',' // A constructor\'s position in its declaration.\n'],
  ['const arm=this.armByPosition?f.arms[this.constructorIndex(c.value[1],c.value[2])]:f.arms.find(arm=>arm[0]===c.value[2]);','const arm=f.arms[this.constructorIndex(c.value[1],c.value[2])];']

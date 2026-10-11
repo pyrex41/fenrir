@@ -55,12 +55,13 @@ isolation only; each step's report row names its boundary.
 | Untouched (defective) | FAIL | candidate-changed |
 | Reference candidate restored | DEVELOPMENT-PASS | none |
 | Minimal one-line fix (select arm by name) | DEVELOPMENT-PASS | none |
-| Overfit fix (by name only for two-arm matches) | FAIL | repaired-replay, held-out-generated-pure-data |
+| Overfit fix (by name only for two-arm matches) | FAIL | repaired-replay, held-out-generated-pure-data, held-out-exhaustive-5 |
 | Minimal fix plus an edited model file and an added tool | FAIL | protected-inputs (names both files) |
 
-The overfit patch passes the hand cases, regressions and the whole exhaustive scope,
-because grammar G has only a two-constructor datatype. Only the retained failures
-and the generated three-constructor family catch it. That is a recorded gap in G.
+The overfit patch passes the hand cases and regressions. When grammar G had only a
+two-constructor datatype, it also passed the whole exhaustive scope; G now includes
+a three-constructor enum matched in all six arm orders, so the exhaustive scope
+rejects it as well.
 
 Both passing patches were written by the packet author with knowledge of the defect.
 They show the evaluator can pass a correct candidate, and they are **not** evidence

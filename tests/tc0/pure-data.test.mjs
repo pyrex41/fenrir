@@ -158,3 +158,10 @@ test('data hand cases record and replay Exact; reversed tuple collection diverge
  const s=setup(cases.find(c=>c.name==='tuple-left-to-right-project'),true);assert.equal(s.bundle.footer.kind,'Divergence');
  assert.equal(replayPureCall(s.machine(),s.reference,s.header,s.bundle).conformance,'Diverged');
 });
+
+test('wrap-overflow mutant replaces each Overflow trap with the two\'s-complement result',()=>{
+ const wrapped=name=>{const v=check(program(name));return new PureCallMachine(v.artifact,v.input,{wrapOverflow:true}).run().outcome;};
+ assert.deepEqual(wrapped('div-min-by-minus-one'),['Ok',['int','-9223372036854775808']]);
+ assert.deepEqual(wrapped('mul-exact-square-then-overflow'),['Ok',['int',String(BigInt.asIntN(64,3037000499n*3037000499n*2n))]]);
+ assert.deepEqual(wrapped('gt-ge-mul-around-2-53'),['Ok',['int','43']]);
+});

@@ -137,6 +137,8 @@ The build admits the artifact only if its observations are byte-identical to hos
 
 Measured on the 9 hand cases, on a 4-CPU machine running other builds: the oracle alone went from ~4.9 s (one Shen process per case, ~600 `-e` expressions each) to ~0.64 s batched on host Shen and ~0.43 s shaken. End to end, the check went from ~15 s to ~8–9 s; the shaken and batched host runs are within noise of each other, because the remaining time is candidate runs and strict replay. A stat-keyed digest cache (`tools/tc0/digest-cache.mjs`, `build/cache/`) avoids rehashing large toolchain binaries such as the 123 MB Node executable on every run.
 
+The repository flake now pins this toolchain (`nix build .#shen-scheme .#shen-cl .#yggdrasil`; `nix run .` links `build/toolchain/shen-scheme`). The shen-cl package performs the bootstrap below inside the Nix sandbox. The manual steps remain for reference.
+
 Bootstrapping shen-cl without a prior shen-cl build (verified in a Linux cloud session on 11 October 2026, environment evidence only):
 
 ```sh

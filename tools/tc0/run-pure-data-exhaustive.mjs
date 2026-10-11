@@ -14,7 +14,7 @@ for(const c of family.cases){
  const checked=validatePureCallArtifact(encode(c.program),['int','0']);
  // A mutant may crash (e.g. binding a missing field); that is recorded, never a semantic kill.
  const run=options=>{try{const r=new PureCallMachine(checked.artifact,checked.input,options).run(200);return {execution:r.execution,outcome:r.outcome,steps:r.steps};}catch(e){if(!Object.keys(options).length)throw e;return {execution:'Crashed',error:String(e.message)};}};
- lines.push(JSON.stringify({name:c.name,nodes:c.nodes,result:c.result,program:c.program,candidate:run({}),reverse_operands:run({reverseOperands:true}),arm_by_position:run({armByPosition:true})}));
+ lines.push(JSON.stringify({name:c.name,nodes:c.nodes,result:c.result,program:c.program,candidate:run({}),reverse_operands:run({reverseOperands:true}),wrap_overflow:run({wrapOverflow:true}),arm_by_position:run({armByPosition:true})}));
 }
 writeFileSync(output,lines.join('\n')+'\n',{flag:'wx'});
 console.log(JSON.stringify({count:family.count,output}));

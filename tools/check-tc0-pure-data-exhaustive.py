@@ -22,7 +22,7 @@ spec = importlib.util.spec_from_file_location('pure_call_probe', ROOT/'tools/che
 pc = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(pc)
 probe = pc.probe
-MUTANTS = ('reverse_operands', 'arm_by_position')
+MUTANTS = ('reverse_operands', 'wrap_overflow', 'arm_by_position')
 
 
 def trace_hash(steps):

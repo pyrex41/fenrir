@@ -10,8 +10,8 @@ function free(e,bound=new Set(),out=new Set()){
 // Structural equality on checked equality-compatible values (no closures).
 function equal(a,b){if(a.length!==b.length||a[0]!==b[0])return false;for(let i=1;i<a.length;i++){const x=a[i],y=b[i];if(Array.isArray(x)?!Array.isArray(y)||!equal(x,y):x!==y)return false;}return true;}
 export class PureCallMachine {
- constructor(artifact,input,{reverseOperands=false,armByPosition=false}={}){
-  this.artifact=artifact;this.input=input;this.functions=new Map(artifact.functions.map(f=>[f.name,f]));this.codes=new Map();this.frames=[];this.epoch=0n;this.terminal=null;this.events=[];this.descriptors=[];this.reverseOperands=reverseOperands;this.armByPosition=armByPosition;
+ constructor(artifact,input,{reverseOperands=false,armByPosition=false,wrapOverflow=false}={}){
+  this.artifact=artifact;this.input=input;this.functions=new Map(artifact.functions.map(f=>[f.name,f]));this.codes=new Map();this.frames=[];this.epoch=0n;this.terminal=null;this.events=[];this.descriptors=[];this.reverseOperands=reverseOperands;this.armByPosition=armByPosition;this.wrapOverflow=wrapOverflow;
   const collect=e=>{if(e[0]==='lambda')this.codes.set(e[1],{parameter:e[2],body:e[7]});for(const c of children(e))collect(c);};
   for(const f of artifact.functions){this.codes.set(f.id,{parameter:f.parameter_id,body:f.body});collect(f.body);}
   const entry=this.functions.get(artifact.entry);this.env=new Map([[entry.parameter_id,input]]);this.control={kind:'Eval',expr:entry.body,tail:true};
@@ -60,7 +60,7 @@ export class PureCallMachine {
    else if(c.operation==='bytes_index'){const octets=c.values[0][1],i=BigInt(c.values[1][1]);if(i<0n||i*2n>=BigInt(octets.length))this.control={kind:'Unwind',code:'Bounds'};else value(['int',String(parseInt(octets.slice(Number(i)*2,Number(i)*2+2),16))]);}
    else {const [a,b]=c.values.map(v=>BigInt(v[1]));let n;if(c.operation==='div'&&b===0n)this.control={kind:'Unwind',code:'DivZero'};else {
     switch(c.operation){case 'add':n=a+b;break;case 'sub':n=a-b;break;case 'mul':n=a*b;break;case 'div':n=a/b;break;case 'neg':n=-a;break;case 'lt':n=a<b;break;case 'le':n=a<=b;break;case 'gt':n=a>b;break;case 'ge':n=a>=b;break;default:throw new Error('Primitive');}
-    if(typeof n==='boolean')value(['bool',n]);else if(n<-(1n<<63n)||n>=(1n<<63n))this.control={kind:'Unwind',code:'Overflow'};else value(['int',String(n)]);
+    if(typeof n==='boolean')value(['bool',n]);else if((n<-(1n<<63n)||n>=(1n<<63n))&&!this.wrapOverflow)this.control={kind:'Unwind',code:'Overflow'};else if(this.wrapOverflow&&(n<-(1n<<63n)||n>=(1n<<63n)))value(['int',String(BigInt.asIntN(64,n))]);else value(['int',String(n)]);
    }}
   }else if(c.kind==='Unwind'){if(this.frames.length)this.env=this.frames.pop().env;else this.control={kind:'Join',outcome:['Trap',c.code]};}
   else if(c.kind==='Join'){events.push({kind:'ScopeExit',task:'0',scope:'0',outcome:c.outcome});this.control={kind:'Terminate',outcome:c.outcome};}
