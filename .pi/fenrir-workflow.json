@@ -23,6 +23,37 @@
       ],
       "timeoutSeconds": 60,
       "authorityPaths": ["tests/fenrir-workflow"]
+    },
+    "tc0-candidate-tests": {
+      "kind": "development",
+      "command": [
+        "node", "--test",
+        "tests/tc0/canonical.test.mjs",
+        "tests/tc0/closure-alias.test.mjs",
+        "tests/tc0/closure-replay-runner.test.mjs",
+        "tests/tc0/closure-replay.test.mjs",
+        "tests/tc0/closure.test.mjs",
+        "tests/tc0/expression.test.mjs",
+        "tests/tc0/generate.test.mjs",
+        "tests/tc0/pure-call-artifact.test.mjs",
+        "tests/tc0/pure-call-failure-runner.test.mjs",
+        "tests/tc0/pure-call-generation.test.mjs",
+        "tests/tc0/pure-call-machine.test.mjs",
+        "tests/tc0/pure-call-replay-runner.test.mjs",
+        "tests/tc0/pure-call-replay.test.mjs",
+        "tests/tc0/reduce.test.mjs",
+        "tests/tc0/reduction-bridge.test.mjs",
+        "tests/tc0/replay.test.mjs"
+      ],
+      "timeoutSeconds": 120,
+      "authorityPaths": []
+    },
+    "tc0-pure-call-oracle": {
+      "kind": "development",
+      "command": ["node", "tools/tc0/dev-check-pure-call-oracle.mjs"],
+      "timeoutSeconds": 330,
+      "authorityPaths": ["tools/tc0/dev-check-pure-call-oracle.mjs"],
+      "blockedExitCode": 2
     }
   }
 }

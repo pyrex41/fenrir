@@ -101,7 +101,28 @@ CLM may summarize old conversation content while the controller retains phase, b
 
 ## Configure trusted checks
 
-The manifest is `.pi/fenrir-workflow.json`. It currently registers only `workflow-tests`, a **development** check. The required `tc0-a-qualification` entry is intentionally absent: there is no TC0-A evaluator yet, and the controller must not invent one or turn its own passing tests into language qualification.
+The manifest is `.pi/fenrir-workflow.json`. It registers three **development** checks:
+
+| Check | Exercises | Typical time |
+| --- | --- | --- |
+| `workflow-tests` | The controller itself; no language behavior | ~30 s |
+| `tc0-candidate-tests` | TC0 validators, candidate machines, generation, reduction and replay unit tests | ~15 s |
+| `tc0-pure-call-oracle` | Fresh Shen-vs-candidate agreement on the pure-call hand cases, then strict replay of that fresh report | see below |
+
+The two TC0 checks give the agent loop semantic back pressure at measure boundaries (03_PHASED_EXECUTION_PLAN.md §5). They are development evidence only: no claims, no qualification credit. The required `tc0-a-qualification` entry is intentionally absent: there is no TC0-A evaluator yet, and the controller must not invent one or turn development checks into language qualification.
+
+`tc0-pure-call-oracle` needs a Shen oracle. Because checks run with a minimal environment, it reads a fixed, ignored path instead of an environment variable:
+
+```sh
+mkdir -p build/toolchain
+ln -s "$FENRIR_SHEN_SOURCE/_build/bin/shen-scheme" build/toolchain/shen-scheme
+```
+
+Without that link, or if the link does not resolve to a `shen-scheme` build with `lib/shen-scheme/shen.boot`, the check exits 2 and the controller records **BLOCKED** (its `blockedExitCode`), which pauses the drive rather than starting a repair. A missing oracle is never PASS and never a candidate failure. A real exit 1 can be a semantic disagreement or an oracle/tool error; read the check's stderr before repairing. Outputs go to `build/tc0/dev-check/` and are deleted at the start of each run, so stale reports cannot stand in for fresh observations.
+
+Authority: only the launcher `tools/tc0/dev-check-pure-call-oracle.mjs` is protected. The Shen model, fixtures and checker tools stay writable because the current S1 slice develops model and candidate together; protect them when the candidate-only repair phase begins, after authority review.
+
+A development check MAY declare `blockedExitCode` (an integer from 2 to 125) for an unavailable prerequisite. Only that exact exit maps to BLOCKED; every other nonzero exit is FAIL. Qualification checks cannot declare it; their JSON report owns the verdict.
 
 After a real evaluator exists, stop the run and separately review its implementation, fixtures and authority. Add a qualification check, for example:
 

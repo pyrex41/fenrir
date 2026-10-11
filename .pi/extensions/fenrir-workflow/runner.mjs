@@ -136,8 +136,11 @@ export async function runCheck({ cwd, state, config, checkId, signal, onUpdate, 
       summary = interrupted || spawnError?.message || logError?.message || cleanupError?.message || (strayProcess ? 'Runner left background processes' : !sourceStable ? 'Source/evaluator/executable changed during check' : 'Cleanup unresolved');
       cleanup = 'unresolved'; // Process cleanup alone cannot establish evaluator/fixture teardown.
     } else if (check.kind === 'development') {
-      verdict = exitCode === 0 && !exitSignal ? 'PASS' : 'FAIL';
-      summary = `Development command exit ${exitCode ?? exitSignal}; not a language qualification verdict`;
+      const blocked = check.blockedExitCode !== undefined && exitCode === check.blockedExitCode && !exitSignal;
+      verdict = blocked ? 'BLOCKED' : exitCode === 0 && !exitSignal ? 'PASS' : 'FAIL';
+      summary = blocked
+        ? `Development command reported an unavailable prerequisite (exit ${exitCode}); see stderr. Not a candidate failure or qualification verdict`
+        : `Development command exit ${exitCode ?? exitSignal}; not a language qualification verdict`;
       evidenceStable = true;
     } else {
       const report = reportFrom(Buffer.concat(captured).toString('utf8'), { nonce, checkId, sourceHash: before.hash, configHash: state.configHash });

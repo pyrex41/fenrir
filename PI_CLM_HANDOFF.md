@@ -89,9 +89,13 @@ recheck those gates before any new live bootstrap.
 In parallel, the larger useful milestone remains a qualified pure TC0-A repair
 loop: complete the model/candidate/evaluator slice, find and reduce a defect,
 replay its exact original failure, obtain an independently reviewed candidate-
-only repair, then evaluate it freshly. The configured workflow currently has
-only `workflow-tests`; the required `tc0-a-qualification` evaluator is absent by
-design. Do not invent one or promote workflow checks to qualification.
+only repair, then evaluate it freshly. The configured workflow has three
+development checks: `workflow-tests` (controller only), `tc0-candidate-tests`
+(TC0 validator, machine, generation, reduction and replay unit tests) and
+`tc0-pure-call-oracle` (fresh Shen-vs-candidate hand-case agreement, then strict
+replay; BLOCKED until `build/toolchain/shen-scheme` links a pinned shen-scheme
+build). The required `tc0-a-qualification` evaluator is absent by design. Do not
+invent one or promote development checks to qualification.
 
 The native candidate/replay evidence index and strict repair boundary are in
 `tools/solo5/native-arithmetic/REPAIR_HANDOFF.md`. Historical build outputs live
