@@ -35,7 +35,8 @@ const WITHHELD=['README.md','PI_CLM_HANDOFF.md','campaigns','.pi',
  'tools/check-tc0-pure-call-reduction.py','tools/check-tc0-pure-data-exhaustive.py','tools/check-tc0-s3-repair.py',
  'tools/tc0/pure-data-generate.mjs','tools/tc0/pure-data-enumerate.mjs','tools/tc0/pure-data-invalid.mjs',
  'tools/tc0/run-pure-data-exhaustive.mjs','tools/tc0/pure-call-campaign-bridge.mjs','tools/tc0/check-pure-call-failure-replay.mjs',
- 'tools/tc0/s3-prepare.mjs','tools/tc0/s3-defect.mjs','tools/tc0/s3-replay.mjs','tools/tc0/s3-task-template.md','tools/tc0/check-sandbox.mjs'];
+ 'tools/tc0/s3-prepare.mjs','tools/tc0/s3-defect.mjs','tools/tc0/s3-replay.mjs','tools/tc0/s3-task-template.md','tools/tc0/check-sandbox.mjs',
+ 'spec/tc0/requirement-ledger-a.json','tools/tc0/check-requirement-ledger.mjs','tests/tc0/requirement-ledger.test.mjs'];
 const REWRITES=[
  ['tools/tc0/pure-call-replay.mjs',',arm_by_position:m.armByPosition===true}','}'],
  ['tools/tc0/pure-call-replay-header.mjs',',arm_by_position:machine.armByPosition===true})','})'],

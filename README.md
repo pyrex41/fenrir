@@ -12,9 +12,10 @@ counterexamples, reduction and strict replay. A small arithmetic candidate has
 also run natively inside Solo5 with an external Shen comparison.
 
 However, **the first language qualification milestone (G1 / TC0-A) is not yet
-complete**. Most recent work has hardened the native development host, rather
-than added user-facing language features. Passing host tests are useful progress,
-but are not evidence that the whole language is implemented or qualified.
+complete**. The pure TC0-A slice now has development evidence across its whole
+expression grammar (see below). What G1 still lacks is an independent candidate
+repair and a registered qualification evaluator. Passing development checks are
+useful progress, but are not evidence that the language is qualified.
 
 A percentage would be misleading: a small demonstrated arithmetic/closure slice
 is very different from the compiler, runtime and tools needed for the full vision.
@@ -24,11 +25,11 @@ language release**.
 | Area | What exists | What is not established |
 | --- | --- | --- |
 | Specification | v0.2 architecture, core contract and phased plan | Full frozen, executable acceptance authority |
-| Pure-language development | Shen arithmetic, expression, closure and pure-call models; independent development candidates; validators and distinguishing fixtures | Complete, qualified TC0-A constructor/frame coverage and integration |
-| Counterexample loop | Generated operand-order failures, bounded reduction and source-bound strict replay | Genuinely independent candidate repair followed by fresh independent acceptance |
+| Pure-language development | Shen models and an independent candidate for the whole TC0-A expression grammar (schema `/2`: calls, closures, Bytes, TrapCode, tuples, datatypes, match, byte primitives, eq); closed validator; 24 hand fixtures; catalog coverage 112/112; every program of a bounded grammar up to 5 nodes (5,051) agreeing on two Shen ports; an exact-arithmetic ledger | Qualified TC0-A evaluation; independent catalog review |
+| Counterexample loop | Generated discovery and typed reduction for three candidate mutants, exact original/minimized replay, and an S3 clean-room repair packet with a frozen, sandboxed evaluator | Genuinely independent candidate repair followed by fresh independent acceptance |
 | Native arithmetic spike | Small C/Solo5 candidate; historical model comparisons, hand cases, generated failure and cold replay | Full language backend, machine-level determinism, native startup/counter closure |
 | Native host | Go orchestration, bounded readers/output, source inventories, owned process/container cleanup, session/replay and selected campaigns | Current-source live validation of recent repairs; full hostile-peer/corpus/perturbation obligations |
-| Qualification | Explicit verdict separation and bounded development workflow | A configured TC0-A qualification evaluator and a qualified G1 release |
+| Qualification | Explicit verdict separation, bounded development workflow, a TC0-A requirement ledger, a pinned TC0 toolchain flake and a measured candidate sandbox | A configured TC0-A qualification evaluator and a qualified G1 release |
 | Later language/product phases | Requirements and dependency order | Qualified handlers, concurrency/lifetimes/time, production compiler/runtime, practical surface language, package tooling and deployment |
 
 The current pure candidates are development machines, not a production Fenrir

@@ -20,7 +20,8 @@ retained pure-data `arm-by-position` reduction report:
 - `workspace/`: a `git archive` export of HEAD with no history, the defective
   candidate in place, `S3_TASK.md` and the bundle. Evaluator-side material is
   withheld: README, campaigns, `.pi`, the mutation, generation and reduction tooling
-  for this defect, the held-out exhaustive scope and the S3 tools. Three exact
+  for this defect, the held-out exhaustive scope, the S3 tools, and the requirement
+  ledger, which cites them. Three exact
   rewrites drop the mutant's name from shared tooling. Preparation fails if any
   workspace file still names the defect.
 
