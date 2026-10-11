@@ -60,7 +60,7 @@ Development exit: generated discovery → smaller valid failure → fresh model 
 
 ## S3 — candidate-only repair preparation and evaluation
 
-Status (development): packet and frozen evaluator prepared and dry-run; see `campaigns/tc0/S3_REPAIR_PACKET.md`. Independent repair NOT EXECUTED and remains UNKNOWN pending a separately approved arrangement.
+Status (development): packet and frozen evaluator prepared and dry-run; see `campaigns/tc0/S3_REPAIR_PACKET.md`. One independent repair (local subagent, instruction-only isolation) evaluated DEVELOPMENT-PASS; see `campaigns/tc0/s3/independent-repair-1.md`.
 
 Prepare a clean-room task packet from S2 with original candidate identity, allowed candidate files, read-only model/catalog/goldens/gate inputs, failure bundle and retained replay instructions. Preserve the defective original for exact-original replay. Repair only candidate paths; do not fix an oracle disagreement by rewriting its expected answer.
 

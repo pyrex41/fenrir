@@ -29,7 +29,6 @@ node tools/tc0/run-pure-call.mjs PROGRAM.json          # candidate on one artifa
 node --test tests/tc0/*.test.mjs                        # regression suite
 # With a Shen executable (shen-scheme with lib/shen-scheme/shen.boot):
 python3 -I tools/check-tc0-pure-call.py --shen-executable SHEN --output build/hand.json
-python3 -I tools/check-tc0-pure-data-exhaustive.py --shen-executable SHEN --max-nodes 4 --output build/small4.json
 ```
 
 The evaluator also uses held-out evaluation inputs that are frozen before this

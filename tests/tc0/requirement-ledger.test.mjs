@@ -5,7 +5,8 @@ import {checkLedger} from '../../tools/tc0/check-requirement-ledger.mjs';
 const ledger=()=>JSON.parse(readFileSync(new URL('../../spec/tc0/requirement-ledger-a.json',import.meta.url)));
 test('the TC0-A requirement ledger is well formed and cites only existing evidence',()=>{
  const {problems,summary}=checkLedger(ledger());assert.deepEqual(problems,[]);
- assert.equal(summary['NOT-EXECUTED'],'1');assert.ok(Number(summary.UNKNOWN)>=1,'open rows stay visible');
+ assert.ok(Number(summary.UNKNOWN)>=1,'open rows stay visible');
+ const repair=ledger().rows.find(r=>r.id==='TC0-INDEPENDENT-REPAIR');assert.ok(repair.gaps.some(g=>/instruction-only/.test(g)),'repair keeps its isolation caveat');
 });
 test('the ledger checker rejects verdict statuses, missing evidence, silent gaps and duplicates',()=>{
  const mutations=[

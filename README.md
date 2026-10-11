@@ -13,8 +13,9 @@ also run natively inside Solo5 with an external Shen comparison.
 
 However, **the first language qualification milestone (G1 / TC0-A) is not yet
 complete**. The pure TC0-A slice now has development evidence across its whole
-expression grammar (see below). What G1 still lacks is an independent candidate
-repair and a registered qualification evaluator. Passing development checks are
+expression grammar (see below). One independent candidate repair has passed the
+frozen S3 evaluator, with recorded isolation caveats. What G1 still lacks is a
+registered, reviewed qualification evaluator. Passing development checks are
 useful progress, but are not evidence that the language is qualified.
 
 A percentage would be misleading: a small demonstrated arithmetic/closure slice
@@ -26,7 +27,7 @@ language release**.
 | --- | --- | --- |
 | Specification | v0.2 architecture, core contract and phased plan | Full frozen, executable acceptance authority |
 | Pure-language development | Shen models and an independent candidate for the whole TC0-A expression grammar (schema `/2`: calls, closures, Bytes, TrapCode, tuples, datatypes, match, byte primitives, eq); closed validator; 24 hand fixtures; catalog coverage 112/112; every program of a bounded grammar up to 5 nodes (5,051) agreeing on two Shen ports; an exact-arithmetic ledger | Qualified TC0-A evaluation; independent catalog review |
-| Counterexample loop | Generated discovery and typed reduction for three candidate mutants, exact original/minimized replay, and an S3 clean-room repair packet with a frozen, sandboxed evaluator | Genuinely independent candidate repair followed by fresh independent acceptance |
+| Counterexample loop | Generated discovery and typed reduction for three candidate mutants, exact original/minimized replay, and an S3 clean-room repair packet with a frozen, sandboxed evaluator; one independent repair evaluated DEVELOPMENT-PASS | Enforced repairer isolation (repair 1 used instruction-only isolation) and qualified acceptance |
 | Native arithmetic spike | Small C/Solo5 candidate; historical model comparisons, hand cases, generated failure and cold replay | Full language backend, machine-level determinism, native startup/counter closure |
 | Native host | Go orchestration, bounded readers/output, source inventories, owned process/container cleanup, session/replay and selected campaigns | Current-source live validation of recent repairs; full hostile-peer/corpus/perturbation obligations |
 | Qualification | Explicit verdict separation, bounded development workflow, a TC0-A requirement ledger, a pinned TC0 toolchain flake and a measured candidate sandbox | A configured TC0-A qualification evaluator and a qualified G1 release |
@@ -124,9 +125,9 @@ model was flagged on the 15 results equal to the maximum.
 **Requirement ledger (G0 row).** [`spec/tc0/requirement-ledger-a.json`](spec/tc0/requirement-ledger-a.json)
 lists each TC0-A and G1-relevant G0 requirement with its evidence or its gap, and
 `tools/tc0/check-requirement-ledger.mjs` keeps it honest: no verdict statuses, every
-cited file exists, and every open row states its gap. Current rows: 22 with
+cited file exists, and every open row states its gap. Current rows: 23 with
 development evidence, 1 UNKNOWN (the gate itself: no registered TC0-A evaluator),
-1 NOT-EXECUTED (independent repair), 3 deferred to B/C. The mandatory bad-overflow mutant (`--wrap-overflow`, two's-complement wrap
+and 3 deferred to B/C. The mandatory bad-overflow mutant (`--wrap-overflow`, two's-complement wrap
 instead of the trap) is now in the candidate; it is killed on exactly the Overflow
 programs of the exhaustive scope (17 at 4 nodes, 216 at 5).
 
@@ -179,7 +180,7 @@ added for the last 18 gaps: `gt`/`ge`/`mul`, Overflow from `sub`, `neg` minimum,
 initializers and `if` conditions. This covers the catalog's named transitions, not
 every frame/context combination.
 
-**S3 repair packet (prepared, repair not executed).** See
+**S3 repair packet and independent repair 1.** See
 [`campaigns/tc0/S3_REPAIR_PACKET.md`](campaigns/tc0/S3_REPAIR_PACKET.md).
 `tools/tc0/s3-prepare.mjs` builds a clean-room workspace: a history-free export
 with the arm-by-position defect made unconditional in the candidate, the retained
@@ -190,9 +191,15 @@ defective original, then checks the patch fresh: retained failures, hand cases,
 regressions, held-out generated and exhaustive scopes, and a mutation control.
 Dry runs fail the untouched, overfit and tampered workspaces, and pass the reference
 and a minimal one-line fix. Both passing patches are self-authored evaluator
-checks, not independent repairs.
+checks, not independent repairs. A fresh local subagent then repaired the
+candidate from the workspace alone, without being told the defect: a one-line fix
+selecting the match arm by constructor name. The frozen evaluator gave it
+DEVELOPMENT-PASS on all 10 steps, including the 5,051 held-out exhaustive programs
+with the candidate sandboxed. Caveats: the subagent's isolation was by instruction,
+not enforced, and it shares a model family with the packet author; see
+[`campaigns/tc0/s3/independent-repair-1.md`](campaigns/tc0/s3/independent-repair-1.md).
 
-Not established: an independent (non-self-authored) candidate repair (S3), and anything at the B/C level (`Outcome`, `SendResult`,
+Not established: a repair under enforced repairer isolation, and anything at the B/C level (`Outcome`, `SendResult`,
 `ReceiveResult` and the runtime operations). Qualification remains **UNKNOWN**.
 
 ## Latest native-host progress
@@ -277,7 +284,8 @@ capabilities. This is a plan, not an implemented or qualified property; see
 [plan §19](03_PHASED_EXECUTION_PLAN.md#19-direction-amendment-unikernel-target-and-agent-back-pressure).
 
 Overall language qualification and native startup/counter closure remain
-**UNKNOWN**; independent candidate repair remains **NOT EXECUTED**.
+**UNKNOWN**. One independent candidate repair passed the S3 development evaluator
+with instruction-only repairer isolation.
 
 ## Plans and task packets
 

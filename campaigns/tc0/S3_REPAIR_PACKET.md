@@ -1,6 +1,6 @@
 # S3 candidate-only repair packet (TC0-A pure-call demo, schema /2)
 
-Status: prepared and dry-run; **independent repair NOT EXECUTED**. This is a task
+Status: prepared, dry-run, and one independent repair evaluated DEVELOPMENT-PASS (see [`s3/independent-repair-1.md`](s3/independent-repair-1.md), including its independence caveats). This is a task
 packet and evaluator, not acceptance authority. Qualification remains UNKNOWN.
 
 ## What the packet contains
@@ -68,11 +68,13 @@ Both passing patches were written by the packet author with knowledge of the def
 They show the evaluator can pass a correct candidate, and they are **not** evidence
 of an independent repair.
 
-## Remaining step: independent repair
+## Independent repair
 
-An independent repair needs a separately approved arrangement: an agent or person
-who receives only `workspace/` (or a fresh clone of it), has not seen this packet's
-evaluator side or the defect description, and returns a patch to the allowed path.
-The evaluator is then run unchanged on the returned workspace. Until that happens,
-the independent-repair claim stays **UNKNOWN**. No nested model session was started
-while preparing this packet.
+An independent repair needs an approved arrangement: an agent or person who receives
+only `workspace/`, has not seen this packet's evaluator side or the defect
+description, and returns a patch to the allowed path. The evaluator then runs
+unchanged on the returned workspace. Repair 1 (a local subagent with instruction-only
+isolation, approved by the project owner) is recorded in
+[`s3/independent-repair-1.md`](s3/independent-repair-1.md). A repair under enforced
+isolation, such as a separate container that receives only the workspace, is still
+open.
