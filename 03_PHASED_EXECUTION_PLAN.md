@@ -1,10 +1,10 @@
 # Fenrir and Gleipnir phased execution plan
 
-Version 0.2 • Vertical-slice revision • Dependency ordered implementation program
+Version 0.3 • Status-aware revision • Dependency ordered implementation program
 
 **Working names:** Fenrir is the language and overall project. Gleipnir is its deterministic harness and conformance environment. ShenCheck retains its existing name. TC0 remains the first core; 0.2 is its revised contract.
 
-**Revision status:** This plan adopts [review.md](review.md) and replaces the v0.1 bootstrap dependency chain. Gates below are requirements, not completed work or existing commands. The specification ZIP remains a historical v0.1 bundle. Old evidence does not satisfy revised gates without explicit compatibility review and reruns.
+**Revision status (11 October 2026, master `8cc4c92`):** This plan adopts [review.md](review.md) and replaces the v0.1 bootstrap dependency chain. The specification ZIP remains a historical v0.1 bundle. The repo now has the schema `/2` TC0-A development slice, S2 campaigns, an S3 repair packet, a registered TC0-A gate and a recorded PASS at `1db7471` under owner-approved waivers. That receipt is historical and source-bound to `1db7471`; no run at the current master has been recorded in this checkout. Re-run the registered gate on the clean current head before treating G1 as current. B, C, the full language, and native execution remain outside that result. Requirements below remain normative; the status notes identify delivered evidence without widening its scope.
 
 **Direction amendment (11 October 2026):** See [§19](#19-direction-amendment-unikernel-target-and-agent-back-pressure). It sets the unikernel production target, effects as the capability manifest, a semantic per-change check for the agent loop, a host-hardening freeze until G1, and a new dependency-epoch rule for unrecoverable inputs. It replaces the first concrete assignment in §18. Gate requirements are unchanged except where this document explicitly adds rows to G4, G6, G7 and G10.
 
@@ -16,23 +16,23 @@ Do not rewrite ShenCheck without a source-grounded reason. Do not claim existing
 
 Each phase ends with a gate. PASS requires current evidence bound to source and toolchain hashes. FAIL, UNKNOWN, BLOCKED and DEFERRED are distinct. Deferred optional work cannot satisfy a required gate. No dates or estimates substitute for acceptance evidence.
 
-Measure progress by closed feedback loops, not by subsystems added or hardening passes completed. Every agent run has a registered per-change check that exercises the component it is changing (see 01_FULL_VISION.md §13, back pressure). Once a run's scope, protected inputs, sandbox and budget are approved, candidate-only iterations proceed without per-step human approval; humans review authority changes, dependency epochs and stops.
+Measure progress by closed feedback loops, not by subsystems added or hardening passes completed. Each task packet must select a registered development check that exercises its component and record when it runs (see 01_FULL_VISION.md §13, back pressure). The manifest registers checks; it does not by itself enforce component-to-check routing or execution on every edit. Once a run's scope, protected inputs, sandbox and budget are approved, candidate-only iterations proceed without per-step human approval; humans review authority changes, dependency epochs and stops.
 
 ## 2 Dependency order
 
-| Phase | Deliverable | Depends on |
-| --- | --- | --- |
-| P0 | Provenance, integration inventory, requirement ledger | None |
-| P1 | Qualified TC0-A pure model, evaluator, candidate and strict-replay repair loop | P0 core readiness |
-| P2 | Qualified TC0-B dynamic handlers across the same vertical stack | P1 |
-| P3 | Qualified TC0-C concurrency/lifetimes/time, then full TC0 freeze | P2 |
-| P4 | Deterministic Solo5 execution profile | P3 |
-| P5 | Native compiler and memory correctness baseline | P3; P4 for isolated release evidence |
-| P6 | Practical typed surface language and tooling | P5 |
-| P7 | Production concurrency and supervised services | P4, P6 |
-| P8 | Persistent services and independent history checking | P7 |
-| P9 | Ownership optimization and specialization | P5; broader suites from P6–P8 |
-| P10 | Interactive development and production qualification | P6–P9 |
+| Phase | Deliverable | Depends on | Current position |
+| --- | --- | --- | --- |
+| P0 | Provenance, integration inventory, requirement ledger | None | TC0 development toolchain and ledger exist; the native-host dependency epoch and retained image rebuild remain open. |
+| P1 | Qualified TC0-A pure model, evaluator, candidate and strict-replay repair loop | P0 core readiness | Registered gate recorded PASS at `1db7471` under waivers; rerun on current master before treating G1 as current. |
+| P2 | Qualified TC0-B dynamic handlers across the same vertical stack | Current G1 evidence | Next implementation phase after a current-head G1 PASS. |
+| P3 | Qualified TC0-C concurrency/lifetimes/time, then full TC0 freeze | P2 | Not started. |
+| P4 | Deterministic Solo5 execution profile | P3 | Not started; optional thin development slice may follow G1 as described below. |
+| P5 | Native compiler and memory correctness baseline | P3; P4 for isolated release evidence | Not started. |
+| P6 | Practical typed surface language and tooling | P5 | Not started. |
+| P7 | Production concurrency and supervised services | P4, P6 | Not started. |
+| P8 | Persistent services and independent history checking | P7 | Not started. |
+| P9 | Ownership optimization and specialization | P5; broader suites from P6–P8 | Not started. |
+| P10 | Interactive development and production qualification | P6–P9 | Not started. |
 
 P1–P3 each include model, independent candidate, evaluator, applicable mutants, reduction and strict replay. They are not separate model-first/evaluator-second/candidate-last phases. The first useful release is G1; full TC0 is G3.
 
@@ -69,9 +69,9 @@ Path restrictions are workflow controls, not isolation. Build and run candidates
 
 ### Work
 
-Pin ShenCheck, Koka, Solo5, the selected Shen port, C compiler, Rust toolchain where used, and any Jepsen checker artifacts. Record exact commits, license obligations, build commands, file hashes and platform details. Keep upstream source adaptations explicit. Use a Nix flake and lockfile for reproducible dependencies where supported; provide a documented non-Nix build path if platform support requires it. Backend container and guest images are built from the flake, so a lost image is rebuilt rather than recovered. Keep local upstream fixes as named overlays or patch files with review records.
+Pin ShenCheck, Koka, Solo5, the selected Shen port, C compiler, Rust toolchain where used, and any Jepsen checker artifacts. Record exact commits, license obligations, build commands, file hashes and platform details. Keep upstream source adaptations explicit. Use a Nix flake and lockfile for reproducible dependencies where supported; provide a documented non-Nix build path if platform support requires it. Backend container and guest images should be built from the flake where recipes are defined, so a lost image can be reproduced rather than recovered. The current flake pins the TC0 development toolchain only; native stock/control image recipes and identities are still outstanding. Keep local upstream fixes as named overlays or patch files with review records.
 
-**Dependency epochs.** A pinned input set is an epoch with its own identity. When a retained input cannot be restored exactly, a reviewer opens a new epoch: rebuild from pinned sources, record the new identities and the reason, mark evidence bound to the old epoch historical, and rerun what the next gate needs. Old receipts are never rewritten or reinterpreted to match new artifacts, and earlier failures or uncertainties stay recorded. Opening an epoch is the remedy for the current native-host blocker (missing exact stock/control images); it does not by itself authorize live runs, which still require the remaining gates in the native closure packet.
+**Dependency epochs.** A pinned input set is an epoch with its own identity. When a retained input cannot be restored exactly, a reviewer opens a new epoch: rebuild from pinned sources, record the new identities and the reason, mark evidence bound to the old epoch historical, and rerun what the next gate needs. Old receipts are never rewritten or reinterpreted to match new artifacts, and earlier failures or uncertainties stay recorded. The repository flake now pins the TC0 development toolchain; this does not open or complete the separate native-host epoch for the missing stock/control images. A native epoch does not by itself authorize live runs, which still require the remaining gates in the native closure packet.
 
 Inspect ShenCheck choices, replay, model sets, corpus/minimizer, cooperative protocol, Antithesis shim, Jepsen bridge and current tests. Classify each as reusable unchanged, requires adapter, requires repair, or unrelated. Inspect Koka's runtime assumptions before deciding whether code can be reused on Solo5. Inspect Solo5 clocks, bindings, tender, toolchain and target support.
 
@@ -103,23 +103,27 @@ Use scripted peers to test malformed/truncated streams, duplicate sequence IDs, 
 
 Give an agent a generated failure against a protected oracle, retain its task packet and revisions, independently build its patch, and rerun retained plus fresh cases. A scenario tape may be reissued against the repaired candidate, but exact-original replay remains bound to the original candidate identity.
 
-Register the slice's semantic development checks with the Pi workflow controller as development-tier commands: validator negative tests, hand-fixture Shen-vs-candidate agreement, and strict replay of retained cases. They give the agent loop semantic back pressure without being the `tc0-a-qualification` evaluator, which stays a separate deliverable and is never approximated by these checks. Measure their wall time; the per-change set targets about a minute on the process backend.
+Register the slice's semantic development checks with the Pi workflow controller as development-tier commands: validator negative tests, hand-fixture Shen-vs-candidate agreement, and strict replay of retained cases. They give the agent loop semantic back pressure but do not approximate the separate `tc0-a-qualification` evaluator. The current manifest has both tiers registered; measure development-check wall time, with the per-change set targeting about a minute on the process backend.
 
 Until G1 passes, native-host and Solo5 hardening is frozen except for work that removes a named blocker for G1 or for the dependency epoch above. The pure process-backed loop is the critical path.
 
 ### Gate G1 — first useful release
 
-The pure model and independent candidate agree on hand fixtures, the declared exhaustive-small scope and sampled campaigns. Canonical bytes and arithmetic match independent expectations. Every A constructor/frame has explicit transitions and distinguishing fixtures. The reference kernel has no environmental effects.
+The pure model and independent candidate agree on hand fixtures, the declared exhaustive-small scope and sampled campaigns. Canonical bytes and arithmetic match independent expectations. The gate measures named catalog-transition coverage and the stated distinguishing hand fixtures; 112/112 catalog keys does not establish every frame/context combination or state-space coverage. The reference kernel has no environmental effects.
 
 Gleipnir discovers an evaluation-order or arithmetic defect, reduces it, strictly replays the original failure, and supplies an agent patch with fresh passing evidence. Applicable evaluator/pure mutants are killed with expected classifications; the equivalent control passes. Required replay/protocol failures never promote the candidate. Publish a runnable gate entry point and versioned manifest; proposed command text alone is not evidence.
 
 Qualify the A profile/catalog identities only. This release does not claim handlers, concurrency, full TC0 or production semantics. Cross-port portability is claimed only after independently checked fixtures pass on the stated configurations.
+
+**Recorded result and freshness.** The registered `tc0-a-qualification` evaluator returned PASS at `1db7471`, with all 15 required rows and six claims, under the owner-recorded waivers in [`campaigns/tc0/G1_EVALUATOR_REVIEW.md`](campaigns/tc0/G1_EVALUATOR_REVIEW.md). The accepted scope is bounded (including grammar G through 5 AST nodes and three mutants); the repairer used instruction-only isolation, and the evaluator is trusted-local while candidates are sandboxed. This is a G1 result for that source identity, not a waiver-free isolation claim or qualification of B/C/full TC0. The current master is a later commit and has no recorded fresh gate receipt here. Until the registered check passes at the current clean source, current-head G1 is UNKNOWN. A later documentation-only change still changes the exact committed source identity required by the gate.
 
 ## 6 P2 Qualify TC0-B handlers vertically
 
 ### Work
 
 Add explicitly dynamic handler selection to the Shen model, independent candidate, validator, generators, reducer and evaluator together. Specify lexical clause captures, inactive selected/intervening handlers, outer clause context, single restore on return, and abort cleanup. Freeze no handler rule based only on the first implementation.
+
+Start P2 in a separate bounded run after reviewing the G1 controller receipt and approving the P2 task packet. The first protected-source edit makes affected G1 evidence historical. G2 must rerun the required A rows against the final P2 source alongside the new B rows. G1's program enumeration has one scheduling alternative per state; it supplies no concurrency, fairness, crash, retry or partition evidence. New claims require their own fault model, schedule identity, monitor state and replay evidence.
 
 Extend strict replay and one-step fixtures. Kill skipped-handler and double-resume mutations. Test a closure defined under H1 but called under H2, same-effect outward forwarding, and an outer E operation crossing an inner F handler. Include traps and continuation restoration. Timer/channel suspension fixtures and `TC0-BC-INHERITED-HANDLER-OWNERSHIP` are declared dependencies on C and are not silently credited in B. Copied handler ownership anchors must rebind to the child's task-local scope; parent scope/cleanup authority is never inherited.
 
@@ -300,28 +304,27 @@ Completion: patch, design explanation, current evidence, remaining limitations.
 Never report PASS for timeout, unknown, skipped, or truncated required work.
 ```
 
-## 18 First concrete implementation assignment
+## 18 Current implementation sequence
 
-Revised by the 11 October 2026 direction amendment (§19). Items are in dependency order; 1 and 2 can proceed in parallel.
+The 11 October direction amendment (§19) has been implemented in the plan and workflow controller. The former assignment to build S1–S3, pin the TC0 development toolchain and register the evaluator is historical; those artifacts are present on master. Do not start the old `NEXT_SLICE.md` S1 assignment again.
 
-1. **Open a new dependency epoch** for the native host (§4): pin Shen, Solo5, the C toolchain and image recipes in the flake, rebuild the stock/control images, record new identities and mark old native receipts historical. This removes the missing-image blocker only; the remaining native closure gates still apply before any live run.
-2. **Give the agent loop semantic back pressure** (§5): register validator, hand-fixture Shen-vs-candidate and strict-replay development checks for the pure-call/closure slice in the workflow manifest, and measure their latency. Leave `tc0-a-qualification` unconfigured until a real evaluator exists.
-3. **Close G1** on the process backend, completing or explicitly blocking the G0 core-readiness rows it needs (exact arithmetic, evaluator boundary, requirement ledger), through `campaigns/tc0/NEXT_SLICE.md` S1–S3: closed pure-call/closure validator and catalog, generated discovery, reduction, strict original replay, then one independently built candidate-only repair with fresh passing evidence. Freeze unrelated host hardening until then.
-4. **Reduce host languages:** keep the Go host; retire Python runners as their slices are touched, and add no new semantic harness logic in Node. Move harness responsibilities toward the Shen/ShenCheck boundary in §3 as each slice is rebuilt.
-5. **Thin unikernel slice** after G1 (§2): one pure function plus one output effect, compiled to C, linked with Solo5 hvt using an effect-derived device manifest, replayed and compared with Shen. Development spike only.
-6. **Optional surface kata** after G1 (§10): a throwaway frontend tested on whether agents write correct programs from a grammar card. Design evidence only.
-7. Add dynamic handlers and explicit context rules through the same vertical stack (G2).
-8. Add tasks/channels/cancellation, conservative resource lifetimes and distinct idle-time rules; demonstrate the stale-waiter repair and qualify full TC0 (G3).
+1. **Verify the supported runner and refresh G1 only.** The flake currently targets `x86_64-linux`; the registered gate requires Nix and the pinned Shen output. Select an actual Linux x86-64 runner and record its OS, architecture, Nix/toolchain identities, checkout commit, available resources and finite timeout before starting. macOS is not a qualified execution path; an unavailable supported runner is BLOCKED. On a clean committed source, run only `tc0-a-qualification` through the controller and retain its receipt with source/configuration hashes, executable identities, evidence hashes and cleanup. The standalone gate report is supporting evidence; the controller receipt is the qualification artifact. PASS ends this run for receipt review. Non-PASS stops progression and routes to the reported row. Do not begin P2 in this run.
+2. **Review a separate P2 task packet, then implement one minimal handler slice.** Specify the exact dynamic-handler semantics, new profile/catalog versions, allowed paths, protected A baseline, authority changes, relevant development checks and finite budgets. After this review, start a fresh P2 run through the vertical stack in §6. The first protected-source edit invalidates affected current G1 evidence; keep its receipt as a historical regression baseline. Freeze the final P2 source and run a reviewed G2 evaluator that reruns required A rows plus B rows. A G1 PASS alone does not qualify P2.
 
-The next executable demonstration packet contains: (1) a canonical TC0-A program, (2) its hand-derived expected trace, (3) agreement between the Shen evaluator and independent candidate, (4) an injected arithmetic/evaluation-order defect, (5) Gleipnir discovery and reduction, (6) exact replay of the original failure, and (7) a repair passing fresh evaluation. Schemas, concrete frames and byte vectors are checked implementation artifacts; do not delay this packet for B/C ownership fixtures or another large specification revision.
+3. **Close the accepted G1 waiver before broadening trust.** The recorded G1 accepted instruction-only repairer isolation and a trusted-local evaluator with only candidate sandboxing. Keep those limits explicit during P2; before using the gate to support claims beyond its accepted G1 scope, separately review and measure enforced repairer and evaluator isolation, then rerun the affected qualification rows. Do not silently upgrade the waiver to an isolation guarantee.
+4. **Keep the native-host dependency epoch separate.** The TC0 flake pins the TC0 tools; it does not restore or replace missing native stock/control images. When native work becomes a named prerequisite, open the epoch, rebuild from pinned sources, record new identities, and retain old receipts as historical. Do not run live native campaigns before their closure packet gates pass.
+5. **After G1, optional bounded thin unikernel slice** (§2): one pure function plus one output effect, compiled to C, linked with Solo5 hvt using an effect-derived device manifest, replayed and compared with Shen. It is development evidence only and is not P4/G4 qualification. Keep it behind P2 work unless an explicit bounded task says otherwise.
+6. **Continue P3 and later only through their gates:** add tasks/channels/cancellation, conservative resource lifetimes and distinct idle-time rules; demonstrate stale-waiter repair; then qualify full TC0 at G3. Surface-language prototypes, production backends and optimization remain downstream of their listed dependencies.
 
-Strict replay is part of step 3, not deferred integration work. The first demonstration must show an actual generated implementation failure, a small deterministic counterexample, original-failure replay, an agent patch, and current passing evidence. A diagram or manually selected happy path is insufficient. Authority comes from reviewed explicit rules and the qualified evaluator, never whichever implementation arrives first. Keep backend work bounded until these slices establish useful evidence.
+**Authority-record cleanup is a separate reviewed change, not a new gate prerequisite.** The evaluator header still calls itself unreviewed/unregistered, and the ledger retains pre-registration gap text. Reconcile evaluator source, ledger, manifest, workflow registration and review packet together. The ledger checker validates structure and file references; it cannot establish semantic consistency among those objects. These stale descriptions should be corrected under authority review, but do not block a read-only G1 refresh unless the owner explicitly changes the acceptance contract. Any cleanup changes source/authority identities and requires fresh evidence afterwards.
+
+The immediate milestones are a supported-runner G1 refresh and receipt review, followed by a separately reviewed P2 run and final-source G2 evaluation. Optional native or surface-language spikes are excluded from both runs. Strict replay, a generated failure, its minimized counterexample, and fresh repair evidence are part of the recorded `1db7471` gate result under the stated waiver; do not describe those historical receipts as fresh on a later source identity.
 
 ## 19 Direction amendment: unikernel target and agent back pressure
 
 **Source.** Geoffrey Huntley, ["unikernels were hard. key word: were."](https://ghuntley.com/unikernels/), 11 October 2026: a write-up of a conversation with Justin Cormack (MirageOS). Its arguments are opinion and anecdote, not measured evidence. This section records which ideas the plan adopts, where they land, and what it does not adopt.
 
-**Assessment.** The article's central method, "if you have an oracle, porting is a loop," is Gleipnir's existing design: Shen is the oracle and candidates are checked against it. The gap it exposes is not rigor but loop speed. The project has a strong evidence vocabulary around a small arithmetic/closure slice, while its agent loop has no registered semantic check, recent passes hardened the native host rather than closing G1, and the native path is blocked on unrecoverable images. The amendment keeps acceptance authority strict and makes the inner candidate loop fast and unattended.
+**Assessment (updated 11 October 2026).** The article's central method, "if you have an oracle, porting is a loop," is Gleipnir's design: Shen is the oracle and candidates are checked against it. The process-backed TC0-A loop now has semantic development checks, generated discovery/reduction, an S3 repair packet and a registered evaluator. Its recorded G1 PASS at `1db7471` has explicit scope and isolation waivers; the current master still needs a fresh gate receipt. The separate native path remains blocked on unrecoverable stock/control images. The amendment keeps acceptance authority strict and makes the inner candidate loop fast and bounded.
 
 | Article idea | Adopted as | Where |
 | --- | --- | --- |
@@ -347,5 +350,5 @@ Strict replay is part of step 3, not deferred integration work. The first demons
 - Dependent types are recorded as a later research option for added back pressure, not a P6 requirement.
 - Self-hosting the compiler (the T-diagram path) is out of scope until a stable surface language and G6 exist.
 - Choosing OCaml as an implementation language is not decided here; it is one option at the §8 library decision.
-- Nothing in this amendment changes TC0 0.2 semantics, profile identities, the evidence contract (§16) or the rule that only the external evaluator issues verdicts.
+- Nothing in this amendment changes TC0 0.2 semantics, profile identities, the evidence contract (§16) or the rule that only the registered gate evaluator issues qualification verdicts.
 

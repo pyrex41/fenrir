@@ -1,20 +1,32 @@
-# Next TC0-A development workflow
+# TC0-A completion record and P2 handoff
 
-Status: prepared, not started or qualified. This is a task packet, not acceptance authority.
+Status: S1–S3 development work is present on master, and the owner-reviewed `tc0-a-qualification` gate recorded PASS at `1db7471` under the waivers in [`G1_EVALUATOR_REVIEW.md`](G1_EVALUATOR_REVIEW.md). Master has since advanced to `8cc4c92`; no gate receipt at that exact source is recorded in this checkout. The evaluator header and protected ledger retain descriptions predating registration. Their cleanup is a separate reviewed authority change; the structural ledger checker does not make stale prose a prerequisite for a read-only gate refresh. Until it passes, current-head G1 is UNKNOWN. This file records delivered work and the next transition; it is not acceptance authority.
 
 ## Activation and finite limits
 
-The previous run e38e2587-ec81-44a2-9f44-741c1bdfed23 is paused at 120/120 turns, with confirmed cleanup, no active check and no occupied lease (measured with fenrir_status during preparation). Do not resume exhausted bounds or edit its journal.
+Inspect the live workflow state before starting. Do not resume an exhausted budget or edit a prior journal. The finite drive below is an example for a fresh, explicitly approved run; it does not authorize automatic renewal.
+
+### Run A — supported-runner G1 refresh only
+
+Use a Linux x86-64 runner with Nix; the current flake does not provide a measured macOS qualification path. Record runner identity, checkout commit, pinned Shen resolution, resource limits and timeout. Missing prerequisites are BLOCKED.
 
 Human command in Pi:
 
 ```text
-/fenrir-workflow drive --turns=120 --minutes=120 --repairs=6 Follow campaigns/tc0/NEXT_SLICE.md: integrate the closed pure call/closure demo, then bounded generated reduction and strict replay if budget permits; retain fresh independent Shen evidence, keep qualification UNKNOWN, stop at authority-review boundaries, and checkpoint without automatic renewal.
+/fenrir-workflow drive --turns=120 --minutes=120 --repairs=6 Verify the Linux x86-64 runner and pinned toolchain; run only tc0-a-qualification on clean committed HEAD, retain its controller receipt and evidence identities, then checkpoint and stop for receipt review. Do not modify authority inputs or start P2.
 ```
 
-No reload is needed for this task packet. Review the displayed authority manifest and confirm the drive. In non-UI mode the controller requires explicit human approval. This command authorizes one finite run, not each future row in the roadmap. Follow-ons may proceed within that budget only when their development dependencies are measured; later drives require fresh authorization.
+Review the displayed manifest and confirm this finite run. Non-UI mode requires explicit human approval. The controller receipt, including source/configuration hashes, executable/evidence identities and cleanup, is the qualification artifact; a standalone report is supporting evidence. PASS ends Run A; any non-PASS retains its reasons and stops progression.
 
-Use existing controller tools: select → build → measure; failed development checks → repair → measure. Registered development checks: `workflow-tests` (controller only), `tc0-candidate-tests` (TC0 unit tests) and `tc0-pure-call-oracle` (fresh Shen agreement plus strict replay on the pure-call hand cases; BLOCKED without `build/toolchain/shen-scheme`). Use the two TC0 checks at measure boundaries; a fresh PASS with missing qualification returns to build. Do not call the unconfigured `tc0-a-qualification`. No controller/configuration/protected-test changes are required by this packet.
+### Run B — separately reviewed P2 development
+
+After reviewing a fresh G1 PASS, prepare and approve a P2 task packet with exact handler semantics, versioned profile/catalog, allowed paths, protected A baseline, authority changes, component checks and finite budgets. Then start a new bounded run:
+
+```text
+/fenrir-workflow drive --turns=120 --minutes=120 --repairs=6 Follow the separately reviewed P2 task packet and 03_PHASED_EXECUTION_PLAN.md §6: implement one minimal dynamic-handler vertical slice, select and run its relevant development checks, retain failures/reduction/replay, and stop at the packet budget or an authority change. Keep affected G1 evidence historical after protected-source edits; do not claim G2 before its reviewed evaluator runs A and B rows on final source.
+```
+
+This command is a template, not authorization for an unprepared packet. G1's program enumeration provides no concurrency, fairness, crash, retry or partition qualification. New claims need explicit fault models, schedule/monitor identities and replay evidence. Optional backend and surface-language work is outside both runs.
 
 ## Read and baseline
 
@@ -30,7 +42,9 @@ Retain baseline evidence without overwriting:
 
 Old source-bound evidence is historical after relevant changes; regenerate affected evidence under new filenames. Record source/toolchain hashes, commands, bounds, cap hits and cleanup in each development bundle.
 
-## S1 — closed integrated pure-call demo (first priority)
+## S1 — closed integrated pure-call demo (development exit recorded)
+
+The schema `/1` and `/2` implementation, closed validator, catalog, independent Shen/candidate machines, hand traces and replay identity are present. The recorded G1 run includes 24 hand cases and catalog coverage. Treat the exact gate report and its source identity as the evidence; this section's criteria are retained as the acceptance history, not a new assignment.
 
 Publish a new explicit demo schema/profile/catalog identity; do not widen arithmetic-demo/1 or pure-closure-demo/1 or relabel either as full TC0-A. Choose its exact identity after inspecting existing artifacts. Unsupported A constructors remain rejected and listed as gaps.
 
@@ -42,9 +56,9 @@ Implement together:
 4. Hand fixtures before generated claims: forward/mutually recursive names, finite tail recursion, non-tail recursion, lexical capture and nested returned/captured aliases, higher-order calls, emit ordering, left trap suppressing a later emit, overflow and final-step completion. Retain hand-derived expected steps and independent observations. Semantic continuation-depth tests do not establish native stack guarantees.
 5. New compatible replay identity: header binds the complete artifact/source map, catalog, model, candidate, toolchains, profile and bounds. Preserve singleton decisions, epochs/sites/occurrences, full trace/checkpoints and exact terminal/divergence/budget footers. Test missing/extra choices and identity/domain/site drift fail closed.
 
-Development exit: closed validator negative tests, catalog coverage and hand traces pass; independently observed Shen/candidate traces agree; cold strict replay agrees on admitted and known divergence boundaries; old demos' regressions pass. Report supported subset and unresolved full-A requirements. This is NOT G1 PASS.
+Development exit: closed validator negative tests, catalog coverage and hand traces pass; independently observed Shen/candidate traces agree; cold strict replay agrees on admitted and known divergence boundaries; old demos' regressions pass. Report supported subset and unresolved full-A requirements. This development exit alone is not G1 PASS; the registered evaluator owns that verdict.
 
-## S2 — bounded valid generation, reduction and discovery
+## S2 — bounded valid generation, reduction and discovery (development exit recorded)
 
 Status (development): runs for the pure-call family and the schema /2 data family with two candidate-only mutants (`reverse-operands`, `arm-by-position`) plus the default equivalent control. Each mutant was discovered from its generated family, reduced against fresh Shen observations and replayed Exact for both the original and the minimized failure; the data campaigns were also cold-repeated. Measured results are in README.md. Invalid-program generation (27 named mutations with expected rejection classes) and an exhaustive-small Shen-vs-candidate scope (every program of a bounded grammar up to 5 AST nodes, 5,051 programs) now run as well; see README.md.
 
@@ -58,9 +72,9 @@ Implement typed reductions that preserve declarations, unique IDs, binding scope
 
 Development exit: generated discovery → smaller valid failure → fresh model confirmation → strict original/minimized replay, plus equivalent-control evidence. Never claim global minimality or complete exploration from a bounded reducer/sample.
 
-## S3 — candidate-only repair preparation and evaluation
+## S3 — candidate-only repair preparation and evaluation (development result recorded with waiver)
 
-Status (development): packet and frozen evaluator prepared and dry-run; see `campaigns/tc0/S3_REPAIR_PACKET.md`. One independent repair (local subagent, instruction-only isolation) evaluated DEVELOPMENT-PASS; see `campaigns/tc0/s3/independent-repair-1.md`.
+Status (development): packet and frozen evaluator prepared and dry-run; see `campaigns/tc0/S3_REPAIR_PACKET.md`. One candidate-only repair evaluated DEVELOPMENT-PASS under the instruction-only independence waiver; see `campaigns/tc0/s3/independent-repair-1.md`.
 
 Prepare a clean-room task packet from S2 with original candidate identity, allowed candidate files, read-only model/catalog/goldens/gate inputs, failure bundle and retained replay instructions. Preserve the defective original for exact-original replay. Repair only candidate paths; do not fix an oracle disagreement by rewriting its expected answer.
 
@@ -72,15 +86,13 @@ Freeze evaluator inputs and fresh evaluation campaign before exposing held-out c
 
 | Stage | Next deliverable | Dependency / stop boundary |
 | --- | --- | --- |
-| S4 | Remaining full-A constructors/values, declarations, primitives, effects/serialization and complete frame/source-map catalog. **In progress:** schema `tc0-a-pure-call-demo/2` / catalog `/2` adds Bytes, TrapCode, tuples, datatypes, construct/match/project, byte primitives and eq with 10 Shen-agreeing hand fixtures; Catalog transition coverage over Shen-agreeing traces is 112/112 (`tools/tc0/check-pure-call-coverage.mjs`); S2 discovery/reduction over these constructs now runs (`--family pure-data`, `--mutant arm-by-position`, see README) | S1/S2 development; introduce explicit versions and distinguishing fixtures for each extension; do not assume this demo covers full A |
-| S5 | G0 exact-arithmetic/provenance ledger and enforced evaluator boundary; benign protected-write/access/credential probes | Required qualification prerequisites; platform enforcement must be measured, not replaced by path rules |
-| S6 | Independently reviewed evaluator/requirement manifest, protocol and replay mutants, finite exhaustive-small scope and fresh repair evaluation | Separate authority review before protecting/registering evaluator inputs or changing .pi/fenrir-workflow.json; no synthesized claims |
-| G1 | Source-bound TC0-A qualification via an actually registered evaluator. **Reached at `1db7471` under owner waivers** (campaigns/tc0/G1_EVALUATOR_REVIEW.md) | All required A/G0 rows and six controller claims; any required missing evidence remains UNKNOWN/BLOCKED |
-| P2 | Dynamic handlers across validator/model/candidate/generator/reducer/replay | Qualified G1; B/C-dependent fixtures remain deferred until C |
-| P3 | Tasks/channels/cancellation/lifetimes/time and stale-waiter repair | Qualified G2; full TC0 freeze only after G3 |
-| P4/P5 | Deterministic Solo5 profile and conservative native compiler | G3 interfaces; Solo5 startup feasibility is not deterministic execution qualification |
+| G1 refresh | Verify a supported Linux x86-64 runner; run the registered gate on clean HEAD, retain the controller receipt, and stop for review. | Separate Run A; non-PASS retains its verdict and stops progression. |
+| P2 / G2 | Separately review a task packet, implement one dynamic-handler vertical slice, then evaluate final-source A and B rows. | Separate Run B after G1 receipt review; protected-source edits make affected G1 evidence historical. |
+| G1 waiver retirement | Enforced repairer isolation and an isolated evaluator, with separately reviewed boundary evidence and fresh rows. | Needed before relying on the gate beyond its accepted G1 scope; do not silently upgrade the waiver. |
+| P3 / G3 | Tasks, channels, cancellation, lifetimes, time and stale-waiter repair; then full TC0 freeze. | Depends on qualified G2; deferred B/C requirements remain explicit. |
+| P4/P5 | Deterministic Solo5 profile and conservative native compiler. | Depends on G3 interfaces; the optional thin slice after G1 is development evidence only. |
 
-Keep optional backend spikes off the critical path. Do not start B/C, a hypervisor, surface language or optimization work to bypass incomplete A evidence.
+Keep optional backend spikes off the P2 critical path. Do not treat schema `/2`, a bounded campaign, or the recorded G1 waiver as full TC0, waiver-free isolation, native qualification or production readiness.
 
 ## Checks, checkpoints and stopping
 
@@ -90,8 +102,8 @@ Synchronous development commands (not qualification):
 node --test tests/tc0/*.test.mjs
 ```
 
-Inspect the existing tools/check-tc0-closure.py and tools/check-tc0-reduction.py for baseline commands. Add an integration runner for the new identity instead of silently feeding integrated artifacts into old demo runners. Keep fresh independent model reports and source-verified replay admission. Run `fenrir_check` with `tc0-candidate-tests` and `tc0-pure-call-oracle` at development measure boundaries; when S1 adds a new integration runner, propose extending the oracle launcher to cover it in a separately reviewed manifest change. `workflow-tests` checks the controller, not TC0 semantics. Record TC0 evidence separately with `fenrir_progress` and `fenrir_checkpoint`.
+Use the schema `/2` integration runners and the registered gate; do not feed integrated artifacts into old demo runners. Keep fresh independent model reports and source-verified replay admission. Use `tc0-candidate-tests` and `tc0-pure-call-oracle` for development feedback. The G1 gate is a separate qualification check, not a development check. `workflow-tests` checks the controller, not TC0 semantics. Record each P2 phase, current hashes, bounds, semantic outcomes and cleanup with `fenrir_progress` and `fenrir_checkpoint`.
 
 Each completed substep records current files/hashes, actual test counts, measured bounds/cap hits, semantic outcomes, source/toolchain identities, cleanup and the next executable action. Checkpoint before budget exhaustion, large handoffs and context compaction. Report phase progress, not only status, to avoid the controller's stall guard.
 
-Stop on unavailable required prerequisites, unresolved owned-process cleanup, cancellation, authority drift or the finite budget. Stop for review before changing the trusted evaluator, qualified catalog/model/goldens, command manifest or protected paths. All work in this packet is development until independently qualified. No push, deployment, background jobs, lock/journal manipulation or implicit budget renewal.
+Stop on unavailable required prerequisites, unresolved owned-process cleanup, cancellation, authority drift or the finite budget. Stop for review before changing the trusted evaluator, qualified catalog/model/goldens, command manifest or protected paths. The recorded G1 result applies only to its cited source and approved waivers; new P2 work remains development until evaluated by the updated gate. No push, deployment, background jobs, lock/journal manipulation or implicit budget renewal.
