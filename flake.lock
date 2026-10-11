@@ -1,0 +1,60 @@
+{
+  "nodes": {
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1791487292,
+        "narHash": "sha256-6BIvCXtdLW4HQwsOGkgH444aB3vCbHypE9TA78ireh8=",
+        "rev": "8edc0c72e3a38faf5434e40d1f19431125fe4b30",
+        "type": "tarball",
+        "url": "https://releases.nixos.org/nixpkgs/nixpkgs-26.11pre1088030.8edc0c72e3a3/nixexprs.tar.zst"
+      },
+      "original": {
+        "type": "tarball",
+        "url": "https://releases.nixos.org/nixpkgs/nixpkgs-26.11pre1088030.8edc0c72e3a3/nixexprs.tar.zst"
+      }
+    },
+    "root": {
+      "inputs": {
+        "nixpkgs": "nixpkgs",
+        "shen-cl-src": "shen-cl-src",
+        "yggdrasil-src": "yggdrasil-src"
+      }
+    },
+    "shen-cl-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1781699246,
+        "narHash": "sha256-KqxtYRNhjRw2nZ+nUtFWJYKkfRz+xLjBdqK9kl0MODk=",
+        "ref": "refs/heads/master",
+        "rev": "dff7445e6cd3ed9c021fdf6e8a45ffafa3128347",
+        "revCount": 436,
+        "type": "git",
+        "url": "https://github.com/Shen-Language/shen-cl"
+      },
+      "original": {
+        "rev": "dff7445e6cd3ed9c021fdf6e8a45ffafa3128347",
+        "type": "git",
+        "url": "https://github.com/Shen-Language/shen-cl"
+      }
+    },
+    "yggdrasil-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790532444,
+        "narHash": "sha256-3zwNMF8PlsMsQHVxJWNt/yzpYpiK2WrPdQCCx2rjn90=",
+        "ref": "refs/heads/main",
+        "rev": "a40d8c5b6ed1eb2b5d7a4511e61d0304ce9a2e3d",
+        "revCount": 151,
+        "type": "git",
+        "url": "https://github.com/pyrex41/yggdrasil"
+      },
+      "original": {
+        "rev": "a40d8c5b6ed1eb2b5d7a4511e61d0304ce9a2e3d",
+        "type": "git",
+        "url": "https://github.com/pyrex41/yggdrasil"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

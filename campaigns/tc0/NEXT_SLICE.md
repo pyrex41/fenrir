@@ -46,6 +46,8 @@ Development exit: closed validator negative tests, catalog coverage and hand tra
 
 ## S2 — bounded valid generation, reduction and discovery
 
+Status (development): runs for the pure-call family and the schema /2 data family with two candidate-only mutants (`reverse-operands`, `arm-by-position`) plus the default equivalent control. Each mutant was discovered from its generated family, reduced against fresh Shen observations and replayed Exact for both the original and the minimized failure; the data campaigns were also cold-repeated. Measured results are in README.md. Invalid-program generation (27 named mutations with expected rejection classes) and an exhaustive-small Shen-vs-candidate scope (every program of a bounded grammar up to 5 AST nodes, 5,051 programs) now run as well; see README.md.
+
 Begin only after S1's development exit. Start with a deterministic, explicitly finite family of at most 32 cases, 200 AST nodes/case, 200 reference steps/run, and 100 reduction attempts per selected failure. Keep a wall-time watchdog and output caps; lower bounds if measured throughput requires it. Caps/truncation remain visible and cannot imply exhaustive coverage.
 
 Generate typed named-call/closure combinations including alias retention, returned closures, tail/non-tail calls and arithmetic/emit. Validate each case; document enumeration order/seed. Avoid recursive programs without a declared terminating family or explicit budget-outcome test.
@@ -58,6 +60,8 @@ Development exit: generated discovery → smaller valid failure → fresh model 
 
 ## S3 — candidate-only repair preparation and evaluation
 
+Status (development): packet and frozen evaluator prepared and dry-run; see `campaigns/tc0/S3_REPAIR_PACKET.md`. One independent repair (local subagent, instruction-only isolation) evaluated DEVELOPMENT-PASS; see `campaigns/tc0/s3/independent-repair-1.md`.
+
 Prepare a clean-room task packet from S2 with original candidate identity, allowed candidate files, read-only model/catalog/goldens/gate inputs, failure bundle and retained replay instructions. Preserve the defective original for exact-original replay. Repair only candidate paths; do not fix an oracle disagreement by rewriting its expected answer.
 
 A genuinely independent agent repair/evaluation needs a separately approved execution arrangement. No nested paid model sessions are authorized here. If unavailable, retain the task packet and mark the independent-repair claim UNKNOWN rather than substituting a self-authored patch.
@@ -68,10 +72,10 @@ Freeze evaluator inputs and fresh evaluation campaign before exposing held-out c
 
 | Stage | Next deliverable | Dependency / stop boundary |
 | --- | --- | --- |
-| S4 | Remaining full-A constructors/values, declarations, primitives, effects/serialization and complete frame/source-map catalog | S1/S2 development; introduce explicit versions and distinguishing fixtures for each extension; do not assume this demo covers full A |
+| S4 | Remaining full-A constructors/values, declarations, primitives, effects/serialization and complete frame/source-map catalog. **In progress:** schema `tc0-a-pure-call-demo/2` / catalog `/2` adds Bytes, TrapCode, tuples, datatypes, construct/match/project, byte primitives and eq with 10 Shen-agreeing hand fixtures; Catalog transition coverage over Shen-agreeing traces is 112/112 (`tools/tc0/check-pure-call-coverage.mjs`); S2 discovery/reduction over these constructs now runs (`--family pure-data`, `--mutant arm-by-position`, see README) | S1/S2 development; introduce explicit versions and distinguishing fixtures for each extension; do not assume this demo covers full A |
 | S5 | G0 exact-arithmetic/provenance ledger and enforced evaluator boundary; benign protected-write/access/credential probes | Required qualification prerequisites; platform enforcement must be measured, not replaced by path rules |
 | S6 | Independently reviewed evaluator/requirement manifest, protocol and replay mutants, finite exhaustive-small scope and fresh repair evaluation | Separate authority review before protecting/registering evaluator inputs or changing .pi/fenrir-workflow.json; no synthesized claims |
-| G1 | Source-bound TC0-A qualification via an actually registered evaluator | All required A/G0 rows and six controller claims; any required missing evidence remains UNKNOWN/BLOCKED |
+| G1 | Source-bound TC0-A qualification via an actually registered evaluator. **Reached at `1db7471` under owner waivers** (campaigns/tc0/G1_EVALUATOR_REVIEW.md) | All required A/G0 rows and six controller claims; any required missing evidence remains UNKNOWN/BLOCKED |
 | P2 | Dynamic handlers across validator/model/candidate/generator/reducer/replay | Qualified G1; B/C-dependent fixtures remain deferred until C |
 | P3 | Tasks/channels/cancellation/lifetimes/time and stale-waiter repair | Qualified G2; full TC0 freeze only after G3 |
 | P4/P5 | Deterministic Solo5 profile and conservative native compiler | G3 interfaces; Solo5 startup feasibility is not deterministic execution qualification |

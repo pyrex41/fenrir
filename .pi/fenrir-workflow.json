@@ -37,14 +37,20 @@
         "tests/tc0/expression.test.mjs",
         "tests/tc0/generate.test.mjs",
         "tests/tc0/pure-call-artifact.test.mjs",
+        "tests/tc0/pure-call-coverage.test.mjs",
         "tests/tc0/pure-call-failure-runner.test.mjs",
         "tests/tc0/pure-call-generation.test.mjs",
         "tests/tc0/pure-call-machine.test.mjs",
         "tests/tc0/pure-call-replay-runner.test.mjs",
         "tests/tc0/pure-call-replay.test.mjs",
+        "tests/tc0/pure-data-generation.test.mjs",
+        "tests/tc0/pure-data.test.mjs",
         "tests/tc0/reduce.test.mjs",
         "tests/tc0/reduction-bridge.test.mjs",
-        "tests/tc0/replay.test.mjs"
+        "tests/tc0/replay.test.mjs",
+        "tests/tc0/requirement-ledger.test.mjs",
+        "tests/tc0/s3-repair.test.mjs",
+        "tests/tc0/sandbox.test.mjs"
       ],
       "timeoutSeconds": 120,
       "authorityPaths": []
@@ -55,6 +61,17 @@
       "timeoutSeconds": 330,
       "authorityPaths": ["tools/tc0/dev-check-pure-call-oracle.mjs"],
       "blockedExitCode": 2
+    },
+    "tc0-a-qualification": {
+      "kind": "qualification",
+      "command": ["python3", "-I", "tools/check-tc0-a-gate.py"],
+      "timeoutSeconds": 1800,
+      "authorityPaths": [
+        "tools/check-tc0-a-gate.py", "spec/tc0", "models/tc0", "fixtures/tc0", "tools/tc0",
+        "tools/check-tc0-pure-call.py", "tools/check-tc0-expression.py", "tools/check-tc0-pure-data-exhaustive.py",
+        "tools/check-tc0-pure-call-reduction.py", "tools/check-tc0-exact-arithmetic.py", "tools/check-tc0-s3-repair.py",
+        "tests/tc0", "campaigns/tc0/s3", "flake.nix", "flake.lock"
+      ]
     }
   }
 }
