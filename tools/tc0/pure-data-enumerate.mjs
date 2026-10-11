@@ -10,7 +10,8 @@
 //           | match Opt {None => I64; Some x => I64}   (both arm orders)
 //           | match Tri {A => I64; B => I64; C => I64}  (all six arm orders)
 //   Bool  ::= true | not(Bool) | lt(I64,I64) | eq(T,T) for T in I64, Bytes, Opt, Pair, Tri
-//   Bytes ::= "" | ff | bytes_concat(Bytes,Bytes)
+//   Bytes ::= "" | ff | 01 | bytes_concat(Bytes,Bytes)   (two distinct nonempty literals
+//                                                     make concatenation order observable)
 //   Opt   ::= None | Some(I64)
 //   Pair  ::= tuple(I64,I64)
 //   Tri   ::= A | B | C                     (a nullary three-constructor datatype)
@@ -51,7 +52,7 @@ function enumerate(maxNodes){
    product([['I64',depth],['I64',depth]],(a,b)=>['prim','lt',a,b]);
    for(const ty of ['I64','Bytes','Opt','Pair','Tri'])product([[ty,depth],[ty,depth]],(a,b)=>['prim','eq',a,b]);
   }else if(t==='Bytes'){
-   if(n===1)out.push(['bytes',''],['bytes','ff']);
+   if(n===1)out.push(['bytes',''],['bytes','ff'],['bytes','01']);
    product([['Bytes',depth],['Bytes',depth]],(a,b)=>['prim','bytes_concat',a,b]);
   }else if(t==='Opt'){
    if(n===1)out.push(['construct','Opt','None']);

@@ -1,0 +1,11 @@
+--- a/runtime/tc0/pure-call-machine.mjs
++++ b/runtime/tc0/pure-call-machine.mjs
+@@ -40,7 +40,7 @@
+    else {const f=this.frames.pop();this.env=f.env;
+     if(f.kind==='Let'){this.env=new Map(this.env);this.env.set(f.binding,c.value);enter(f.body,f.tail);}
+     else if(f.kind==='If')enter(c.value[1]?f.yes:f.no,f.tail);
+-    else if(f.kind==='Match'){const arm=f.arms[this.constructorIndex(c.value[1],c.value[2])];if(!arm)throw new Error('No match arm');this.env=new Map(this.env);arm[1].forEach((b,i)=>this.env.set(b,c.value[3+i]));enter(arm[2],f.tail);}
++    else if(f.kind==='Match'){const arm=f.arms.find(a=>a[0]===c.value[2]);if(!arm)throw new Error('No match arm');this.env=new Map(this.env);arm[1].forEach((b,i)=>this.env.set(b,c.value[3+i]));enter(arm[2],f.tail);}
+     else if(f.kind==='Return')value(c.value);
+     else {const values=[...f.values,c.value];if(f.remaining.length){this.frames.push({...f,values,remaining:f.remaining.slice(1)});enter(f.remaining[0],false);}else this.control={kind:'Ready',node:f.node,operation:f.operation,metadata:f.metadata,values:this.reverseOperands?[...values].reverse():values,tail:f.tail};}
+    }
