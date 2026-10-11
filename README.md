@@ -123,6 +123,19 @@ non-serializable entry and source-map gaps. Each case records the rejection it
 must produce. The tests check the exact rejection class, and that the runner
 exits nonzero without output, so invalid artifacts never execute.
 
+**Catalog coverage.** `tools/tc0/check-pure-call-coverage.mjs` maps every step of
+the Shen-agreeing traces to a catalog transition: dispatch by tag, collect/ready by
+operation, trap routing by code, frame kinds (from a frame stack simulated from the
+step records and checked against each step's depth), tail-call contexts, emit and
+root event sequences. These come from the 24 hand cases and the 3,869
+exhaustive-small programs; each exhaustive program is admitted only when its trace
+hash matches the Shen-agreeing one. It covers **112 of 112** transitions the catalog
+defines for schema `/2`, and no step maps outside the catalog. Five fixtures were
+added for the last 18 gaps: `gt`/`ge`/`mul`, Overflow from `sub`, `neg` minimum,
+`mul` and minimum ÷ −1, exact values around 2^53, and unwinding through `let`
+initializers and `if` conditions. This covers the catalog's named transitions, not
+every frame/context combination.
+
 **S3 repair packet (prepared, repair not executed).** See
 [`campaigns/tc0/S3_REPAIR_PACKET.md`](campaigns/tc0/S3_REPAIR_PACKET.md).
 `tools/tc0/s3-prepare.mjs` builds a clean-room workspace: a history-free export

@@ -37,6 +37,7 @@
         "tests/tc0/expression.test.mjs",
         "tests/tc0/generate.test.mjs",
         "tests/tc0/pure-call-artifact.test.mjs",
+        "tests/tc0/pure-call-coverage.test.mjs",
         "tests/tc0/pure-call-failure-runner.test.mjs",
         "tests/tc0/pure-call-generation.test.mjs",
         "tests/tc0/pure-call-machine.test.mjs",

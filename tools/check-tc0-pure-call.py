@@ -247,7 +247,7 @@ def main():
             raise ValueError('Hand case cap')
         return rows
     cases=load(hand,8)
-    data_cases=load(data_hand,12)
+    data_cases=load(data_hand,16)
     forward={'name':'hand-forward','program':json.loads(fixture.read_text()),'expected_outcome':['Ok',['int','1']],
              'expected_staging':[['Eval','1'],['Value','1'],['Ready','0'],['Eval','0'],['Eval','1'],['Value','1'],['Eval','1'],['Value','1'],['Ready','0'],['Value','0'],['Join','0'],['Terminate','0'],['Terminal','0']]}
     cases=[forward]+cases+data_cases

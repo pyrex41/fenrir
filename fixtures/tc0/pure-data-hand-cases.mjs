@@ -73,5 +73,27 @@ export const cases=[
  fixture('closure-in-datatype-field',[Box],({fn,node,fresh})=>[
   fn('main','I64','I64',[],()=>{const k=fresh(),q=fresh(),f=fresh();return node('let',k,int(node,10),
    node('match',node('construct','Box','Box',node('lambda',q,'I64','I64',[],[],prim(node,'add',node('var',q),node('var',k)))),['Box',[f],node('apply',node('var',f),int(node,5))]));})
- ],['Ok',['int','15']],{expected_descriptor_count:'1'})
+ ],['Ok',['int','15']],{expected_descriptor_count:'1'}),
+ // Catalog coverage: gt/ge/mul collection, exact values around 2^53.
+ // 6*7 = 42; (2^53+1) - 2^53 = 1, which a float would round away; 42 + 1 = 43.
+ fixture('gt-ge-mul-around-2-53',[],({fn,node})=>[
+  fn('main','I64','I64',[],()=>node('if',prim(node,'gt',int(node,3),int(node,2)),node('if',prim(node,'ge',int(node,2),int(node,2)),
+   prim(node,'add',prim(node,'mul',int(node,6),int(node,7)),prim(node,'sub',int(node,'9007199254740993'),int(node,'9007199254740992'))),int(node,0)),int(node,1)))
+ ],['Ok',['int','43']]),
+ // sub below I64 minimum inside a let initializer: unwinds through Collect then Let; no emit.
+ fixture('sub-overflow-in-let-initializer',[],({fn,node,fresh})=>[
+  fn('main','I64','I64',['Emit'],()=>{const x=fresh();return node('let',x,prim(node,'sub',int(node,'-9223372036854775808'),int(node,1)),node('let',fresh(),node('emit','unreached',node('var',x)),node('var',x)));})
+ ],['Trap','Overflow'],{expected_emissions:[]}),
+ // neg of the I64 minimum inside an if condition: unwinds through Collect, Collect, If.
+ fixture('neg-min-overflow-in-if-condition',[],({fn,node})=>[
+  fn('main','I64','I64',[],()=>node('if',prim(node,'lt',prim(node,'neg',int(node,'-9223372036854775808')),int(node,0)),int(node,1),int(node,2)))
+ ],['Trap','Overflow']),
+ // 3037000499^2 = 9223372030926249001 fits I64; doubling it does not.
+ fixture('mul-exact-square-then-overflow',[],({fn,node,fresh})=>[
+  fn('main','I64','I64',[],()=>{const a=fresh();return node('let',a,prim(node,'mul',int(node,'3037000499'),int(node,'3037000499')),prim(node,'mul',node('var',a),int(node,2)));})
+ ],['Trap','Overflow']),
+ // The one division that overflows: minimum / -1.
+ fixture('div-min-by-minus-one',[],({fn,node})=>[
+  fn('main','I64','I64',[],()=>prim(node,'div',int(node,'-9223372036854775808'),int(node,-1)))
+ ],['Trap','Overflow'])
 ];
