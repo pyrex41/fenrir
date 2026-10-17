@@ -1,10 +1,13 @@
 # TC0-A gate evaluator — authority review packet
 
-Status: **owner-reviewed and registered (2026-10-11).** The project owner answered the
-review questions below; the gate and manifest are registered as `tc0-a-qualification`
-in `.pi/fenrir-workflow.json`. Its verdicts count as TC0-A qualification verdicts
-only under the recorded decisions and waivers. They are development-grade: the
-evaluator itself runs trusted-local (decision 6).
+Status: **registered (2026-10-11); verdicts are development-grade.** The project owner
+registered the gate as `tc0-a-qualification` in `.pi/fenrir-workflow.json` and accepted
+the repair-isolation waiver (decision 3). The record below attributes decisions 2, 5
+and 7 to the packet author, records no owner preference on 1, and states 4 and 6 as
+accepted without attribution. A PASS means single-author differential agreement under these decisions
+and waivers, with the evaluator trusted-local (decision 6). It is not independent
+qualification; the open limits are listed in the
+[README](../../README.md#limits-of-the-tc0-a-pass).
 
 ## What is proposed
 
@@ -89,5 +92,5 @@ the controller enforces through source hashes.
 
 ## Not claimed
 
-No TC0-A qualification, no G1 release, no isolation guarantee beyond the measured
+No independent TC0-A qualification, no G1 release, no isolation guarantee beyond the measured
 probes, and no global minimality or exhaustive exploration beyond the stated bounds.
