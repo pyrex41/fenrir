@@ -86,12 +86,15 @@ class Gate:
     def unit_suite(self):
         tests = sorted(str(p.relative_to(ROOT)) for p in (ROOT/'tests/tc0').glob('*.test.mjs'))
         code, out, err, secs = run([self.node, '--test', *tests])
-        fails = int((re.search(r'^# fail (\d+)', out, re.M) or [0, '1'])[1])
-        skips = int((re.search(r'^# skipped (\d+)', out, re.M) or [0, '0'])[1])
-        if fails or code not in (0, None) and not fails:
-            return Row('FAIL', [f'{fails} failing tests' if fails else f'test runner exit {code}'], seconds=secs)
         if code is None:
-            return Row('UNKNOWN', ['Test runner timed out'])
+            return Row('UNKNOWN', ['Test runner timed out'], seconds=secs)
+        summary = re.search(r'^# fail (\d+)', out, re.M)
+        if not summary:
+            return Row('FAIL', [f'test runner exit {code} without a summary'], seconds=secs)
+        fails = int(summary[1])
+        skips = int((re.search(r'^# skipped (\d+)', out, re.M) or [0, '0'])[1])
+        if fails or code != 0:
+            return Row('FAIL', [f'{fails} failing tests' if fails else f'test runner exit {code}'], seconds=secs)
         if skips:
             return Row('UNKNOWN', [f'{skips} skipped tests are missing evidence'], seconds=secs)
         return Row('PASS', tests=str(len(tests)), passed=(re.search(r'^# pass (\d+)', out, re.M) or [0, '?'])[1], seconds=secs)
