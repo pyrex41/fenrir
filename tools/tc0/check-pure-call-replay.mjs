@@ -44,10 +44,7 @@ const required = [
   'spec/tc0/pure-call-demo.json',
   'fixtures/tc0/pure-call-forward.json',
   'fixtures/tc0/pure-call-hand-cases.mjs',
-  'fixtures/tc0/pure-data-hand-cases.mjs',
-  'tests/tc0/pure-call-machine.test.mjs',
-  'tests/tc0/pure-call-artifact.test.mjs',
-  'tests/tc0/pure-data.test.mjs'
+  'fixtures/tc0/pure-data-hand-cases.mjs'
 ];
 for (const p of required)
   if (!Object.hasOwn(report.sources, resolve(root, p)))

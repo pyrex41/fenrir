@@ -251,7 +251,6 @@ def main():
            ROOT/'tools/tc0/run-pure-call.mjs',ROOT/'tools/tc0/pure-call-artifact.mjs',
            ROOT/'tools/tc0/canonical.mjs',ROOT/'runtime/tc0/pure-call-machine.mjs',
            *MODEL_FILES,ROOT/'spec/tc0/pure-call-demo.json',
-           ROOT/'tests/tc0/pure-call-machine.test.mjs',ROOT/'tests/tc0/pure-call-artifact.test.mjs',ROOT/'tests/tc0/pure-data.test.mjs',
            *oracle.identity_paths(),node]
     before={str(p):probe.digest(p) for p in paths}
     def load(module,cap):

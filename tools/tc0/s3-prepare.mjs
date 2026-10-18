@@ -76,6 +76,7 @@ const WITHHELD = [
   'tests/tc0/requirement-ledger.test.mjs',
   'spec/tc0/tc0-a-requirements.json',
   'tools/check-tc0-a-gate.py',
+  'attic',
   'tools/tc0/pure-call-mutants.mjs',
   'tests/tc0/pure-call-mutants.test.mjs'
 ];
@@ -154,6 +155,15 @@ const failingTests = readdirSync(join(workspace, 'tests/tc0'))
   })
   .map(n => 'tests/tc0/' + n);
 for (const p of failingTests) rmSync(join(workspace, p));
+// What remains must pass as a whole on the defective candidate, or the packet is refused.
+const shipped = readdirSync(join(workspace, 'tests/tc0'))
+  .filter(n => n.endsWith('.test.mjs'))
+  .map(n => 'tests/tc0/' + n);
+try {
+  execFileSync(process.execPath, ['--test', ...shipped], { cwd: workspace, stdio: 'pipe' });
+} catch {
+  throw new Error('Shipped regression suite fails on the defective candidate after withholding');
+}
 mkdirSync(join(workspace, 's3'), { recursive: true });
 writeFileSync(join(workspace, 's3/failure-bundle.json'), JSON.stringify(bundle, null, 1) + '\n');
 writeFileSync(
