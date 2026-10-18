@@ -1,6 +1,6 @@
 # Pi + CLM handoff — Fenrir / Gleipnir
 
-Updated 2026-10-08. Read this first when opening Fenrir on a new developer
+Updated 2026-10-08; TC0-A status refreshed 2026-10-17. Read this first when opening Fenrir on a new developer
 machine with Pi and `pi-clm`.
 
 ## Start a fresh session
@@ -51,9 +51,11 @@ and `workflow_research.md`; do not treat the architecture goal as implemented.
 
 The project is early executable bootstrap work. It has Shen models, candidate
 implementations, fixtures, reduction/replay evidence and a narrow Solo5 arithmetic
-spike. **TC0-A / G1 qualification is still UNKNOWN; independent candidate repair
-has not been executed.** A green development or controller test does not qualify
-the language.
+spike. **TC0-A / G1 has a provisional, development-grade gate PASS
+(single-author differential agreement); see "Limits of the TC0-A PASS" in
+`README.md`.** One repair by a separate local subagent was evaluated, with
+instruction-only isolation. A green development or controller test does not
+qualify the language.
 
 The project-local `fenrir-workflow` extension and its manifest are tracked at
 `.pi/extensions/fenrir-workflow/` and `.pi/fenrir-workflow.json`. Keep `pi-clm`
@@ -86,16 +88,16 @@ the proposed cumulative envelope, report/footer checks and live prerequisites.
 Keep the older failed-run uncertainty intact. Restore exact immutable inputs and
 recheck those gates before any new live bootstrap.
 
-In parallel, the larger useful milestone remains a qualified pure TC0-A repair
-loop: complete the model/candidate/evaluator slice, find and reduce a defect,
-replay its exact original failure, obtain an independently reviewed candidate-
-only repair, then evaluate it freshly. The configured workflow has three
+In parallel, the larger useful milestone is turning the provisional TC0-A PASS
+into an independent one: an implementation or hand-derived traces from outside
+the author lineage, and a repair under enforced isolation on a defect the shipped
+tests do not point at. The configured workflow has three
 development checks: `workflow-tests` (controller only), `tc0-candidate-tests`
 (TC0 validator, machine, generation, reduction and replay unit tests) and
 `tc0-pure-call-oracle` (fresh Shen-vs-candidate hand-case agreement, then strict
 replay; BLOCKED until `build/toolchain/shen-scheme` links a pinned shen-scheme
-build). The required `tc0-a-qualification` evaluator is absent by design. Do not
-invent one or promote development checks to qualification.
+build). The required `tc0-a-qualification` check is the registered gate
+`tools/check-tc0-a-gate.py`; do not promote development checks to qualification.
 
 The native candidate/replay evidence index and strict repair boundary are in
 `tools/solo5/native-arithmetic/REPAIR_HANDOFF.md`. Historical build outputs live

@@ -1,0 +1,237 @@
+{
+ "schema": "tc0-a-gate-run/3",
+ "authority": "owner-registered; development-grade, single-author differential agreement",
+ "qualification": "PASS",
+ "verdict": "PASS",
+ "claims": [
+  "canonical-program",
+  "defect-discovered-and-reduced",
+  "exact-original-failure-replay",
+  "fresh-repair-evaluation",
+  "hand-derived-trace",
+  "model-candidate-agreement"
+ ],
+ "waivers": [
+  "Repair isolation: instruction-only accepted by project owner (pyrex41) on 2026-10-11; revisit: Re-run the repair under enforced isolation (a separate container receiving only the workspace) before relying on this gate beyond G1."
+ ],
+ "head": "fa9ed1836d5353d94efd0f3866f3b7f437396fd7",
+ "manifest": "spec/tc0/tc0-a-requirements.json",
+ "evaluator": "tools/check-tc0-a-gate.py",
+ "aggregation": "TC0-GATE (02 \u00a714): any required row FAIL -> FAIL; else any BLOCKED -> BLOCKED; else any UNKNOWN -> UNKNOWN; else PASS (precedence accepted by the owner, 2026-10-11). A mutant killed on no program is FAIL. Every row's reasons are reported whatever the aggregate. Optional rows never satisfy a required row.",
+ "seconds": 244.28,
+ "rows": [
+  {
+   "id": "source-identity",
+   "required": true,
+   "status": "PASS",
+   "reasons": [],
+   "detail": {
+    "head": "fa9ed1836d5353d94efd0f3866f3b7f437396fd7"
+   },
+   "seconds": 0.01
+  },
+  {
+   "id": "toolchain-pinned",
+   "required": true,
+   "status": "PASS",
+   "reasons": [],
+   "detail": {
+    "shen": "/nix/store/aslpvi23jg4lpxdbdanmmg8ch10c4n0h-shen-scheme-0.26/bin/shen-scheme",
+    "seconds": 6.86
+   },
+   "seconds": 6.86
+  },
+  {
+   "id": "unit-suite",
+   "required": true,
+   "status": "PASS",
+   "reasons": [],
+   "detail": {
+    "tests": "15",
+    "passed": "104",
+    "seconds": 10.13
+   },
+   "seconds": 10.13
+  },
+  {
+   "id": "hand-agreement-and-replay",
+   "required": true,
+   "status": "PASS",
+   "reasons": [],
+   "detail": {
+    "cases": "24",
+    "seconds": 10.97
+   },
+   "seconds": 10.97
+  },
+  {
+   "id": "exact-arithmetic",
+   "required": true,
+   "status": "PASS",
+   "reasons": [],
+   "detail": {
+    "cases": "2908",
+    "seconds": 9.16
+   },
+   "seconds": 9.16
+  },
+  {
+   "id": "exhaustive-small",
+   "required": true,
+   "status": "PASS",
+   "reasons": [],
+   "detail": {
+    "programs": "5695",
+    "seconds": 64.56
+   },
+   "seconds": 64.6
+  },
+  {
+   "id": "mutant-reverse-operands",
+   "required": true,
+   "status": "PASS",
+   "reasons": [],
+   "detail": {
+    "killed": "3940",
+    "survived": "1755",
+    "crashed": "0"
+   },
+   "seconds": 0.0
+  },
+  {
+   "id": "mutant-bad-overflow",
+   "required": true,
+   "status": "PASS",
+   "reasons": [],
+   "detail": {
+    "killed": "233",
+    "survived": "5462",
+    "crashed": "0"
+   },
+   "seconds": 0.0
+  },
+  {
+   "id": "mutant-arm-by-position",
+   "required": true,
+   "status": "PASS",
+   "reasons": [],
+   "detail": {
+    "killed": "975",
+    "survived": "4720",
+    "crashed": "0"
+   },
+   "seconds": 0.0
+  },
+  {
+   "id": "catalog-coverage",
+   "required": true,
+   "status": "PASS",
+   "reasons": [],
+   "detail": {
+    "covered": "112/112"
+   },
+   "seconds": 2.55
+  },
+  {
+   "id": "discovery-reduction-replay",
+   "required": true,
+   "status": "PASS",
+   "reasons": [],
+   "detail": {
+    "arm-by-position": {
+     "discovered_index": "12",
+     "nodes": "64->17",
+     "seconds": 29.99
+    },
+    "reverse-operands": {
+     "discovered_index": "0",
+     "nodes": "64->15",
+     "seconds": 16.71
+    }
+   },
+   "seconds": 49.8
+  },
+  {
+   "id": "candidate-boundary",
+   "required": true,
+   "status": "PASS",
+   "reasons": [],
+   "detail": {
+    "seconds": 2.89
+   },
+   "seconds": 2.89
+  },
+  {
+   "id": "requirement-ledger",
+   "required": true,
+   "status": "PASS",
+   "reasons": [],
+   "detail": {
+    "summary": {
+     "DEVELOPMENT-EVIDENCE": "24",
+     "UNKNOWN": "0",
+     "BLOCKED": "0",
+     "NOT-EXECUTED": "0",
+     "DEFERRED-TO-B-C": "3"
+    }
+   },
+   "seconds": 0.05
+  },
+  {
+   "id": "independent-repair-fresh",
+   "required": true,
+   "status": "PASS",
+   "reasons": [],
+   "detail": {
+    "steps": {
+     "protected-inputs": "PASS",
+     "candidate-changed": "PASS",
+     "original-replay": "PASS",
+     "repaired-replay": "PASS",
+     "hand-case-agreement": "PASS",
+     "regressions": "PASS",
+     "held-out-generated-pure-call": "PASS",
+     "held-out-generated-pure-data": "PASS",
+     "held-out-exhaustive-5": "PASS",
+     "mutation-control-defective-4": "PASS"
+    },
+    "seconds": 86.96
+   },
+   "seconds": 87.17
+  },
+  {
+   "id": "independent-repair-isolation",
+   "required": true,
+   "status": "PASS",
+   "reasons": [],
+   "detail": {
+    "isolation": "instruction-only",
+    "waiver": "Repair isolation: instruction-only accepted by project owner (pyrex41) on 2026-10-11; revisit: Re-run the repair under enforced isolation (a separate container receiving only the workspace) before relying on this gate beyond G1."
+   },
+   "seconds": 0.0
+  },
+  {
+   "id": "exact-arithmetic-second-port",
+   "required": false,
+   "status": "DEFERRED",
+   "reasons": [
+    "Optional second port unavailable or stale: FileNotFoundError: [Errno 2] No such file or directory: '/home/user/fenrir/build/toolchain/tc0-pure-call-oracle'"
+   ],
+   "detail": {},
+   "seconds": 0.05
+  }
+ ],
+ "evidence_sha256": {
+  "hand.json": "d04c46b0bbd1cc6db6305bf23f01897e64ba34e6b688e570ae8426fe53d05258",
+  "hand-replay.json": "7ca4d80b227f48584da5c7e69829a2dfe069f1f3867112caab839d87f465ad3e",
+  "arith.json": "697f69a995674a0b0c71b8d56bf53375b10d18cfdc8b715c48dde979bd8feb91",
+  "exhaustive-5.json": "07755acf1d87be44447e25335352a76c325d56262d97b0c41a6f5455d5937129",
+  "coverage.json": "63968de54aa0024e5515f91d088e6c555ddcf535a2a73a325c2c3d4bee14a5a4",
+  "s2-arm-by-position.json": "760ae101e65a3bf75596904798bf7db90763c491f96faa7cfb722ad7a494d7b0",
+  "s2-arm-by-position-replay.json": "00e87ddb8c6864969048e08f2f9f0570e82a4835243f8f6fac1f94a4691ff615",
+  "s2-reverse-operands.json": "03c65bb2d331c2743ddb133067b62df1c479a41fbb11493510bcfa349e7d22b5",
+  "s2-reverse-operands-replay.json": "78d38d19a3894667f861f7569c1c730bea769e602087e2bc2dab0fc78e72c0bc",
+  "sandbox.json": "18f190c006ab98ae8f700250406e993568e9e3f68b1231beff90981b1e24bc85",
+  "s3-evaluation.json": "a6cba1dfe98e59f46c6f6c214e2df1bb4ac84649a7e03e4f7e6452664af04462"
+ }
+}

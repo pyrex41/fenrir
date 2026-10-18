@@ -11,15 +11,51 @@ structured development candidates, checked artifacts, hand fixtures, generated
 counterexamples, reduction and strict replay. A small arithmetic candidate has
 also run natively inside Solo5 with an external Shen comparison.
 
-**TC0-A (the pure slice, G1) qualifies at `1db7471` under recorded owner waivers.**
-The owner-reviewed gate, registered as `tc0-a-qualification`, ran through the
-workflow controller and returned a qualification PASS: 15 of 15 required rows, and
-all six required claims. The waivers matter. The independent repair used
-instruction-only isolation, the scopes are bounded (grammar up to 5 nodes, three
-mutants), and the evaluator runs trusted-local with only candidates sandboxed. See
+**TC0-A (the pure slice, G1) has a provisional, development-grade gate PASS:
+single-author differential agreement, not independent qualification.** The gate
+registered as `tc0-a-qualification` returns PASS on 15 of 15 required rows and all
+six claims; committed receipts are in [`campaigns/tc0/receipts/`](campaigns/tc0/receipts/).
+What that PASS does not establish is listed under
+[Limits of the TC0-A PASS](#limits-of-the-tc0-a-pass): the model, candidate,
+evaluator and injected defect share one author lineage, the repair was isolated by
+instruction only, the scopes are bounded and the evaluator runs trusted-local. See
 [the review](campaigns/tc0/G1_EVALUATOR_REVIEW.md). Later source changes need a
 fresh run. Slices B and C, full TC0, native execution and everything after them
 are not qualified.
+
+## Limits of the TC0-A PASS
+
+An external review (17 October 2026) re-ran the gate from a clean checkout and
+reproduced every published count. It also found these limits, which stay open
+until fixed:
+
+- **No independent implementation.** One author lineage wrote the Shen model, the
+  JS candidate, the Python glue that translates between them and the evaluator.
+  Agreement rules out divergence, not a shared misreading of the spec. Only the
+  exact-arithmetic ledger has a third-party oracle (Python integers).
+- **The repair was easy to localize.** The S3 workspace withholds the mutant tooling
+  but ships `tests/tc0/pure-data.test.mjs`. With the defect applied, three of its tests
+  fail and point at the match arm. The repairer shared the packet author's model
+  family, with isolation by instruction only.
+- **Catalog coverage is self-referential.** The 112 transition keys are listed in
+  `tools/tc0/pure-call-coverage.mjs`, not derived from `spec/tc0/pure-call-demo.json`,
+  and the catalog has had no independent review.
+- **Mutant rows are weaker than the plan's §16.** A kill is any trace difference,
+  without a required classification or a retained reduced reproducer (bad-overflow
+  has none). Three of the twelve mandatory mutants exist, and there is no
+  equivalent-mutant control.
+- **The oracle compares control flow, events and outcome**, not intermediate values,
+  so a wrong value that affects neither goes unseen.
+- **Most review decisions were the packet author's.** The owner registered the gate
+  and accepted the isolation waiver; aggregation, survivor policy, protected inputs
+  and the claim mapping were decided by the packet author
+  ([decisions](campaigns/tc0/G1_EVALUATOR_REVIEW.md#decisions-2026-10-11)).
+- **The candidate carries its own mutant switches** (`reverseOperands`,
+  `armByPosition`, `wrapOverflow` in `runtime/tc0/pure-call-machine.mjs`).
+  Moving them into harness-applied patches, and reformatting the candidate, is
+  deferred to the enforced-isolation repair rerun: the retained repair patch is a
+  diff against the candidate's current text, and its waiver is bound to that
+  patch's SHA-256.
 
 A percentage would be misleading: a small demonstrated arithmetic/closure slice
 is very different from the compiler, runtime and tools needed for the full vision.
@@ -33,7 +69,7 @@ language release**.
 | Counterexample loop | Generated discovery and typed reduction for three candidate mutants, exact original/minimized replay, and an S3 clean-room repair packet with a frozen, sandboxed evaluator; one independent repair evaluated DEVELOPMENT-PASS | Enforced repairer isolation (repair 1 used instruction-only isolation) and qualified acceptance |
 | Native arithmetic spike | Small C/Solo5 candidate; historical model comparisons, hand cases, generated failure and cold replay | Full language backend, machine-level determinism, native startup/counter closure |
 | Native host | Go orchestration, bounded readers/output, source inventories, owned process/container cleanup, session/replay and selected campaigns | Current-source live validation of recent repairs; full hostile-peer/corpus/perturbation obligations |
-| Qualification | Registered, owner-reviewed TC0-A gate: qualification PASS at `1db7471` with all six claims, under waivers; requirement ledger, pinned toolchain flake, measured candidate sandbox | Waiver-free G1 (enforced repairer isolation, an isolated evaluator); B/C/full TC0 qualification |
+| Qualification | Registered TC0-A gate: provisional development-grade PASS with all six claims, under waivers and the [limits](#limits-of-the-tc0-a-pass) above; requirement ledger, pinned toolchain flake, measured candidate sandbox | Waiver-free G1 (enforced repairer isolation, an isolated evaluator); B/C/full TC0 qualification |
 | Later language/product phases | Requirements and dependency order | Qualified handlers, concurrency/lifetimes/time, production compiler/runtime, practical surface language, package tooling and deployment |
 
 The current pure candidates are development machines, not a production Fenrir
@@ -61,7 +97,7 @@ Evidence from this pass (development only):
   `bytes_index` off-by-one bound, a non-tail match arm, reversed tuple fields,
   a shallow `eq` and swapped constructor metadata.
 - `tests/tc0/pure-data.test.mjs` adds 25 validator, machine, reducer and replay
-  tests; the full TC0 suite passes (108 tests).
+  tests.
 
 **Generated discovery and reduction (S2) over the data constructs.** A finite
 deterministic family (`tools/tc0/pure-data-generate.mjs`, 24 configurations)
@@ -127,9 +163,8 @@ model was flagged on the 15 results equal to the maximum.
 **Requirement ledger (G0 row).** [`spec/tc0/requirement-ledger-a.json`](spec/tc0/requirement-ledger-a.json)
 lists each TC0-A and G1-relevant G0 requirement with its evidence or its gap, and
 `tools/tc0/check-requirement-ledger.mjs` keeps it honest: no verdict statuses, every
-cited file exists, and every open row states its gap. Current rows: 23 with
-development evidence, 1 UNKNOWN (the gate itself: no registered TC0-A evaluator),
-and 3 deferred to B/C. The mandatory bad-overflow mutant (`--wrap-overflow`, two's-complement wrap
+cited file exists, and every open row states its gap. Current rows: 24 with
+development evidence and 3 deferred to B/C. The mandatory bad-overflow mutant (`--wrap-overflow`, two's-complement wrap
 instead of the trap) is now in the candidate; it is killed on exactly the Overflow
 programs of the exhaustive scope (233 at 5 nodes).
 
@@ -189,9 +224,10 @@ against a clean, committed HEAD and aggregates per TC0-GATE. That includes
 rebuilding an S3 packet and re-evaluating the retained independent patch. After
 the owner's review decisions
 ([`campaigns/tc0/G1_EVALUATOR_REVIEW.md`](campaigns/tc0/G1_EVALUATOR_REVIEW.md)), it
-is registered as `tc0-a-qualification`. Through the workflow controller it returned
-a qualification PASS at `1db7471`: 15 of 15 required rows, all six claims, and one
-recorded waiver (instruction-only repairer isolation). A negative control with a
+is registered as `tc0-a-qualification`. It returns a development-grade PASS:
+15 of 15 required rows, all six claims, and one recorded waiver (instruction-only
+repairer isolation). Each run's `gate.json` records a SHA-256 per evidence file;
+copies are committed under [`campaigns/tc0/receipts/`](campaigns/tc0/receipts/). A negative control with a
 subtly broken candidate gave FAIL.
 
 **S3 repair packet and independent repair 1.** See
@@ -214,7 +250,7 @@ not enforced, and it shares a model family with the packet author; see
 [`campaigns/tc0/s3/independent-repair-1.md`](campaigns/tc0/s3/independent-repair-1.md).
 
 Not established: a repair under enforced repairer isolation, and anything at the B/C level (`Outcome`, `SendResult`,
-`ReceiveResult` and the runtime operations). Qualification remains **UNKNOWN**.
+`ReceiveResult` and the runtime operations). B/C qualification remains **UNKNOWN**.
 
 ## Latest native-host progress
 
@@ -298,7 +334,8 @@ capabilities. This is a plan, not an implemented or qualified property; see
 [plan §19](03_PHASED_EXECUTION_PLAN.md#19-direction-amendment-unikernel-target-and-agent-back-pressure).
 
 Overall language qualification and native startup/counter closure remain
-**UNKNOWN** beyond TC0-A. TC0-A qualifies at `1db7471` under the recorded waivers.
+**UNKNOWN** beyond TC0-A. TC0-A has a provisional, development-grade PASS under the
+recorded waivers and [limits](#limits-of-the-tc0-a-pass).
 
 ## Plans and task packets
 
@@ -312,15 +349,16 @@ Overall language qualification and native startup/counter closure remain
 - [Development build receipt v2](spec/solo5/native-arithmetic-demo/build-receipt-v2.md)
 
 Task packets propose work; they do not authorize execution or prove completion.
-The specification ZIP is a historical v0.1 snapshot, not current authority.
+The historical v0.1 specification ZIP and superseded TC0 lineages are in [`attic/`](attic/), not current authority.
 
 ## Running development checks
 
 The project-local [Pi workflow extension](.pi/extensions/fenrir-workflow/README.md)
 drives bounded development work alongside `pi-clm` continuous context. Review the
 manifest, available prerequisites and finite scope before starting; do not resume
-a blocked pass merely because some tests pass. Its default manifest intentionally
-has no TC0 qualification evaluator and cannot fabricate qualification PASS.
+a blocked pass merely because some tests pass. Its manifest registers the TC0-A
+gate as `tc0-a-qualification`; the controller never promotes development checks
+to a qualification verdict.
 
 ```sh
 # Controller tests only; Node 22.19+, no downloaded dependencies/model calls.
@@ -354,4 +392,5 @@ prerequisites; ordinary unit tests do not supply them.
 
 Private development captures live under ignored `build/` and workflow journals.
 They are local source-bound evidence, not automatically available from a clean
-checkout or published qualification receipts.
+checkout. Gate summaries (`gate.json`, with evidence digests) are copied into
+`campaigns/tc0/receipts/`; the bulk evidence they hash stays under `build/`.

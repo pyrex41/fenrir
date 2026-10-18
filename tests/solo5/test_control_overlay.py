@@ -8,9 +8,16 @@ m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 
 
+def pinned_spt_core(case):
+    path = ROOT/'build/vendor/solo5/tenders/spt/spt_core.c'
+    if not path.is_file():
+        case.skipTest('Pinned vendor unavailable; live overlay build remains unverified')
+    return path.read_bytes()
+
+
 class OverlayTests(unittest.TestCase):
     def test_exact_patch_is_narrow_and_repeatable(self):
-        original = (ROOT/'build/vendor/solo5/tenders/spt/spt_core.c').read_bytes()
+        original = pinned_spt_core(self)
         patched,diff = m.apply(original)
         self.assertEqual((patched,diff),m.apply(original))
         self.assertIn('static bool fenrir_control_stdin = false;',patched.decode())
@@ -23,7 +30,7 @@ class OverlayTests(unittest.TestCase):
         self.assertIn('Copyright (c) 2015-2019',patched.decode())
 
     def test_moving_or_already_patched_source_rejected(self):
-        original = (ROOT/'build/vendor/solo5/tenders/spt/spt_core.c').read_bytes()
+        original = pinned_spt_core(self)
         patched,_ = m.apply(original)
         for bad in [b'',original+b'\n',patched]:
             with self.assertRaises(ValueError):
