@@ -1,10 +1,49 @@
 // Source-bound identity helper; trusted-local DEVELOPMENT, not evaluator authority.
-import {readFileSync} from 'node:fs';
-import {createHash} from 'node:crypto';
-import {hash,stateHash} from './pure-call-replay.mjs';
-const digest=b=>createHash('sha256').update(b).digest('hex');
-const source=p=>digest(readFileSync(new URL('../../'+p,import.meta.url)));
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { hash, stateHash } from './pure-call-replay.mjs';
+const digest = b => createHash('sha256').update(b).digest('hex');
+const source = p => digest(readFileSync(new URL('../../' + p, import.meta.url)));
 // candidate_path binds a candidate other than runtime/tc0/pure-call-machine.mjs (e.g. a preserved defective original).
-export function pureCallHeader(machine,program,input,reference,oracleIdentity,{run_id='pure-call-development',steps='200',candidate_path=null}={}){
- return {schema:'pure-call-demo-tape/1',profile:'pure-call-demo-step/1',run_id,program_hash:hash(program),input_hash:hash(input),reference_hash:hash(reference),oracle_hash:hash(oracleIdentity),catalog_hash:source('spec/tc0/pure-call-demo.json'),candidate_hash:hash({source:candidate_path?digest(readFileSync(candidate_path)):source('runtime/tc0/pure-call-machine.mjs'),reverse_operands:machine.reverseOperands,wrap_overflow:machine.wrapOverflow===true,arm_by_position:machine.armByPosition===true}),adapter_hash:hash(['tools/tc0/pure-call-replay.mjs','tools/tc0/pure-call-replay-header.mjs','tools/tc0/pure-call-artifact.mjs','tools/tc0/canonical.mjs'].map(source)),toolchain_hash:digest(readFileSync(process.execPath)),environment_hash:hash({node:process.version,platform:process.platform,arch:process.arch,mode:'trusted-local-development'}),initial_state_hash:stateHash(machine),bounds:{steps}};
+export function pureCallHeader(
+  machine,
+  program,
+  input,
+  reference,
+  oracleIdentity,
+  { run_id = 'pure-call-development', steps = '200', candidate_path = null } = {}
+) {
+  return {
+    schema: 'pure-call-demo-tape/1',
+    profile: 'pure-call-demo-step/1',
+    run_id,
+    program_hash: hash(program),
+    input_hash: hash(input),
+    reference_hash: hash(reference),
+    oracle_hash: hash(oracleIdentity),
+    catalog_hash: source('spec/tc0/pure-call-demo.json'),
+    candidate_hash: hash({
+      source: candidate_path
+        ? digest(readFileSync(candidate_path))
+        : source('runtime/tc0/pure-call-machine.mjs'),
+      variant: machine.variant ?? 'reference'
+    }),
+    adapter_hash: hash(
+      [
+        'tools/tc0/pure-call-replay.mjs',
+        'tools/tc0/pure-call-replay-header.mjs',
+        'tools/tc0/pure-call-artifact.mjs',
+        'tools/tc0/canonical.mjs'
+      ].map(source)
+    ),
+    toolchain_hash: digest(readFileSync(process.execPath)),
+    environment_hash: hash({
+      node: process.version,
+      platform: process.platform,
+      arch: process.arch,
+      mode: 'trusted-local-development'
+    }),
+    initial_state_hash: stateHash(machine),
+    bounds: { steps }
+  };
 }

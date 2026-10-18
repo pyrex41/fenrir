@@ -10,6 +10,8 @@ Evaluates a repairer's workspace (from tools/tc0/s3-prepare.mjs) against its pac
  4. The repaired candidate replays each retained failure Exact and Admitted.
  5. Fresh Shen agreement on the hand cases (workspace checker, repaired candidate).
  6. Workspace regression suite.
+ 6b. Held-out regressions: the tests the packet withheld because they failed on the
+    defective original, run in a trusted export with the repaired candidate.
  7. Held-out (never in the workspace): the generated pure-call and pure-data families,
     and every exhaustive-small program up to 5 nodes, against fresh Shen observations.
  8. Mutation control: the same held-out exhaustive scope at 4 nodes must reject the
@@ -116,6 +118,13 @@ def main():
         tests = sorted(str(p.relative_to(workspace)) for p in (workspace/'tests/tc0').glob('*.test.mjs'))
         r, secs = run(['unshare', '-n', '--', node, '--test', *tests], workspace, env={'PATH': '/usr/bin:/bin'})
         record('regressions', r.returncode == 0, seconds=secs, boundary='network namespace and empty environment only', tests=tests, tail=r.stdout[-1500:])
+        # 6b. Held-out regressions (manifest schema /2); none withheld is recorded, not skipped.
+        held = manifest.get('withheld_failing_tests', [])
+        if held:
+            r, secs = run(['unshare', '-n', '--', node, '--test', *held], evaluated, env={'PATH': '/usr/bin:/bin'})
+            record('held-out-regressions', r.returncode == 0, seconds=secs, boundary='network namespace and empty environment only', tests=held, tail=r.stdout[-1500:])
+        else:
+            record('held-out-regressions', True, tests=[], note='No shipped test failed on the defective original')
         # 7. Held-out generated families.
         spec = importlib.util.spec_from_file_location('s3_pc', evaluated/'tools/check-tc0-pure-call.py')
         pc = importlib.util.module_from_spec(spec)
@@ -145,10 +154,10 @@ def main():
             disagreements = summary.get('disagreements')
             ok = (r.returncode == 0 and disagreements == 0) if want_clean else (r.returncode == 1 and isinstance(disagreements, int) and disagreements > 0)
             record(name, ok, seconds=secs, boundary='sandbox' if want_clean else 'trusted defective original', programs=summary.get('programs'), disagreements=disagreements, stderr=r.stderr[-1000:])
-    required = ['protected-inputs', 'candidate-changed', 'original-replay', 'repaired-replay', 'hand-case-agreement', 'regressions',
+    required = ['protected-inputs', 'candidate-changed', 'original-replay', 'repaired-replay', 'hand-case-agreement', 'regressions', 'held-out-regressions',
                 'held-out-generated-pure-call', 'held-out-generated-pure-data', 'held-out-exhaustive-5', 'mutation-control-defective-4']
     verdict = 'DEVELOPMENT-PASS' if [s['step'] for s in steps] == required and all(s['status'] == 'PASS' for s in steps) else 'FAIL'
-    report = {'schema': 'tc0-s3-repair-evaluation/1', 'qualification': 'UNKNOWN', 'verdict': verdict,
+    report = {'schema': 'tc0-s3-repair-evaluation/2', 'qualification': 'UNKNOWN', 'verdict': verdict,
               'independent_repair': 'UNKNOWN: the evaluator cannot establish who authored the patch',
               'start_revision': manifest['start_revision'], 'evaluator_sha256': sha(__file__),
               'packet': {'bundle_sha256': sha(bundle_path), 'defective_sha256': sha(defective), 'manifest_sha256': sha(packet/'workspace-manifest.json')},
