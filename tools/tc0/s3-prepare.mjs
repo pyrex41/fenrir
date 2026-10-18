@@ -164,6 +164,8 @@ try {
 } catch {
   throw new Error('Shipped regression suite fails on the defective candidate after withholding');
 }
+// Those runs leave caches under build/, which the evaluator ignores; ship none.
+rmSync(join(workspace, 'build'), { recursive: true, force: true });
 mkdirSync(join(workspace, 's3'), { recursive: true });
 writeFileSync(join(workspace, 's3/failure-bundle.json'), JSON.stringify(bundle, null, 1) + '\n');
 writeFileSync(
