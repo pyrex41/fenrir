@@ -52,6 +52,10 @@ until fixed:
   ([decisions](campaigns/tc0/G1_EVALUATOR_REVIEW.md#decisions-2026-10-11)).
 - **The candidate carries its own mutant switches** (`reverseOperands`,
   `armByPosition`, `wrapOverflow` in `runtime/tc0/pure-call-machine.mjs`).
+  Moving them into harness-applied patches, and reformatting the candidate, is
+  deferred to the enforced-isolation repair rerun: the retained repair patch is a
+  diff against the candidate's current text, and its waiver is bound to that
+  patch's SHA-256.
 
 A percentage would be misleading: a small demonstrated arithmetic/closure slice
 is very different from the compiler, runtime and tools needed for the full vision.
