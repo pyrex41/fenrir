@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Owner-reviewed, registered TC0-A gate evaluator (02 §14 TC0-GATE).
+"""Registered TC0-A gate evaluator (02 §14 TC0-GATE), `tc0-a-qualification`.
 
 Runs trusted-local under the G1 scope and waivers recorded in
 campaigns/tc0/G1_EVALUATOR_REVIEW.md; registration does not establish isolation.
@@ -16,6 +16,12 @@ Authority: the verdict is a qualification verdict only when the manifest is
 owner-reviewed AND .pi/fenrir-workflow.json registers this script as
 `tc0-a-qualification`; otherwise `qualification` stays UNKNOWN. Waivers (such as
 accepted instruction-only repairer isolation) are listed in every report.
+
+Scope of a PASS: development-grade, single-author differential agreement. The
+model, candidate, evaluator and the defect were written by one author lineage, and
+the evaluator runs trusted-local; see campaigns/tc0/G1_EVALUATOR_REVIEW.md.
+gate.json records a SHA-256 for each evidence file so a copied receipt can be
+checked against a retained run directory.
 
 Under the workflow controller (FENRIR_CHECK_NONCE set) stdout carries exactly one
 fenrir.check.v1 report; logs go to stderr. Exit: PASS 0, FAIL 1, UNKNOWN/BLOCKED 2.
@@ -89,12 +95,15 @@ class Gate:
     def unit_suite(self):
         tests = sorted(str(p.relative_to(ROOT)) for p in (ROOT/'tests/tc0').glob('*.test.mjs'))
         code, out, err, secs = run([self.node, '--test', *tests])
-        fails = int((re.search(r'^# fail (\d+)', out, re.M) or [0, '1'])[1])
-        skips = int((re.search(r'^# skipped (\d+)', out, re.M) or [0, '0'])[1])
-        if fails or code not in (0, None) and not fails:
-            return Row('FAIL', [f'{fails} failing tests' if fails else f'test runner exit {code}'], seconds=secs)
         if code is None:
-            return Row('UNKNOWN', ['Test runner timed out'])
+            return Row('UNKNOWN', ['Test runner timed out'], seconds=secs)
+        summary = re.search(r'^# fail (\d+)', out, re.M)
+        if not summary:
+            return Row('FAIL', [f'test runner exit {code} without a summary'], seconds=secs)
+        fails = int(summary[1])
+        skips = int((re.search(r'^# skipped (\d+)', out, re.M) or [0, '0'])[1])
+        if fails or code != 0:
+            return Row('FAIL', [f'{fails} failing tests' if fails else f'test runner exit {code}'], seconds=secs)
         if skips:
             return Row('UNKNOWN', [f'{skips} skipped tests are missing evidence'], seconds=secs)
         return Row('PASS', tests=str(len(tests)), passed=(re.search(r'^# pass (\d+)', out, re.M) or [0, '?'])[1], seconds=secs)
@@ -291,14 +300,17 @@ def main():
     config = json.loads((ROOT/'.pi/fenrir-workflow.json').read_text())
     registered = (manifest.get('status') == 'owner-reviewed' and
                   'tools/check-tc0-a-gate.py' in config.get('checks', {}).get('tc0-a-qualification', {}).get('command', []))
-    report = {'schema': 'tc0-a-gate-run/2', 'authority': 'owner-reviewed, registered' if registered else 'UNREGISTERED',
+    evidence_files = [p for p in [out/n for n in ('hand.json', 'hand-replay.json', 'arith.json', 'exhaustive-5.json', 'coverage.json',
+                      's2-arm-by-position.json', 's2-arm-by-position-replay.json', 's2-reverse-operands.json', 's2-reverse-operands-replay.json',
+                      'sandbox.json', 's3-evaluation.json')] if p.is_file()]
+    report = {'schema': 'tc0-a-gate-run/3',
+              'authority': 'owner-registered; development-grade, single-author differential agreement' if registered else 'UNREGISTERED',
               'qualification': verdict if registered else 'UNKNOWN', 'verdict': verdict, 'claims': claims, 'waivers': gate.waivers,
               'head': getattr(gate, 'head', None), 'manifest': str(manifest_path.relative_to(ROOT)), 'evaluator': 'tools/check-tc0-a-gate.py',
-              'aggregation': manifest['aggregation'], 'seconds': round(time.monotonic()-started, 2), 'rows': rows}
+              'aggregation': manifest['aggregation'], 'seconds': round(time.monotonic()-started, 2), 'rows': rows,
+              'evidence_sha256': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in evidence_files}}
     (out/'gate.json').write_text(json.dumps(report, indent=1)+'\n')
-    evidence = [str(p.relative_to(ROOT)) for p in [out/'gate.json', *[out/n for n in ('hand.json', 'hand-replay.json', 'arith.json', 'exhaustive-5.json', 'coverage.json',
-                's2-arm-by-position.json', 's2-arm-by-position-replay.json', 's2-reverse-operands.json', 's2-reverse-operands-replay.json',
-                'sandbox.json', 's3-evaluation.json')]] if p.is_file()]
+    evidence = [str(p.relative_to(ROOT)) for p in [out/'gate.json', *evidence_files]]
     summary = (f"TC0-A gate at {report['head']}: {verdict}; {sum(r['status'] == 'PASS' for r in required)}/{len(required)} required rows PASS; "
                f"claims {', '.join(claims) or 'none'}" + (f"; waivers: {' | '.join(gate.waivers)}" if gate.waivers else '') +
                ''.join(f"; {r['id']}: {r['status']} ({'; '.join(r['reasons'])})" for r in rows if r['status'] not in ('PASS',) and r['required']))[:7900]

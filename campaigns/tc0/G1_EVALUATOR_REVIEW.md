@@ -1,10 +1,14 @@
 # TC0-A gate evaluator — authority review packet
 
-Status: **owner-reviewed and registered (2026-10-11).** The project owner answered the
-review questions below; the gate and manifest are registered as `tc0-a-qualification`
-in `.pi/fenrir-workflow.json`. Its verdicts count as TC0-A qualification verdicts
-only under the recorded decisions and waivers. The evaluator runs trusted-local
-(decision 6); candidate sandbox probes do not establish evaluator isolation.
+Status: **registered (2026-10-11); verdicts are development-grade.** The project owner
+registered the gate as `tc0-a-qualification` in `.pi/fenrir-workflow.json` and accepted
+the repair-isolation waiver (decision 3). The record below attributes decisions 2, 5
+and 7 to the packet author, records no owner preference on 1, and states 4 and 6 as
+accepted without attribution. A PASS means single-author differential agreement under
+these decisions and waivers. The evaluator runs trusted-local (decision 6); candidate
+sandbox probes do not establish evaluator isolation. It is not independent
+qualification; the open limits are listed in the
+[README](../../README.md#limits-of-the-tc0-a-pass).
 
 ## Evaluator and manifest
 
@@ -89,12 +93,13 @@ the controller enforces through source hashes.
 
 ## Scope boundary
 
-The registered run is a TC0-A qualification PASS for the exact source identity and
-manifest recorded above, under the listed owner waivers. It does not qualify B, C,
-full TC0, native execution, or production readiness. It provides no isolation
-guarantee beyond the measured probes and does not establish global minimality or
-exhaustive exploration beyond the stated bounds. Re-run the gate for a later source
-identity; until then, current-source qualification is UNKNOWN.
+A registered run is a development-grade TC0-A PASS for the exact source identity and
+manifest it records, under the listed owner waivers: single-author differential
+agreement, not independent qualification. It does not qualify B, C, full TC0, native
+execution, or production readiness. It provides no isolation guarantee beyond the
+measured probes and does not establish global minimality or exhaustive exploration
+beyond the stated bounds. Re-run the gate for a later source identity; until then,
+current-source qualification is UNKNOWN.
 
 ## Qualification artifact and next refresh
 
