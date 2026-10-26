@@ -1,8 +1,10 @@
 # Fenrir / Gleipnir
 
 **Current stage: working research prototypes and a developing test harness—not a
-usable or qualified programming language yet.** Fenrir is the planned language;
-Gleipnir is the development, exploration and conformance harness.
+usable full language or production compiler yet.** Fenrir is the planned language;
+Gleipnir is the development, exploration and conformance harness. The narrow
+TC0-A pure slice has a recorded qualification PASS at `1db7471` under explicit
+waivers; the current master still needs a fresh source-bound gate run.
 
 ## How far along are we?
 
@@ -21,19 +23,19 @@ mutants), and the evaluator runs trusted-local with only candidates sandboxed. S
 fresh run. Slices B and C, full TC0, native execution and everything after them
 are not qualified.
 
-A percentage would be misleading: a small demonstrated arithmetic/closure slice
-is very different from the compiler, runtime and tools needed for the full vision.
-Think of this as **early executable bootstrap work, before the first qualified
-language release**.
+A percentage would be misleading: a bounded arithmetic/closure slice is very
+different from the compiler, runtime and tools needed for the full vision. This is
+**early executable work, before a qualified full-language release**; the narrow
+TC0-A gate does not qualify B, C, full TC0, native execution or production use.
 
 | Area | What exists | What is not established |
 | --- | --- | --- |
-| Specification | v0.2 architecture, core contract and phased plan | Full frozen, executable acceptance authority |
-| Pure-language development | Shen models and an independent candidate for the whole TC0-A expression grammar (schema `/2`: calls, closures, Bytes, TrapCode, tuples, datatypes, match, byte primitives, eq); closed validator; 24 hand fixtures; catalog coverage 112/112; every program of a bounded grammar up to 5 nodes (5,695) agreeing on two Shen ports; an exact-arithmetic ledger | Qualified TC0-A evaluation; independent catalog review |
-| Counterexample loop | Generated discovery and typed reduction for three candidate mutants, exact original/minimized replay, and an S3 clean-room repair packet with a frozen, sandboxed evaluator; one independent repair evaluated DEVELOPMENT-PASS | Enforced repairer isolation (repair 1 used instruction-only isolation) and qualified acceptance |
+| Specification | v0.2 architecture, core contract and phased plan | Full-language frozen, executable acceptance authority |
+| Pure-language development | Shen models and an independent candidate for the whole TC0-A expression grammar (schema `/2`: calls, closures, Bytes, TrapCode, tuples, datatypes, match, byte primitives, eq); closed validator; 24 hand fixtures; catalog coverage 112/112; every program of a bounded grammar up to 5 nodes (5,695) agreeing on two Shen ports; an exact-arithmetic ledger | Fresh current-head G1 receipt; independent catalog review |
+| Counterexample loop | Generated discovery and typed reduction for three candidate mutants, exact original/minimized replay, and an S3 clean-room repair packet with a frozen evaluator that sandboxes candidate execution; one candidate-only repair evaluated DEVELOPMENT-PASS under the instruction-only independence waiver | Enforced repairer isolation (repair 1 used instruction-only isolation) and fresh qualification on current source |
 | Native arithmetic spike | Small C/Solo5 candidate; historical model comparisons, hand cases, generated failure and cold replay | Full language backend, machine-level determinism, native startup/counter closure |
 | Native host | Go orchestration, bounded readers/output, source inventories, owned process/container cleanup, session/replay and selected campaigns | Current-source live validation of recent repairs; full hostile-peer/corpus/perturbation obligations |
-| Qualification | Registered, owner-reviewed TC0-A gate: qualification PASS at `1db7471` with all six claims, under waivers; requirement ledger, pinned toolchain flake, measured candidate sandbox | Waiver-free G1 (enforced repairer isolation, an isolated evaluator); B/C/full TC0 qualification |
+| Qualification | Registered, owner-reviewed TC0-A gate: last recorded qualification PASS at `1db7471` with all six claims, under waivers; requirement ledger, pinned toolchain flake, measured candidate sandbox | Fresh current-head G1 receipt; waiver-free G1 (enforced repairer isolation, an isolated evaluator); B/C/full TC0 qualification |
 | Later language/product phases | Requirements and dependency order | Qualified handlers, concurrency/lifetimes/time, production compiler/runtime, practical surface language, package tooling and deployment |
 
 The current pure candidates are development machines, not a production Fenrir
@@ -127,9 +129,11 @@ model was flagged on the 15 results equal to the maximum.
 **Requirement ledger (G0 row).** [`spec/tc0/requirement-ledger-a.json`](spec/tc0/requirement-ledger-a.json)
 lists each TC0-A and G1-relevant G0 requirement with its evidence or its gap, and
 `tools/tc0/check-requirement-ledger.mjs` keeps it honest: no verdict statuses, every
-cited file exists, and every open row states its gap. Current rows: 23 with
-development evidence, 1 UNKNOWN (the gate itself: no registered TC0-A evaluator),
-and 3 deferred to B/C. The mandatory bad-overflow mutant (`--wrap-overflow`, two's-complement wrap
+cited file exists, and every open row states its gap. The ledger records evidence
+and gaps; it does not issue the gate verdict. The TC0-A evaluator is now registered
+and owner-reviewed. The last recorded qualification PASS is at `1db7471`; current
+master requires a fresh run before that result is treated as current. Three rows are
+deferred to B/C. The mandatory bad-overflow mutant (`--wrap-overflow`, two's-complement wrap
 instead of the trap) is now in the candidate; it is killed on exactly the Overflow
 programs of the exhaustive scope (233 at 5 nodes).
 
@@ -213,8 +217,10 @@ with the candidate sandboxed. Caveats: the subagent's isolation was by instructi
 not enforced, and it shares a model family with the packet author; see
 [`campaigns/tc0/s3/independent-repair-1.md`](campaigns/tc0/s3/independent-repair-1.md).
 
-Not established: a repair under enforced repairer isolation, and anything at the B/C level (`Outcome`, `SendResult`,
-`ReceiveResult` and the runtime operations). Qualification remains **UNKNOWN**.
+Not established: a repair under enforced repairer isolation, or any B/C behavior
+(`Outcome`, `SendResult`, `ReceiveResult` and the runtime operations). This packet
+does not issue a verdict; the separate G1 evaluator's last recorded TC0-A PASS is
+at `1db7471` under waivers, and current master still needs a fresh run.
 
 ## Latest native-host progress
 
@@ -254,7 +260,25 @@ Later selected campaigns add bounded observations, not full-corpus qualification
 See the [native host README](tools/solo5/native-arithmetic/README.md) and
 [repair handoff](tools/solo5/native-arithmetic/REPAIR_HANDOFF.md).
 
-## Current blocker and next steps
+## Current blockers and next steps
+
+**TC0-A / G1.** S1–S3 development artifacts and the registered qualification gate
+are present. The gate recorded PASS at `1db7471` with 15/15 required rows and six
+claims, under the owner waivers in
+[`campaigns/tc0/G1_EVALUATOR_REVIEW.md`](campaigns/tc0/G1_EVALUATOR_REVIEW.md).
+That receipt is tied to its recorded source identity. Master has advanced since
+then, so run `tc0-a-qualification` on the clean current HEAD before treating G1 as
+current. Use a supported Linux x86-64 runner with Nix and the pinned Shen output;
+no measured macOS qualification path is provided. Retain the controller receipt
+with source/configuration, executable and evidence identities, then stop for review.
+A separate reviewed P2 task packet and bounded run follow only after PASS. Protected
+P2 edits make affected G1 evidence historical; G2 reruns A and B rows on final source.
+The stale evaluator header and ledger registration descriptions need separately
+reviewed cleanup, but their text is not a technical prerequisite for read-only G1
+refresh. Keep the instruction-only
+repairer isolation and trusted-local evaluator limitations visible. Remove those
+waivers through a separately reviewed and measured boundary before relying on the
+gate beyond its accepted G1 scope.
 
 **The latest native closure pass is blocked before its live bootstrap.** The local
 Docker daemon is responding again, but both exact retained stock/control images
@@ -262,11 +286,11 @@ are absent. The local archive search did not locate an image backup. No pull,
 rebuild, replacement image or guest execution was performed during restore review.
 
 An exact restore needs the original Docker/OCI archive or a registry recovery
-source containing those immutable identities. **Planned remedy (direction amendment,
-11 October 2026):** instead of further recovery attempts, open a new reviewed
-dependency epoch that rebuilds the images from a pinned Nix flake, records new
-identities and leaves the old receipts historical (never rewritten). That epoch has
-not been opened yet; see the [execution plan §4 and §18](03_PHASED_EXECUTION_PLAN.md#18-first-concrete-implementation-assignment).
+source containing those immutable identities. The repository flake pins the TC0
+development toolchain, but that does not open the separate native-host dependency
+epoch. The planned remedy is to rebuild the images from pinned sources, record new
+identities and leave old receipts historical (never rewritten). That epoch has not
+been opened; see the [execution plan §4 and §18](03_PHASED_EXECUTION_PLAN.md#18-current-implementation-sequence).
 
 Other outstanding gates before live work:
 
@@ -283,13 +307,12 @@ Other outstanding gates before live work:
 5. Only after those gates, perform one fresh arithmetic bootstrap, stopping without
    retry on cleanup ambiguity; then measure the bounded hostile-peer and corpus scope.
 
-The larger project milestone is still a **qualified pure TC0-A repair loop**:
-complete model/candidate/evaluator coverage, retain discovery/reduction/exact-original
-replay, obtain an independent repair and validate it freshly. Broader native-host
-work does not substitute for that milestone. Under the direction amendment, native
-hardening outside named blockers is frozen until G1, and the workflow controller is
-to gain semantic development checks for the pure slice so the agent loop is checked
-against language behavior rather than only controller tests.
+The next language milestone is **TC0-B / G2**: add dynamic handlers through the
+model, candidate, validator, generator, reducer, replay and evaluator while keeping
+the A suite as a regression baseline. Begin after the registered G1 gate passes on
+current master. The three development checks provide semantic feedback but do not
+replace the qualification gate. Native hardening outside named blockers stays
+frozen until its dependency order permits it.
 
 The amendment also sets the long-term direction: Fenrir programs deploy as
 single-application unikernels whose declared effects determine the image's
@@ -298,7 +321,8 @@ capabilities. This is a plan, not an implemented or qualified property; see
 [plan §19](03_PHASED_EXECUTION_PLAN.md#19-direction-amendment-unikernel-target-and-agent-back-pressure).
 
 Overall language qualification and native startup/counter closure remain
-**UNKNOWN** beyond TC0-A. TC0-A qualifies at `1db7471` under the recorded waivers.
+**UNKNOWN** beyond TC0-A. TC0-A's last recorded qualification PASS is at `1db7471`
+under the recorded waivers; current master needs a fresh gate run.
 
 ## Plans and task packets
 
@@ -319,8 +343,9 @@ The specification ZIP is a historical v0.1 snapshot, not current authority.
 The project-local [Pi workflow extension](.pi/extensions/fenrir-workflow/README.md)
 drives bounded development work alongside `pi-clm` continuous context. Review the
 manifest, available prerequisites and finite scope before starting; do not resume
-a blocked pass merely because some tests pass. Its default manifest intentionally
-has no TC0 qualification evaluator and cannot fabricate qualification PASS.
+a blocked pass merely because some tests pass. The manifest now registers the
+owner-reviewed `tc0-a-qualification` gate; its receipt is source-bound and a
+development-check PASS cannot substitute for it.
 
 ```sh
 # Controller tests only; Node 22.19+, no downloaded dependencies/model calls.
