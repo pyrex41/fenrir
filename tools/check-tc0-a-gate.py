@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""TC0-A gate evaluator (02 §14 TC0-GATE), registered as `tc0-a-qualification`.
+"""Registered TC0-A gate evaluator (02 §14 TC0-GATE), `tc0-a-qualification`.
+
+Runs trusted-local under the G1 scope and waivers recorded in
+campaigns/tc0/G1_EVALUATOR_REVIEW.md; registration does not establish isolation.
 
 Runs every row of spec/tc0/tc0-a-requirements.json freshly against the current
 committed source, into a new run directory under build/tc0/gate/, and aggregates:

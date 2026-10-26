@@ -1,7 +1,6 @@
 # S3 candidate-only repair packet (TC0-A pure-call demo, schema /2)
 
-Status: prepared, dry-run, and one independent repair evaluated DEVELOPMENT-PASS (see [`s3/independent-repair-1.md`](s3/independent-repair-1.md), including its independence caveats). This is a task
-packet and evaluator, not acceptance authority. Qualification remains UNKNOWN.
+Status: prepared, dry-run, and one candidate-only repair evaluated DEVELOPMENT-PASS under the instruction-only independence waiver (see [`s3/independent-repair-1.md`](s3/independent-repair-1.md), including its independence caveats). This packet's evaluator reports development results and is not itself acceptance authority. The separate registered G1 evaluator recorded TC0-A qualification PASS at `1db7471` under the waivers in [`G1_EVALUATOR_REVIEW.md`](G1_EVALUATOR_REVIEW.md); current master needs a fresh gate run before that result is treated as current.
 
 ## What the packet contains
 
