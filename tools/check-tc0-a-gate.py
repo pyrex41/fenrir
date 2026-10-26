@@ -282,7 +282,9 @@ def main():
         print(f"{spec_row['id']}: {row.status}{' - '+'; '.join(row.reasons) if row.reasons else ''}", file=sys.stderr, flush=True)
     required = [r for r in rows if r['required']]
     verdict = next((s for s in ('FAIL', 'BLOCKED', 'UNKNOWN') if any(r['status'] == s for r in required)), 'PASS')
-    if gate.source_identity().detail.get('head') != getattr(gate, 'head', None) or subprocess.run(['git', 'status', '--porcelain'], cwd=ROOT, capture_output=True, text=True).stdout.strip():
+    # Read HEAD directly: source_identity() would overwrite gate.head and compare it with itself.
+    head_now = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    if head_now != getattr(gate, 'head', None) or subprocess.run(['git', 'status', '--porcelain'], cwd=ROOT, capture_output=True, text=True).stdout.strip():
         verdict = 'UNKNOWN' if verdict == 'PASS' else verdict
         rows.append({'id': 'source-drift', 'required': True, 'status': 'UNKNOWN', 'reasons': ['Source changed during evaluation'], 'detail': {}, 'seconds': 0})
     status = {r['id']: r['status'] for r in rows}
