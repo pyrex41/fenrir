@@ -1,0 +1,85 @@
+{
+  "contract_version": "0.2",
+  "schema_version": "tc0-a-pure-call-demo/2",
+  "slice": "TC0-A",
+  "module": "arm-checked",
+  "datatypes": [],
+  "effects": [],
+  "functions": [
+    {
+      "id": "0",
+      "name": "main",
+      "parameter_id": "1",
+      "argument_type": "I64",
+      "result_type": "I64",
+      "effects": [],
+      "body": [
+        "prim",
+        "5",
+        "sub",
+        [
+          "prim",
+          "3",
+          "add",
+          [
+            "var",
+            "2",
+            "1"
+          ],
+          [
+            "int",
+            "4",
+            "1"
+          ]
+        ],
+        [
+          "int",
+          "6",
+          "1"
+        ]
+      ]
+    }
+  ],
+  "entry": "main",
+  "input_schema": {
+    "type": "I64"
+  },
+  "source_map": [
+    {
+      "id": "0",
+      "file": "arm-checked",
+      "line": "0",
+      "column": "0"
+    },
+    {
+      "id": "2",
+      "file": "arm-checked",
+      "line": "0",
+      "column": "0"
+    },
+    {
+      "id": "3",
+      "file": "arm-checked",
+      "line": "0",
+      "column": "0"
+    },
+    {
+      "id": "4",
+      "file": "arm-checked",
+      "line": "0",
+      "column": "0"
+    },
+    {
+      "id": "5",
+      "file": "arm-checked",
+      "line": "0",
+      "column": "0"
+    },
+    {
+      "id": "6",
+      "file": "arm-checked",
+      "line": "0",
+      "column": "0"
+    }
+  ]
+}
