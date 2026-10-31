@@ -6,6 +6,16 @@ Gleipnir is the development, exploration and conformance harness. The narrow
 TC0-A pure slice has a recorded qualification PASS at `1db7471` under explicit
 waivers; the current master still needs a fresh source-bound gate run.
 
+## AArch64 proof development
+
+The [AArch64 verification lane](verification/aarch64/README.md) compiles a closed
+checked-I64 subset of existing TC0-A artifacts to actual instruction bytes, proves
+its lowering in Rocq/Coq, and checks execution against the existing candidate with
+QEMU. The proof currently uses a **handwritten instruction model**; authoritative
+ARM refinement, JSON/source correspondence and whole-image execution remain open.
+This lane does not promote the historical TC0 or Solo5 qualification status.
+See the [implementation roadmap](verification/aarch64/PLAN.md).
+
 ## How far along are we?
 
 We have moved beyond plans: there are executable Shen models, independently

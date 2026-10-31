@@ -1,0 +1,25 @@
+name: AArch64 verification development lane
+on:
+  push:
+    paths: ['verification/aarch64/**', 'tools/aarch64/**', 'tests/aarch64/**', 'tools/tc0/**', 'runtime/tc0/**', '.github/workflows/aarch64-verification.yml']
+  pull_request:
+    paths: ['verification/aarch64/**', 'tools/aarch64/**', 'tests/aarch64/**', 'tools/tc0/**', 'runtime/tc0/**', '.github/workflows/aarch64-verification.yml']
+permissions:
+  contents: read
+jobs:
+  proof-and-native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: sudo apt-get update && sudo apt-get install -y coq binutils-aarch64-linux-gnu qemu-user
+      - run: node --test tests/aarch64/*.test.mjs
+      - run: node tools/aarch64/check.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: aarch64-verification-evidence
+          path: build/aarch64/
