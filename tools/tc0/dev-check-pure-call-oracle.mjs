@@ -56,6 +56,6 @@ if(shakenFresh()){
 
 // Stale outputs must never stand in for this run's observations.
 rmSync(agreement,{force:true});rmSync(replay,{force:true});mkdirSync(out,{recursive:true});
-run('Shen/candidate hand-case agreement',['python3','-I',resolve(root,'tools/check-tc0-pure-call.py'),...oracleArgs,'--output',agreement],240);
+run('Shen/candidate hand-case agreement',[process.execPath,resolve(root,'tools/check-tc0-pure-call.mjs'),...oracleArgs,'--output',agreement],240);
 run('strict replay of fresh agreement report',[process.execPath,resolve(root,'tools/tc0/check-pure-call-replay.mjs'),agreement,replay],60);
 console.log(JSON.stringify({qualification:'UNKNOWN',scope:'pure-call hand cases: fresh Shen agreement + strict replay (development)',outputs:[agreement,replay]}));

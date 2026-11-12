@@ -6,7 +6,7 @@
     "reference": "models/tc0/arithmetic.shen",
     "candidate": "runtime/tc0/arithmetic-candidate.mjs",
     "hand_fixtures": "fixtures/tc0/arithmetic-boundaries.json",
-    "development_probe": "tools/check-tc0-arithmetic.py"
+    "development_probe": "tools/check-tc0-arithmetic.mjs"
   },
   "next_file_boundaries": {
     "encoding_and_closed_schemas": "spec/tc0/schemas/",

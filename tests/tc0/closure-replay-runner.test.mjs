@@ -12,7 +12,7 @@ test('runner serializes path identities canonically and rejects drift/overwritin
   const program=JSON.parse(readFileSync('fixtures/tc0/closure-capture-program.json'));
   // Mock oracle transport fixture only, NOT independent model evidence.
   const report={qualification:'UNKNOWN',scope:'Mock runner unit fixture, no oracle credit',sources:Object.fromEntries(
-   ['tools/check-tc0-closure.py','models/tc0/closure-machine.shen','runtime/tc0/closure-machine.mjs','spec/tc0/pure-closure-demo.json'].map(p=>[resolve(root,p),digest(p)])),
+   ['tools/check-tc0-closure.mjs','models/tc0/closure-machine.shen','runtime/tc0/closure-machine.mjs','spec/tc0/pure-closure-demo.json'].map(p=>[resolve(root,p),digest(p)])),
    cases:[{name:'mock-unit-only',program,model_steps:new ClosureMachine(program,['int','0']).run(200).steps}]};
   const input=resolve(dir,'input.json'),output=resolve(dir,'output.json');writeFileSync(input,JSON.stringify(report));
   const run=(out=output)=>spawnSync(process.execPath,['tools/tc0/check-closure-replay.mjs',input,out],{timeout:10000,encoding:'utf8'});

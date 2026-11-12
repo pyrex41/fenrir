@@ -85,7 +85,7 @@ mkdirSync(parityDir,{recursive:true});
 const reports={};
 for(const [kind,flag,value] of [['host','--shen-executable',paritySh],['artifact','--oracle-artifact',tmp]]){
   const path=resolve(parityDir,`parity-${kind}.json`);rmSync(path,{force:true});
-  const r=run(['python3','-I',resolve(root,'tools/check-tc0-pure-call.py'),flag,value,'--output',path]);
+  const r=run([process.execPath,resolve(root,'tools/check-tc0-pure-call.mjs'),flag,value,'--output',path]);
   if(r.status!==0)fail(`${kind} oracle run failed\n`+r.stderr.slice(-2000));
   reports[kind]=JSON.parse(readFileSync(path,'utf8'));
 }

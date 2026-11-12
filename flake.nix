@@ -5,7 +5,7 @@
   #   shen-cl dff7445     second port and Yggdrasil stage-1 host, built from the
   #                       S41.2 kernel precompiled with nixpkgs' shen-sbcl 41.2
   #   yggdrasil a40d8c5   tree-shaker for the eval-free oracle
-  #   sbcl, nodejs_22, python3, go 1.27 from the pinned nixpkgs release
+  #   sbcl, nodejs_22, go 1.27 from the pinned nixpkgs release
   # The native-host epoch (Solo5 images, C toolchain) is separate and not opened here.
   description = "Fenrir / Gleipnir TC0 development toolchain epoch";
 
@@ -96,7 +96,7 @@
       packages.${system} = { inherit shen-scheme shen-cl yggdrasil link-toolchain; default = link-toolchain; };
       apps.${system}.default = { type = "app"; program = "${link-toolchain}/bin/fenrir-link-toolchain"; };
       devShells.${system}.default = pkgs.mkShell {
-        packages = [ pkgs.nodejs_22 pkgs.python3 pkgs.sbcl pkgs.go_1_27 shen-scheme yggdrasil ];
+        packages = [ pkgs.nodejs_22 pkgs.sbcl pkgs.go_1_27 shen-scheme yggdrasil ];
         FENRIR_SHEN_CL = "${shen-cl}";
       };
     };

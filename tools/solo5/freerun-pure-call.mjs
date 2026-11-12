@@ -17,6 +17,7 @@ import {cases as dataHand} from '../../fixtures/tc0/pure-data-hand-cases.mjs';
 import {generatePureCalls} from '../tc0/pure-call-generate.mjs';
 import {generatePureData} from '../tc0/pure-data-generate.mjs';
 import {enumeratePureData} from '../tc0/pure-data-enumerate.mjs';
+import {shenPureCallTraces} from './shen-pure-call-traces.mjs';
 
 const root=resolve(import.meta.dirname,'../..');
 const FUEL=200,CHUNK=250,INPUT=['int','0'];
@@ -86,9 +87,7 @@ function main() {
   // The oracle runs as its own process; the guest never sees its output.
   let model=null;
   if(shen) {
-    writeFileSync(resolve(out,'programs.json'),JSON.stringify(programs.map(p=>p.program)));
-    must('python3',['-I',resolve(root,'tools/solo5/shen-pure-call-traces.py'),...(portable?['--portable']:[]),resolve(shen),resolve(out,'programs.json'),resolve(out,'shen.jsonl')],{timeout:1800000});
-    model=readFileSync(resolve(out,'shen.jsonl'),'utf8').trimEnd().split('\n').map(line=>JSON.parse(line));
+    model=shenPureCallTraces(resolve(shen),programs.map(p=>p.program),{portable});
     if(model.length!==programs.length)throw new Error('Wrong Shen trace count');
   }
   const normalCandidate=reference('normal');

@@ -15,7 +15,7 @@ if(!relative(resolve(root,'build'),output)||relative(resolve(root,'build'),outpu
 const reportBytes=readFileSync(reportPath),reportHash=createHash('sha256').update(reportBytes).digest('hex');
 const report=JSON.parse(reportBytes);
 if(report.qualification!=='UNKNOWN'||!Array.isArray(report.cases)||!report.sources)throw new Error('Expected development oracle report');
-const required=['tools/check-tc0-closure.py','models/tc0/closure-machine.shen','runtime/tc0/closure-machine.mjs','spec/tc0/pure-closure-demo.json'];
+const required=['tools/check-tc0-closure.mjs','models/tc0/closure-machine.shen','runtime/tc0/closure-machine.mjs','spec/tc0/pure-closure-demo.json'];
 for(const p of required)if(!Object.hasOwn(report.sources,resolve(root,p)))throw new Error('Missing required oracle/source identity');
 for(const [path,expected] of Object.entries(report.sources))if(digest(path)!==expected)throw new Error('Retained oracle source/toolchain drift: '+path);
 const before=Object.fromEntries(['tools/tc0/closure-replay.mjs','tools/tc0/closure-replay-header.mjs','tools/tc0/check-closure-replay.mjs'].map(p=>[p,digest(resolve(root,p))]));
