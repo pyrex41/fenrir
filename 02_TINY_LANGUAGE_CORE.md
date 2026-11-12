@@ -6,6 +6,8 @@ Version 0.2 • Semantic contract revision • Proposed normative implementation
 
 **Status:** Not yet frozen or executable acceptance authority. This revision resolves semantic choices identified in [review.md](review.md). Machine-readable schemas, complete transition fixtures, and evaluator qualification remain required deliverables. An implementation MUST NOT fill a gap silently and thereby establish authority. Record unresolved cases, review an explicit amendment, and qualify it before promotion. The v0.1 ZIP is historical; v0.1 artifacts/tapes require explicit migration and cannot be labeled exact v0.2 replay.
 
+**Successor proposal (12 November 2026):** [04_DIRECTION_AMENDMENT.md](04_DIRECTION_AMENDMENT.md) proposes TC1, a successor core defined in Rocq with a different effect contract (explicit one-shot resumptions, inferred effect rows at the surface). It does not amend this contract: TC0 0.2 rules, profile identities and evidence are unchanged, and §5 below remains the 0.2 handler specification.
+
 ## 1 Scope, authority and profiles
 
 This document specifies TC0 for [01_FULL_VISION.md](01_FULL_VISION.md). Implementation order and gates are in [03_PHASED_EXECUTION_PLAN.md](03_PHASED_EXECUTION_PLAN.md). TC0 is an internal typed language, not final surface syntax or all of Koka.

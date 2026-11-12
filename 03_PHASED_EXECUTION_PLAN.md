@@ -8,6 +8,8 @@ Version 0.3 • Status-aware revision • Dependency ordered implementation prog
 
 **Direction amendment (11 October 2026):** See [§19](#19-direction-amendment-unikernel-target-and-agent-back-pressure). It sets the unikernel production target, effects as the capability manifest, a semantic per-change check for the agent loop, a host-hardening freeze until G1, and a new dependency-epoch rule for unrecoverable inputs. It replaces the first concrete assignment in §18. Gate requirements are unchanged except where this document explicitly adds rows to G4, G6, G7 and G10.
 
+**Proposed direction amendment (12 November 2026):** [04_DIRECTION_AMENDMENT.md](04_DIRECTION_AMENDMENT.md) proposes a Rocq-defined successor core (TC1), a redesigned effect contract, an observation-based compiler boundary and an early application proof, and re-sequences work after G1 (its §10). It is under owner review. Until it is accepted, this plan governs as written; on acceptance, its §10 replaces §18 items 2–6 and the P2/P3 slices are re-targeted to TC1. Gate contents and recorded evidence do not change.
+
 ## 1 Mission and operating rules
 
 Implement Fenrir and its Gleipnir harness according to the architecture in [01_FULL_VISION.md](01_FULL_VISION.md), beginning with the normative contract in [02_TINY_LANGUAGE_CORE.md](02_TINY_LANGUAGE_CORE.md). Continue in vertical slices: model, evaluator, candidate implementation, adversarial evidence, then the next feature. This plan includes the bootstrap and the phases after the tiny core so a fresh implementation agent has the complete dependency chain.

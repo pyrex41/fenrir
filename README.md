@@ -6,6 +6,24 @@ Gleipnir is the development, exploration and conformance harness. The narrow
 TC0-A pure slice has a recorded qualification PASS at `1db7471` under explicit
 waivers; the current master still needs a fresh source-bound gate run.
 
+## Proposed direction (November 2026)
+
+[04_DIRECTION_AMENDMENT.md](04_DIRECTION_AMENDMENT.md) proposes keeping this
+repository and identity while revising the language and proof architecture: a
+small core defined in Rocq (TC1) with Shen as an independent executable
+reference, a redesigned effect system with one-shot resumptions, a compiler
+that preserves observations rather than interpreter steps, and one backend
+feature proved early. It is under owner review and changes no TC0 evidence.
+
+- [campaigns/RECONCILIATION_2026-11.md](campaigns/RECONCILIATION_2026-11.md)
+  reviews open PRs #5–#8 against that direction.
+- [verification/service/](verification/service/) is the first stage of the
+  application example: a Rocq model of a tenant-scoped request that atomically
+  records a report, a durable job and its retry result before answering, with
+  write isolation, atomicity, acceptance durability, retry safety and crash
+  recovery proved **for the model only** (`sh verification/service/check.sh`,
+  Coq 8.18). It is not connected to Fenrir programs or a database yet.
+
 ## How far along are we?
 
 We have moved beyond plans: there are executable Shen models, independently
