@@ -1,5 +1,5 @@
 // SHA-256 with a stat-keyed cache for large files (toolchain binaries), shared
-// with tools/tc0/shen-probe.mjs through build/cache/sha256-stat.json.
+// with tools/check-tc0-expression.py through build/cache/sha256-stat.json.
 // A cached digest is reused only while (dev, ino, size, mtime, ctime) are all
 // unchanged: any write bumps ctime and a replacement changes the inode, and ctime
 // cannot be set back without privileges. Files under 1 MiB are always rehashed.

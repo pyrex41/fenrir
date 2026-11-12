@@ -21,7 +21,7 @@ else {
   const reference=request.reference,peer=machine(true);
   const header={schema:'arithmetic-demo-tape/1',contract:'0.2',slice:'TC0-A',profile:'arithmetic-demo-frames/1',run_id:request.run_id,
    artifact_hash:digest(encode(graph.artifact)),input_hash:digest(encode(graph.input)),oracle_hash:checkpointHash(reference),
-   oracle_source_hash:checkpointHash([source('models/tc0/arithmetic.shen'),source('models/tc0/expression-machine.shen'),source('tools/tc0/shen-probe.mjs'),source('tools/check-tc0-reduction.mjs'),request.shen_hash,request.shen_boot_hash]),
+   oracle_source_hash:checkpointHash([source('models/tc0/arithmetic.shen'),source('models/tc0/expression-machine.shen'),source('tools/check-tc0-expression.py'),source('tools/check-tc0-reduction.py'),request.shen_hash,request.shen_boot_hash]),
    catalog_hash:source('spec/tc0/arithmetic-demo-frames.json'),monitor_hash:source('tools/tc0/replay.mjs'),
    adapter_hash:checkpointHash([source('tools/tc0/artifact.mjs'),source('tools/tc0/canonical.mjs'),source('tools/tc0/reduction-bridge.mjs')]),
    candidate_hash:source('runtime/tc0/expression-machine.mjs'),compiler_runtime_hash:digest(readFileSync(process.execPath)),

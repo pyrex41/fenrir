@@ -1,7 +1,7 @@
 // Catalog coverage over Shen-agreeing traces, UNQUALIFIED development measure.
 // Usage: node tools/tc0/check-pure-call-coverage.mjs HAND_REPORT EXHAUSTIVE_REPORT OUTPUT
-//   HAND_REPORT        tools/check-tc0-pure-call.mjs output (Shen model_steps per case)
-//   EXHAUSTIVE_REPORT  tools/check-tc0-pure-data-exhaustive.mjs output; each program is
+//   HAND_REPORT        tools/check-tc0-pure-call.py output (Shen model_steps per case)
+//   EXHAUSTIVE_REPORT  tools/check-tc0-pure-data-exhaustive.py output; each program is
 //                      re-run on the candidate here and admitted only if its trace hash
 //                      equals the Shen-agreeing trace hash recorded in the report.
 import {createHash} from 'node:crypto';

@@ -5,7 +5,7 @@
  "contract": "0.2",
  "catalog": "spec/tc0/pure-call-demo.json",
  "ledger": "spec/tc0/requirement-ledger-a.json",
- "evaluator": "tools/check-tc0-a-gate.mjs",
+ "evaluator": "tools/check-tc0-a-gate.py",
  "aggregation": "TC0-GATE (02 §14): any required row FAIL -> FAIL; else any BLOCKED -> BLOCKED; else any UNKNOWN -> UNKNOWN; else PASS (precedence accepted by the owner, 2026-10-11). A mutant killed on no program is FAIL. Every row's reasons are reported whatever the aggregate. Optional rows never satisfy a required row.",
  "rows": [
   {
