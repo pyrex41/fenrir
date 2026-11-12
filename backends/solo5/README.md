@@ -21,3 +21,31 @@ The measured spike covers:
 Transport is command-line input and console output: **startup-only**, not an interactive scheduler channel. Time mediation, CPU-counter audit/enforcement, host Run/AdvanceTime transport, TC0 candidate integration and host-perturbation campaigns remain work. Diagnostics are separate from semantic frames. Repeated payload agreement is not whole-machine determinism or a blanket security certification; all qualification verdicts remain UNKNOWN.
 
 Pi development continuation is provided by the project extension. After one `/reload`, use `/fenrir-workflow drive --turns=120 --minutes=120 [goal]`, review/confirm once, and the bounded development loop continues without periodic nudges. Required qualification remains external and cannot be self-promoted.
+
+## Stock-tender free run on any Solo5 host (November 2026)
+
+The measured profile above needs the retained Docker image and Linux/AArch64. This
+path needs neither. It was run on Linux x86-64 without Docker and without KVM.
+
+```sh
+sudo apt-get install -y libseccomp-dev pkg-config
+git clone --depth 1 --branch v0.9.3 https://github.com/Solo5/solo5.git build/vendor/solo5
+(cd build/vendor/solo5 && ./configure.sh && make)        # must be commit 38e0c348be23
+node tools/solo5/freerun.mjs --max-cases 80
+```
+
+`freerun.mjs` checks the Solo5 checkout is the pinned commit with no modified tracked
+files, lowers each artifact with the existing `native-arithmetic/lower.mjs`, compiles
+`native-arithmetic/freerun.c` with the unchanged `machine.c` and `format.c` using Solo5's
+own toolchain wrapper, runs the guest under the stock `solo5-spt` tender in `normal` and
+`mutant` modes, and compares every reference step with the JS expression machine.
+
+Recorded run: 81 programs (the left-trap fixture and 80 generated), 1,051 reference
+steps, no divergence; 41 DivZero traps and 40 results; the reverse-operand defect
+detected on all 81. Report: `build/solo5/freerun/<run>/report.json`.
+
+Limits: development evidence only, `qualification: UNKNOWN`. The comparison is against
+the JS candidate, not Shen. The host observes a free run; it does not select steps, so
+this is not the control-channel profile and gives no replay. `spt` is a seccomp-sandboxed
+process, not a virtual machine. The toolchain, tender and host kernel are trusted as
+built, and the build is not reproducible-build pinned.

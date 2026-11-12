@@ -79,6 +79,9 @@ For every reachable state, over every interleaving of those steps:
 
 ## Next stage (A1)
 
-State the same contract as an executable Shen model, and have Gleipnir explore
-submit/complete/respond/crash schedules against it, with the volatile-mailbox
-variant kept as a mutant that must be caught.
+State the same contract as an executable Shen model, which then becomes its
+authoritative statement (Shen is Fenrir's semantic authority; this Rocq file
+is a scoped model). Have Gleipnir explore submit/complete/respond/crash
+schedules against it, with the volatile-mailbox variant kept as a mutant that
+must be caught. The real store is SQLite under an OTP supervisor (amendment
+§8); its single-writer transactions match assumption 1 above.

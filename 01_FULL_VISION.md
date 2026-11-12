@@ -8,7 +8,7 @@ Version 0.2 • Semantic and execution-plan revision • Proposed architecture a
 
 **Direction amendment (11 October 2026):** Adopts a single-application unikernel as the intended production deployment target, makes declared effects the capability manifest of a deployed image, and adds agent-loop requirements (back pressure, loop latency, agent-facing language tooling). The review that produced it is recorded in [03_PHASED_EXECUTION_PLAN.md §19](03_PHASED_EXECUTION_PLAN.md#19-direction-amendment-unikernel-target-and-agent-back-pressure). This amendment changes product direction and plan ordering only. It does not alter the TC0 0.2 contract, any profile identity or any gate requirement, and it qualifies nothing.
 
-**Proposed direction amendment (12 November 2026):** [04_DIRECTION_AMENDMENT.md](04_DIRECTION_AMENDMENT.md) proposes changes to §5–§6 (semantic authority: a Rocq-defined core with Shen as independent reference), §7 (target roles) and §14 (compiler and memory strategy), and moves an application proof early. It is under owner review; this document governs until it is accepted.
+**Direction amendment (12 November 2026):** [04_DIRECTION_AMENDMENT.md](04_DIRECTION_AMENDMENT.md) records owner rulings that refine §5–§6 (Shen stays the semantic authority; where proofs are checked), §7 (Solo5 first, BEAM as supervisor), §14 (compiler and memory strategy) and adds a concurrency sketch. Where the two differ on direction or ordering, the amendment is the newer statement.
 
 ## 1 Purpose and reading order
 

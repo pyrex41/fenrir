@@ -1,6 +1,10 @@
 # Reconciling open branches with the direction amendment
 
-12 November 2026 • Review notes, step D0 of [04_DIRECTION_AMENDMENT.md](../04_DIRECTION_AMENDMENT.md) §10
+12 November 2026 • Review notes, step B0 of [04_DIRECTION_AMENDMENT.md](../04_DIRECTION_AMENDMENT.md) §10
+
+Updated the same day for the owner's rulings (amendment §12): Shen stays the
+semantic authority, Solo5 is the first target, and Búri is a separate project
+that proves Shen implementations in Rocq.
 
 Base: master `4898e7b`. These notes recommend; the owner merges. Nothing here
 is a gate verdict, and no qualification campaign was run.
@@ -87,21 +91,28 @@ Under the amendment's vocabulary (§9) this is *implementation refinement
 proved*, scoped to that profile and that instruction model. The PR's own README
 states the same limits.
 
-**Fit.** It is the right foundation for step D6. Three follow-ups make it part
-of the new architecture instead of a parallel island:
+**Fit.** It is the right foundation for proved native code (amendment §10,
+B6). Three follow-ups connect it to the rest:
 
-1. **One source language.** `Core.v` defines its own `expr`, `eval_expr` and
-   `checked`. When the TC1 Rocq core exists (D2), restate
-   `expression_binary_correct` against the core's evaluation of the projected
-   fragment and delete the private copy. Until then the README should say the
-   source semantics is local to the lane.
-2. **One projection obligation.** The unverified step from artifact JSON to the
-   Rocq AST (ARM-02, in `tools/aarch64/compile.mjs`) is the same obligation as
-   the core's artifact projection (amendment §3). Solve it once in the core.
-3. **Ownership names.** `PLAN.md`'s "Integration ownership" section assigns
-   roles to Buri, Vor and Thornet as separate projects. If Buri is the
-   prototype being consolidated, that section should be rewritten to match
-   amendment §11; if not, it needs a sentence saying what those projects are.
+1. **Source semantics.** `Core.v` defines its own `expr`, `eval_expr` and
+   `checked`. Under the rulings there is no Rocq core of Fenrir to rebase it
+   on: Shen is the authority. The lane's source side therefore has to be tied
+   to the Shen model, either through Búri's KLambda semantics of
+   `models/tc0/pure-call-machine.shen` or, until that exists, by an explicit
+   statement that the source semantics is local to the lane and agrees with
+   Shen only on tested cases. The README should say which.
+2. **Projection.** The unverified step from artifact JSON to the Rocq AST
+   (ARM-02, in `tools/aarch64/compile.mjs`) stays an obligation of this lane.
+3. **Ownership section.** `PLAN.md`'s "Integration ownership" lists Buri, Vor
+   and Thornet. Búri's role there (reusable representation and preservation
+   techniques, ported through a declared adapter) matches what Búri is. Its
+   ARM-03 plan should point at Búri's existing ARM foundation work (Sail
+   model, Islaris environment, a first byte-level lemma against the Armv9.4
+   model) instead of starting that research again here.
+
+Target note: this lane emits AArch64. The Solo5 lane that now runs in
+development is x86-64 `spt`. Proved code reaches a Solo5 guest only once the
+Solo5 lane also builds for AArch64 (amendment §7 item 5).
 
 Smaller points:
 
@@ -112,8 +123,8 @@ Smaller points:
 - The two-register result convention (`x1` = status) is a custom ABI. Pin it as
   a named convention before a second profile depends on it.
 - The CI workflow installs tools with `apt-get`; versions are recorded but not
-  pinned. Move Coq/Rocq into the flake when the owner picks a version
-  (amendment §12 item 9).
+  pinned. The ruling is a current Rocq release, following Búri's pin (9.3.0);
+  this lane was checked with Coq 8.18 and should move when next touched.
 - The README change in this PR touches the status section that #5 also
   rewrites; they merge cleanly in the order above.
 
@@ -143,16 +154,19 @@ Recommended revision:
 | Q3 segment discard per frame or per step; Q7 site identity; Q8 handler stack or segments in the state hash | These are reference-profile questions. Answer them for the reference machine only; they are not compiler obligations (amendment §6) |
 | Q5 operation argument/result types | Decide with the resumption rule: a resumption is not serializable and not equality-compatible; whether operations may carry arrows depends on capture support |
 | Q6 observable events | Decide with the observation boundary: performed operations are observable effects in §6's list, so "none" needs revisiting |
-| Lanes | Add the Rocq lane: the slice's typing and evaluation rules in the core, with a soundness statement for the slice |
+| Lanes | Model (Shen, authority) and candidate, as the packet has them. Add the slice's typing rules as Shen sequent rules, with their soundness recorded as an open universal claim until proved (amendment §3) |
 | Mutants | Keep all seven. `double-resume` and `forgotten-resume` become the direct tests of the one-shot rule |
 | Q11 extend or add files; Q12 separate gate; Q13 authorship; Q14 harness language; Q15 repair isolation | Still owner decisions, unchanged |
 
 The packet should be rewritten after the owner accepts or rejects amendment
 §4, not before.
 
-## The external prototype
+## Búri
 
-Not reviewed: it is not in this repository and was not available in this
-session. Amendment §11 gives the porting rules. Its first concrete check is
-arithmetic (amendment §5): any imported optimizer or lowering lemma stated for
-wrapping `Word32` does not hold for checked `I64` as is.
+Read at `1495f49` (shallow clone, README and three design documents only; no
+proofs were rebuilt). It is not a language prototype to merge into Fenrir. It
+proves Shen implementations correct in Rocq, with Shen/JIT as the lead track,
+and by its own ledger no implementation is verified yet (0 of 41 work packages
+done, 18 in progress). What matters for Fenrir is in amendment §3 and §11: its
+KLambda semantics and its contract calculus with Rocq-proved rules and a Shen
+certificate checker.

@@ -6,23 +6,32 @@ Gleipnir is the development, exploration and conformance harness. The narrow
 TC0-A pure slice has a recorded qualification PASS at `1db7471` under explicit
 waivers; the current master still needs a fresh source-bound gate run.
 
-## Proposed direction (November 2026)
+## Direction (November 2026)
 
-[04_DIRECTION_AMENDMENT.md](04_DIRECTION_AMENDMENT.md) proposes keeping this
-repository and identity while revising the language and proof architecture: a
-small core defined in Rocq (TC1) with Shen as an independent executable
-reference, a redesigned effect system with one-shot resumptions, a compiler
-that preserves observations rather than interpreter steps, and one backend
-feature proved early. It is under owner review and changes no TC0 evidence.
+[04_DIRECTION_AMENDMENT.md](04_DIRECTION_AMENDMENT.md) records the owner's
+rulings of 12 November 2026. Fenrir keeps this repository and identity. Shen
+stays the semantic authority; proofs that Shen cannot give alone go through
+[Búri](https://github.com/pyrex41/buri)'s Rocq-proved contract rules. The
+effect system gets one-shot resumptions and inferred effect rows (TC1). Solo5
+is the first execution target, with BEAM as supervisor and SQLite as the first
+store. The amendment changes no TC0 evidence.
 
+- **Solo5 lane (development).** `node tools/solo5/freerun.mjs` builds TC0-A
+  arithmetic artifacts into guests for a stock Solo5 `spt` tender and compares
+  every reference step with the JS expression machine. On Linux x86-64 with
+  Solo5 v0.9.3 built from the pinned commit (no Docker, no KVM): 81 programs,
+  1,051 steps, no divergence; the guest's reverse-operand defect is detected on
+  all 81. The Shen oracle is not in this comparison yet. See
+  [backends/solo5/README.md](backends/solo5/README.md).
+- **Service model.** [verification/service/](verification/service/) is a Rocq
+  model of a tenant-scoped request that atomically records a report, a durable
+  job and its retry result before answering, with write isolation, atomicity,
+  acceptance durability, retry safety and crash recovery proved **for the model
+  only** (`sh verification/service/check.sh`, Coq 8.18).
+- **Proving in Shen.** [verification/shen-proving/](verification/shen-proving/)
+  shows what Shen's sequent checker does and does not establish alone.
 - [campaigns/RECONCILIATION_2026-11.md](campaigns/RECONCILIATION_2026-11.md)
-  reviews open PRs #5–#8 against that direction.
-- [verification/service/](verification/service/) is the first stage of the
-  application example: a Rocq model of a tenant-scoped request that atomically
-  records a report, a durable job and its retry result before answering, with
-  write isolation, atomicity, acceptance durability, retry safety and crash
-  recovery proved **for the model only** (`sh verification/service/check.sh`,
-  Coq 8.18). It is not connected to Fenrir programs or a database yet.
+  reviews open PRs #5–#8 against the direction.
 
 ## How far along are we?
 
