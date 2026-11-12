@@ -59,4 +59,4 @@ function main() {
   console.log(JSON.stringify({development_agreement:matched,mutant_first_divergence:first,qualification:'UNKNOWN',report:destination}));
   process.exitCode=matched&&first==='1'&&report.mutant_emissions.length===1?0:1;
 }
-main();
+if(process.argv[1]&&resolve(process.argv[1])===import.meta.filename)main();
