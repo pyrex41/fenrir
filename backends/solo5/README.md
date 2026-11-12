@@ -51,7 +51,8 @@ results; the reverse-operand defect detected on all 81. Report:
 ### Pure-call guest (calls, closures, data, bytes)
 
 ```sh
-node tools/solo5/freerun-pure-call.mjs --exhaustive-nodes 5 --shen build/toolchain/shen-scheme
+sh harness/run-solo5-pure-call.sh                              # guest against the Shen model, in Shen
+node tools/solo5/freerun-pure-call.mjs --exhaustive-nodes 5    # guest against the JS candidate
 ```
 
 `backends/solo5/pure-call/` is a new C candidate for schemas `/1` and `/2`: named and
@@ -62,29 +63,18 @@ trap. `tools/solo5/pure-call/lower.mjs` lowers a whole batch of validated artifa
 data header (node tables, child and callee indices, each lambda's free bindings in numeric
 order), so one guest image holds every program and one tender launch runs a range of them.
 
-Recorded run: 5,774 programs (23 hand cases, 32 + 24 generated, and all 5,695 programs of
-the 5-node exhaustive grammar), 86,286 reference steps; guest, Shen pure-call model and JS
-candidate agree on every step. `reverse-operands` mode is detected on 4,019 programs and
-`wrap-overflow` on 238, matching the JS candidate's mutant counts. About 100 seconds, most
-of it Shen. The Shen traces come through `tools/solo5/shen-pure-call-traces.py`, a
-transport wrapper around the existing oracle driver and normalization.
+Recorded runs: 5,774 programs (23 hand cases, 32 + 24 generated, and all 5,695 programs of
+the 5-node exhaustive grammar), 86,286 reference steps. The guest agrees with the Shen
+model and, separately, with the JS candidate on every step. `reverse-operands` mode is
+detected on 4,019 programs and `wrap-overflow` on 238 by both comparisons.
 
-### Oracle on current Shen ports
-
-`--shen` accepts any Shen launcher with the `script`/`eval` command line. Measured on the
-pure-call check (5,774 programs, 86,286 steps, full agreement in each row):
-
-| Oracle | Model | Time |
-| --- | --- | --- |
-| shen-scheme 0.26 (flake pin) | registered | ~100 s |
-| shen-scheme 0.54 | registered | ~50 s |
-| Shen/JIT 0.7 | portable (`--portable-model`) | ~27 s |
-
-Shen/JIT integers are 62-bit, so the registered model cannot run on it: add
-`--portable-model` to use the proposed width-independent model in
-[models/tc0/portable/](../../models/tc0/portable/README.md). The arithmetic-only
-`freerun.mjs` still uses the registered expression model and on Shen/JIT is only valid
-while values fit 62 bits, which its generated family does.
+The comparison with the Shen model is a Shen program,
+[harness/solo5-pure-call.shen](../../harness/README.md), running on Shen/JIT 0.7: it runs
+the model in-process, launches the tender, parses the guest's frames and compares, in
+about 5 seconds. Shen/JIT integers are 62-bit, so it uses the proposed width-independent
+integer layer in [models/tc0/portable/](../../models/tc0/portable/README.md). Earlier in
+this lane the same scope also agreed with the registered model on shen-scheme 0.26 and
+0.54 through a Python wrapper, which has been removed.
 
 Limits (both checks): development evidence only, `qualification: UNKNOWN`. The host
 observes a free run; it does not select steps, so this is not the control-channel profile

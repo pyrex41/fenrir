@@ -63,6 +63,8 @@ So Fenrir does not get its own Rocq core:
 
 **Shen port.** The owner asked for a current port, Shen/JIT preferred (it is also Búri's lead proof target). Shen/JIT 0.7 has 62-bit integers, and the registered model's arithmetic needs integers wider than I64, so the registered model cannot run on it. [models/tc0/portable/](models/tc0/portable/README.md) is a proposed width-independent model: I64 values as decimal strings, exact on 5,478 boundary cases on three ports, and in full agreement with the Solo5 guest and the JS candidate on 5,774 programs when run on Shen/JIT 0.7. It sits beside the registered model. Moving the oracle is an authority change with a concrete list in that README; shen-scheme 0.54 runs the registered model unchanged but the gate's tools assume a file it no longer ships.
 
+**Harness language.** The owner ruled that the machinery around the model should be Shen as well, not Python or JavaScript. [harness/](harness/README.md) is where it moves, starting with the Solo5 comparison, which now runs as one Shen program on Shen/JIT. The second implementations (JavaScript, C) stay non-Shen because their value is independence from the model.
+
 **Proof assistant version.** Use a current Rocq release where Rocq is needed. Búri pins Rocq 9.3.0 for its current lane; this repository follows Búri's pin rather than choosing separately. The two Rocq files here were checked with Coq 8.18 and are to be moved when they are next touched.
 
 ### Programmable typing, fixed checking

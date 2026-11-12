@@ -2,7 +2,8 @@
 // Development check: run TC0-A pure-call programs (schemas /1 and /2: calls,
 // closures, tuples, datatypes, match, bytes, eq) inside a stock Solo5 spt
 // guest and compare every reference step with the independent JS pure-call
-// machine and, with --shen, the Shen pure-call model. NOT a TC0 or Solo5
+// machine. The comparison with the Shen model is done in Shen by
+// harness/solo5-pure-call.shen (use --build-only here first). NOT a TC0 or Solo5
 // qualification: the host observes a free run and does not control steps.
 import {createHash} from 'node:crypto';
 import {copyFileSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
@@ -53,21 +54,12 @@ export function executeRange(tools,guest,batch,mode,first,end) {
   return traces;
 }
 
-function shenVersion(executable) {
-  const r=run(executable,['--version'],{timeout:20000});
-  return r.stdout.toString().trim().split('\n').at(-1)||'unreported';
-}
-
 function main() {
   const args=process.argv.slice(2);
   const option=(name,fallback)=>{const i=args.indexOf(name);return i<0?fallback:args[i+1];};
   const solo5=resolve(option('--solo5',resolve(root,'build/vendor/solo5')));
   const bound=Number(option('--exhaustive-nodes','4'));
   if(!Number.isSafeInteger(bound)||bound<0||bound>5)throw new Error('--exhaustive-nodes must be 0..5');
-  const shen=option('--shen',null);
-  // --portable-model: the proposed width-independent Shen model (models/tc0/portable),
-  // required for ports with integers narrower than I64 such as Shen/JIT.
-  const portable=args.includes('--portable-model');
   const tools=toolchain(solo5);
   const out=resolve(root,'build/solo5/freerun-pure-call',`${Date.now()}-${process.pid}`);
   const families={hand:[...callHand,...dataHand],'generated-pure-call':generatePureCalls(32).cases,'generated-pure-data':generatePureData(24).cases};
@@ -80,17 +72,16 @@ function main() {
   const lowered=lowerBatch(programs);
   const guest=buildGuest(tools,lowered.header,out);
   const checked=programs.map(p=>validatePureCallArtifact(encode(p.program),p.input));
+  // --build-only: write the validated programs and the guest image for the Shen harness
+  // (harness/solo5-pure-call.shen) and stop. No comparison happens in this process.
+  if(args.includes('--build-only')) {
+    writeFileSync(resolve(out,'programs.json'),JSON.stringify(checked.map(c=>c.artifact)));
+    writeFileSync(resolve(out,'batch.json'),JSON.stringify({guest,tender:tools.tender,batch_sha256:lowered.batch_sha256,programs:resolve(out,'programs.json'),count:String(programs.length)})+'\n');
+    console.log(out);return;
+  }
   const reference=mode=>checked.map(c=>{const r=new PureCallMachine(c.artifact,c.input,MODES[mode]).run(FUEL);return {execution:r.execution,steps:r.steps,outcome:r.outcome};});
   const guestRun=mode=>{const traces=[];for(let first=0;first<programs.length;first+=CHUNK)traces.push(...executeRange(tools,guest,lowered.batch_sha256,mode,first,Math.min(first+CHUNK,programs.length)));return traces;};
-  const failures=[],outcomes={},perFamily={},mutants={};let steps=0,modelSteps=0;
-  // The oracle runs as its own process; the guest never sees its output.
-  let model=null;
-  if(shen) {
-    writeFileSync(resolve(out,'programs.json'),JSON.stringify(programs.map(p=>p.program)));
-    must('python3',['-I',resolve(root,'tools/solo5/shen-pure-call-traces.py'),...(portable?['--portable']:[]),resolve(shen),resolve(out,'programs.json'),resolve(out,'shen.jsonl')],{timeout:1800000});
-    model=readFileSync(resolve(out,'shen.jsonl'),'utf8').trimEnd().split('\n').map(line=>JSON.parse(line));
-    if(model.length!==programs.length)throw new Error('Wrong Shen trace count');
-  }
+  const failures=[],outcomes={},perFamily={},mutants={};let steps=0;
   const normalCandidate=reference('normal');
   for(const mode of Object.keys(MODES)) {
     const guestTraces=guestRun(mode),candidate=mode==='normal'?normalCandidate:reference(mode);
@@ -100,11 +91,6 @@ function main() {
       const divergence=g.execution!==c.execution?{epoch:'execution',guest:g.execution,candidate:c.execution}:firstDivergence(g.steps,c.steps);
       if(divergence&&failures.length<20)failures.push({family:program.family,program:program.name,mode,...divergence});
       else if(divergence)failures.push({family:program.family,program:program.name,mode,epoch:divergence.epoch});
-      if(mode==='normal'&&model) {
-        const against=g.execution!==model[i].execution?{epoch:'execution',guest:g.execution,model:model[i].execution}:firstDivergence(g.steps,model[i].steps);
-        if(against)failures.push({family:program.family,program:program.name,mode:'normal-vs-shen',epoch:against.epoch,guest:against.guest,model:against.candidate??against.model});
-        modelSteps+=model[i].steps.length;
-      }
       if(mode==='normal') {
         steps+=g.steps.length;perFamily[program.family]=(perFamily[program.family]||0)+1;
         const key=c.outcome?(c.outcome[0]==='Trap'?'Trap:'+c.outcome[1]:'Ok'):'BudgetExhausted';outcomes[key]=(outcomes[key]||0)+1;
@@ -115,8 +101,7 @@ function main() {
   const noKill=Object.values(mutants).some(m=>m.killed==='0');
   const report={schema:'fenrir.solo5.freerun-pure-call-development/1',status:failures.length||noKill?'development-fail':'development-pass',
     qualification:'UNKNOWN',
-    scope:'TC0-A pure-call demo schemas /1 and /2; stock spt tender; observed free run compared with '+(model?'the Shen pure-call model and ':'')+'the JS pure-call machine; entry input ["int","0"]',
-    shen_oracle:model?{executable_sha256:sha(readFileSync(resolve(shen))),version:shenVersion(resolve(shen)),model:portable?'portable (proposed, models/tc0/portable)':'registered',model_steps_compared:String(modelSteps)}:'not-run',solo5_commit:SOLO5_COMMIT,triple:tools.triple,tender_sha256:tools.tender_sha256,
+    scope:'TC0-A pure-call demo schemas /1 and /2; stock spt tender; observed free run compared with the JS pure-call machine; entry input ["int","0"]',
     guest_sha256:sha(readFileSync(guest)),batch_sha256:lowered.batch_sha256,fuel:String(FUEL),
     programs:String(programs.length),programs_by_family:perFamily,reference_steps_compared:String(steps),outcomes,mutants,
     failure_count:String(failures.length),failures:failures.slice(0,20)};

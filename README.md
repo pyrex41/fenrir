@@ -18,13 +18,16 @@ store. The amendment changes no TC0 evidence.
 
 - **Solo5 lane (development).** Fenrir programs run as guests of a stock Solo5
   `spt` tender, built from the pinned Solo5 commit on Linux x86-64 with no
-  Docker and no KVM, and every reference step is compared with the Shen model
-  and the JS candidate. `node tools/solo5/freerun-pure-call.mjs
-  --exhaustive-nodes 5 --shen build/toolchain/shen-scheme` covers calls,
-  closures, datatypes, match and bytes: 5,774 programs, 86,286 steps, all three
-  agree, and the guest's two injected defects are detected (4,019 and 238
-  programs). The host observes a free run; step control and replay are not
-  there yet. See [backends/solo5/README.md](backends/solo5/README.md).
+  Docker and no KVM. `sh harness/run-solo5-pure-call.sh` compares every
+  reference step of 5,774 programs (calls, closures, datatypes, match, bytes;
+  86,286 steps) with the Shen model: all agree, and the guest's two injected
+  defects are detected (4,019 and 238 programs). The host observes a free run;
+  step control and replay are not there yet. See
+  [backends/solo5/README.md](backends/solo5/README.md).
+- **Harness in Shen.** That comparison is itself a Shen program on Shen/JIT
+  0.7 ([harness/](harness/README.md)): it runs the model in-process, launches
+  the guest and compares, in about 5 seconds. The rest of the harness is still
+  Python and JavaScript and moves over piece by piece; the gate is untouched.
 - **Current Shen ports.** Shen/JIT 0.7 and shen-scheme 0.54 both work as the
   oracle for the Solo5 comparison. Shen/JIT needs the proposed
   width-independent model in [models/tc0/portable/](models/tc0/portable/README.md)

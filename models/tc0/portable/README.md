@@ -37,7 +37,7 @@ output has the same shape, so the existing normalization is reused.
 
 ```sh
 node tools/tc0/check-portable-i64.mjs build/toolchain/shen-jit build/toolchain/shen-scheme-v0.54/bin/shen-scheme
-node tools/solo5/freerun-pure-call.mjs --exhaustive-nodes 5 --portable-model --shen build/toolchain/shen-jit
+sh harness/run-solo5-pure-call.sh
 ```
 
 - **Arithmetic against exact results.** 5,478 cases (five binary operations and
@@ -46,9 +46,11 @@ node tools/solo5/freerun-pure-call.mjs --exhaustive-nodes 5 --portable-model --s
   shen-scheme 0.26. The set includes both I64 extremes, the multiplication
   boundary 3037000499/3037000500, and values on each side of 2^53, 2^61 and
   2^62.
-- **Whole model against the Solo5 guest and the JS candidate.** With this model
-  on Shen/JIT 0.7 as the oracle, all 5,774 pure-call programs (86,286 reference
-  steps) agree, in about 27 seconds. The same holds on shen-scheme 0.54. The
+- **Whole model against the Solo5 guest.** With this model on Shen/JIT 0.7,
+  run by the Shen harness ([harness/](../../harness/README.md)), all 5,774
+  pure-call programs (86,286 reference steps) agree with the guest. Before the
+  harness moved to Shen the same held on shen-scheme 0.54 through a Python
+  wrapper, since removed. The
   registered model on shen-scheme 0.26 and 0.54 gives the same traces on the
   same programs, which is the evidence that the two models agree on this scope.
 
