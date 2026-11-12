@@ -18,6 +18,7 @@ import {cases as dataHand} from '../../fixtures/tc0/pure-data-hand-cases.mjs';
 import {generatePureCalls} from '../tc0/pure-call-generate.mjs';
 import {generatePureData} from '../tc0/pure-data-generate.mjs';
 import {enumeratePureData} from '../tc0/pure-data-enumerate.mjs';
+import {VALUES} from '../tc0/check-portable-i64.mjs';
 
 const root=resolve(import.meta.dirname,'../..');
 const FUEL=200,CHUNK=250,INPUT=['int','0'];
@@ -54,6 +55,26 @@ export function executeRange(tools,guest,batch,mode,first,end) {
   return traces;
 }
 
+// Exact-arithmetic family: every binary I64 operation over the boundary set squared, and
+// negation over the set, each as a whole program through the machine. No expected results
+// are attached: the guest's C arithmetic and the model's digit arithmetic are the two
+// independent sides, compared by the harness.
+export function exactArithmeticCases() {
+  const base=callHand[0].program,cases=[];
+  const program=(name,result,body,ids)=>({...base,module:name,datatypes:[],effects:[],entry:'main',
+    functions:[{id:'0',name:'main',parameter_id:'1',argument_type:'I64',result_type:result,effects:[],body}],
+    source_map:['0',...ids].map(id=>({id,file:name,line:'0',column:'0'}))});
+  VALUES.forEach((a,i)=>{
+    cases.push({name:`neg-${i}`,program:program(`neg-${i}`,'I64',['prim','2','neg',['int','3',String(a)]],['2','3'])});
+    VALUES.forEach((b,j)=>{
+      for(const op of ['add','sub','mul','div','lt','le','gt','ge'])
+        cases.push({name:`${op}-${i}-${j}`,program:program(`${op}-${i}-${j}`,['lt','le','gt','ge'].includes(op)?'Bool':'I64',
+          ['prim','2',op,['int','3',String(a)],['int','4',String(b)]],['2','3','4'])});
+    });
+  });
+  return cases;
+}
+
 function main() {
   const args=process.argv.slice(2);
   const option=(name,fallback)=>{const i=args.indexOf(name);return i<0?fallback:args[i+1];};
@@ -62,8 +83,10 @@ function main() {
   if(!Number.isSafeInteger(bound)||bound<0||bound>5)throw new Error('--exhaustive-nodes must be 0..5');
   const tools=toolchain(solo5);
   const out=resolve(root,'build/solo5/freerun-pure-call',`${Date.now()}-${process.pid}`);
-  const families={hand:[...callHand,...dataHand],'generated-pure-call':generatePureCalls(32).cases,'generated-pure-data':generatePureData(24).cases};
-  if(bound){
+  const exact=args.includes('--exact-arithmetic');
+  const families=exact?{'exact-arithmetic':exactArithmeticCases()}
+    :{hand:[...callHand,...dataHand],'generated-pure-call':generatePureCalls(32).cases,'generated-pure-data':generatePureData(24).cases};
+  if(bound&&!exact){
     const exhaustive=enumeratePureData(bound,{maxCases:8000});
     if(exhaustive.truncated)throw new Error('Exhaustive family truncated');
     families[`exhaustive-${bound}`]=exhaustive.cases;

@@ -8,29 +8,44 @@ subprocess libraries.
 ## What runs today
 
 ```sh
-sh harness/run-solo5-pure-call.sh        # full scope, about 5 s after the guest is built
-sh harness/run-solo5-pure-call.sh 0      # hand and generated cases only
+sh harness/run-solo5-pure-call.sh          # Solo5 guest against the model, full scope, ~5 s
+sh harness/run-solo5-pure-call.sh exact    # exact arithmetic: C guest against the model, ~4 s
+sh harness/run-model-vs-candidate.sh       # JavaScript implementation against the model, ~11 s
 ```
 
-[solo5-pure-call.shen](solo5-pure-call.shen) is one Shen program that:
+[common.shen](common.shen) holds what the programs share: turning a program
+(decoded JSON) into a model state as data, running the model, putting its
+observations in JSON shape, and comparing JSON values regardless of key order.
+Nothing is printed and re-read between the harness and the model: they are one
+Shen process.
 
-1. reads the batch of programs as JSON and turns each into a model state, as
-   data (no text is printed and re-read);
-2. runs the Shen model on each program **in the same process**;
-3. launches the Solo5 tender on the guest image and captures its output;
-4. parses the guest's frames strictly and compares every step with the model;
-5. reruns the guest with each injected defect and requires that the comparison
-   detects it;
-6. prints a JSON report and exits 0 only on full agreement.
+**[solo5-pure-call.shen](solo5-pure-call.shen)** runs the model on each program,
+launches the Solo5 tender on the guest image, parses the guest's frames
+strictly, compares every step, then reruns the guest with each injected defect
+and requires that the comparison detects it.
 
-Recorded run: 5,774 programs, 86,286 steps, no difference; the reversed-operand
-defect detected on 4,019 programs and wrapping overflow on 238. The same scope
-took about 100 s through the earlier Python and JavaScript path, most of it
-printing Shen terms and parsing them back.
+| Batch | Programs | Steps | Result |
+| --- | --- | --- | --- |
+| Hand, generated and 5-node exhaustive | 5,774 | 86,286 | No difference; defects detected on 4,019 and 238 programs |
+| Exact arithmetic (`exact`) | 8,745 | 78,639 | No difference; 975 Overflow, 33 DivZero; defects detected on 8,712 and 975 |
 
-It replaces, for this comparison: the Python trace wrapper, the Python
-translation and normalization of Shen terms, and the JavaScript step
-comparison against Shen.
+The exact-arithmetic batch is every binary I64 operation over a 33-value
+boundary set squared, and negation over the set, each as a whole program. No
+expected results are attached. The two sides are independent by construction:
+the guest uses the C compiler's checked 64-bit arithmetic, the model uses
+decimal digit lists. This replaces Python's exact integers as the independent
+side of the arithmetic ledger, as the owner agreed.
+
+**[model-vs-candidate.shen](model-vs-candidate.shen)** launches `node` on the
+existing batch runner for the JavaScript implementation and its three mutants,
+runs the model here, and compares. At the 5-node bound: 5,695 of 5,695 programs
+agree (81,063 steps; 4,350 Ok, 595 DivZero, 517 Bounds, 233 Overflow), with
+reverse-operands killed on 3,940, arm-by-position on 975 and wrap-overflow on
+233, and no mutant crash. Those are the counts the Python checker
+`tools/check-tc0-pure-data-exhaustive.py` reports for the same scope.
+
+The same comparisons took about 100 s and 82 s through the Python route, most
+of it printing Shen terms and parsing them back.
 
 ## What is still not Shen
 
@@ -38,8 +53,9 @@ comparison against Shen.
 | --- | --- | --- |
 | Guest image build: generate programs, validate, lower to C data, compile | JavaScript (`tools/solo5/freerun-pure-call.mjs --build-only`) | The harness trusts this only to produce the two inputs it is given; a wrong batch shows up as a comparison failure or an identity mismatch |
 | Second implementation | JavaScript (`runtime/tc0/`) and C (`backends/solo5/pure-call/`) | Stays non-Shen on purpose: it has to be independent of the model |
-| Model against the JavaScript implementation: hand cases, exhaustive scope | Python (`tools/check-tc0-pure-call.py`, `check-tc0-pure-data-exhaustive.py`) | Next to move: same shape as this harness with `node` as the launched process |
-| Exact-arithmetic ledger | Python | Its expected results must come from something other than the model's own arithmetic; needs a decision on what that is in a Shen-only harness |
+| Hand cases with their hand-derived expectations (staging, depth, emission order, descriptors) | Python (`tools/check-tc0-pure-call.py`) | Next to move |
+| Python checkers now duplicated in Shen: exhaustive scope, exact arithmetic | Python (`check-tc0-pure-data-exhaustive.py`, `check-tc0-exact-arithmetic.py`) | Kept only because the registered gate calls them; they go when the gate moves |
+| Reduction of failing programs, repair evaluation | Python and JavaScript | After the hand cases |
 | Validator | JavaScript | Natural fit for Shen sequent rules; this is also Fenrir's type checker in the amendment |
 | Generators, enumerator, reducer | JavaScript | Plain list processing |
 | TC0-A gate and its receipts | Python, registered | Untouched. Replacing it is an authority change for the owner |

@@ -26,8 +26,12 @@ store. The amendment changes no TC0 evidence.
   [backends/solo5/README.md](backends/solo5/README.md).
 - **Harness in Shen.** That comparison is itself a Shen program on Shen/JIT
   0.7 ([harness/](harness/README.md)): it runs the model in-process, launches
-  the guest and compares, in about 5 seconds. The rest of the harness is still
-  Python and JavaScript and moves over piece by piece; the gate is untouched.
+  the guest and compares, in about 5 seconds. Two more comparisons run the
+  same way: the model against the JavaScript implementation over the
+  exhaustive scope (5,695 programs, same counts as the Python checker), and
+  exact arithmetic with the C guest as the independent side (8,745 programs).
+  The rest of the harness is still Python and JavaScript and moves over piece
+  by piece; the gate is untouched and still calls the Python checkers.
 - **Current Shen ports.** Shen/JIT 0.7 and shen-scheme 0.54 both work as the
   oracle for the Solo5 comparison. Shen/JIT needs the proposed
   width-independent model in [models/tc0/portable/](models/tc0/portable/README.md)
