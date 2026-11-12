@@ -69,6 +69,23 @@ candidate agree on every step. `reverse-operands` mode is detected on 4,019 prog
 of it Shen. The Shen traces come through `tools/solo5/shen-pure-call-traces.py`, a
 transport wrapper around the existing oracle driver and normalization.
 
+### Oracle on current Shen ports
+
+`--shen` accepts any Shen launcher with the `script`/`eval` command line. Measured on the
+pure-call check (5,774 programs, 86,286 steps, full agreement in each row):
+
+| Oracle | Model | Time |
+| --- | --- | --- |
+| shen-scheme 0.26 (flake pin) | registered | ~100 s |
+| shen-scheme 0.54 | registered | ~50 s |
+| Shen/JIT 0.7 | portable (`--portable-model`) | ~27 s |
+
+Shen/JIT integers are 62-bit, so the registered model cannot run on it: add
+`--portable-model` to use the proposed width-independent model in
+[models/tc0/portable/](../../models/tc0/portable/README.md). The arithmetic-only
+`freerun.mjs` still uses the registered expression model and on Shen/JIT is only valid
+while values fit 62 bits, which its generated family does.
+
 Limits (both checks): development evidence only, `qualification: UNKNOWN`. The host
 observes a free run; it does not select steps, so this is not the control-channel profile
 and gives no replay. `spt` is a seccomp-sandboxed process, not a virtual machine. The

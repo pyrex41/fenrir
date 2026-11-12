@@ -25,6 +25,11 @@ store. The amendment changes no TC0 evidence.
   agree, and the guest's two injected defects are detected (4,019 and 238
   programs). The host observes a free run; step control and replay are not
   there yet. See [backends/solo5/README.md](backends/solo5/README.md).
+- **Current Shen ports.** Shen/JIT 0.7 and shen-scheme 0.54 both work as the
+  oracle for the Solo5 comparison. Shen/JIT needs the proposed
+  width-independent model in [models/tc0/portable/](models/tc0/portable/README.md)
+  because its integers are 62-bit; the registered model and the gate still
+  name shen-scheme 0.26.
 - **Service model.** [verification/service/](verification/service/) is a Rocq
   model of a tenant-scoped request that atomically records a report, a durable
   job and its retry result before answering, with write isolation, atomicity,

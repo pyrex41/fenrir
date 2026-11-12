@@ -53,6 +53,11 @@ export function executeRange(tools,guest,batch,mode,first,end) {
   return traces;
 }
 
+function shenVersion(executable) {
+  const r=run(executable,['--version'],{timeout:20000});
+  return r.stdout.toString().trim().split('\n').at(-1)||'unreported';
+}
+
 function main() {
   const args=process.argv.slice(2);
   const option=(name,fallback)=>{const i=args.indexOf(name);return i<0?fallback:args[i+1];};
@@ -60,6 +65,9 @@ function main() {
   const bound=Number(option('--exhaustive-nodes','4'));
   if(!Number.isSafeInteger(bound)||bound<0||bound>5)throw new Error('--exhaustive-nodes must be 0..5');
   const shen=option('--shen',null);
+  // --portable-model: the proposed width-independent Shen model (models/tc0/portable),
+  // required for ports with integers narrower than I64 such as Shen/JIT.
+  const portable=args.includes('--portable-model');
   const tools=toolchain(solo5);
   const out=resolve(root,'build/solo5/freerun-pure-call',`${Date.now()}-${process.pid}`);
   const families={hand:[...callHand,...dataHand],'generated-pure-call':generatePureCalls(32).cases,'generated-pure-data':generatePureData(24).cases};
@@ -79,7 +87,7 @@ function main() {
   let model=null;
   if(shen) {
     writeFileSync(resolve(out,'programs.json'),JSON.stringify(programs.map(p=>p.program)));
-    must('python3',['-I',resolve(root,'tools/solo5/shen-pure-call-traces.py'),resolve(shen),resolve(out,'programs.json'),resolve(out,'shen.jsonl')],{timeout:1800000});
+    must('python3',['-I',resolve(root,'tools/solo5/shen-pure-call-traces.py'),...(portable?['--portable']:[]),resolve(shen),resolve(out,'programs.json'),resolve(out,'shen.jsonl')],{timeout:1800000});
     model=readFileSync(resolve(out,'shen.jsonl'),'utf8').trimEnd().split('\n').map(line=>JSON.parse(line));
     if(model.length!==programs.length)throw new Error('Wrong Shen trace count');
   }
@@ -108,7 +116,7 @@ function main() {
   const report={schema:'fenrir.solo5.freerun-pure-call-development/1',status:failures.length||noKill?'development-fail':'development-pass',
     qualification:'UNKNOWN',
     scope:'TC0-A pure-call demo schemas /1 and /2; stock spt tender; observed free run compared with '+(model?'the Shen pure-call model and ':'')+'the JS pure-call machine; entry input ["int","0"]',
-    shen_oracle:model?{executable_sha256:sha(readFileSync(resolve(shen))),model_steps_compared:String(modelSteps)}:'not-run',solo5_commit:SOLO5_COMMIT,triple:tools.triple,tender_sha256:tools.tender_sha256,
+    shen_oracle:model?{executable_sha256:sha(readFileSync(resolve(shen))),version:shenVersion(resolve(shen)),model:portable?'portable (proposed, models/tc0/portable)':'registered',model_steps_compared:String(modelSteps)}:'not-run',solo5_commit:SOLO5_COMMIT,triple:tools.triple,tender_sha256:tools.tender_sha256,
     guest_sha256:sha(readFileSync(guest)),batch_sha256:lowered.batch_sha256,fuel:String(FUEL),
     programs:String(programs.length),programs_by_family:perFamily,reference_steps_compared:String(steps),outcomes,mutants,
     failure_count:String(failures.length),failures:failures.slice(0,20)};

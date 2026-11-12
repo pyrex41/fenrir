@@ -61,6 +61,8 @@ So Fenrir does not get its own Rocq core:
 
 **Limits, stated now.** Búri's own ledger says no Shen implementation is verified yet and the contract calculus is in progress with one worked example. Reasoning about a Fenrir program through contracts on the interpreter that runs it has not been tried and its cost is unknown. The first test is small: one TC0-A property, for example that checked `add` never returns a value outside I64, certified through Búri's checker against `models/tc0/pure-call-machine.shen`. Until that works, universal claims about Fenrir are reported as open, and rule-set claims as "derivable under rule set R, soundness not yet proved".
 
+**Shen port.** The owner asked for a current port, Shen/JIT preferred (it is also Búri's lead proof target). Shen/JIT 0.7 has 62-bit integers, and the registered model's arithmetic needs integers wider than I64, so the registered model cannot run on it. [models/tc0/portable/](models/tc0/portable/README.md) is a proposed width-independent model: I64 values as decimal strings, exact on 5,478 boundary cases on three ports, and in full agreement with the Solo5 guest and the JS candidate on 5,774 programs when run on Shen/JIT 0.7. It sits beside the registered model. Moving the oracle is an authority change with a concrete list in that README; shen-scheme 0.54 runs the registered model unchanged but the gate's tools assume a file it no longer ships.
+
 **Proof assistant version.** Use a current Rocq release where Rocq is needed. Búri pins Rocq 9.3.0 for its current lane; this repository follows Búri's pin rather than choosing separately. The two Rocq files here were checked with Coq 8.18 and are to be moved when they are next touched.
 
 ### Programmable typing, fixed checking
