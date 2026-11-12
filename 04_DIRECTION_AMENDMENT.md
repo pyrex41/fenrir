@@ -1,6 +1,6 @@
 # Fenrir direction amendment: Shen authority with checked proofs, effect successor, Solo5 first
 
-Version 0.2 • Architecture amendment with owner decisions recorded
+Version 0.3 • Architecture amendment with owner decisions recorded and confirmed
 
 **Working names:** unchanged. Fenrir is the language and the project. Gleipnir is its exploration and conformance harness. TC0 is the first core (contract 0.2). **TC1** is the name of its versioned successor.
 
@@ -145,15 +145,22 @@ The target theorem is the one stated in the AArch64 lane's plan: for source P, i
 | Native process | Development adapter only | JS candidate |
 | Wasm | Later: portable components, sandboxed tenant or policy logic | Not started |
 
-**Solo5 state (12 November 2026).** Solo5 v0.9.3 at the pinned commit `38e0c348` builds from source on Linux x86-64 with the distribution compiler, without Docker and without the retained images whose loss blocked the native epoch. [tools/solo5/freerun.mjs](tools/solo5/freerun.mjs) lowers TC0-A arithmetic artifacts, links the existing C candidate machine into a guest for the stock `spt` tender, runs it, and compares every reference step with the JS expression machine: 81 programs, 1,051 steps, no divergence, and the guest's reverse-operand defect is detected on all 81. This is development evidence under the JS candidate only.
+**Solo5 state (12 November 2026).** Solo5 v0.9.3 at the pinned commit `38e0c348` builds from source on Linux x86-64 with the distribution compiler, without Docker and without the retained images whose loss blocked the native epoch. Two development checks run Fenrir programs as guests of the stock `spt` tender and compare every reference step with the Shen model and the JS candidate:
+
+| Check | Guest machine | Programs | Steps | Result |
+| --- | --- | --- | --- | --- |
+| [tools/solo5/freerun.mjs](tools/solo5/freerun.mjs) | Existing arithmetic machine | 81 | 1,051 | Guest, Shen and JS agree |
+| [tools/solo5/freerun-pure-call.mjs](tools/solo5/freerun-pure-call.mjs) | New pure-call machine ([backends/solo5/pure-call/](backends/solo5/pure-call/)): calls, tail calls, closures, tuples, datatypes, match, bytes, `eq`, checked I64, emit | 5,774: 23 hand cases, 56 generated, and every program of the 5-node exhaustive grammar | 86,286 | Guest, Shen and JS agree |
+
+The guest's injected defects are detected by the same comparison: reversed operand order on 4,019 programs and wrapping overflow on 238, the same counts the JS candidate's mutants give in the existing exhaustive check. This is *bounded exploration passed*, development grade: one author lineage wrote the guest machine and the JS candidate was visible while writing it.
 
 What "Solo5 up" still needs, in order:
 
-1. The Shen oracle in the same comparison (the binary is the flake's pinned shen-scheme).
-2. The pure-call machine (`/2`: calls, closures, data, bytes) as a guest, replacing the arithmetic-only machine.
-3. The host control channel, so the host selects steps instead of observing a free run. This is the patched tender of the earlier native host and reopens that dependency epoch with rebuilt, recorded identities.
-4. `hvt` under KVM. The development container used here has no `/dev/kvm`; `spt` is a seccomp-sandboxed process, not a virtual machine.
-5. AArch64, where the proved code lane (PR #8) and the earlier measured profile live.
+1. The host control channel, so the host selects steps instead of observing a free run, and with it strict replay. This is the patched tender of the earlier native host and reopens that dependency epoch with rebuilt, recorded identities.
+2. `hvt` under KVM. The development container used here has no `/dev/kvm`; `spt` is a seccomp-sandboxed process, not a virtual machine.
+3. AArch64, where the proved code lane (PR #8) and the earlier measured profile live.
+4. Entry inputs other than unit, bool and int, and IDs above 2^64, which the guest lowering refuses today.
+5. Registration of these checks with the workflow controller, and a pinned build of Solo5 in the flake.
 
 Supervision restarts computation; it does not make state or messages durable. Durability comes from a persistence and acknowledgment protocol with a contract (§8).
 
@@ -174,7 +181,7 @@ It must establish, as separate statements:
 
 Confidentiality (other tenants' data cannot influence what *t* observes) is a relational property and stronger than the frame property. It is not claimed until it is stated and proved as such. Concurrency of transactions needs an explicit isolation contract; atomicity alone does not protect a business invariant from two interleaved read-then-write requests.
 
-**Ruling: BEAM and SQLite.** The deployment shape, as this document reads that ruling (to be confirmed, since BEAM cannot run inside a Solo5 guest):
+**Ruling: BEAM and SQLite.** The deployment shape, confirmed by the owner (BEAM cannot run inside a Solo5 guest):
 
 - An OTP supervisor owns the Solo5 tender processes. Each Fenrir image is a supervised worker with a typed request/response protocol over the guest's control channel.
 - SQLite lives on the host side, behind the storage adapter that discharges Fenrir's durable effects. A durable operation crosses the Solo5 boundary as a protocol request; the guest holds no database.
@@ -205,7 +212,7 @@ Gate verdicts (PASS, FAIL, UNKNOWN, BLOCKED, DEFERRED) are unchanged. Claims add
 | Bounded exploration passed | No violation within the explored programs, schedules and bounds |
 | Observed history accepted | This recorded execution is consistent with the specification |
 
-Current standing under this vocabulary: TC0-A is *bounded exploration passed* (at `1db7471`, under waivers). The Solo5 free-run comparison is *bounded exploration passed* against the JS candidate only. The AArch64 lane is *implementation refinement proved* for a closed unary checked-I64 add/subtract/negate profile against a handwritten instruction model, and is still a draft PR. The service example is *model property proved*. Nothing in the repository is yet a refinement proof against real hardware semantics or a real database.
+Current standing under this vocabulary: TC0-A is *bounded exploration passed* (at `1db7471`, under waivers). The Solo5 free-run comparisons are *bounded exploration passed* against Shen and the JS candidate, development grade. The AArch64 lane is *implementation refinement proved* for a closed unary checked-I64 add/subtract/negate profile against a handwritten instruction model, and is still a draft PR. The service example is *model property proved*. Nothing in the repository is yet a refinement proof against real hardware semantics or a real database.
 
 ## 10 Build order
 
@@ -214,7 +221,7 @@ Current standing under this vocabulary: TC0-A is *bounded exploration passed* (a
 | Step | Build | Done when |
 | --- | --- | --- |
 | B0 | Merge the open branches in the order given in [campaigns/RECONCILIATION_2026-11.md](campaigns/RECONCILIATION_2026-11.md) | PRs #5, #6, #8 merged; #7 rewritten against §4 |
-| B1 | **Solo5 lane** (§7): Shen in the comparison, pure-call machine as guest, control channel | A `/2` program with closures and data runs in Solo5 under host-selected steps and agrees with Shen |
+| B1 | **Solo5 lane** (§7): Shen in the comparison (done), pure-call machine as guest (done, free-running), control channel (open) | A `/2` program with closures and data runs in Solo5 under host-selected steps and agrees with Shen |
 | B2 | **TC1 effects** (§4): contract text, then handlers in the Shen model and the candidate with fixtures and mutants; tail-resumptive first, explicit one-shot resumption second | A handler program with agreeing traces; `double-resume` and `forgotten-resume` mutants caught |
 | B3 | **Frontend**, written in Shen: reader, elaboration to checked core artifacts, effect-row inference, typing rules as sequent rules | A program a person can write, read, run and check, executing in Solo5 |
 | B4 | **Tasks and channels** under the production scheduling contract (§14) | The commuting obligation checked on the exhaustive-small scope |
@@ -250,7 +257,7 @@ The G1 refresh on a supported runner (plan §18 item 1) is still owed. TC0-B and
 | 9 | Proof assistant version | Current Rocq release, where Rocq is needed | §3: follow Búri's pin |
 | 10 | Consolidate here | Agreed. Búri is on GitHub and is about proving Shen/JIT in Rocq | §11 |
 
-Three points in this version are this document's reading of a ruling and need a yes or no:
+Three points in version 0.2 were this document's reading of a ruling. The owner confirmed all three on 12 November 2026:
 
 1. Ruling 1 as "Shen authority, Búri-backed checking", given what the experiment shows Shen does not do alone (§3).
 2. Ruling 7 as "OTP supervises Solo5 guests and owns SQLite on the host side" (§8).

@@ -40,12 +40,38 @@ files, lowers each artifact with the existing `native-arithmetic/lower.mjs`, com
 own toolchain wrapper, runs the guest under the stock `solo5-spt` tender in `normal` and
 `mutant` modes, and compares every reference step with the JS expression machine.
 
-Recorded run: 81 programs (the left-trap fixture and 80 generated), 1,051 reference
-steps, no divergence; 41 DivZero traps and 40 results; the reverse-operand defect
-detected on all 81. Report: `build/solo5/freerun/<run>/report.json`.
+Add `--shen build/toolchain/shen-scheme` (the flake's pinned shen-scheme v0.26) to put the
+Shen expression model in the same comparison.
 
-Limits: development evidence only, `qualification: UNKNOWN`. The comparison is against
-the JS candidate, not Shen. The host observes a free run; it does not select steps, so
-this is not the control-channel profile and gives no replay. `spt` is a seccomp-sandboxed
-process, not a virtual machine. The toolchain, tender and host kernel are trusted as
-built, and the build is not reproducible-build pinned.
+Recorded run: 81 programs (the left-trap fixture and 80 generated), 1,051 reference
+steps; guest, Shen model and JS candidate agree on every step; 41 DivZero traps and 40
+results; the reverse-operand defect detected on all 81. Report:
+`build/solo5/freerun/<run>/report.json`.
+
+### Pure-call guest (calls, closures, data, bytes)
+
+```sh
+node tools/solo5/freerun-pure-call.mjs --exhaustive-nodes 5 --shen build/toolchain/shen-scheme
+```
+
+`backends/solo5/pure-call/` is a new C candidate for schemas `/1` and `/2`: named and
+tail calls, closures with captured bindings, tuples, declared and recursive datatypes,
+match, bytes primitives, structural `eq`, checked I64 and emit. Values live in a 4 MiB
+bump arena reset per program; exhausting it is a guest failure (exit 2), never a language
+trap. `tools/solo5/pure-call/lower.mjs` lowers a whole batch of validated artifacts to one
+data header (node tables, child and callee indices, each lambda's free bindings in numeric
+order), so one guest image holds every program and one tender launch runs a range of them.
+
+Recorded run: 5,774 programs (23 hand cases, 32 + 24 generated, and all 5,695 programs of
+the 5-node exhaustive grammar), 86,286 reference steps; guest, Shen pure-call model and JS
+candidate agree on every step. `reverse-operands` mode is detected on 4,019 programs and
+`wrap-overflow` on 238, matching the JS candidate's mutant counts. About 100 seconds, most
+of it Shen. The Shen traces come through `tools/solo5/shen-pure-call-traces.py`, a
+transport wrapper around the existing oracle driver and normalization.
+
+Limits (both checks): development evidence only, `qualification: UNKNOWN`. The host
+observes a free run; it does not select steps, so this is not the control-channel profile
+and gives no replay. `spt` is a seccomp-sandboxed process, not a virtual machine. The
+toolchain, tender and host kernel are trusted as built, and the build is not
+reproducible-build pinned. The guest machine and the JS candidate share an author lineage.
+The pure-call guest takes unit, bool and int entry inputs and IDs up to 2^64 − 1 only.

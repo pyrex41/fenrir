@@ -16,13 +16,15 @@ effect system gets one-shot resumptions and inferred effect rows (TC1). Solo5
 is the first execution target, with BEAM as supervisor and SQLite as the first
 store. The amendment changes no TC0 evidence.
 
-- **Solo5 lane (development).** `node tools/solo5/freerun.mjs` builds TC0-A
-  arithmetic artifacts into guests for a stock Solo5 `spt` tender and compares
-  every reference step with the JS expression machine. On Linux x86-64 with
-  Solo5 v0.9.3 built from the pinned commit (no Docker, no KVM): 81 programs,
-  1,051 steps, no divergence; the guest's reverse-operand defect is detected on
-  all 81. The Shen oracle is not in this comparison yet. See
-  [backends/solo5/README.md](backends/solo5/README.md).
+- **Solo5 lane (development).** Fenrir programs run as guests of a stock Solo5
+  `spt` tender, built from the pinned Solo5 commit on Linux x86-64 with no
+  Docker and no KVM, and every reference step is compared with the Shen model
+  and the JS candidate. `node tools/solo5/freerun-pure-call.mjs
+  --exhaustive-nodes 5 --shen build/toolchain/shen-scheme` covers calls,
+  closures, datatypes, match and bytes: 5,774 programs, 86,286 steps, all three
+  agree, and the guest's two injected defects are detected (4,019 and 238
+  programs). The host observes a free run; step control and replay are not
+  there yet. See [backends/solo5/README.md](backends/solo5/README.md).
 - **Service model.** [verification/service/](verification/service/) is a Rocq
   model of a tenant-scoped request that atomically records a report, a durable
   job and its retry result before answering, with write isolation, atomicity,
