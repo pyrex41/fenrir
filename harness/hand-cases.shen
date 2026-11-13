@@ -4,7 +4,7 @@
 \\ step staging, count of return frames, continuation depth bound, closure
 \\ descriptor count and emission order. Development evidence only.
 \\
-\\   shen-jit script harness/hand-cases.shen LIBDIR ROOT OUTDIR
+\\   shen-jit script harness/hand-cases.shen LIBDIR ROOT OUTDIR [sandbox]
 \\
 \\ Launches node on tools/tc0/run-pure-call-hand.mjs for the implementation's
 \\ traces. The model runs in this process and does not see them before comparing.
@@ -13,6 +13,8 @@
 (set fh.*lib* (cn (hd (tl (value *argv*))) "/"))
 (set fh.*root* (cn (hd (tl (tl (value *argv*)))) "/"))
 (set fh.*out* (cn (hd (tl (tl (tl (value *argv*))))) "/"))
+\\ Optional fifth argument "sandbox": run the implementation inside tools/tc0/sandbox.mjs.
+(set fh.*sandbox* (= (tl (tl (tl (tl (value *argv*))))) ["sandbox"]))
 (load (cn (value fh.*root*) "harness/common.shen"))
 
 \\ ---------- closure descriptors the model produced ----------
@@ -116,7 +118,8 @@
 
 (define fh.main
   -> (let File (cn (value fh.*out*) "hand.jsonl")
-          R (process.run "node" [(cn (value fh.*root*) "tools/tc0/run-pure-call-hand.mjs") File] (buffer.from-string "") [[timeout 60000]])
+          R (process.run "node" (fh.node-arguments "tools/tc0/run-pure-call-hand.mjs" [File] ["fixtures/tc0"] File (value fh.*sandbox*))
+                         (buffer.from-string "") [[timeout 60000]])
           Ran (if (and (= (hd R) ok) (process.success? (hd (tl R)))) true (error "harness: the JavaScript hand-case run did not complete"))
           View (buffer.from-string (read-file-as-string File))
           Rows (fh.json-lines View 0 (buffer.length View) [])
@@ -128,6 +131,7 @@
                          ["qualification" "UNKNOWN"]
                          ["harness" "Shen"]
                          ["shen" (make-string "~A ~A ~A" (value *implementation*) (value *port*) (version))]
+                         ["implementation_sandboxed" (value fh.*sandbox*)]
                          ["cases" (str (length Rows))]
                          ["expectations_checked" (str (fh.sum Results (/. R (nth 3 R)) 0))]
                          ["model_steps" (str (fh.sum Results (/. R (nth 4 R)) 0))]

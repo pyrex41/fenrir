@@ -3,7 +3,7 @@
 \\ grammar, and classify the implementation's three injected defects.
 \\ Development evidence only; no qualification verdict.
 \\
-\\   shen-jit script harness/model-vs-candidate.shen LIBDIR ROOT MAX_NODES OUTDIR
+\\   shen-jit script harness/model-vs-candidate.shen LIBDIR ROOT MAX_NODES OUTDIR [sandbox]
 \\
 \\ This program launches node on tools/tc0/run-pure-data-exhaustive.mjs, which
 \\ enumerates the programs, validates them and runs the JavaScript
@@ -16,6 +16,8 @@
 (set fh.*root* (cn (hd (tl (tl (value *argv*)))) "/"))
 (set fh.*bound* (hd (tl (tl (tl (value *argv*))))))
 (set fh.*out* (cn (hd (tl (tl (tl (tl (value *argv*)))))) "/"))
+\\ Optional sixth argument "sandbox": run the implementation inside tools/tc0/sandbox.mjs.
+(set fh.*sandbox* (= (tl (tl (tl (tl (tl (value *argv*)))))) ["sandbox"]))
 (load (cn (value fh.*root*) "harness/common.shen"))
 
 \\ The outcome the model reports in its final TaskTermination event.
@@ -66,7 +68,7 @@
 
 (define fh.main
   -> (let File (cn (value fh.*out*) (cn "candidate-" (cn (value fh.*bound*) ".jsonl")))
-          R (process.run "node" [(cn (value fh.*root*) "tools/tc0/run-pure-data-exhaustive.mjs") (value fh.*bound*) File]
+          R (process.run "node" (fh.node-arguments "tools/tc0/run-pure-data-exhaustive.mjs" [(value fh.*bound*) File] [] File (value fh.*sandbox*))
                          (buffer.from-string "") [[timeout 600000]])
           Ran (if (and (= (hd R) ok) (process.success? (hd (tl R)))) true
                   (error "harness: the JavaScript batch did not complete"))
@@ -93,6 +95,7 @@
                          ["shen" (make-string "~A ~A ~A" (value *implementation*) (value *port*) (version))]
                          ["scope" (cn "every program of the pure-data grammar with at most " (cn (value fh.*bound*) " nodes"))]
                          ["scope_complete" Complete]
+                         ["implementation_sandboxed" (value fh.*sandbox*)]
                          ["programs" (str (length Rows))]
                          ["agreeing" (str (hd Tally))]
                          ["model_steps" (str (nth 3 Tally))]

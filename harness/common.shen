@@ -198,6 +198,21 @@
                       ["events" (map (/. E (fh.event E)) (hd (tl (tl T))))] ["site" (fh.site (tc0.pc.site State))]]
       (fh.run Next (- Fuel 1) (+ Epoch 1) [Step | Acc])))
 
+\\ ---------- launching the JavaScript implementation ----------
+
+\\ Arguments for node to run Script (relative to the repository root) with Args.
+\\ Sandboxed: through tools/tc0/sandbox.mjs, which gives the process no network and
+\\ no environment, read access to the implementation tree and ExtraReads only, and
+\\ write access to Output only.
+(define fh.node-arguments
+  Script Args _ _ false -> [(cn (value fh.*root*) Script) | Args]
+  Script Args ExtraReads Output true ->
+    (append [(cn (value fh.*root*) "tools/tc0/sandbox.mjs") "--read"
+             (cn (value fh.*root*) "tools/tc0") (cn (value fh.*root*) "runtime/tc0")]
+            (map (/. R (cn (value fh.*root*) R)) ExtraReads)
+            ["--write" Output "--" (cn (value fh.*root*) Script)]
+            Args))
+
 \\ ---------- byte views ----------
 
 (define fh.next-line

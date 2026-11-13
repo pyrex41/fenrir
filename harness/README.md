@@ -47,18 +47,63 @@ reverse-operands killed on 3,940, arm-by-position on 975 and wrap-overflow on
 The same comparisons took about 100 s and 82 s through the Python route, most
 of it printing Shen terms and parsing them back.
 
+## The proposed gate
+
+```sh
+sh harness/run-hand-cases.sh
+sh harness/run-gate.sh
+```
+
+**[hand-cases.shen](hand-cases.shen)** checks the 24 hand fixtures: the model
+and the sandboxed JavaScript implementation agree step for step, every closure
+descriptor the implementation reports was produced by the model, and both
+satisfy the 42 hand-written expectations (outcome, step staging, return frame
+count, depth bound, descriptor count, emission order). Each kind of expectation
+was confirmed to fail when its expected value is corrupted.
+
+**[gate.shen](gate.shen)** is a proposed replacement for the registered
+evaluator `tools/check-tc0-a-gate.py`, with its own manifest
+`spec/tc0/tc0-a-requirements-shen.json` (status `proposed`). It keeps the
+registered gate's rows, claims and aggregation: any required FAIL gives FAIL,
+else BLOCKED, else UNKNOWN, else PASS. It always reports
+`authority: UNREGISTERED` and `qualification: UNKNOWN`. Each comparison runs as
+its own harness process, with the JavaScript implementation sandboxed.
+
+A row whose check has not moved to Shen yet is UNKNOWN, so an incomplete port
+cannot produce PASS. Current rows on a committed tree:
+
+| Row | Status | Why |
+| --- | --- | --- |
+| source-identity | PASS on a clean tree | |
+| toolchain-pinned | BLOCKED | Shen/JIT is not in the flake |
+| unit-suite | PASS | |
+| hand-agreement-and-replay | UNKNOWN | Hand cases agree; strict replay not moved yet |
+| exact-arithmetic | PASS | C guest against the model, 8,745 programs |
+| exhaustive-small | PASS | 5,695 programs |
+| three mutant rows | PASS | 3,940, 233 and 975 programs |
+| catalog-coverage | UNKNOWN | Not moved yet |
+| discovery-reduction-replay | UNKNOWN | Not moved yet |
+| candidate-boundary | PASS | Existing JavaScript probe tool |
+| requirement-ledger | PASS | Existing JavaScript checker |
+| independent-repair-fresh | UNKNOWN | Not moved yet |
+| independent-repair-isolation | PASS, with the recorded owner waiver | |
+| solo5-guest-agreement (optional, new) | PASS | 5,774 programs |
+
+Verdict today: BLOCKED. It includes the HEAD-drift fix of PR #6: the final
+check reads HEAD directly and compares it with the head recorded by the
+source-identity row.
+
 ## What is still not Shen
 
 | Piece | Now | Notes |
 | --- | --- | --- |
 | Guest image build: generate programs, validate, lower to C data, compile | JavaScript (`tools/solo5/freerun-pure-call.mjs --build-only`) | The harness trusts this only to produce the two inputs it is given; a wrong batch shows up as a comparison failure or an identity mismatch |
 | Second implementation | JavaScript (`runtime/tc0/`) and C (`backends/solo5/pure-call/`) | Stays non-Shen on purpose: it has to be independent of the model |
-| Hand cases with their hand-derived expectations (staging, depth, emission order, descriptors) | Python (`tools/check-tc0-pure-call.py`) | Next to move |
-| Python checkers now duplicated in Shen: exhaustive scope, exact arithmetic | Python (`check-tc0-pure-data-exhaustive.py`, `check-tc0-exact-arithmetic.py`) | Kept only because the registered gate calls them; they go when the gate moves |
-| Reduction of failing programs, repair evaluation | Python and JavaScript | After the hand cases |
+| Python checkers now duplicated in Shen: hand cases, exhaustive scope, exact arithmetic | Python (`check-tc0-pure-call.py`, `check-tc0-pure-data-exhaustive.py`, `check-tc0-exact-arithmetic.py`) | Kept only because the registered gate calls them; they go when the gate moves |
+| Strict replay, catalog coverage, reduction of failing programs, repair evaluation | Python and JavaScript | The four gate rows still UNKNOWN |
 | Validator | JavaScript | Natural fit for Shen sequent rules; this is also Fenrir's type checker in the amendment |
 | Generators, enumerator, reducer | JavaScript | Plain list processing |
-| TC0-A gate and its receipts | Python, registered | Untouched. Replacing it is an authority change for the owner |
+| TC0-A gate and its receipts | Python, registered | Untouched. `gate.shen` is the proposed replacement; switching is an authority change for the owner |
 | Solo5 host tooling of the earlier Docker profile | Python and Go | Superseded in part by the stock-tender lane |
 
 ## Limits of what runs today
