@@ -40,9 +40,19 @@
               (fh.row "PASS" [] [["head" Head]] Memo2)
               (fh.row "UNKNOWN" ["Worktree has uncommitted changes; evidence would not be source-bound"] [["head" Head]] Memo2)))))
 
+\\ The executable and library directory this gate is running on must be the flake's
+\\ shen-jit output. No nix, or no such output: BLOCKED. Anything else running: UNKNOWN.
 (define fh.toolchain-pinned
-  Memo -> (fh.row "BLOCKED" ["Shen/JIT and its libraries are built by hand and are not pinned in the flake"]
-                  [["shen" (make-string "~A ~A ~A" (value *implementation*) (value *port*) (version))]] Memo))
+  Memo ->
+    (let Built (fh.exec "nix" ["build" "--no-link" "--print-out-paths" ".#shen-jit"] 1800)
+         Pinned (fh.trim (hd (tl Built)))
+         Executable (fh.trim (hd (tl (fh.exec "realpath" [(value fh.*jit*)] 30))))
+         Library (fh.trim (hd (tl (fh.exec "realpath" [(value fh.*lib*)] 30))))
+      (if (not (= (hd Built) 0))
+          (fh.row "BLOCKED" ["nix is unavailable or could not build the flake's shen-jit output"] [] Memo)
+          (if (and (= Executable (cn Pinned "/bin/shen-jit")) (= Library (cn Pinned "/lib")))
+              (fh.row "PASS" [] [["shen_jit" Pinned] ["shen" (make-string "~A ~A ~A" (value *implementation*) (value *port*) (version))]] Memo)
+              (fh.row "UNKNOWN" [(make-string "The gate is running on ~A with libraries ~A, not the pinned ~A" Executable Library Pinned)] [] Memo)))))
 
 (define fh.unit-suite
   Memo ->

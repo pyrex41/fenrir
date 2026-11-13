@@ -4,6 +4,11 @@
 # Exit status: 0 verdict PASS, 1 FAIL, 2 anything else.
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
+# Use the flake's pinned Shen/JIT when nix can provide it; FENRIR_SHEN_JIT overrides.
+# A hand-built Shen/JIT still runs the gate, but its toolchain row will not pass.
+if [ -z "${FENRIR_SHEN_JIT:-}" ] && command -v nix >/dev/null 2>&1; then
+  FENRIR_SHEN_JIT=$(cd "$root" && nix build --no-link --print-out-paths .#shen-jit 2>/dev/null) || FENRIR_SHEN_JIT=
+fi
 jit="${FENRIR_SHEN_JIT:-$root/build/toolchain/shen-jit-0.7}"
 out="$root/build/harness/gate/$(date +%s)-$$"
 mkdir -p "$out"

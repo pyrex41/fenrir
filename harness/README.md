@@ -95,13 +95,13 @@ Strict replay uses the existing JavaScript tape code unchanged, through
 `tools/tc0/replay-reference.mjs`: the harness supplies the model's trace as the
 reference and holds the expectation (admitted, or diverged for a defect).
 
-A row whose check has not moved to Shen yet is UNKNOWN, so an incomplete port
-cannot produce PASS. Current rows on a committed tree:
+An evaluator error, a check that does not report, or a check the evaluator
+does not know is UNKNOWN, never a pass. Rows on a committed tree:
 
 | Row | Status | Why |
 | --- | --- | --- |
 | source-identity | PASS on a clean tree | |
-| toolchain-pinned | BLOCKED | Shen/JIT is not in the flake |
+| toolchain-pinned | PASS | The gate runs on the flake's `shen-jit` output (Shen/JIT v0.7, pinned by commit and hashes) |
 | unit-suite | PASS | |
 | hand-agreement-and-replay | PASS | 24 cases, 42 expectations, strict replay admitted for all 24 |
 | exact-arithmetic | PASS | C guest against the model, 8,745 programs |
@@ -115,7 +115,7 @@ cannot produce PASS. Current rows on a committed tree:
 | independent-repair-isolation | PASS, with the recorded owner waiver | |
 | solo5-guest-agreement (optional, new) | PASS | 5,774 programs |
 
-Verdict today: BLOCKED, by the toolchain row alone; every other required row passes on a committed tree. It includes the HEAD-drift fix of PR #6: the final
+Verdict on a committed tree, 13 November 2026: **PASS**, 15 of 15 required rows and all six claims, in about two minutes, with the recorded repair-isolation waiver reported. Because the evaluator is unregistered, the same report says `qualification: UNKNOWN`: this is a result about the proposed gate, not a TC0-A qualification. It includes the HEAD-drift fix of PR #6: the final
 check reads HEAD directly and compares it with the head recorded by the
 source-identity row.
 
@@ -128,7 +128,7 @@ source-identity row.
 | Python checkers now duplicated in Shen: hand cases, exhaustive scope, exact arithmetic | Python (`check-tc0-pure-call.py`, `check-tc0-pure-data-exhaustive.py`, `check-tc0-exact-arithmetic.py`) | Kept only because the registered gate calls them; they go when the gate moves |
 | Validator | JavaScript | Natural fit for Shen sequent rules; this is also Fenrir's type checker in the amendment |
 | Generators, enumerator, reducer | JavaScript | Plain list processing |
-| TC0-A gate and its receipts | Python, registered | Untouched. `gate.shen` is the proposed replacement; switching is an authority change for the owner |
+| TC0-A gate and its receipts | Python, registered | Untouched. `gate.shen` is the proposed replacement and now passes; switching registration, and deleting the Python checkers it replaces, is the owner's decision |
 | Solo5 host tooling of the earlier Docker profile | Python and Go | Superseded in part by the stock-tender lane |
 
 ## Limits of what runs today
@@ -141,5 +141,6 @@ source-identity row.
 - The harness and the model run in one Shen process. A bug in Shen/JIT itself
   could affect both; the guest is the independent side.
 - Entry input is fixed at `["int","0"]`.
-- Shen/JIT and its libraries are built from source by hand
-  (`make deps && make && make process` at tag `v0.7`) and are not in the flake.
+- Shen/JIT is pinned in the flake (`nix build .#shen-jit`); `run-gate.sh` uses
+  that output. The other runner scripts default to a hand-built copy under
+  `build/toolchain/shen-jit-0.7` unless `FENRIR_SHEN_JIT` points elsewhere.

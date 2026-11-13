@@ -24,14 +24,16 @@ store. The amendment changes no TC0 evidence.
   defects are detected (4,019 and 238 programs). The host observes a free run;
   step control and replay are not there yet. See
   [backends/solo5/README.md](backends/solo5/README.md).
-- **Harness in Shen.** That comparison is itself a Shen program on Shen/JIT
-  0.7 ([harness/](harness/README.md)): it runs the model in-process, launches
-  the guest and compares, in about 5 seconds. Two more comparisons run the
-  same way: the model against the JavaScript implementation over the
-  exhaustive scope (5,695 programs, same counts as the Python checker), and
-  exact arithmetic with the C guest as the independent side (8,745 programs).
-  The rest of the harness is still Python and JavaScript and moves over piece
-  by piece; the gate is untouched and still calls the Python checkers.
+- **Harness in Shen.** The checks around the model are now Shen programs on
+  Shen/JIT 0.7 ([harness/](harness/README.md)): hand cases, the exhaustive
+  scope, exact arithmetic, catalog coverage, strict replay, the
+  discovery-and-reduction campaign, the repair evaluation, and a proposed gate
+  evaluator that aggregates them. `sh harness/run-gate.sh` on a committed tree
+  gives verdict PASS on 15 of 15 required rows in about two minutes. It is
+  unregistered, so it reports `qualification: UNKNOWN`; the registered gate is
+  still the Python one, and the Python checkers stay until the owner switches.
+  JavaScript remains for the second implementation, program generation and
+  validation, and a few transports.
 - **Current Shen ports.** Shen/JIT 0.7 and shen-scheme 0.54 both work as the
   oracle for the Solo5 comparison. Shen/JIT needs the proposed
   width-independent model in [models/tc0/portable/](models/tc0/portable/README.md)

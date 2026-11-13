@@ -17,6 +17,7 @@
       "inputs": {
         "nixpkgs": "nixpkgs",
         "shen-cl-src": "shen-cl-src",
+        "shen-jit-src": "shen-jit-src",
         "yggdrasil-src": "yggdrasil-src"
       }
     },
@@ -35,6 +36,23 @@
         "rev": "dff7445e6cd3ed9c021fdf6e8a45ffafa3128347",
         "type": "git",
         "url": "https://github.com/Shen-Language/shen-cl"
+      }
+    },
+    "shen-jit-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1794365136,
+        "narHash": "sha256-i1DzZenPbogcDC5Az9K1razT73aP11mHn1gwYNsFIGQ=",
+        "ref": "refs/heads/main",
+        "rev": "2f4b48bf9aabc2b93379d15f1818e4209137eb60",
+        "revCount": 253,
+        "type": "git",
+        "url": "https://github.com/tizoc/shen-jit"
+      },
+      "original": {
+        "rev": "2f4b48bf9aabc2b93379d15f1818e4209137eb60",
+        "type": "git",
+        "url": "https://github.com/tizoc/shen-jit"
       }
     },
     "yggdrasil-src": {
