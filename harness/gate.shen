@@ -197,6 +197,22 @@
               (fh.row "FAIL" [(make-string "Mutant ~A survived every program (~A crashes are not kills)" Name (fh.member "crashed" Counts))] [] Memo)
               (fh.row "PASS" [] [["killed" Killed] ["survived" (fh.member "survived" Counts)] ["crashed" (fh.member "crashed" Counts)]] Memo)))))
 
+\\ Coverage is measured over the traces this run established as agreeing.
+(define fh.catalog-coverage
+  Memo ->
+    (if (or (= (fh.member-in "hand" Memo) []) (= (fh.member-in "exhaustive" Memo) [])
+            (not (= (fh.member "agreeing" (fh.member-in "exhaustive" Memo)) (fh.member "programs" (fh.member-in "exhaustive" Memo)))))
+        (fh.row "UNKNOWN" ["Needs this run's agreeing hand and exhaustive results"] [] Memo)
+        (let Report (fh.harness "coverage.shen" [(cn (value fh.*out*) "hand/hand.jsonl") (cn (value fh.*out*) "exhaustive/candidate-5.jsonl")] 900)
+             Status (fh.member "status" Report)
+          (if (= Status "outside-catalog")
+              (fh.row "FAIL" ["Steps outside the catalog"] [["unknown_observed" (json.stringify (fh.member "unknown_observed" Report) [])]] Memo)
+              (if (= Status "incomplete")
+                  (fh.row "UNKNOWN" ["Catalog transitions uncovered"] [["missing" (json.stringify (fh.member "missing" Report) [])]] Memo)
+                  (if (= Status "complete")
+                      (fh.row "PASS" [] [["covered" (make-string "~A/~A" (fh.member "covered" Report) (fh.member "catalog_keys" Report))]] Memo)
+                      (fh.row "UNKNOWN" ["The coverage harness did not report"] [] Memo)))))))
+
 (define fh.candidate-boundary
   Memo ->
     (let R (fh.exec "node" [(cn (value fh.*root*) "tools/tc0/check-sandbox.mjs") (cn (value fh.*out*) "sandbox.json")] 300)
@@ -251,7 +267,7 @@
   "mutant:reverse_operands" Memo -> (fh.mutant "reverse_operands" Memo)
   "mutant:wrap_overflow" Memo -> (fh.mutant "wrap_overflow" Memo)
   "mutant:arm_by_position" Memo -> (fh.mutant "arm_by_position" Memo)
-  "catalog-coverage" Memo -> (fh.not-ported "Catalog coverage" Memo)
+  "catalog-coverage" Memo -> (fh.catalog-coverage Memo)
   "discovery-reduction-replay" Memo -> (fh.not-ported "Generated discovery, reduction and failure replay" Memo)
   "candidate-boundary" Memo -> (fh.candidate-boundary Memo)
   "requirement-ledger" Memo -> (fh.requirement-ledger Memo)

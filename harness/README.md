@@ -81,7 +81,7 @@ cannot produce PASS. Current rows on a committed tree:
 | exact-arithmetic | PASS | C guest against the model, 8,745 programs |
 | exhaustive-small | PASS | 5,695 programs |
 | three mutant rows | PASS | 3,940, 233 and 975 programs |
-| catalog-coverage | UNKNOWN | Not moved yet |
+| catalog-coverage | PASS | [coverage.shen](coverage.shen): 112 of 112 catalog transitions, over the run's hand and exhaustive traces |
 | discovery-reduction-replay | UNKNOWN | Not moved yet |
 | candidate-boundary | PASS | Existing JavaScript probe tool |
 | requirement-ledger | PASS | Existing JavaScript checker |
@@ -100,7 +100,7 @@ source-identity row.
 | Guest image build: generate programs, validate, lower to C data, compile | JavaScript (`tools/solo5/freerun-pure-call.mjs --build-only`) | The harness trusts this only to produce the two inputs it is given; a wrong batch shows up as a comparison failure or an identity mismatch |
 | Second implementation | JavaScript (`runtime/tc0/`) and C (`backends/solo5/pure-call/`) | Stays non-Shen on purpose: it has to be independent of the model |
 | Python checkers now duplicated in Shen: hand cases, exhaustive scope, exact arithmetic | Python (`check-tc0-pure-call.py`, `check-tc0-pure-data-exhaustive.py`, `check-tc0-exact-arithmetic.py`) | Kept only because the registered gate calls them; they go when the gate moves |
-| Strict replay, catalog coverage, reduction of failing programs, repair evaluation | Python and JavaScript | The four gate rows still UNKNOWN |
+| Strict replay, reduction of failing programs, repair evaluation | Python and JavaScript | The three gate rows still UNKNOWN |
 | Validator | JavaScript | Natural fit for Shen sequent rules; this is also Fenrir's type checker in the amendment |
 | Generators, enumerator, reducer | JavaScript | Plain list processing |
 | TC0-A gate and its receipts | Python, registered | Untouched. `gate.shen` is the proposed replacement; switching is an authority change for the owner |
