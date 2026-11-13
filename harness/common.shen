@@ -205,6 +205,19 @@
   V I End -> (+ I 1) where (= (buffer.u8 V I) 10)
   V I End -> (fh.next-line V (+ I 1) End))
 
+\\ One decoded JSON value per nonempty line of a byte view.
+(define fh.json-lines
+  V I End Acc -> (reverse Acc) where (>= I End)
+  V I End Acc ->
+    (let Next (fh.next-line V I End)
+         Count (- (- Next I) (if (and (> Next I) (= (buffer.u8 V (- Next 1)) 10)) 1 0))
+      (fh.json-lines V Next End
+        (if (= Count 0) Acc [(json.decode (buffer.slice V I Count) [[byte-limit 16777216]]) | Acc]))))
+
+(define fh.last
+  [X] -> X
+  [_ | Xs] -> (fh.last Xs))
+
 \\ ---------- order-insensitive JSON comparison ----------
 
 (define fh.string<?

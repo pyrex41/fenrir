@@ -18,19 +18,6 @@
 (set fh.*out* (cn (hd (tl (tl (tl (tl (value *argv*)))))) "/"))
 (load (cn (value fh.*root*) "harness/common.shen"))
 
-\\ One decoded JSON value per nonempty line of a byte view.
-(define fh.json-lines
-  V I End Acc -> (reverse Acc) where (>= I End)
-  V I End Acc ->
-    (let Next (fh.next-line V I End)
-         Count (- (- Next I) (if (and (> Next I) (= (buffer.u8 V (- Next 1)) 10)) 1 0))
-      (fh.json-lines V Next End
-        (if (= Count 0) Acc [(json.decode (buffer.slice V I Count) [[byte-limit 16777216]]) | Acc]))))
-
-(define fh.last
-  [X] -> X
-  [_ | Xs] -> (fh.last Xs))
-
 \\ The outcome the model reports in its final TaskTermination event.
 (define fh.model-outcome
   Steps -> (fh.field "outcome" (hd (fh.field "events" (fh.last Steps)))))
