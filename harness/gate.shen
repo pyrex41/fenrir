@@ -19,69 +19,6 @@
 (set fh.*jit* (hd (tl (tl (tl (tl (value *argv*)))))))
 (load (cn (value fh.*root*) "harness/common.shen"))
 
-\\ ---------- processes and text ----------
-
-(define fh.exit-code
-  [exited N] -> N
-  _ -> -1)
-
-\\ [ExitCode Stdout Stderr]; -1 when the process did not exit normally in time.
-(define fh.exec
-  Program Args Seconds ->
-    (let R (process.run Program Args (buffer.from-string "")
-                        [[cwd (value fh.*root*)] [timeout (* Seconds 1000)] [stdout-limit 67108864] [stderr-limit 4194304]])
-      (if (= (hd R) ok)
-          [(fh.exit-code (process.status (hd (tl R))))
-           (buffer.string (process.output-bytes (hd (tl R))))
-           (buffer.string (process.error-bytes (hd (tl R))))]
-          [-1 "" "process did not complete within its time or output limits"])))
-
-(define fh.view-lines
-  V I End Acc -> (reverse Acc) where (>= I End)
-  V I End Acc ->
-    (let Next (fh.next-line V I End)
-         Count (- (- Next I) (if (and (> Next I) (= (buffer.u8 V (- Next 1)) 10)) 1 0))
-      (fh.view-lines V Next End [(buffer.string (buffer.slice V I Count)) | Acc])))
-
-(define fh.lines
-  S -> (let V (buffer.from-string S) (fh.view-lines V 0 (buffer.length V) [])))
-
-(define fh.starts?
-  "" _ -> true
-  _ "" -> false
-  (@s A As) (@s B Bs) -> (and (= A B) (fh.starts? As Bs)))
-
-(define fh.drop
-  "" S -> S
-  (@s _ Ps) (@s _ Ss) -> (fh.drop Ps Ss))
-
-\\ The text after Prefix on the last line that starts with it, or [].
-(define fh.last-after
-  Prefix [] Found -> Found
-  Prefix [L | Ls] Found -> (fh.last-after Prefix Ls (if (fh.starts? Prefix L) (fh.drop Prefix L) Found)))
-
-(define fh.last-nonempty
-  [] Found -> Found
-  ["" | Ls] Found -> (fh.last-nonempty Ls Found)
-  [L | Ls] _ -> (fh.last-nonempty Ls L))
-
-\\ The last line that is a JSON object, decoded, or [].
-(define fh.last-report
-  Text -> (let Line (fh.last-after "{" (fh.lines Text) [])
-            (if (= Line []) [] (trap-error (json.parse (cn "{" Line) [[byte-limit 4194304]]) (/. E [])))))
-
-(define fh.member
-  Key [object | Members] -> (fh.member-in Key Members)
-  _ _ -> [])
-
-(define fh.member-in
-  Key [[Key V] | _] -> V
-  Key [_ | Rest] -> (fh.member-in Key Rest)
-  _ [] -> [])
-
-(define fh.trim
-  S -> (fh.last-nonempty (fh.lines S) ""))
-
 \\ ---------- rows ----------
 \\ A check returns [Status Reasons Detail Memo]. Detail is a list of [Key String].
 \\ Memo carries results later rows depend on.
@@ -91,16 +28,6 @@
 
 (define fh.not-ported
   What Memo -> (fh.row "UNKNOWN" [(cn What " is not yet moved to the Shen harness")] [] Memo))
-
-\\ Run one harness program and decode its report.
-(define fh.harness
-  Script Args Seconds ->
-    (fh.last-report (hd (tl (fh.exec (value fh.*jit*) (append ["script" (cn (value fh.*root*) (cn "harness/" Script)) (value fh.*lib*) (value fh.*root*)] Args) Seconds)))))
-
-(define fh.subdir
-  Name -> (let Dir (cn (value fh.*out*) Name)
-               Made (fh.exec "mkdir" ["-p" Dir] 30)
-            Dir))
 
 (define fh.source-identity
   Memo ->
@@ -253,14 +180,35 @@
           (fh.row "PASS" [] [] Memo)
           (fh.row "FAIL" ["The ledger checker reports problems"] [["output" (fh.trim (hd (tl R)))]] Memo))))
 
-(define fh.sha256
-  Path -> (let R (fh.exec "sha256sum" [Path] 60)
-            (if (= (hd R) 0) (fh.take-string 64 (hd (tl R))) "")))
+\\ A fresh repair packet from this run's failure, the retained patch applied, then the
+\\ repair evaluation. A patch that no longer applies is stale evidence: UNKNOWN.
+(define fh.failed-steps
+  [] -> ""
+  [S | Ss] -> (if (= (fh.field "status" S) "PASS") (fh.failed-steps Ss) (cn (fh.field "step" S) (cn " " (fh.failed-steps Ss)))))
 
-(define fh.take-string
-  0 _ -> ""
-  _ "" -> ""
-  N (@s C Cs) -> (cn C (fh.take-string (- N 1) Cs)))
+(define fh.independent-repair-fresh
+  Memo ->
+    (if (= (fh.member-in "campaign:arm-by-position" Memo) [])
+        (fh.row "UNKNOWN" ["Needs this run's arm-by-position reduction campaign"] [] Memo)
+        (let S3 (cn (value fh.*out*) "s3")
+             Prepared (fh.exec "node" [(cn (value fh.*root*) "tools/tc0/s3-prepare.mjs")
+                                       (cn (value fh.*out*) "reduction-arm-by-position/failure-report.json") S3] 600)
+          (if (not (= (hd Prepared) 0))
+              (fh.row "UNKNOWN" [(cn "Packet preparation failed: " (fh.trim (hd (tl (tl Prepared)))))] [] Memo)
+              (let Repair (cn S3 "/repair")
+                   Copied (fh.exec "cp" ["-r" (cn S3 "/workspace") Repair] 300)
+                   Patched (fh.exec "patch" ["-p1" "--forward" "--batch" "-d" Repair "-i"
+                                             (cn (value fh.*root*) "campaigns/tc0/s3/independent-repair-1.patch")] 120)
+                (if (or (not (= (hd Copied) 0)) (not (= (hd Patched) 0)))
+                    (fh.row "UNKNOWN" ["Retained independent patch no longer applies to this source; repair evidence is stale"] [] Memo)
+                    (let Cleaned (fh.exec "find" [Repair "-name" "*.orig" "-delete"] 60)
+                         Report (fh.harness "repair-evaluation.shen" [(fh.subdir "s3-evaluation") (value fh.*jit*) (cn S3 "/packet") Repair] 3600)
+                         Verdict (fh.member "verdict" Report)
+                      (if (= Verdict "DEVELOPMENT-PASS")
+                          (fh.row "PASS" [] [["steps" (str (length (fh.member "steps" Report)))]] Memo)
+                          (if (= Verdict "FAIL")
+                              (fh.row "FAIL" [(cn "Repair evaluation: " (fh.failed-steps (fh.member "steps" Report)))] [] Memo)
+                              (fh.row "UNKNOWN" ["The repair evaluation did not report"] [] Memo))))))))))
 
 (define fh.repair-isolation
   Path Memo ->
@@ -295,7 +243,7 @@
   "discovery-reduction-replay" Memo -> (fh.discovery-reduction-replay Memo)
   "candidate-boundary" Memo -> (fh.candidate-boundary Memo)
   "requirement-ledger" Memo -> (fh.requirement-ledger Memo)
-  "independent-repair-fresh" Memo -> (fh.not-ported "The fresh repair evaluation" Memo)
+  "independent-repair-fresh" Memo -> (fh.independent-repair-fresh Memo)
   "repair-isolation:campaigns/tc0/s3/repair-isolation-acceptance.json" Memo -> (fh.repair-isolation "campaigns/tc0/s3/repair-isolation-acceptance.json" Memo)
   "exact-arithmetic-shaken" Memo -> (fh.row "DEFERRED" ["Optional second port: the harness runs on Shen/JIT only"] [] Memo)
   "solo5-guest-agreement" Memo -> (fh.solo5-guest-agreement Memo)

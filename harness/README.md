@@ -79,6 +79,18 @@ three campaigns reproduce the Python tool's published results exactly: case
 case 0, 30 (10), 64 to 15, epochs 20 and 2; case 0, 36 (8), 37 to 18, epochs
 27 and 9.
 
+**[repair-evaluation.shen](repair-evaluation.shen)** decides whether a change
+to the implementation is an acceptable repair of a retained failure. Ten steps,
+all required: only the allowed file changed; it differs from the preserved
+defective original; the defective original still reproduces each failure at
+its recorded divergence; the repair replays each failure and is admitted; the
+hand cases agree; the workspace's test suite passes; two generated families
+and the 5-node exhaustive scope, never shown to the repairer, agree; and the
+same checks reject the defective original (699 of 719 programs agree at 4
+nodes). The repaired implementation always runs sandboxed. On the retained
+patch `campaigns/tc0/s3/independent-repair-1.patch` it returns
+DEVELOPMENT-PASS.
+
 Strict replay uses the existing JavaScript tape code unchanged, through
 `tools/tc0/replay-reference.mjs`: the harness supplies the model's trace as the
 reference and holds the expectation (admitted, or diverged for a defect).
@@ -99,11 +111,11 @@ cannot produce PASS. Current rows on a committed tree:
 | discovery-reduction-replay | PASS | [reduction.shen](reduction.shen): arm-by-position found at case 12, 64 to 17 nodes; reverse-operands at case 0, 64 to 15 nodes; both replayed |
 | candidate-boundary | PASS | Existing JavaScript probe tool |
 | requirement-ledger | PASS | Existing JavaScript checker |
-| independent-repair-fresh | UNKNOWN | Not moved yet |
+| independent-repair-fresh | PASS | [repair-evaluation.shen](repair-evaluation.shen): all ten steps |
 | independent-repair-isolation | PASS, with the recorded owner waiver | |
 | solo5-guest-agreement (optional, new) | PASS | 5,774 programs |
 
-Verdict today: BLOCKED. It includes the HEAD-drift fix of PR #6: the final
+Verdict today: BLOCKED, by the toolchain row alone; every other required row passes on a committed tree. It includes the HEAD-drift fix of PR #6: the final
 check reads HEAD directly and compares it with the head recorded by the
 source-identity row.
 
@@ -114,7 +126,6 @@ source-identity row.
 | Guest image build: generate programs, validate, lower to C data, compile | JavaScript (`tools/solo5/freerun-pure-call.mjs --build-only`) | The harness trusts this only to produce the two inputs it is given; a wrong batch shows up as a comparison failure or an identity mismatch |
 | Second implementation | JavaScript (`runtime/tc0/`) and C (`backends/solo5/pure-call/`) | Stays non-Shen on purpose: it has to be independent of the model |
 | Python checkers now duplicated in Shen: hand cases, exhaustive scope, exact arithmetic | Python (`check-tc0-pure-call.py`, `check-tc0-pure-data-exhaustive.py`, `check-tc0-exact-arithmetic.py`) | Kept only because the registered gate calls them; they go when the gate moves |
-| Repair evaluation | Python and JavaScript | The one gate row still UNKNOWN |
 | Validator | JavaScript | Natural fit for Shen sequent rules; this is also Fenrir's type checker in the amendment |
 | Generators, enumerator, reducer | JavaScript | Plain list processing |
 | TC0-A gate and its receipts | Python, registered | Untouched. `gate.shen` is the proposed replacement; switching is an authority change for the owner |

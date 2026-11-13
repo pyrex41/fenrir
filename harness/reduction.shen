@@ -91,7 +91,7 @@
 \\ ---------- one fresh observation ----------
 
 \\ Case is [Name Program ExpectedOutcome ExpectedEmissions Predicted], absent parts none.
-\\ Result is [Name Program ModelSteps Nodes Discrepancy ModelOutcome].
+\\ Result is [Name Program ModelSteps Nodes Discrepancy Outcome].
 (define fh.observe
   [Name Program Expected Emissions Predicted] ->
     (let Path (cn (value fh.*out*) (cn Name ".json"))
@@ -122,7 +122,7 @@
          Checked (if (and (not (= Predicted none)) (not (= Discrepancy none))
                           (not (= (fh.canon (fh.field "outcome" Mutant)) (fh.canon Predicted))))
                      (error "semantic: defective outcome differs from the generator-derived prediction on ~A" Name) true)
-      [Name Program Model Nodes Discrepancy]))
+      [Name Program Model Nodes Discrepancy Want]))
 
 (define fh.case-of
   C -> [(fh.field "name" C) (fh.field "program" C) (fh.optional "expected_outcome" C)
@@ -175,6 +175,11 @@
 
 \\ ---------- replay of the failure ----------
 
+(define fh.retained
+  [Name Program Model Nodes Discrepancy Outcome] ->
+    [object ["name" Name] ["program" Program] ["input" ["int" "0"]] ["model_steps" Model]
+            ["hand_outcome" Outcome] ["discrepancy" Discrepancy]])
+
 (define fh.diverged?
   R -> (and (= (fh.field "replay" R) "Exact") (= (fh.field "conformance" R) "Diverged") (= (fh.field "execution" R) "StoppedAtDivergence")))
 
@@ -192,7 +197,15 @@
           Exact (if (and (= (length Replayed) 2) (fh.diverged? (hd Replayed)) (fh.diverged? (hd (tl Replayed)))) true
                     (error "semantic: same-defect first-discrepancy replay failed"))
           Kept (do (write-to-file (cn (value fh.*out*) "original.json") (json.stringify (nth 2 Original) [[byte-limit 8388608]]))
-                   (write-to-file (cn (value fh.*out*) "minimized.json") (json.stringify (nth 2 Minimized) [[byte-limit 8388608]])))
+                   (write-to-file (cn (value fh.*out*) "minimized.json") (json.stringify (nth 2 Minimized) [[byte-limit 8388608]]))
+                   \\ The retained failures with the model's traces, in the shape the repair
+                   \\ packet tool (tools/tc0/s3-prepare.mjs) reads.
+                   (write-to-file (cn (value fh.*out*) "failure-report.json")
+                     (json.stringify [object ["schema" "pure-call-reduction-development/2"] ["qualification" "UNKNOWN"]
+                                             ["producer" "harness/reduction.shen"]
+                                             ["family" (value fh.*family*)] ["mutant" (value fh.*mutant*)]
+                                             ["original" (fh.retained Original)] ["minimized" (fh.retained Minimized)]]
+                                     [[byte-limit 16777216]])))
        [object ["status" "development-pass"]
                ["family" (value fh.*family*)] ["mutant" (value fh.*mutant*)] ["discrepancy" Expected]
                ["discovered_index" (str (hd Found))]

@@ -4,7 +4,7 @@
 \\ step staging, count of return frames, continuation depth bound, closure
 \\ descriptor count and emission order. Development evidence only.
 \\
-\\   shen-jit script harness/hand-cases.shen LIBDIR ROOT OUTDIR [sandbox]
+\\   shen-jit script harness/hand-cases.shen LIBDIR ROOT OUTDIR [sandbox] [pure-call|pure-data]
 \\
 \\ Launches node on tools/tc0/run-pure-call-hand.mjs for the implementation's
 \\ traces. The model runs in this process and does not see them before comparing.
@@ -13,8 +13,12 @@
 (set fh.*lib* (cn (hd (tl (value *argv*))) "/"))
 (set fh.*root* (cn (hd (tl (tl (value *argv*)))) "/"))
 (set fh.*out* (cn (hd (tl (tl (tl (value *argv*))))) "/"))
-\\ Optional fifth argument "sandbox": run the implementation inside tools/tc0/sandbox.mjs.
-(set fh.*sandbox* (= (tl (tl (tl (tl (value *argv*))))) ["sandbox"]))
+\\ Optional further arguments, in any order:
+\\   sandbox                 run the implementation inside tools/tc0/sandbox.mjs
+\\   pure-call | pure-data   check that generated family instead of the hand fixtures
+(set fh.*options* (tl (tl (tl (tl (value *argv*))))))
+(set fh.*sandbox* (element? "sandbox" (value fh.*options*)))
+(set fh.*family* (if (element? "pure-call" (value fh.*options*)) ["pure-call"] (if (element? "pure-data" (value fh.*options*)) ["pure-data"] [])))
 (load (cn (value fh.*root*) "harness/common.shen"))
 
 \\ ---------- facts about a trace ----------
@@ -86,7 +90,7 @@
 
 (define fh.main
   -> (let File (cn (value fh.*out*) "hand.jsonl")
-          R (process.run "node" (fh.node-arguments "tools/tc0/run-pure-call-hand.mjs" [File] ["fixtures/tc0"] File (value fh.*sandbox*))
+          R (process.run "node" (fh.node-arguments "tools/tc0/run-pure-call-hand.mjs" [File | (value fh.*family*)] ["fixtures/tc0"] File (value fh.*sandbox*))
                          (buffer.from-string "") [[timeout 60000]])
           Ran (if (and (= (hd R) ok) (process.success? (hd (tl R)))) true (error "harness: the JavaScript hand-case run did not complete"))
           View (buffer.from-string (read-file-as-string File))
@@ -105,6 +109,7 @@
                          ["harness" "Shen"]
                          ["shen" (make-string "~A ~A ~A" (value *implementation*) (value *port*) (version))]
                          ["implementation_sandboxed" (value fh.*sandbox*)]
+                         ["source" (if (empty? (value fh.*family*)) "hand fixtures" (hd (value fh.*family*)))]
                          ["cases" (str (length Rows))]
                          ["expectations_checked" (str (fh.sum Results (/. R (nth 3 R)) 0))]
                          ["model_steps" (str (fh.sum Results (/. R (nth 4 R)) 0))]
