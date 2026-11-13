@@ -139,12 +139,36 @@
     (let Report (fh.harness "hand-cases.shen" [(fh.subdir "hand") "sandbox"] 600)
          Status (fh.member "status" Report)
       (if (= Status "development-fail")
-          (fh.row "FAIL" ["Hand cases: model, implementation or hand expectations disagree"] [["failures" (json.stringify (fh.member "failures" Report) [])]] Memo)
-          (if (= Status "development-pass")
-              (fh.row "UNKNOWN" ["Hand cases agree; strict replay is not yet moved to the Shen harness"]
-                      [["cases" (fh.member "cases" Report)] ["expectations_checked" (fh.member "expectations_checked" Report)]]
+          (fh.row "FAIL" ["Hand cases: model, implementation, hand expectations or strict replay disagree"]
+                  [["failures" (json.stringify (fh.member "failures" Report) [])]] Memo)
+          (if (and (= Status "development-pass") (= (fh.member "strict_replay_admitted" Report) (fh.member "cases" Report)))
+              (fh.row "PASS" [] [["cases" (fh.member "cases" Report)] ["expectations_checked" (fh.member "expectations_checked" Report)]
+                                 ["strict_replay_admitted" (fh.member "strict_replay_admitted" Report)]]
                       [["hand" Report] | Memo])
               (fh.row "UNKNOWN" ["The hand-case harness did not report"] [] Memo)))))
+
+\\ Two campaigns. Each must discover, reduce and strictly replay its failure.
+(define fh.campaigns
+  [] Memo Reasons Detail Status -> (fh.row Status (reverse Reasons) (reverse Detail) Memo)
+  [Mutant | Mutants] Memo Reasons Detail Status ->
+    (let Dir (fh.subdir (cn "reduction-" Mutant))
+         Report (fh.harness "reduction.shen" [Dir "pure-data" Mutant] 900)
+         S (fh.member "status" Report)
+      (if (= S "development-pass")
+          (fh.campaigns Mutants [[(cn "campaign:" Mutant) Report] | Memo] Reasons
+            [[Mutant (make-string "case ~A, ~A attempts (~A accepted), nodes ~A->~A, divergence epochs ~A and ~A"
+                                  (fh.member "discovered_index" Report) (fh.member "attempts" Report) (fh.member "accepted" Report)
+                                  (fh.member "original_nodes" Report) (fh.member "minimized_nodes" Report)
+                                  (fh.member "original_divergence_epoch" Report) (fh.member "minimized_divergence_epoch" Report))] | Detail]
+            Status)
+          (if (= S "development-fail")
+              (fh.campaigns Mutants Memo [(make-string "~A: ~A" Mutant (fh.member "reason" Report)) | Reasons] Detail "FAIL")
+              (fh.campaigns Mutants Memo
+                [(make-string "~A: ~A" Mutant (if (= Report []) "the campaign did not report" (fh.member "reason" Report))) | Reasons]
+                Detail (if (= Status "PASS") "UNKNOWN" Status))))))
+
+(define fh.discovery-reduction-replay
+  Memo -> (fh.campaigns ["arm-by-position" "reverse-operands"] Memo [] [] "PASS"))
 
 \\ Build a guest batch with the JavaScript builder and compare it in Shen.
 (define fh.guest-batch
@@ -268,7 +292,7 @@
   "mutant:wrap_overflow" Memo -> (fh.mutant "wrap_overflow" Memo)
   "mutant:arm_by_position" Memo -> (fh.mutant "arm_by_position" Memo)
   "catalog-coverage" Memo -> (fh.catalog-coverage Memo)
-  "discovery-reduction-replay" Memo -> (fh.not-ported "Generated discovery, reduction and failure replay" Memo)
+  "discovery-reduction-replay" Memo -> (fh.discovery-reduction-replay Memo)
   "candidate-boundary" Memo -> (fh.candidate-boundary Memo)
   "requirement-ledger" Memo -> (fh.requirement-ledger Memo)
   "independent-repair-fresh" Memo -> (fh.not-ported "The fresh repair evaluation" Memo)

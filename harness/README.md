@@ -69,6 +69,20 @@ else BLOCKED, else UNKNOWN, else PASS. It always reports
 `authority: UNREGISTERED` and `qualification: UNKNOWN`. Each comparison runs as
 its own harness process, with the JavaScript implementation sandboxed.
 
+**[reduction.shen](reduction.shen)** runs a discovery-and-reduction campaign
+with one implementation defect switched on: find the first generated program
+showing the expected kind of discrepancy, shrink it by typed proposals (each
+accepted only when fresh model and implementation runs show the same kind of
+discrepancy), then replay the original and minimized failure strictly. Its
+three campaigns reproduce the Python tool's published results exactly: case
+12, 35 attempts (18 accepted), 64 to 17 nodes, divergence epochs 88 and 29;
+case 0, 30 (10), 64 to 15, epochs 20 and 2; case 0, 36 (8), 37 to 18, epochs
+27 and 9.
+
+Strict replay uses the existing JavaScript tape code unchanged, through
+`tools/tc0/replay-reference.mjs`: the harness supplies the model's trace as the
+reference and holds the expectation (admitted, or diverged for a defect).
+
 A row whose check has not moved to Shen yet is UNKNOWN, so an incomplete port
 cannot produce PASS. Current rows on a committed tree:
 
@@ -77,12 +91,12 @@ cannot produce PASS. Current rows on a committed tree:
 | source-identity | PASS on a clean tree | |
 | toolchain-pinned | BLOCKED | Shen/JIT is not in the flake |
 | unit-suite | PASS | |
-| hand-agreement-and-replay | UNKNOWN | Hand cases agree; strict replay not moved yet |
+| hand-agreement-and-replay | PASS | 24 cases, 42 expectations, strict replay admitted for all 24 |
 | exact-arithmetic | PASS | C guest against the model, 8,745 programs |
 | exhaustive-small | PASS | 5,695 programs |
 | three mutant rows | PASS | 3,940, 233 and 975 programs |
 | catalog-coverage | PASS | [coverage.shen](coverage.shen): 112 of 112 catalog transitions, over the run's hand and exhaustive traces |
-| discovery-reduction-replay | UNKNOWN | Not moved yet |
+| discovery-reduction-replay | PASS | [reduction.shen](reduction.shen): arm-by-position found at case 12, 64 to 17 nodes; reverse-operands at case 0, 64 to 15 nodes; both replayed |
 | candidate-boundary | PASS | Existing JavaScript probe tool |
 | requirement-ledger | PASS | Existing JavaScript checker |
 | independent-repair-fresh | UNKNOWN | Not moved yet |
@@ -100,7 +114,7 @@ source-identity row.
 | Guest image build: generate programs, validate, lower to C data, compile | JavaScript (`tools/solo5/freerun-pure-call.mjs --build-only`) | The harness trusts this only to produce the two inputs it is given; a wrong batch shows up as a comparison failure or an identity mismatch |
 | Second implementation | JavaScript (`runtime/tc0/`) and C (`backends/solo5/pure-call/`) | Stays non-Shen on purpose: it has to be independent of the model |
 | Python checkers now duplicated in Shen: hand cases, exhaustive scope, exact arithmetic | Python (`check-tc0-pure-call.py`, `check-tc0-pure-data-exhaustive.py`, `check-tc0-exact-arithmetic.py`) | Kept only because the registered gate calls them; they go when the gate moves |
-| Strict replay, reduction of failing programs, repair evaluation | Python and JavaScript | The three gate rows still UNKNOWN |
+| Repair evaluation | Python and JavaScript | The one gate row still UNKNOWN |
 | Validator | JavaScript | Natural fit for Shen sequent rules; this is also Fenrir's type checker in the amendment |
 | Generators, enumerator, reducer | JavaScript | Plain list processing |
 | TC0-A gate and its receipts | Python, registered | Untouched. `gate.shen` is the proposed replacement; switching is an authority change for the owner |

@@ -20,10 +20,6 @@
 (set fh.*sandbox* (= (tl (tl (tl (tl (tl (value *argv*)))))) ["sandbox"]))
 (load (cn (value fh.*root*) "harness/common.shen"))
 
-\\ The outcome the model reports in its final TaskTermination event.
-(define fh.model-outcome
-  Steps -> (fh.field "outcome" (hd (fh.field "events" (fh.last Steps)))))
-
 \\ A trace record from the JavaScript side is {execution, outcome, steps}.
 (define fh.agrees?
   [Execution Steps] Record ->

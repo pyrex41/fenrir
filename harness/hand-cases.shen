@@ -17,34 +17,7 @@
 (set fh.*sandbox* (= (tl (tl (tl (tl (value *argv*))))) ["sandbox"]))
 (load (cn (value fh.*root*) "harness/common.shen"))
 
-\\ ---------- closure descriptors the model produced ----------
-
-(define fh.captured
-  [closure Code Captures []] -> (fh.descriptor [closure Code Captures []])
-  V -> (fh.value V))
-
-(define fh.descriptor
-  [closure Code Captures []] ->
-    [object ["code_id" Code]
-            ["captures" (map (/. Pair [(hd Pair) (fh.captured (hd (tl Pair)))]) Captures)]
-            ["capture_support" []]])
-
-\\ Every closure value the model yields, in order, as descriptors.
-(define fh.descriptors
-  State _ Acc -> (reverse Acc) where (= (fh.phase State) terminal)
-  _ 0 Acc -> (reverse Acc)
-  State Fuel Acc ->
-    (let Next (hd (tl (tc0.pc.step State)))
-      (fh.descriptors Next (- Fuel 1) (fh.note-closure (hd (tl Next)) Acc))))
-
-(define fh.note-closure
-  [value [closure Code Captures []]] Acc -> [(fh.canon (fh.descriptor [closure Code Captures []])) | Acc]
-  _ Acc -> Acc)
-
 \\ ---------- facts about a trace ----------
-
-(define fh.model-outcome
-  Steps -> (fh.field "outcome" (hd (fh.field "events" (fh.last Steps)))))
 
 (define fh.staging
   Steps -> (map (/. S [(fh.field "after" S) (fh.field "depth" S)]) Steps))
@@ -56,19 +29,6 @@
 (define fh.max-depth
   [] N -> N
   [S | Steps] N -> (let D (tc0.i64.small (fh.field "depth" S)) (fh.max-depth Steps (if (> D N) D N))))
-
-(define fh.emit-labels
-  [] -> []
-  [[object ["kind" "Emit"] | Rest] | Events] -> [(fh.assoc "label" Rest) | (fh.emit-labels Events)]
-  [_ | Events] -> (fh.emit-labels Events))
-
-(define fh.emissions
-  [] -> []
-  [S | Steps] -> (append (fh.emit-labels (fh.field "events" S)) (fh.emissions Steps)))
-
-(define fh.all-members?
-  [] _ -> true
-  [X | Xs] Ys -> (and (element? X Ys) (fh.all-members? Xs Ys)))
 
 \\ ---------- one expectation at a time ----------
 
@@ -106,7 +66,7 @@
          Expectations (tl (fh.field "expectations" Row))
          Reasons (append (fh.agreement Model Candidate (fh.descriptors State 200 []))
                          (fh.expectations Expectations (hd (tl Model)) Candidate))
-      [(fh.field "name" Row) Reasons (length Expectations) (length (hd (tl Model)))]))
+      [(fh.field "name" Row) Reasons (length Expectations) (length (hd (tl Model))) (fh.field "program" Row) (hd (tl Model))]))
 
 (define fh.sum
   [] _ N -> N
@@ -116,6 +76,14 @@
   [] -> []
   [[Name Reasons | _] | Rest] -> (if (= Reasons []) (fh.failed Rest) [[object ["case" Name] ["reasons" Reasons]] | (fh.failed Rest)]))
 
+\\ Strict replay: a tape of the implementation recorded against the model's trace
+\\ must replay exactly on a fresh machine and be admitted, for every case.
+(define fh.not-admitted
+  [] -> []
+  [R | Rs] -> (if (and (= (fh.field "replay" R) "Exact") (= (fh.field "conformance" R) "Admitted") (= (fh.field "execution" R) "Completed"))
+                  (fh.not-admitted Rs)
+                  [[object ["case" (fh.field "name" R)] ["reasons" ["strict replay was not admitted"]]] | (fh.not-admitted Rs)]))
+
 (define fh.main
   -> (let File (cn (value fh.*out*) "hand.jsonl")
           R (process.run "node" (fh.node-arguments "tools/tc0/run-pure-call-hand.mjs" [File] ["fixtures/tc0"] File (value fh.*sandbox*))
@@ -124,8 +92,13 @@
           View (buffer.from-string (read-file-as-string File))
           Rows (fh.json-lines View 0 (buffer.length View) [])
           Results (map (/. Row (fh.check-case Row)) Rows)
-          Failures (fh.failed Results)
-          Pass (and (empty? Failures) (> (length Rows) 0))
+          Agreement (fh.failed Results)
+          \\ Replay only what agreed: a disagreeing case has no reference to replay against.
+          Replayed (if (empty? Agreement)
+                       (fh.replay (map (/. R [(hd R) (nth 5 R) (nth 6 R) null]) Results) (value fh.*out*) (value fh.*sandbox*))
+                       [])
+          Failures (append Agreement (fh.not-admitted Replayed))
+          Pass (and (empty? Failures) (> (length Rows) 0) (= (length Replayed) (length Rows)))
           Report [object ["schema" "fenrir.harness.hand-cases/1"]
                          ["status" (if Pass "development-pass" "development-fail")]
                          ["qualification" "UNKNOWN"]
@@ -135,6 +108,7 @@
                          ["cases" (str (length Rows))]
                          ["expectations_checked" (str (fh.sum Results (/. R (nth 3 R)) 0))]
                          ["model_steps" (str (fh.sum Results (/. R (nth 4 R)) 0))]
+                         ["strict_replay_admitted" (str (- (length Replayed) (length (fh.not-admitted Replayed))))]
                          ["failures" Failures]]
        (do (output "~A~%" (json.stringify Report [[byte-limit 1048576]]))
            (shen-jit.exit (if Pass 0 1)))))

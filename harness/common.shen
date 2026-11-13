@@ -202,16 +202,91 @@
 
 \\ Arguments for node to run Script (relative to the repository root) with Args.
 \\ Sandboxed: through tools/tc0/sandbox.mjs, which gives the process no network and
-\\ no environment, read access to the implementation tree and ExtraReads only, and
+\\ no environment, read access to the implementation tree and ExtraReads only
+\\ (repository-relative, or absolute when they start with a slash), and
 \\ write access to Output only.
 (define fh.node-arguments
   Script Args _ _ false -> [(cn (value fh.*root*) Script) | Args]
   Script Args ExtraReads Output true ->
     (append [(cn (value fh.*root*) "tools/tc0/sandbox.mjs") "--read"
              (cn (value fh.*root*) "tools/tc0") (cn (value fh.*root*) "runtime/tc0")]
-            (map (/. R (cn (value fh.*root*) R)) ExtraReads)
+            (map (/. R (if (= (pos R 0) "/") R (cn (value fh.*root*) R))) ExtraReads)
             ["--write" Output "--" (cn (value fh.*root*) Script)]
             Args))
+
+\\ ---------- closure descriptors the model produced ----------
+
+(define fh.captured
+  [closure Code Captures []] -> (fh.descriptor [closure Code Captures []])
+  V -> (fh.value V))
+
+(define fh.descriptor
+  [closure Code Captures []] ->
+    [object ["code_id" Code]
+            ["captures" (map (/. Pair [(hd Pair) (fh.captured (hd (tl Pair)))]) Captures)]
+            ["capture_support" []]])
+
+\\ Every closure value the model yields, in order, as descriptors.
+(define fh.descriptors
+  State _ Acc -> (reverse Acc) where (= (fh.phase State) terminal)
+  _ 0 Acc -> (reverse Acc)
+  State Fuel Acc ->
+    (let Next (hd (tl (tc0.pc.step State)))
+      (fh.descriptors Next (- Fuel 1) (fh.note-closure (hd (tl Next)) Acc))))
+
+(define fh.note-closure
+  [value [closure Code Captures []]] Acc -> [(fh.canon (fh.descriptor [closure Code Captures []])) | Acc]
+  _ Acc -> Acc)
+
+(define fh.model-outcome
+  Steps -> (fh.field "outcome" (hd (fh.field "events" (fh.last Steps)))))
+
+(define fh.emit-labels
+  [] -> []
+  [[object ["kind" "Emit"] | Rest] | Events] -> [(fh.assoc "label" Rest) | (fh.emit-labels Events)]
+  [_ | Events] -> (fh.emit-labels Events))
+
+(define fh.emissions
+  [] -> []
+  [S | Steps] -> (append (fh.emit-labels (fh.field "events" S)) (fh.emissions Steps)))
+
+(define fh.all-members?
+  [] _ -> true
+  [X | Xs] Ys -> (and (element? X Ys) (fh.all-members? Xs Ys)))
+
+\\ ---------- strict replay of the implementation against model traces ----------
+
+\\ Cases is a list of [Name Program ReferenceSteps Mutant], Mutant a string or null.
+\\ Writes the request, runs tools/tc0/replay-reference.mjs (sandboxed when asked),
+\\ and returns its decoded result rows, or [] when the run failed.
+(define fh.replay-lines
+  [] -> ""
+  [[Name Program Reference Mutant] | Cases] ->
+    (cn (json.stringify [object ["name" Name] ["program" Program] ["reference" Reference] ["mutant" Mutant]] [[byte-limit 16777216]])
+        (cn "c#10;" (fh.replay-lines Cases))))
+
+(define fh.first-line
+  V I End -> (buffer.string (buffer.slice V 0 (- (fh.next-line V 0 End) (if (> End 0) 1 0)))))
+
+(define fh.node-path
+  -> (let R (process.run "node" ["-p" "process.execPath"] (buffer.from-string "") [[timeout 30000]])
+          V (if (and (= (hd R) ok) (process.success? (hd (tl R)))) (process.output-bytes (hd (tl R))) (error "harness: node is not available"))
+       (fh.first-line V 0 (buffer.length V))))
+
+(define fh.replay
+  Cases Dir Sandbox ->
+    (let In (cn Dir "replay-input.jsonl")
+         Out (cn Dir "replay-output.jsonl")
+         Identity (json.stringify [object ["identity" [object ["evaluator" "Shen harness"]
+                                    ["shen" (make-string "~A ~A ~A" (value *implementation*) (value *port*) (version))]]]] [])
+         Written (write-to-file In (cn Identity (cn "c#10;" (fh.replay-lines Cases))))
+         \\ The tape header binds the node executable's identity, so the sandbox must let it be read.
+         Node (if Sandbox (fh.node-path) "")
+         R (process.run "node" (fh.node-arguments "tools/tc0/replay-reference.mjs" [In Out] (if Sandbox ["spec/tc0" In Node] []) Out Sandbox)
+                        (buffer.from-string "") [[timeout 300000]])
+      (if (and (= (hd R) ok) (process.success? (hd (tl R))))
+          (let View (buffer.from-string (read-file-as-string Out)) (fh.json-lines View 0 (buffer.length View) []))
+          [])))
 
 \\ ---------- byte views ----------
 
