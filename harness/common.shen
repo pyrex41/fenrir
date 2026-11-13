@@ -10,10 +10,9 @@
      ["ffi.shen" "buffer.shen" "cursor.shen" "grammar.shen" "json.shen" "io.shen" "io-file.shen"
       "deadline.shen" "clock.shen" "process.shen" "process-io.shen"])
 
-\\ The model: registered machine plus the width-independent integer layer.
+\\ The model: the pure-call machine and its exact integer arithmetic.
 (map (/. F (load (cn (value fh.*root*) F)))
-     ["models/tc0/arithmetic.shen" "models/tc0/pure-call-machine.shen"
-      "models/tc0/portable/i64.shen" "models/tc0/portable/pure-call-overrides.shen"])
+     ["models/tc0/i64.shen" "models/tc0/pure-call-machine.shen"])
 
 \\ ---------- decoded JSON helpers ----------
 
@@ -53,7 +52,7 @@
 (define fh.exprs
   Es -> (map (/. E (fh.expr E)) Es))
 
-\\ I64 literals and every ID stay strings: the portable model's representation.
+\\ I64 literals and every ID stay strings: the model's representation.
 (define fh.expr
   ["unit" Node] -> [unit Node]
   ["bool" Node B] -> [bool Node B]

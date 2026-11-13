@@ -1,22 +1,25 @@
-\\ PROPOSED TC0-A gate evaluator, in Shen. NOT the registered evaluator: that is
-\\ tools/check-tc0-a-gate.py with spec/tc0/tc0-a-requirements.json until the
-\\ owner accepts this one. Whatever its rows say, this program reports
+\\ TC0-A gate evaluator, in Shen. Registered as the check tc0-a-qualification in
+\\ .pi/fenrir-workflow.json, with the manifest spec/tc0/tc0-a-requirements.json.
+\\ It replaced the Python evaluator on 2026-11-13 by the owner's instruction; see
+\\ campaigns/tc0/G1_SHEN_EVALUATOR_SWITCH.md.
+\\
+\\   shen-jit script harness/gate.shen LIBDIR ROOT OUTDIR SHEN_JIT_EXECUTABLE [NONCE CHECK_ID SOURCE_SHA256 CONFIG_SHA256]
+\\
+\\ It evaluates each manifest row and aggregates: any required FAIL gives FAIL; else
+\\ any BLOCKED gives BLOCKED; else any UNKNOWN gives UNKNOWN; else PASS. An evaluator
+\\ error, a check that does not report, or a check it does not know is UNKNOWN.
+\\ The verdict counts as a qualification only while the manifest is owner-accepted
+\\ and the workflow configuration names this evaluator; otherwise the report says
 \\ authority UNREGISTERED and qualification UNKNOWN.
-\\
-\\   shen-jit script harness/gate.shen LIBDIR ROOT OUTDIR SHEN_JIT_EXECUTABLE
-\\
-\\ It reads spec/tc0/tc0-a-requirements-shen.json, evaluates each row, and
-\\ aggregates exactly as the registered gate does: any required FAIL gives FAIL;
-\\ else any BLOCKED gives BLOCKED; else any UNKNOWN gives UNKNOWN; else PASS.
-\\ A row whose check has not been moved to the Shen harness yet is UNKNOWN, so
-\\ an incomplete port can never produce PASS. An evaluator error is UNKNOWN.
 \\ The comparisons themselves are the other harness programs, each run as its
 \\ own process so one cannot disturb another.
+\\ With the four controller arguments it also prints the controller's check record.
 
 (set fh.*lib* (cn (hd (tl (value *argv*))) "/"))
 (set fh.*root* (cn (hd (tl (tl (value *argv*)))) "/"))
 (set fh.*out* (cn (hd (tl (tl (tl (value *argv*))))) "/"))
 (set fh.*jit* (hd (tl (tl (tl (tl (value *argv*)))))))
+(set fh.*controller* (tl (tl (tl (tl (tl (value *argv*)))))))
 (load (cn (value fh.*root*) "harness/common.shen"))
 
 \\ ---------- rows ----------
@@ -330,7 +333,7 @@
   _ -> 2)
 
 (define fh.main
-  -> (let ManifestPath "spec/tc0/tc0-a-requirements-shen.json"
+  -> (let ManifestPath "spec/tc0/tc0-a-requirements.json"
           Manifest (json.parse (read-file-as-string (cn (value fh.*root*) ManifestPath)) [[byte-limit 4194304]])
           Ledger (json.parse (read-file-as-string (cn (value fh.*root*) (fh.field "ledger" Manifest))) [[byte-limit 4194304]])
           Valid (if (and (= (fh.field "schema" Manifest) "tc0-a-requirement-manifest/1")
@@ -350,9 +353,11 @@
                    Rows0)
           Verdict (fh.verdict Rows)
           Claims (fh.claims (tl (fh.field "claims" Manifest)) (fh.field "claim_prerequisites" Manifest) Rows)
-          Report [object ["schema" "tc0-a-gate-run/shen-proposed-1"]
-                         ["authority" "UNREGISTERED"]
-                         ["qualification" "UNKNOWN"]
+          Registered (fh.registered? Manifest)
+          Passing (make-string "~A/~A" (fh.count-status "PASS" true Rows 0) (- (length Rows) (fh.count-optional Rows 0)))
+          Report [object ["schema" "tc0-a-gate-run/3"]
+                         ["authority" (if Registered "owner-accepted, registered" "UNREGISTERED")]
+                         ["qualification" (if Registered Verdict "UNKNOWN")]
                          ["verdict" Verdict]
                          ["claims" Claims]
                          ["waivers" (fh.waivers Memo)]
@@ -361,13 +366,44 @@
                          ["evaluator" "harness/gate.shen"]
                          ["shen" (make-string "~A ~A ~A" (value *implementation*) (value *port*) (version))]
                          ["aggregation" (fh.field "aggregation" Manifest)]
-                         ["required_rows_passing" (make-string "~A/~A" (fh.count-status "PASS" true Rows 0)
-                                                               (- (length Rows) (fh.count-optional Rows 0)))]
+                         ["required_rows_passing" Passing]
                          ["rows" Rows]]
           Text (json.stringify Report [[byte-limit 4194304]])
           Written (write-to-file (cn (value fh.*out*) "gate.json") (cn Text "c#10;"))
        (do (output "~A~%" Text)
+           (fh.controller-record (value fh.*controller*) Registered Verdict Claims Passing (fh.waivers Memo))
            (shen-jit.exit (fh.exit-status Verdict)))))
+
+\\ Registered: the manifest is owner-accepted and the workflow's qualification check runs this gate.
+(define fh.registered?
+  Manifest ->
+    (let Config (trap-error (json.parse (read-file-as-string (cn (value fh.*root*) ".pi/fenrir-workflow.json")) [[byte-limit 4194304]]) (/. E []))
+         Command (fh.member "command" (fh.member "tc0-a-qualification" (fh.member "checks" Config)))
+      (and (= (fh.field "status" Manifest) "owner-accepted") (cons? Command) (element? "harness/run-gate.sh" Command))))
+
+\\ A path below the repository root, without the root.
+(define fh.relative
+  Path -> (if (fh.starts? (value fh.*root*) Path) (fh.drop (value fh.*root*) Path) Path))
+
+(define fh.join
+  [] _ -> ""
+  [X] _ -> X
+  [X | Xs] Sep -> (cn X (cn Sep (fh.join Xs Sep))))
+
+\\ The workflow controller's check record, printed last when it supplied its nonce.
+\\ An unregistered evaluator credits no verdict and no claims.
+(define fh.controller-record
+  [Nonce CheckId SourceHash ConfigHash] Registered Verdict Claims Passing Waivers ->
+    (output "~A~%"
+      (json.stringify
+        [object ["schema" "fenrir.check.v1"] ["nonce" Nonce] ["checkId" CheckId] ["sourceHash" SourceHash] ["configHash" ConfigHash]
+                ["verdict" (if Registered Verdict "UNKNOWN")] ["cleanup" "confirmed"] ["claims" (if Registered Claims [])]
+                ["evidence" [(fh.relative (cn (value fh.*out*) "gate.json"))]]
+                ["summary" (make-string "TC0-A gate (Shen): ~A; ~A required rows PASS; claims ~A~A"
+                                        Verdict Passing (if (empty? Claims) "none" (fh.join Claims ", "))
+                                        (if (empty? Waivers) "" (cn "; waivers: " (fh.join Waivers " | "))))]]
+        [[byte-limit 1048576]]))
+  _ _ _ _ _ _ -> skip)
 
 (define fh.count-optional
   [] N -> N

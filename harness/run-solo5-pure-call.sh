@@ -3,11 +3,9 @@
 # Usage: sh harness/run-solo5-pure-call.sh [EXHAUSTIVE_NODES=5 | exact]
 #   a number  hand cases, generated cases and the exhaustive grammar to that bound
 #   exact     the exact-arithmetic family: C guest arithmetic against the model's
-# Needs: build/vendor/solo5 built at the pinned commit, and Shen/JIT 0.7 with its
-# lib directory and shen-process.so under build/toolchain/shen-jit-0.7.
+# Needs build/vendor/solo5 built at the pinned commit. Shen/JIT: see harness/jit.sh.
 set -eu
-root=$(cd "$(dirname "$0")/.." && pwd)
-jit="${FENRIR_SHEN_JIT:-$root/build/toolchain/shen-jit-0.7}"
+. "$(dirname "$0")/jit.sh"
 if [ "${1:-5}" = exact ]; then
   batch=$(node "$root/tools/solo5/freerun-pure-call.mjs" --exact-arithmetic --build-only)
 else

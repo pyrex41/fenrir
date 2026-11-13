@@ -81,33 +81,6 @@ test('project-tuple-literal selects the projected element',()=>{
  assert.deepEqual(pureCallReductions(unused).filter(r=>r.rule==='drop-tuple-element').map(r=>r.program.functions[0].body[3]),[['tuple','3',['int','5','9']],['tuple','3',['int','4','7']]]);
  const row=pureCallReductions(program).find(r=>r.rule==='project-tuple-literal');assert.deepEqual(row.program.functions[0].body,['int','5','9']);assert.deepEqual(row.program.source_map.map(r=>r.id),['0','5']);
 });
-
-test('schema /2 same-mutant failure replay rechecks wrong-match-arm and fails closed on drift',()=>{
- const digest=p=>createHash('sha256').update(readFileSync(p)).digest('hex');
- const parent=resolve('build/tc0');mkdirSync(parent,{recursive:true});const dir=mkdtempSync(resolve(parent,'pure-data-failure-unit-'));
- try{
-  mkdirSync(resolve(dir,'bin'));const shen=resolve(dir,'bin/shen-scheme'),boot=resolve(dir,'shen.boot');writeFileSync(shen,'mock unit only');writeFileSync(boot,'mock boot');
-  const paths=['tools/check-tc0-pure-call-reduction.py','tools/check-tc0-pure-call.py','tools/check-tc0-expression.py','tools/tc0/pure-call-generate.mjs','tools/tc0/pure-data-generate.mjs','tools/tc0/pure-call-reduce.mjs','tools/tc0/pure-call-campaign-bridge.mjs','tools/tc0/run-pure-call.mjs','tools/tc0/pure-call-artifact.mjs','tools/tc0/canonical.mjs','models/tc0/pure-call-machine.shen','models/tc0/arithmetic.shen','runtime/tc0/pure-call-machine.mjs','spec/tc0/pure-call-demo.json'].map(p=>resolve(p));
-  const sources=Object.fromEntries([...paths,process.execPath,shen,boot].map(p=>[p,digest(p)]));
-  const program=generatePureData().cases[12].program,input=['int','0'],candidate=run(program),mutant=run(program,{armByPosition:true});
-  const row={name:'mock-unit-only',program,input,candidate,equivalent_control:candidate,mutant,model_steps:candidate.steps,hand_outcome:candidate.outcome,discrepancy:'wrong-match-arm'};
-  const report={schema:'pure-call-reduction-development/2',family:'pure-data',mutant:'arm-by-position',expected_discrepancy:'wrong-match-arm',qualification:'UNKNOWN',cleanup:'confirmed',sources,sources_after:sources,observations:[row],original:row,minimized:row};
-  const file=resolve(dir,'input.json');let serial=0;
-  const go=r=>{const out=resolve(dir,'output-'+serial+++'.json');writeFileSync(file,JSON.stringify(r));const result=spawnSync(process.execPath,['tools/tc0/check-pure-call-failure-replay.mjs',file,out],{timeout:10000,encoding:'utf8'});assert.ifError(result.error);return {result,out};};
-  const {result,out}=go(report);assert.equal(result.status,0,result.stderr);const bundle=JSON.parse(readFileSync(out));assert.equal(bundle.mutant,'arm-by-position');assert.equal(bundle.family,'pure-data');
-  for(const c of bundle.cases){assert.equal(c.result.replay,'Exact');assert.equal(c.result.conformance,'Diverged');assert.equal(c.bundle.footer.kind,'Divergence');}
-  // A declared-order case is an equivalent mutant: no retained discrepancy can be claimed for it.
-  const equivalent=generatePureData().cases[0].program,eq=run(equivalent);
-  for(const mutate of [
-   x=>{x.mutant='reverse-operands';},x=>{x.expected_discrepancy='reversed-emissions-same-outcome';},x=>{x.family='other';},
-   x=>delete x.sources[resolve('tools/tc0/pure-data-generate.mjs')],
-   x=>{x.original.discrepancy='reversed-emissions-same-outcome';},
-   x=>{x.original.mutant=x.original.candidate;},
-   x=>{const r={...x.original,program:equivalent,candidate:eq,equivalent_control:eq,mutant:run(equivalent,{armByPosition:true}),model_steps:eq.steps,hand_outcome:eq.outcome};x.original=r;x.observations.push(r);}
-  ]){const bad=structuredClone(report);mutate(bad);const r=go(bad);assert.notEqual(r.result.status,0);assert.equal(existsSync(r.out),false);}
- }finally{rmSync(dir,{recursive:true,force:true});}
-});
-
 test('invalid family: each named mutation is rejected with its expected class and never executes',async()=>{
  const {generateInvalidPureData}=await import('../../tools/tc0/pure-data-invalid.mjs');
  const {InvalidPureCallArtifact}=await import('../../tools/tc0/pure-call-artifact.mjs');

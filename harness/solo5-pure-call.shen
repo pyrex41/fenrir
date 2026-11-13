@@ -133,7 +133,7 @@
                          ["qualification" "UNKNOWN"]
                          ["harness" "Shen"]
                          ["shen" (make-string "~A ~A ~A" (value *implementation*) (value *port*) (version))]
-                         ["model" "registered pure-call machine with models/tc0/portable integer layer, run in this process"]
+                         ["model" "models/tc0/pure-call-machine.shen with models/tc0/i64.shen, run in this process"]
                          ["batch_sha256" Sha]
                          ["programs" (str Count)]
                          ["model_steps" (str (fh.step-count Model 0))]

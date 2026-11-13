@@ -1,12 +1,12 @@
 {
  "schema": "tc0-a-requirement-manifest/1",
- "status": "owner-reviewed",
+ "status": "owner-accepted",
  "slice": "TC0-A",
  "contract": "0.2",
  "catalog": "spec/tc0/pure-call-demo.json",
  "ledger": "spec/tc0/requirement-ledger-a.json",
- "evaluator": "tools/check-tc0-a-gate.py",
- "aggregation": "TC0-GATE (02 §14): any required row FAIL -> FAIL; else any BLOCKED -> BLOCKED; else any UNKNOWN -> UNKNOWN; else PASS (precedence accepted by the owner, 2026-10-11). A mutant killed on no program is FAIL. Every row's reasons are reported whatever the aggregate. Optional rows never satisfy a required row.",
+ "evaluator": "harness/gate.shen",
+ "aggregation": "TC0-GATE (02 \u00a714): any required row FAIL -> FAIL; else any BLOCKED -> BLOCKED; else any UNKNOWN -> UNKNOWN; else PASS (precedence accepted by the owner, 2026-10-11). A mutant killed on no program is FAIL. Every row's reasons are reported whatever the aggregate. Optional rows never satisfy a required row.",
  "rows": [
   {
    "id": "source-identity",
@@ -24,7 +24,7 @@
     "G0-TOOLCHAIN-BASELINE"
    ],
    "check": "toolchain-pinned",
-   "acceptance": "build/toolchain/shen-scheme resolves to the flake's shen-scheme output. No nix: BLOCKED. Another executable: UNKNOWN."
+   "acceptance": "The Shen/JIT executable and library directory the gate runs on resolve to the flake's shen-jit output. No nix or no such flake output: BLOCKED. Another executable: UNKNOWN."
   },
   {
    "id": "unit-suite",
@@ -52,7 +52,7 @@
     "TC0-REPLAY"
    ],
    "check": "hand-agreement-and-replay",
-   "acceptance": "Fresh Shen/candidate agreement on every hand case with hand-derived outcomes, then strict replay Admitted for each."
+   "acceptance": "harness/hand-cases.shen: model and sandboxed implementation agree on every hand case and satisfy every hand-derived expectation; then strict replay Admitted for each."
   },
   {
    "id": "exact-arithmetic",
@@ -61,7 +61,7 @@
     "G0-EXACT-ARITHMETIC"
    ],
    "check": "exact-arithmetic",
-   "acceptance": "Every boundary-product and ID case exact on host Shen and the candidate."
+   "acceptance": "harness/solo5-pure-call.shen on the exact-arithmetic batch: every boundary-product program agrees between the model and the Solo5 guest, whose C arithmetic is the independent side, and both guest defects are detected. Solo5 not built: BLOCKED."
   },
   {
    "id": "exhaustive-small",
@@ -72,7 +72,7 @@
     "TC0-SHEN-INDEPENDENCE"
    ],
    "check": "exhaustive-small",
-   "acceptance": "Every program of grammar G up to 5 nodes agrees with fresh Shen (trace and outcome), with the candidate sandboxed."
+   "acceptance": "harness/model-vs-candidate.shen: every program of grammar G up to 5 nodes agrees with the model run in the harness (trace and outcome), with the implementation sandboxed."
   },
   {
    "id": "mutant-reverse-operands",
@@ -162,10 +162,19 @@
     "G0-EXACT-ARITHMETIC"
    ],
    "check": "exact-arithmetic-shaken",
-   "acceptance": "Optional: the same ledger exact on the Yggdrasil-shaken shen-cl port when its stamp is fresh."
+   "acceptance": "Optional and not available: the harness runs on Shen/JIT only. Always DEFERRED."
+  },
+  {
+   "id": "solo5-guest-agreement",
+   "required": false,
+   "check": "solo5-guest-agreement",
+   "ledger": [
+    "TC0-EXPLORE"
+   ],
+   "acceptance": "Optional: harness/solo5-pure-call.shen on hand, generated and 5-node exhaustive programs: the Solo5 guest agrees with the model on every step and both guest defects are detected."
   }
  ],
- "review": "campaigns/tc0/G1_EVALUATOR_REVIEW.md",
+ "review": "campaigns/tc0/G1_SHEN_EVALUATOR_SWITCH.md",
  "claims": {
   "canonical-program": [
    "unit-suite",
@@ -200,5 +209,7 @@
   "source-identity",
   "candidate-boundary",
   "requirement-ledger"
- ]
+ ],
+ "supersedes": "The Python evaluator tools/check-tc0-a-gate.py and its manifest (owner-reviewed 2026-10-11, review in campaigns/tc0/G1_EVALUATOR_REVIEW.md), removed on 2026-11-13. Receipts issued by it are historical.",
+ "model": "models/tc0/pure-call-machine.shen with models/tc0/i64.shen, run in-process by the Shen harness on the flake-pinned Shen/JIT"
 }

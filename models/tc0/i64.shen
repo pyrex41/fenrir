@@ -1,11 +1,11 @@
-\\ PROPOSED, UNQUALIFIED. Exact I64 arithmetic that does not depend on the host
-\\ Shen port's integer width. The registered arithmetic.shen computes with host
-\\ integers and then range-checks, which needs integers wider than 64 bits.
-\\ Shen/JIT integers are 62-bit fixnums: a wider literal reads as a real and a
-\\ wider result raises. Here an I64 value is a canonical decimal STRING
-\\ (optional "-", no leading zero, "0" for zero) and all arithmetic is done on
-\\ little-endian lists of decimal digits. No host number above 99 is formed.
-\\ Pure kernel: no host time, entropy or I/O.
+\\ TC0 I64 arithmetic for the pure-call machine. Pure kernel: no host time, entropy or I/O.
+\\ Exact on any Shen port, whatever its integer width: an I64 value is a canonical
+\\ decimal STRING (optional "-", no leading zero, "0" for zero) and all arithmetic is
+\\ done on little-endian lists of decimal digits. No host number above 99 is formed.
+\\ Shen/JIT integers are 62-bit fixnums (a wider literal reads as a real, a wider
+\\ result raises), so arithmetic on host integers cannot represent I64 there.
+\\ arithmetic.shen is the earlier host-integer version; only the arithmetic-demo
+\\ expression machine still uses it, and the two are never loaded together.
 
 (define tc0.i64.digit
   C -> (- (string->n C) 48))
@@ -176,7 +176,7 @@
 (define tc0.i64.small
   S -> (tc0.i64.small-chars (explode S)))
 
-\\ Same interface as arithmetic.shen, over canonical decimal strings.
+\\ The machine's arithmetic entry point, over canonical decimal strings.
 (define tc0.arithmetic
   add [A B] -> (tc0.i64.checked (tc0.i64.add (tc0.i64.parse A) (tc0.i64.parse B)))
   sub [A B] -> (tc0.i64.checked (tc0.i64.add (tc0.i64.parse A) (tc0.i64.negate (tc0.i64.parse B))))

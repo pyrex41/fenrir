@@ -1,6 +1,7 @@
 // S3 clean-room repair packet, development tier, NOT qualification.
 // Usage: node tools/tc0/s3-prepare.mjs S2_REPORT OUT_DIR
-//   S2_REPORT  an arm-by-position pure-data reduction report (schema /2)
+//   S2_REPORT  the failure-report.json written by harness/reduction.shen for the
+//              pure-data arm-by-position campaign
 //   OUT_DIR    fresh directory below build/ receiving packet/ and workspace/
 // packet/ is evaluator-side: the preserved defective original, the failure bundle,
 // the workspace manifest and the allowed path. workspace/ is what a repairer gets:
@@ -32,14 +33,13 @@ const defective=makeDefective(readFileSync(resolve(root,CANDIDATE),'utf8'));
 // mutation/generation/reduction tooling for it, held-out scopes and the S3 tools.
 const WITHHELD=['README.md','PI_CLM_HANDOFF.md','campaigns','.pi',
  'tests/tc0/pure-data-generation.test.mjs','tests/tc0/pure-call-failure-runner.test.mjs','tests/tc0/s3-repair.test.mjs','tests/tc0/sandbox.test.mjs',
- 'tools/check-tc0-pure-call-reduction.py','tools/check-tc0-pure-data-exhaustive.py','tools/check-tc0-s3-repair.py',
  'tools/tc0/pure-data-generate.mjs','tools/tc0/pure-data-enumerate.mjs','tools/tc0/pure-data-invalid.mjs',
  'tools/tc0/run-pure-data-exhaustive.mjs','tools/tc0/pure-call-campaign-bridge.mjs','tools/tc0/check-pure-call-failure-replay.mjs',
  'tools/tc0/s3-prepare.mjs','tools/tc0/s3-defect.mjs','tools/tc0/s3-replay.mjs','tools/tc0/s3-task-template.md','tools/tc0/check-sandbox.mjs',
  'spec/tc0/requirement-ledger-a.json','tools/tc0/check-requirement-ledger.mjs','tests/tc0/requirement-ledger.test.mjs',
- 'spec/tc0/tc0-a-requirements.json','tools/check-tc0-a-gate.py',
+ 'spec/tc0/tc0-a-requirements.json',
  // Evaluator-side Shen harness: the gate, the campaigns and the repair evaluation.
- 'spec/tc0/tc0-a-requirements-shen.json','harness/README.md','harness/gate.shen','harness/reduction.shen',
+ 'harness/README.md','harness/run-gate.sh','harness/gate.shen','harness/reduction.shen',
  'harness/model-vs-candidate.shen','harness/repair-evaluation.shen','tools/tc0/replay-reference.mjs'];
 const REWRITES=[
  ['tools/tc0/pure-call-replay.mjs',',arm_by_position:m.armByPosition===true}','}'],

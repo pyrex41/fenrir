@@ -1,9 +1,16 @@
 {
   "version": 1,
   "requireContinuousContext": true,
-  "protectedPaths": ["tests/fenrir-workflow"],
-  "ignoredPaths": ["node_modules", "build"],
-  "requiredChecks": ["tc0-a-qualification"],
+  "protectedPaths": [
+    "tests/fenrir-workflow"
+  ],
+  "ignoredPaths": [
+    "node_modules",
+    "build"
+  ],
+  "requiredChecks": [
+    "tc0-a-qualification"
+  ],
   "requiredClaims": [
     "canonical-program",
     "hand-derived-trace",
@@ -16,21 +23,24 @@
     "workflow-tests": {
       "kind": "development",
       "command": [
-        "node", "--test",
+        "node",
+        "--test",
         "tests/fenrir-workflow/core.test.mjs",
         "tests/fenrir-workflow/runner.test.mjs",
         "tests/fenrir-workflow/extension.test.mjs"
       ],
       "timeoutSeconds": 60,
-      "authorityPaths": ["tests/fenrir-workflow"]
+      "authorityPaths": [
+        "tests/fenrir-workflow"
+      ]
     },
     "tc0-candidate-tests": {
       "kind": "development",
       "command": [
-        "node", "--test",
+        "node",
+        "--test",
         "tests/tc0/canonical.test.mjs",
         "tests/tc0/closure-alias.test.mjs",
-        "tests/tc0/closure-replay-runner.test.mjs",
         "tests/tc0/closure-replay.test.mjs",
         "tests/tc0/closure.test.mjs",
         "tests/tc0/digest-cache.test.mjs",
@@ -38,10 +48,8 @@
         "tests/tc0/generate.test.mjs",
         "tests/tc0/pure-call-artifact.test.mjs",
         "tests/tc0/pure-call-coverage.test.mjs",
-        "tests/tc0/pure-call-failure-runner.test.mjs",
         "tests/tc0/pure-call-generation.test.mjs",
         "tests/tc0/pure-call-machine.test.mjs",
-        "tests/tc0/pure-call-replay-runner.test.mjs",
         "tests/tc0/pure-call-replay.test.mjs",
         "tests/tc0/pure-data-generation.test.mjs",
         "tests/tc0/pure-data.test.mjs",
@@ -57,20 +65,39 @@
     },
     "tc0-pure-call-oracle": {
       "kind": "development",
-      "command": ["node", "tools/tc0/dev-check-pure-call-oracle.mjs"],
+      "command": [
+        "sh",
+        "harness/run-hand-cases.sh"
+      ],
       "timeoutSeconds": 330,
-      "authorityPaths": ["tools/tc0/dev-check-pure-call-oracle.mjs"],
-      "blockedExitCode": 2
+      "authorityPaths": [
+        "harness/hand-cases.shen",
+        "harness/common.shen",
+        "harness/run-hand-cases.sh"
+      ]
     },
     "tc0-a-qualification": {
       "kind": "qualification",
-      "command": ["python3", "-I", "tools/check-tc0-a-gate.py"],
+      "command": [
+        "sh",
+        "harness/run-gate.sh"
+      ],
       "timeoutSeconds": 1800,
       "authorityPaths": [
-        "tools/check-tc0-a-gate.py", "spec/tc0", "models/tc0", "fixtures/tc0", "tools/tc0",
-        "tools/check-tc0-pure-call.py", "tools/check-tc0-expression.py", "tools/check-tc0-pure-data-exhaustive.py",
-        "tools/check-tc0-pure-call-reduction.py", "tools/check-tc0-exact-arithmetic.py", "tools/check-tc0-s3-repair.py",
-        "tests/tc0", "campaigns/tc0/s3", "flake.nix", "flake.lock"
+        "harness",
+        "spec/tc0",
+        "models/tc0",
+        "fixtures/tc0",
+        "tools/tc0",
+        "runtime/tc0",
+        "tools/solo5/freerun-pure-call.mjs",
+        "tools/solo5/freerun.mjs",
+        "tools/solo5/pure-call",
+        "backends/solo5/pure-call",
+        "tests/tc0",
+        "campaigns/tc0/s3",
+        "flake.nix",
+        "flake.lock"
       ]
     }
   }

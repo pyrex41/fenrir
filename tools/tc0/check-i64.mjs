@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Development check for models/tc0/portable/i64.shen: every operation over a
+// Development check for models/tc0/i64.shen: every operation over a
 // boundary product V x V is compared with exact results computed here with
 // BigInt. Run it once per Shen port; agreement between ports is not the test.
-// Usage: node tools/tc0/check-portable-i64.mjs SHEN_EXECUTABLE [...more]
+// Usage: node tools/tc0/check-i64.mjs SHEN_EXECUTABLE [...more]
 import {spawnSync} from 'node:child_process';
 import {mkdirSync, writeFileSync} from 'node:fs';
 import {resolve} from 'node:path';
@@ -31,7 +31,7 @@ export function cases() {
 function check(executable) {
   const rows=cases(),dir=resolve(root,'build/tc0/portable-i64',`${Date.now()}-${process.pid}`);
   mkdirSync(dir,{recursive:true});
-  const lines=[`(load "${resolve(root,'models/tc0/portable/i64.shen')}")`,'(output "FG-BEGIN~%")'];
+  const lines=[`(load "${resolve(root,'models/tc0/i64.shen')}")`,'(output "FG-BEGIN~%")'];
   for(const [op,a,b] of rows)
     lines.push(op==='compare'?`(output "~A~%" (tc0.i64.compare "${a}" "${b}"))`
       :`(output "~A~%" (tc0.arithmetic ${op} [${[a,b].filter(x=>x!==null).map(x=>`"${x}"`).join(' ')}]))`);
@@ -48,7 +48,7 @@ function check(executable) {
 }
 if(process.argv[1]&&resolve(process.argv[1])===import.meta.filename) {
   const ports=process.argv.slice(2);
-  if(!ports.length)throw new Error('Usage: check-portable-i64.mjs SHEN_EXECUTABLE [...]');
+  if(!ports.length)throw new Error('Usage: check-i64.mjs SHEN_EXECUTABLE [...]');
   const reports=ports.map(p=>check(resolve(p)));
   console.log(JSON.stringify({schema:'fenrir.portable-i64-development/1',qualification:'UNKNOWN',values:String(VALUES.length),reports},null,2));
   if(reports.some(r=>r.status!=='development-pass'))process.exitCode=1;

@@ -2,8 +2,7 @@
 # Check the hand cases in Shen: model against the JavaScript implementation and
 # against the hand-derived expectations. Usage: sh harness/run-hand-cases.sh
 set -eu
-root=$(cd "$(dirname "$0")/.." && pwd)
-jit="${FENRIR_SHEN_JIT:-$root/build/toolchain/shen-jit-0.7}"
+. "$(dirname "$0")/jit.sh"
 out="$root/build/harness/hand-cases/$(date +%s)-$$"
 mkdir -p "$out"
 status=0

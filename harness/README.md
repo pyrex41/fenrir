@@ -42,7 +42,7 @@ runs the model here, and compares. At the 5-node bound: 5,695 of 5,695 programs
 agree (81,063 steps; 4,350 Ok, 595 DivZero, 517 Bounds, 233 Overflow), with
 reverse-operands killed on 3,940, arm-by-position on 975 and wrap-overflow on
 233, and no mutant crash. Those are the counts the Python checker
-`tools/check-tc0-pure-data-exhaustive.py` reports for the same scope.
+the former Python checker reported for the same scope.
 
 The same comparisons took about 100 s and 82 s through the Python route, most
 of it printing Shen terms and parsing them back.
@@ -61,39 +61,15 @@ satisfy the 42 hand-written expectations (outcome, step staging, return frame
 count, depth bound, descriptor count, emission order). Each kind of expectation
 was confirmed to fail when its expected value is corrupted.
 
-**[gate.shen](gate.shen)** is a proposed replacement for the registered
-evaluator `tools/check-tc0-a-gate.py`, with its own manifest
-`spec/tc0/tc0-a-requirements-shen.json` (status `proposed`). It keeps the
-registered gate's rows, claims and aggregation: any required FAIL gives FAIL,
-else BLOCKED, else UNKNOWN, else PASS. It always reports
-`authority: UNREGISTERED` and `qualification: UNKNOWN`. Each comparison runs as
+**[gate.shen](gate.shen)** is the registered TC0-A gate evaluator
+(`tc0-a-qualification` in `.pi/fenrir-workflow.json`), with the manifest
+`spec/tc0/tc0-a-requirements.json`. It replaced the Python evaluator on 13
+November 2026; [the switch record](../campaigns/tc0/G1_SHEN_EVALUATOR_SWITCH.md)
+says on what basis and what differs. It keeps the former gate's rows, claims
+and aggregation: any required FAIL gives FAIL, else BLOCKED, else UNKNOWN, else
+PASS. Its verdict counts as a qualification only while the manifest is
+owner-accepted and the workflow names this evaluator. Each comparison runs as
 its own harness process, with the JavaScript implementation sandboxed.
-
-**[reduction.shen](reduction.shen)** runs a discovery-and-reduction campaign
-with one implementation defect switched on: find the first generated program
-showing the expected kind of discrepancy, shrink it by typed proposals (each
-accepted only when fresh model and implementation runs show the same kind of
-discrepancy), then replay the original and minimized failure strictly. Its
-three campaigns reproduce the Python tool's published results exactly: case
-12, 35 attempts (18 accepted), 64 to 17 nodes, divergence epochs 88 and 29;
-case 0, 30 (10), 64 to 15, epochs 20 and 2; case 0, 36 (8), 37 to 18, epochs
-27 and 9.
-
-**[repair-evaluation.shen](repair-evaluation.shen)** decides whether a change
-to the implementation is an acceptable repair of a retained failure. Ten steps,
-all required: only the allowed file changed; it differs from the preserved
-defective original; the defective original still reproduces each failure at
-its recorded divergence; the repair replays each failure and is admitted; the
-hand cases agree; the workspace's test suite passes; two generated families
-and the 5-node exhaustive scope, never shown to the repairer, agree; and the
-same checks reject the defective original (699 of 719 programs agree at 4
-nodes). The repaired implementation always runs sandboxed. On the retained
-patch `campaigns/tc0/s3/independent-repair-1.patch` it returns
-DEVELOPMENT-PASS.
-
-Strict replay uses the existing JavaScript tape code unchanged, through
-`tools/tc0/replay-reference.mjs`: the harness supplies the model's trace as the
-reference and holds the expectation (admitted, or diverged for a defect).
 
 An evaluator error, a check that does not report, or a check the evaluator
 does not know is UNKNOWN, never a pass. Rows on a committed tree:
@@ -115,7 +91,7 @@ does not know is UNKNOWN, never a pass. Rows on a committed tree:
 | independent-repair-isolation | PASS, with the recorded owner waiver | |
 | solo5-guest-agreement (optional, new) | PASS | 5,774 programs |
 
-Verdict on a committed tree, 13 November 2026: **PASS**, 15 of 15 required rows and all six claims, in about two minutes, with the recorded repair-isolation waiver reported. Because the evaluator is unregistered, the same report says `qualification: UNKNOWN`: this is a result about the proposed gate, not a TC0-A qualification. It includes the HEAD-drift fix of PR #6: the final
+Verdict on a committed tree, 13 November 2026: **PASS**, 15 of 15 required rows and all six claims, in about two minutes, with the recorded repair-isolation waiver reported. That was a direct run, not a run through the workflow controller on a supported runner, so there is no qualification receipt yet. It includes the HEAD-drift fix of PR #6: the final
 check reads HEAD directly and compares it with the head recorded by the
 source-identity row.
 
@@ -125,22 +101,19 @@ source-identity row.
 | --- | --- | --- |
 | Guest image build: generate programs, validate, lower to C data, compile | JavaScript (`tools/solo5/freerun-pure-call.mjs --build-only`) | The harness trusts this only to produce the two inputs it is given; a wrong batch shows up as a comparison failure or an identity mismatch |
 | Second implementation | JavaScript (`runtime/tc0/`) and C (`backends/solo5/pure-call/`) | Stays non-Shen on purpose: it has to be independent of the model |
-| Python checkers now duplicated in Shen: hand cases, exhaustive scope, exact arithmetic | Python (`check-tc0-pure-call.py`, `check-tc0-pure-data-exhaustive.py`, `check-tc0-exact-arithmetic.py`) | Kept only because the registered gate calls them; they go when the gate moves |
 | Validator | JavaScript | Natural fit for Shen sequent rules; this is also Fenrir's type checker in the amendment |
 | Generators, enumerator, reducer | JavaScript | Plain list processing |
-| TC0-A gate and its receipts | Python, registered | Untouched. `gate.shen` is the proposed replacement and now passes; switching registration, and deleting the Python checkers it replaces, is the owner's decision |
 | Solo5 host tooling of the earlier Docker profile | Python and Go | Superseded in part by the stock-tender lane |
 
 ## Limits of what runs today
 
-- Development evidence, `qualification: UNKNOWN`. It is not registered with
-  the workflow controller.
-- The model is the registered pure-call machine plus the proposed
-  width-independent integer layer ([models/tc0/portable/](../models/tc0/portable/README.md)),
-  because Shen/JIT integers are 62-bit. That layer is not the registered model.
+- The individual harness programs report development evidence,
+  `qualification: UNKNOWN`. Only the gate issues a verdict.
+- The model's integers are decimal strings (`models/tc0/i64.shen`), because
+  Shen/JIT integers are 62-bit. `tools/tc0/check-i64.mjs` compares that
+  arithmetic with exact results on 5,478 boundary cases.
 - The harness and the model run in one Shen process. A bug in Shen/JIT itself
   could affect both; the guest is the independent side.
 - Entry input is fixed at `["int","0"]`.
-- Shen/JIT is pinned in the flake (`nix build .#shen-jit`); `run-gate.sh` uses
-  that output. The other runner scripts default to a hand-built copy under
-  `build/toolchain/shen-jit-0.7` unless `FENRIR_SHEN_JIT` points elsewhere.
+- Shen/JIT is pinned in the flake (`nix build .#shen-jit`). The runner scripts
+  use that output when nix is available; see [jit.sh](jit.sh).

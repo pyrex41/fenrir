@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {VALUES, expected, cases} from '../../tools/tc0/check-portable-i64.mjs';
+import {VALUES, expected, cases} from '../../tools/tc0/check-i64.mjs';
 
 // The Shen ports are external; these tests pin the expectation generator itself.
 test('the boundary set brackets every width that matters', () => {

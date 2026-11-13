@@ -1,4 +1,6 @@
-\\ UNQUALIFIED integrated pure-call demo. Load arithmetic.shen first.
+\\ UNQUALIFIED integrated pure-call demo. Load i64.shen first.
+\\ I64 values and every ID (node, binding, function) are canonical decimal strings,
+\\ so the machine does not depend on the host Shen port's integer width.
 \\ Explicit target continuations; names/codes are ordered host-validated tables.
 \\ The evaluation phase is tagged `evaluate`, not `eval`: a literal `eval` symbol
 \\ makes Yggdrasil keep the whole compiler, since a symbol may be applied.
@@ -38,10 +40,11 @@
 (define tc0.pc.free-arms
  [] -> []
  [[Ctor Binders Body] | Arms] -> (append (tc0.pc.remove-all Binders (tc0.pc.free Body)) (tc0.pc.free-arms Arms)))
+\\ Capture order: IDs are unsigned canonical decimal strings, ordered numerically.
 (define tc0.pc.insert
  Id [] -> [Id]
  Id [Id | Rest] -> [Id | Rest]
- Id [X | Rest] -> [Id X | Rest] where (< Id X)
+ Id [X | Rest] -> [Id X | Rest] where (< (tc0.i64.compare Id X) 0)
  Id [X | Rest] -> [X | (tc0.pc.insert Id Rest)])
 (define tc0.pc.ordered
  [] -> []
@@ -86,17 +89,19 @@
 (define tc0.pc.numbers
  [] -> []
  [[int N] | Rest] -> [N | (tc0.pc.numbers Rest)])
+(define tc0.pc.index
+ Os N -> [ok (str (nth (+ N 1) Os))] where (and (>= N 0) (< N (length Os)))
+ _ _ -> [trap bounds])
 (define tc0.pc.pure
  not [[bool B]] -> [ok-bool (not B)]
- lt [[int A] [int B]] -> [ok-bool (< A B)]
- le [[int A] [int B]] -> [ok-bool (<= A B)]
- gt [[int A] [int B]] -> [ok-bool (> A B)]
- ge [[int A] [int B]] -> [ok-bool (>= A B)]
+ lt [[int A] [int B]] -> [ok-bool (< (tc0.i64.compare A B) 0)]
+ le [[int A] [int B]] -> [ok-bool (<= (tc0.i64.compare A B) 0)]
+ gt [[int A] [int B]] -> [ok-bool (> (tc0.i64.compare A B) 0)]
+ ge [[int A] [int B]] -> [ok-bool (>= (tc0.i64.compare A B) 0)]
  eq [A B] -> [ok-bool (= A B)]
- bytes_length [[bytes Os]] -> [ok (length Os)]
+ bytes_length [[bytes Os]] -> [ok (str (length Os))]
  bytes_concat [[bytes A] [bytes B]] -> [ok-value [bytes (append A B)]]
- bytes_index [[bytes Os] [int I]] -> [ok (nth (+ I 1) Os)] where (and (>= I 0) (< I (length Os)))
- bytes_index [[bytes Os] [int I]] -> [trap bounds]
+ bytes_index [[bytes Os] [int I]] -> (tc0.pc.index Os (tc0.i64.small I))
  Op Values -> (tc0.arithmetic Op (tc0.pc.numbers Values)))
 (define tc0.pc.pure-return
  [ok N] Env Frames Codes Names -> (tc0.pc.transition [value [int N]] Env Frames Codes Names [])

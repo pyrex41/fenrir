@@ -18,7 +18,7 @@ import {cases as dataHand} from '../../fixtures/tc0/pure-data-hand-cases.mjs';
 import {generatePureCalls} from '../tc0/pure-call-generate.mjs';
 import {generatePureData} from '../tc0/pure-data-generate.mjs';
 import {enumeratePureData} from '../tc0/pure-data-enumerate.mjs';
-import {VALUES} from '../tc0/check-portable-i64.mjs';
+import {VALUES} from '../tc0/check-i64.mjs';
 
 const root=resolve(import.meta.dirname,'../..');
 const FUEL=200,CHUNK=250,INPUT=['int','0'];

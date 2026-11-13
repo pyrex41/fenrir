@@ -1,7 +1,7 @@
 // Drive the Shen expression model (models/tc0/expression-machine.shen) over a
 // batch of TC0-A arithmetic-demo artifacts and normalize its samples to the
 // step shape the candidates emit. Transport and normalization only: no
-// transition logic lives here. Mirrors tools/check-tc0-expression.py.
+// transition logic lives here.
 import {spawnSync} from 'node:child_process';
 import {resolve} from 'node:path';
 
