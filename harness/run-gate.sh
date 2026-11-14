@@ -10,7 +10,7 @@ mkdir -p "$out"
 status=0
 "$jit/bin/shen-jit" script "$root/harness/gate.shen" "$jit/lib" "$root" "$out" "$jit/bin/shen-jit" \
   ${FENRIR_CHECK_NONCE:+"$FENRIR_CHECK_NONCE" "${FENRIR_CHECK_ID:-}" "${FENRIR_SOURCE_SHA256:-}" "${FENRIR_CONFIG_SHA256:-}"} \
-  > "$out/gate.log" 2>&1 || status=$?
+  > "$out/gate.log" 2>&1 < /dev/null || status=$?
 if [ -n "${FENRIR_CHECK_NONCE:-}" ]; then
   grep -E '^[a-z0-9-]+: (PASS|FAIL|UNKNOWN|BLOCKED|DEFERRED)$' "$out/gate.log" >&2 || true
   grep '^{"schema":"fenrir.check.v1"' "$out/gate.log" | tail -n 1

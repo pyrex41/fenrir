@@ -226,7 +226,7 @@ Current standing under this vocabulary: TC0-A is *bounded exploration passed* (a
 | --- | --- | --- |
 | B0 | Merge the open branches in the order given in [campaigns/RECONCILIATION_2026-11.md](campaigns/RECONCILIATION_2026-11.md) | PRs #5, #6, #8 merged; #7 rewritten against §4 |
 | B1 | **Solo5 lane** (§7): Shen in the comparison (done), pure-call machine as guest (done, free-running), control channel (open) | A `/2` program with closures and data runs in Solo5 under host-selected steps and agrees with Shen |
-| B2 | **TC1 effects** (§4): contract text, then handlers in the Shen model and the candidate with fixtures and mutants; tail-resumptive first, explicit one-shot resumption second | A handler program with agreeing traces; `double-resume` and `forgotten-resume` mutants caught |
+| B2 | **TC1 effects** (§4): contract text ([spec/tc1/EFFECTS.md](spec/tc1/EFFECTS.md), draft) and the tail-resumptive slice in the Shen model and a JavaScript implementation, with fixtures and four mutants (done 14 November 2026); explicit one-shot resumption second (open) | A handler program with agreeing traces; `double-resume` and `forgotten-resume` mutants caught |
 | B3 | **Frontend**, written in Shen: reader, elaboration to checked core artifacts, effect-row inference, typing rules as sequent rules | A program a person can write, read, run and check, executing in Solo5 |
 | B4 | **Tasks and channels** under the production scheduling contract (§14) | The commuting obligation checked on the exhaustive-small scope |
 | B5 | **Service example** A1 → A3 (§8) on BEAM, SQLite and a Solo5 worker | Crash and duplicate-delivery campaigns accepted against the contract |

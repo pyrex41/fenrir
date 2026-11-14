@@ -172,6 +172,15 @@
     "TC0-EXPLORE"
    ],
    "acceptance": "Optional: harness/solo5-pure-call.shen on hand, generated and 5-node exhaustive programs: the Solo5 guest agrees with the model on every step and both guest defects are detected."
+  },
+  {
+   "id": "tc1-handler-slice",
+   "required": false,
+   "check": "tc1-handlers",
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "acceptance": "Optional, outside TC0-A: harness/tc1-handlers.shen. On every TC1 slice H1 hand fixture the model and the sandboxed implementation agree and satisfy the handwritten expectations, and every injected handler defect is detected on some fixture without crashing. Contract: spec/tc1/EFFECTS.md (draft)."
   }
  ],
  "review": "campaigns/tc0/G1_SHEN_EVALUATOR_SWITCH.md",

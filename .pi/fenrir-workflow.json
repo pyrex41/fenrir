@@ -58,7 +58,8 @@
         "tests/tc0/replay.test.mjs",
         "tests/tc0/requirement-ledger.test.mjs",
         "tests/tc0/s3-repair.test.mjs",
-        "tests/tc0/sandbox.test.mjs"
+        "tests/tc0/sandbox.test.mjs",
+        "tests/tc1/handler-artifact.test.mjs"
       ],
       "timeoutSeconds": 120,
       "authorityPaths": []
@@ -97,7 +98,13 @@
         "tests/tc0",
         "campaigns/tc0/s3",
         "flake.nix",
-        "flake.lock"
+        "flake.lock",
+        "models/tc1",
+        "runtime/tc1",
+        "tools/tc1",
+        "fixtures/tc1",
+        "spec/tc1",
+        "tests/tc1"
       ]
     }
   }

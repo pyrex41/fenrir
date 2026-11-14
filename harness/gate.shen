@@ -135,6 +135,18 @@
 (define fh.solo5-guest-agreement
   Memo -> (fh.guest-row (fh.guest-batch ["--exhaustive-nodes" "5"]) Memo))
 
+(define fh.tc1-handlers
+  Memo ->
+    (let Report (fh.harness "tc1-handlers.shen" [(fh.subdir "tc1-handlers") "sandbox"] 600)
+         Status (fh.member "status" Report)
+      (if (= Status "development-pass")
+          (fh.row "PASS" [] [["cases" (fh.member "cases" Report)] ["expectations_checked" (fh.member "expectations_checked" Report)]
+                             ["defects" (json.stringify (fh.member "defects" Report) [])]] Memo)
+          (if (= Status "development-fail")
+              (fh.row "FAIL" ["TC1 handler slice: disagreement, a failed expectation, or an undetected or crashing defect"]
+                      [["failures" (json.stringify (fh.member "failures" Report) [])]] Memo)
+              (fh.row "UNKNOWN" ["The TC1 handler harness did not report"] [] Memo)))))
+
 (define fh.exhaustive-small
   Memo ->
     (let Report (fh.harness "model-vs-candidate.shen" ["5" (fh.subdir "exhaustive") "sandbox"] 1800)
@@ -260,6 +272,7 @@
   "repair-isolation:campaigns/tc0/s3/repair-isolation-acceptance.json" Memo -> (fh.repair-isolation "campaigns/tc0/s3/repair-isolation-acceptance.json" Memo)
   "exact-arithmetic-shaken" Memo -> (fh.row "DEFERRED" ["Optional second port: the harness runs on Shen/JIT only"] [] Memo)
   "solo5-guest-agreement" Memo -> (fh.solo5-guest-agreement Memo)
+  "tc1-handlers" Memo -> (fh.tc1-handlers Memo)
   Name Memo -> (fh.row "UNKNOWN" [(cn "The evaluator has no check named " Name)] [] Memo))
 
 \\ An evaluator fault is never a pass.

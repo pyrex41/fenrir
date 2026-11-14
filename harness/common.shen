@@ -10,9 +10,10 @@
      ["ffi.shen" "buffer.shen" "cursor.shen" "grammar.shen" "json.shen" "io.shen" "io-file.shen"
       "deadline.shen" "clock.shen" "process.shen" "process-io.shen"])
 
-\\ The model: the pure-call machine and its exact integer arithmetic.
+\\ The models: exact integer arithmetic, the TC0-A pure-call machine, and the TC1
+\\ handler machine. Which machine runs a program is decided by its schema.
 (map (/. F (load (cn (value fh.*root*) F)))
-     ["models/tc0/i64.shen" "models/tc0/pure-call-machine.shen"])
+     ["models/tc0/i64.shen" "models/tc0/pure-call-machine.shen" "models/tc1/handler-machine.shen"])
 
 \\ ---------- decoded JSON helpers ----------
 
@@ -70,6 +71,9 @@
   ["project" Node E I] -> [project Node (fh.expr E) (tc0.i64.small I)]
   ["construct" Node Type Ctor | Args] -> [construct Node Type Ctor | (fh.exprs Args)]
   ["match" Node E | Arms] -> [match Node (fh.expr E) (map (/. A (fh.arm A)) Arms)]
+  \\ TC1: effect and operation names stay strings; a clause is [Operation Binder Body].
+  ["handle" Node Effect Clauses Body] -> [handle Node Effect (map (/. C (fh.arm C)) Clauses) (fh.expr Body)]
+  ["perform" Node Effect Op Arg] -> [perform Node Effect Op (fh.expr Arg)]
   X -> (error "harness: unsupported expression ~S" X))
 
 \\ One [Id [Parameter Body]] entry per lambda in a translated expression.
@@ -77,6 +81,8 @@
   [lambda Node Id Body] -> [[Node [Id Body]] | (fh.lambda-codes Body)]
   [let Node Id Init Body] -> (append (fh.lambda-codes Init) (fh.lambda-codes Body))
   [match Node E Arms] -> (append (fh.lambda-codes E) (fh.arm-codes Arms))
+  [handle Node Effect Clauses Body] -> (append (fh.arm-codes Clauses) (fh.lambda-codes Body))
+  [perform Node Effect Op Arg] -> (fh.lambda-codes Arg)
   [Tag Node | Rest] -> (fh.codes-in Rest)
   _ -> [])
 
@@ -102,12 +108,25 @@
   Name [_ | Rows] -> (fh.entry-row Name Rows)
   Name [] -> (error "harness: entry function ~A is not defined" Name))
 
+\\ The machine a program runs on, by its schema.
+(define fh.state-tag
+  "tc1-handler-demo/1" -> tc1-state
+  _ -> pure-call-state)
+
+(define fh.model-step
+  [tc1-state | Rest] -> (tc1.step [tc1-state | Rest])
+  State -> (tc0.pc.step State))
+
+(define fh.model-site
+  [tc1-state | Rest] -> (tc1.site [tc1-state | Rest])
+  State -> (tc0.pc.site State))
+
 (define fh.state
   Artifact ->
     (let Rows (map (/. F (fh.function-row F)) (fh.field "functions" Artifact))
          Names (map (/. R [(fh.function-name (hd (tl R))) (hd R)]) Rows)
          Entry (fh.entry-row (fh.field "entry" Artifact) Rows)
-      [pure-call-state [evaluate (hd (tl Entry)) true] [[(hd Entry) [int "0"]]] [] (fh.function-codes Rows) Names]))
+      [(fh.state-tag (fh.field "schema_version" Artifact)) [evaluate (hd (tl Entry)) true] [[(hd Entry) [int "0"]]] [] (fh.function-codes Rows) Names]))
 
 \\ ---------- model observations in the guest's JSON shape ----------
 
@@ -145,6 +164,8 @@
   [invoke Node Label V] -> [object ["kind" "Invoke"] ["task" "0"] ["node" Node] ["operation" "emit"] ["label" Label] ["value" (fh.value V)]]
   [emit Node Label V] -> [object ["kind" "Emit"] ["task" "0"] ["node" Node] ["label" Label] ["value" (fh.value V)]]
   [commit Node V] -> [object ["kind" "Commit"] ["task" "0"] ["node" Node] ["operation" "emit"] ["value" (fh.value V)]]
+  [perform Node Effect Op V] -> [object ["kind" "Perform"] ["task" "0"] ["node" Node] ["effect" Effect] ["operation" Op] ["value" (fh.value V)]]
+  [resume Node V] -> [object ["kind" "Resume"] ["task" "0"] ["node" Node] ["value" (fh.value V)]]
   [scope-exit O] -> [object ["kind" "ScopeExit"] ["task" "0"] ["scope" "0"] ["outcome" (fh.outcome O)]]
   [task-termination O] -> [object ["kind" "TaskTermination"] ["task" "0"] ["outcome" (fh.outcome O)]])
 
@@ -156,6 +177,8 @@
   match-return -> "MatchReturn"
   return-return -> "ReturnReturn"
   collect-return -> "CollectReturn"
+  handle-return -> "HandleReturn"
+  clause-return -> "ClauseReturn"
   unwind-frame -> "UnwindFrame"
   value -> "Value"
   unwind -> "Unwind"
@@ -191,10 +214,10 @@
   State _ _ Acc -> ["Completed" (reverse Acc)] where (= (fh.phase State) terminal)
   _ 0 _ Acc -> ["BudgetExhausted" (reverse Acc)]
   State Fuel Epoch Acc ->
-    (let T (tc0.pc.step State)
+    (let T (fh.model-step State)
          Next (hd (tl T))
          Step [object ["after" (fh.after (fh.phase Next))] ["depth" (str (fh.depth Next))] ["epoch" (str Epoch)]
-                      ["events" (map (/. E (fh.event E)) (hd (tl (tl T))))] ["site" (fh.site (tc0.pc.site State))]]
+                      ["events" (map (/. E (fh.event E)) (hd (tl (tl T))))] ["site" (fh.site (fh.model-site State))]]
       (fh.run Next (- Fuel 1) (+ Epoch 1) [Step | Acc])))
 
 \\ ---------- launching the JavaScript implementation ----------
@@ -230,7 +253,7 @@
   State _ Acc -> (reverse Acc) where (= (fh.phase State) terminal)
   _ 0 Acc -> (reverse Acc)
   State Fuel Acc ->
-    (let Next (hd (tl (tc0.pc.step State)))
+    (let Next (hd (tl (fh.model-step State)))
       (fh.descriptors Next (- Fuel 1) (fh.note-closure (hd (tl Next)) Acc))))
 
 (define fh.note-closure

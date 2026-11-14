@@ -2,10 +2,14 @@
 // Schema /1 is the Unit/Bool/I64 call/closure demo. Schema /2 adds the TC0-A
 // data built-ins: Bytes, TrapCode, tuples, declared datatypes,
 // construct/match/project, bytes_length/bytes_index/bytes_concat and eq.
+// Schema tc1-handler-demo/1 (contract spec/tc1/EFFECTS.md) adds everything in /2
+// plus effect declarations, handle and perform, with finite effect sets.
 import {decode,encode,decimal} from './canonical.mjs';
 export class InvalidPureCallArtifact extends Error {}
 export class PureCallValidationLimit extends Error {}
 export const PURE_CALL_SCHEMAS=Object.freeze(['tc0-a-pure-call-demo/1','tc0-a-pure-call-demo/2']);
+export const TC1_HANDLER_SCHEMA='tc1-handler-demo/1';
+export const RESERVED_EFFECTS=Object.freeze(['Emit','Task','Channel','Time','Resource']);
 export const TRAP_CODES=Object.freeze(['Overflow','DivZero','Bounds','InvalidDuration','TaskLimit','ChildFailed']);
 const fail=s=>{throw new InvalidPureCallArtifact(s);};
 const same=(a,b)=>encode(a).equals(encode(b));
@@ -16,16 +20,24 @@ const unsigned=v=>{try{decimal(v,{unsigned:true});}catch{fail('Unsigned ID');}};
 const identifier=v=>{text(v);if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(v)||v.length>64)fail('Identifier');};
 const hex=v=>{text(v);if(!/^(?:[0-9a-f]{2})*$/.test(v))fail('Bytes hex');};
 const ids=a=>[...a].sort((x,y)=>BigInt(x)<BigInt(y)?-1:BigInt(x)>BigInt(y)?1:0);
-function effects(v){array(v);if(v.length>1||(v.length===1&&v[0]!=='Emit'))fail('Effect set');}
 const arities={add:2,sub:2,mul:2,div:2,neg:1,lt:2,le:2,gt:2,ge:2,not:1,bytes_length:1,bytes_index:2,bytes_concat:2,eq:2};
 const dataPrimitives=new Set(['bytes_length','bytes_index','bytes_concat','eq']);
 const dataTags=new Set(['bytes','tuple','project','construct','match']);
 export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,maxBytes=256,maxValueNodes=1000}={}){
  for(const n of [maxNodes,maxDepth,maxBytes,maxValueNodes])if(!Number.isSafeInteger(n)||n<1)throw new TypeError('Invalid cap');
  const a=decode(bytes);object(a,['contract_version','schema_version','slice','module','datatypes','effects','functions','entry','input_schema','source_map']);
- if(a.contract_version!=='0.2'||!PURE_CALL_SCHEMAS.includes(a.schema_version)||a.slice!=='TC0-A')fail('Identity');text(a.module);
- const data=a.schema_version==='tc0-a-pure-call-demo/2';
- if(array(a.effects).length)fail('Effect declarations unsupported');
+ const handlers=a.schema_version===TC1_HANDLER_SCHEMA;
+ if(handlers?(a.contract_version!=='tc1-draft-1'||a.slice!=='TC1-H1'):(a.contract_version!=='0.2'||!PURE_CALL_SCHEMAS.includes(a.schema_version)||a.slice!=='TC0-A'))fail('Identity');text(a.module);
+ const data=handlers||a.schema_version==='tc0-a-pure-call-demo/2';
+ if(array(a.effects).length&&!handlers)fail('Effect declarations unsupported');
+ // Effect sets: at most Emit before TC1; under TC1 any declared effect or Emit, in
+ // unsigned UTF-8 byte order with no duplicates (one canonical spelling per set).
+ const declared=new Map();
+ function effects(v){
+  array(v);
+  if(!handlers){if(v.length>1||(v.length===1&&v[0]!=='Emit'))fail('Effect set');return;}
+  v.forEach((k,i)=>{text(k);if(k!=='Emit'&&!declared.has(k))fail('Effect set');if(i&&Buffer.compare(Buffer.from(v[i-1]),Buffer.from(k))>=0)fail('Effect set order');});
+ }
  if(array(a.datatypes).length&&!data)fail('Declarations unsupported');
  // Datatype table: closed declarations, unique names, constructors in declared order.
  const datatypes=new Map();
@@ -48,6 +60,13 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
   if(typeof t==='string')return true;if(t[0]==='Arrow')return false;if(t[0]==='Tuple')return t.slice(1).every(x=>plain(x,visiting));
   if(visiting.has(t[1]))return true;visiting.add(t[1]);const ok=datatypes.get(t[1]).constructors.every(c=>c.fields.every(f=>plain(f,visiting)));visiting.delete(t[1]);return ok;
  }
+ // Effect declarations: operations A -> B. In this slice A and B are serializable
+ // types, so no closure crosses an operation boundary.
+ if(a.effects.length>8)fail('Effect count');
+ for(const d of a.effects){object(d,['name','operations']);identifier(d.name);if(RESERVED_EFFECTS.includes(d.name)||declared.has(d.name))fail('Effect name');
+  if(!array(d.operations).length||d.operations.length>8)fail('Operation count');const seen=new Set();
+  for(const o of d.operations){object(o,['name','argument_type','result_type']);identifier(o.name);if(seen.has(o.name))fail('Duplicate operation');seen.add(o.name);type(o.argument_type);type(o.result_type);if(!plain(o.argument_type)||!plain(o.result_type))fail('Operation types must be serializable');}
+  declared.set(d.name,d);}
  let valueCount=0;
  function value(v,t,depth=0){
   if(++valueCount>maxValueNodes||depth>maxDepth)throw new PureCallValidationLimit('Value cap');array(v);
@@ -62,7 +81,7 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
  const fresh=(id,location=false)=>{unsigned(id);if(ID.has(id))fail('Duplicate ID');ID.add(id);if(location)locations.add(id);};
  if(!array(a.functions).length||a.functions.length>32)fail('Function count');
  for(const f of a.functions){object(f,['id','name','parameter_id','argument_type','result_type','effects','body']);fresh(f.id,true);fresh(f.parameter_id);text(f.name);if(functions.has(f.name))fail('Duplicate function name');type(f.argument_type);type(f.result_type);effects(f.effects);functions.set(f.name,f);}
- const entry=functions.get(a.entry);if(!entry)fail('Entry');if(!plain(entry.argument_type)||!plain(entry.result_type))fail('Serializable entry');object(a.input_schema,['type']);if(!same(a.input_schema.type,entry.argument_type))fail('Input schema');value(input,entry.argument_type);
+ const entry=functions.get(a.entry);if(!entry)fail('Entry');if(entry.effects.some(k=>k!=='Emit'))fail('Entry must handle every user effect');if(!plain(entry.argument_type)||!plain(entry.result_type))fail('Serializable entry');object(a.input_schema,['type']);if(!same(a.input_schema.type,entry.argument_type))fail('Input schema');value(input,entry.argument_type);
  const union=rows=>new Set(rows.flatMap(r=>[...r.effects]));
  const free=rows=>new Set(rows.flatMap(r=>[...r.free]));
  const primitive={add:['I64','I64','I64'],sub:['I64','I64','I64'],mul:['I64','I64','I64'],div:['I64','I64','I64'],neg:['I64','I64'],lt:['I64','I64','Bool'],le:['I64','I64','Bool'],gt:['I64','I64','Bool'],ge:['I64','I64','Bool'],not:['Bool','Bool'],bytes_length:['Bytes','I64'],bytes_index:['Bytes','I64','I64'],bytes_concat:['Bytes','Bytes','Bytes']};
@@ -99,6 +118,20 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
   else if(tag==='lambda'){arity(6);fresh(x[0]);type(x[1]);type(x[2]);effects(x[3]);if(array(x[4]).length)fail('Empty capture support required');const inner=new Map(env);inner.set(x[0],x[1]);const body=visit(x[5],inner,depth+1);if(!same(body.type,x[2])||[...body.effects].some(k=>!x[3].includes(k)))fail('Lambda signature');body.free.delete(x[0]);fv=body.free;t=['Arrow',x[1],x[2],x[3]];codes.push({code_id:node,parameter_id:x[0],free_bindings:ids(fv),capture_support:[]});}
   else if(tag==='apply'){arity(2);const rows=x.map(v),arrow=rows[0].type;if(!Array.isArray(arrow)||arrow[0]!=='Arrow'||!same(arrow[1],rows[1].type))fail('Apply type');t=arrow[2];eff=union(rows);for(const k of arrow[3])eff.add(k);fv=free(rows);}
   else if(tag==='call'){arity(2);text(x[0]);const f=functions.get(x[0]);if(!f)fail('Unknown function');const row=v(x[1]);if(!same(row.type,f.argument_type))fail('Call argument');t=f.result_type;eff=union([row]);for(const k of f.effects)eff.add(k);fv=row.free;}
+  else if(tag==='perform'&&handlers){
+   arity(3);const [name,opName,operand]=x;text(name);text(opName);const o=declared.get(name)?.operations.find(o=>o.name===opName);if(!o)fail('Unknown effect operation');
+   const row=v(operand);if(!same(row.type,o.argument_type))fail('Perform argument');t=o.result_type;eff=union([row]);eff.add(name);fv=row.free;
+  }
+  else if(tag==='handle'&&handlers){
+   // One clause per declared operation. A clause sees the bindings in scope at the handle
+   // node plus its own binder, and must produce the operation's result type. Outward
+   // requirement: (body effects minus the handled effect) union the clauses' effects.
+   arity(3);const [name,clauses,bodyExpr]=x;text(name);const d=declared.get(name);if(!d)fail('Unknown effect');
+   if(array(clauses).length!==d.operations.length)fail('Handler clauses');const seen=new Set(),rows=[];
+   for(const clause of clauses){array(clause);if(clause.length!==3)fail('Handler clause');const [opName,binder,clauseBody]=clause;text(opName);const o=d.operations.find(o=>o.name===opName);if(!o||seen.has(opName))fail('Handler clauses');seen.add(opName);
+    fresh(binder);const inner=new Map(env);inner.set(binder,o.argument_type);const out=visit(clauseBody,inner,depth+1);if(!same(out.type,o.result_type))fail('Handler clause type');out.free.delete(binder);rows.push(out);}
+   const body=v(bodyExpr);t=body.type;eff=union(rows);for(const k of body.effects)if(k!==name)eff.add(k);fv=free([...rows,body]);
+  }
   else fail('Unsupported tag');return {type:t,effects:eff,free:fv};
  }
  for(const f of a.functions){const row=visit(f.body,new Map([[f.parameter_id,f.argument_type]]));if(!same(row.type,f.result_type)||[...row.effects].some(k=>!f.effects.includes(k)))fail('Function signature');if([...row.free].some(k=>k!==f.parameter_id))fail('Named function captures');codes.push({code_id:f.id,parameter_id:f.parameter_id,free_bindings:[],capture_support:[]});}

@@ -95,6 +95,32 @@ Verdict on a committed tree, 13 November 2026: **PASS**, 15 of 15 required rows 
 check reads HEAD directly and compares it with the head recorded by the
 source-identity row.
 
+## TC1: effects and handlers
+
+```sh
+sh harness/run-tc1-handlers.sh
+```
+
+**[tc1-handlers.shen](tc1-handlers.shen)** checks slice H1 of the TC1 effect
+contract ([spec/tc1/EFFECTS.md](../spec/tc1/EFFECTS.md), a draft for owner
+review): user effects with tail-resumptive handlers. On eleven hand fixtures
+the Shen model (`models/tc1/handler-machine.shen`) and an independent
+JavaScript implementation (`runtime/tc1/handler-machine.mjs`) agree step for
+step over 363 steps, both satisfy 28 handwritten expectations (outcome, order
+of performed operations, emission order, and two complete hand-derived step
+traces), and four defects injected into the implementation are each detected:
+forgotten resume (9 fixtures), double resume (9), outermost-handler selection
+(2), clause run in the perform site's bindings (1). It is one optional row of
+the gate, `tc1-handler-slice`.
+
+Which machine runs a program is decided by its schema; `common.shen` loads
+both models. `expectations.shen` holds the expectation checks the hand-case
+and handler programs share.
+
+Not done for TC1: explicit one-shot resumption (specified, slice H2),
+generated or exhaustive handler programs, reduction, strict replay, catalog
+coverage, and the Solo5 guest.
+
 ## What is still not Shen
 
 | Piece | Now | Notes |

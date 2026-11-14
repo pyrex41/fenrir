@@ -12,7 +12,7 @@ else
   batch=$(node "$root/tools/solo5/freerun-pure-call.mjs" --exhaustive-nodes "${1:-5}" --build-only)
 fi
 status=0
-out=$("$jit/bin/shen-jit" script "$root/harness/solo5-pure-call.shen" "$jit/lib" "$root" "$batch" 2>&1) || status=$?
+out=$("$jit/bin/shen-jit" script "$root/harness/solo5-pure-call.shen" "$jit/lib" "$root" "$batch" 2>&1 < /dev/null) || status=$?
 # Loading prints one line per definition; the report is the last line.
 printf '%s\n' "$out" | tail -n 1
 exit "$status"

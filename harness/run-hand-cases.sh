@@ -6,6 +6,6 @@ set -eu
 out="$root/build/harness/hand-cases/$(date +%s)-$$"
 mkdir -p "$out"
 status=0
-report=$("$jit/bin/shen-jit" script "$root/harness/hand-cases.shen" "$jit/lib" "$root" "$out" 2>&1) || status=$?
+report=$("$jit/bin/shen-jit" script "$root/harness/hand-cases.shen" "$jit/lib" "$root" "$out" 2>&1 < /dev/null) || status=$?
 printf '%s\n' "$report" | tail -n 1
 exit "$status"
