@@ -273,6 +273,7 @@
   "exact-arithmetic-shaken" Memo -> (fh.row "DEFERRED" ["Optional second port: the harness runs on Shen/JIT only"] [] Memo)
   "solo5-guest-agreement" Memo -> (fh.solo5-guest-agreement Memo)
   "tc1-handlers" Memo -> (fh.tc1-handlers Memo)
+  "tc1-handler-guest" Memo -> (fh.guest-row (fh.guest-batch ["--tc1"]) Memo)
   Name Memo -> (fh.row "UNKNOWN" [(cn "The evaluator has no check named " Name)] [] Memo))
 
 \\ An evaluator fault is never a pass.

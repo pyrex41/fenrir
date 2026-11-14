@@ -4,11 +4,14 @@
 // construct/match/project, bytes_length/bytes_index/bytes_concat and eq.
 // Schema tc1-handler-demo/1 (contract spec/tc1/EFFECTS.md) adds everything in /2
 // plus effect declarations, handle and perform, with finite effect sets.
+// Schema tc1-handler-demo/2 adds explicit one-shot resumptions: clauses op(x,k),
+// resume(k,e) and discontinue(k), with k used exactly once on every path.
 import {decode,encode,decimal} from './canonical.mjs';
 export class InvalidPureCallArtifact extends Error {}
 export class PureCallValidationLimit extends Error {}
 export const PURE_CALL_SCHEMAS=Object.freeze(['tc0-a-pure-call-demo/1','tc0-a-pure-call-demo/2']);
 export const TC1_HANDLER_SCHEMA='tc1-handler-demo/1';
+export const TC1_RESUMPTION_SCHEMA='tc1-handler-demo/2';
 export const RESERVED_EFFECTS=Object.freeze(['Emit','Task','Channel','Time','Resource']);
 export const TRAP_CODES=Object.freeze(['Overflow','DivZero','Bounds','InvalidDuration','TaskLimit','ChildFailed']);
 const fail=s=>{throw new InvalidPureCallArtifact(s);};
@@ -26,8 +29,8 @@ const dataTags=new Set(['bytes','tuple','project','construct','match']);
 export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,maxBytes=256,maxValueNodes=1000}={}){
  for(const n of [maxNodes,maxDepth,maxBytes,maxValueNodes])if(!Number.isSafeInteger(n)||n<1)throw new TypeError('Invalid cap');
  const a=decode(bytes);object(a,['contract_version','schema_version','slice','module','datatypes','effects','functions','entry','input_schema','source_map']);
- const handlers=a.schema_version===TC1_HANDLER_SCHEMA;
- if(handlers?(a.contract_version!=='tc1-draft-1'||a.slice!=='TC1-H1'):(a.contract_version!=='0.2'||!PURE_CALL_SCHEMAS.includes(a.schema_version)||a.slice!=='TC0-A'))fail('Identity');text(a.module);
+ const resumptions=a.schema_version===TC1_RESUMPTION_SCHEMA,handlers=resumptions||a.schema_version===TC1_HANDLER_SCHEMA;
+ if(handlers?(a.contract_version!=='tc1-draft-1'||a.slice!==(resumptions?'TC1-H2':'TC1-H1')):(a.contract_version!=='0.2'||!PURE_CALL_SCHEMAS.includes(a.schema_version)||a.slice!=='TC0-A'))fail('Identity');text(a.module);
  const data=handlers||a.schema_version==='tc0-a-pure-call-demo/2';
  if(array(a.effects).length&&!handlers)fail('Effect declarations unsupported');
  // Effect sets: at most Emit before TC1; under TC1 any declared effect or Emit, in
@@ -85,15 +88,26 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
  const union=rows=>new Set(rows.flatMap(r=>[...r.effects]));
  const free=rows=>new Set(rows.flatMap(r=>[...r.free]));
  const primitive={add:['I64','I64','I64'],sub:['I64','I64','I64'],mul:['I64','I64','I64'],div:['I64','I64','I64'],neg:['I64','I64'],lt:['I64','I64','Bool'],le:['I64','I64','Bool'],gt:['I64','I64','Bool'],ge:['I64','I64','Bool'],not:['Bool','Bool'],bytes_length:['Bytes','I64'],bytes_index:['Bytes','I64','I64'],bytes_concat:['Bytes','Bytes','Bytes']};
+ // One-shot resumptions: uses[k] counts the uses of resumption binder k on the path
+ // through the expression just visited. Children add into the enclosing count; if and
+ // match, whose branches are alternatives, require equal counts and count one branch.
+ let uses={};
+ const sameUses=(a,b)=>{const keys=new Set([...Object.keys(a),...Object.keys(b)]);for(const k of keys)if((a[k]??0)!==(b[k]??0))return false;return true;};
+ const discount=u=>{for(const [k,n] of Object.entries(u))uses[k]-=n;};
+ const plainEnv=env=>new Map([...env].filter(([,t])=>!(Array.isArray(t)&&t[0]==='Resumption')));
  function visit(e,env,depth=0){
+  const outer=uses;uses={};const row=visitNode(e,env,depth);row.uses=uses;
+  for(const [k,n] of Object.entries(uses))outer[k]=(outer[k]??0)+n;uses=outer;return row;
+ }
+ function visitNode(e,env,depth=0){
   if(++count>maxNodes||depth>maxDepth)throw new PureCallValidationLimit('AST cap');array(e);if(e.length<2)fail('Expression');fresh(e[1],true);
   const [tag,node,...x]=e,arity=n=>{if(x.length!==n)fail('Arity');},v=e=>visit(e,env,depth+1);let t,eff=new Set(),fv=new Set();
   if(dataTags.has(tag)&&!data)fail('Unsupported tag');
   if(['unit','bool','int'].includes(tag)){arity(tag==='unit'?0:1);t={unit:'Unit',bool:'Bool',int:'I64'}[tag];value([tag,...x],t);}
   else if(tag==='bytes'){arity(1);t='Bytes';value(['bytes',x[0]],t);}
-  else if(tag==='var'){arity(1);unsigned(x[0]);if(!env.has(x[0]))fail('Unknown binding');t=env.get(x[0]);fv.add(x[0]);}
+  else if(tag==='var'){arity(1);unsigned(x[0]);if(!env.has(x[0]))fail('Unknown binding');t=env.get(x[0]);if(Array.isArray(t)&&t[0]==='Resumption')fail('A resumption is not a value');fv.add(x[0]);}
   else if(tag==='let'){arity(3);fresh(x[0]);const init=v(x[1]),inner=new Map(env);inner.set(x[0],init.type);const body=visit(x[2],inner,depth+1);body.free.delete(x[0]);t=body.type;eff=union([init,body]);fv=free([init,body]);}
-  else if(tag==='if'){arity(3);const rows=x.map(v);if(rows[0].type!=='Bool'||!same(rows[1].type,rows[2].type))fail('If types');t=rows[1].type;eff=union(rows);fv=free(rows);}
+  else if(tag==='if'){arity(3);const rows=x.map(v);if(rows[0].type!=='Bool'||!same(rows[1].type,rows[2].type))fail('If types');if(!sameUses(rows[1].uses,rows[2].uses))fail('A resumption must be used on every path');discount(rows[2].uses);t=rows[1].type;eff=union(rows);fv=free(rows);}
   else if(tag==='prim'){
    const [op,...operands]=x;if(!Object.hasOwn(arities,op)||operands.length!==arities[op]||(dataPrimitives.has(op)&&!data))fail('Primitive');const rows=operands.map(v);
    if(op==='eq'){if(!same(rows[0].type,rows[1].type)||!plain(rows[0].type))fail('Equality type');t='Bool';}
@@ -112,10 +126,11 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
    for(const arm of arms){array(arm);if(arm.length!==3)fail('Match arm');const [ctor,binders,body]=arm;text(ctor);const c=table.find(c=>c.name===ctor);if(!c||seen.has(ctor))fail('Non-exhaustive or duplicate match arms');seen.add(ctor);
     if(array(binders).length!==c.fields.length)fail('Match binders');const inner=new Map(env);binders.forEach((b,i)=>{fresh(b);inner.set(b,c.fields[i]);});
     const out=visit(body,inner,depth+1);for(const b of binders)out.free.delete(b);if(result!==undefined&&!same(result,out.type))fail('Match arm types');result=out.type;rows.push(out);}
+   for(const arm of rows.slice(2)){if(!sameUses(rows[1].uses,arm.uses))fail('A resumption must be used on every path');discount(arm.uses);}
    t=result;eff=union(rows);fv=free(rows);
   }
   else if(tag==='emit'){arity(2);text(x[0]);const row=v(x[1]);if(!plain(row.type))fail('Emit serializable');t='Unit';eff=union([row]);eff.add('Emit');fv=row.free;}
-  else if(tag==='lambda'){arity(6);fresh(x[0]);type(x[1]);type(x[2]);effects(x[3]);if(array(x[4]).length)fail('Empty capture support required');const inner=new Map(env);inner.set(x[0],x[1]);const body=visit(x[5],inner,depth+1);if(!same(body.type,x[2])||[...body.effects].some(k=>!x[3].includes(k)))fail('Lambda signature');body.free.delete(x[0]);fv=body.free;t=['Arrow',x[1],x[2],x[3]];codes.push({code_id:node,parameter_id:x[0],free_bindings:ids(fv),capture_support:[]});}
+  else if(tag==='lambda'){arity(6);fresh(x[0]);type(x[1]);type(x[2]);effects(x[3]);if(array(x[4]).length)fail('Empty capture support required');const inner=plainEnv(env);inner.set(x[0],x[1]);const body=visit(x[5],inner,depth+1);if(!same(body.type,x[2])||[...body.effects].some(k=>!x[3].includes(k)))fail('Lambda signature');body.free.delete(x[0]);fv=body.free;t=['Arrow',x[1],x[2],x[3]];codes.push({code_id:node,parameter_id:x[0],free_bindings:ids(fv),capture_support:[]});}
   else if(tag==='apply'){arity(2);const rows=x.map(v),arrow=rows[0].type;if(!Array.isArray(arrow)||arrow[0]!=='Arrow'||!same(arrow[1],rows[1].type))fail('Apply type');t=arrow[2];eff=union(rows);for(const k of arrow[3])eff.add(k);fv=free(rows);}
   else if(tag==='call'){arity(2);text(x[0]);const f=functions.get(x[0]);if(!f)fail('Unknown function');const row=v(x[1]);if(!same(row.type,f.argument_type))fail('Call argument');t=f.result_type;eff=union([row]);for(const k of f.effects)eff.add(k);fv=row.free;}
   else if(tag==='perform'&&handlers){
@@ -124,13 +139,30 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
   }
   else if(tag==='handle'&&handlers){
    // One clause per declared operation. A clause sees the bindings in scope at the handle
-   // node plus its own binder, and must produce the operation's result type. Outward
-   // requirement: (body effects minus the handled effect) union the clauses' effects.
+   // node plus its own binder. Outward requirement: (body effects minus the handled
+   // effect) union the clauses' effects.
+   //   op(x) => c       tail-resumptive: c has the operation's result type
+   //   op(x,k) => c     k is the one-shot resumption: c has the handle's type, and uses k
+   //                    exactly once on every path. A clause cannot use an outer clause's k:
+   //                    it may run any number of times.
    arity(3);const [name,clauses,bodyExpr]=x;text(name);const d=declared.get(name);if(!d)fail('Unknown effect');
+   const body=v(bodyExpr);
    if(array(clauses).length!==d.operations.length)fail('Handler clauses');const seen=new Set(),rows=[];
-   for(const clause of clauses){array(clause);if(clause.length!==3)fail('Handler clause');const [opName,binder,clauseBody]=clause;text(opName);const o=d.operations.find(o=>o.name===opName);if(!o||seen.has(opName))fail('Handler clauses');seen.add(opName);
-    fresh(binder);const inner=new Map(env);inner.set(binder,o.argument_type);const out=visit(clauseBody,inner,depth+1);if(!same(out.type,o.result_type))fail('Handler clause type');out.free.delete(binder);rows.push(out);}
-   const body=v(bodyExpr);t=body.type;eff=union(rows);for(const k of body.effects)if(k!==name)eff.add(k);fv=free([...rows,body]);
+   for(const clause of clauses){array(clause);const explicit=clause.length===4;if(clause.length!==3&&!(explicit&&resumptions))fail('Handler clause');
+    const [opName,binder]=clause,k=explicit?clause[2]:null,clauseBody=clause.at(-1);text(opName);const o=d.operations.find(o=>o.name===opName);if(!o||seen.has(opName))fail('Handler clauses');seen.add(opName);
+    fresh(binder);const inner=plainEnv(env);inner.set(binder,o.argument_type);if(explicit){fresh(k);inner.set(k,['Resumption',o.result_type,body.type]);}
+    const out=visit(clauseBody,inner,depth+1);if(!same(out.type,explicit?body.type:o.result_type))fail('Handler clause type');
+    if(explicit){if((out.uses[k]??0)!==1)fail('A resumption must be used exactly once on every path');discount({[k]:1});delete uses[k];}
+    out.free.delete(binder);rows.push(out);}
+   t=body.type;eff=union(rows);for(const e of body.effects)if(e!==name)eff.add(e);fv=free([...rows,body]);
+  }
+  else if(tag==='resume'&&resumptions){
+   arity(2);unsigned(x[0]);const k=env.get(x[0]);if(!Array.isArray(k)||k[0]!=='Resumption')fail('Unknown resumption');
+   const row=v(x[1]);if(!same(row.type,k[1]))fail('Resume argument');uses[x[0]]=(uses[x[0]]??0)+1;t=k[2];eff=union([row]);fv=row.free;
+  }
+  else if(tag==='discontinue'&&resumptions){
+   arity(1);unsigned(x[0]);const k=env.get(x[0]);if(!Array.isArray(k)||k[0]!=='Resumption')fail('Unknown resumption');
+   uses[x[0]]=(uses[x[0]]??0)+1;t='Unit';
   }
   else fail('Unsupported tag');return {type:t,effects:eff,free:fv};
  }

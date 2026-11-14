@@ -1,15 +1,20 @@
 # TC1 effect contract
 
-Draft 1 • 14 November 2026 • For owner review
+Draft 2 • 14 November 2026 • For owner review
 
-**Status.** Written together with its first implementation, at the owner's
-request, so the text and the behaviour can be reviewed side by side. Slice H1
-(tail-resumptive handlers) is implemented in the Shen model, in an independent
-JavaScript implementation, and checked by the harness. Slice H2 (explicit
-one-shot resumption) is specified here and not implemented. Nothing in this
+**Status.** Written together with its implementation, at the owner's request,
+so the text and the behaviour can be reviewed side by side. Both slices are
+implemented in the Shen model, in an independent JavaScript implementation and
+in the C machine that runs as a Solo5 guest, and checked by the harness: H1,
+tail-resumptive handlers, and H2, explicit one-shot resumption. Nothing in this
 document is qualified. It supersedes §5 of
 [02_TINY_LANGUAGE_CORE.md](../../02_TINY_LANGUAGE_CORE.md) for TC1 and answers
 the open questions of the earlier handler task packet (PR #7); §10 lists them.
+
+Owner decisions of 14 November 2026 are folded in: a clause may continue after
+`resume` returns (§7); performs of user effects are not observations (§5);
+operation types stay serializable for now (§1); the slices are one optional
+row each of the TC0-A gate until TC1 has its own (§9).
 
 TC1 is TC0-A plus what is below. Everything TC0-A specifies (values, checked
 I64, evaluation order, calls, closures, data, traps, `emit`) is unchanged.
@@ -26,18 +31,22 @@ effect Cell { get : Unit -> I64; put : I64 -> Unit }
 
 - Effect names are identifiers, unique, and not one of the reserved runtime
   effect names `Emit`, `Task`, `Channel`, `Time`, `Resource`.
-- **H1 restriction:** A and B are serializable types. No closure crosses an
-  operation boundary yet. Lifting this is tied to the resource rules of §8.
+- **Restriction, kept for both slices:** A and B are serializable types. No
+  closure crosses an operation boundary. Lifting this needs a rule for what a
+  closure passed through an operation may capture (§8).
 
 ## 2 Expressions
 
 ```text
-e ::= ... | perform(Effect, operation, e) | handle(Effect, [operation(x) => e]..., body)
+e ::= ... | perform(Effect, operation, e)
+        | handle(Effect, [clause]..., body)        clause ::= operation(x) => e | operation(x, k) => e
+        | resume(k, e) | discontinue(k)
 ```
 
-- `perform` is strict in its one argument, like a call.
+- `perform` and `resume` are strict in their one argument, like a call.
 - `handle` supplies exactly one clause per operation of its effect. The body
   and the clauses are not operands: they are not evaluated eagerly.
+- A clause of the second form names its resumption `k` (§7).
 
 ## 3 Effect sets and typing
 
@@ -98,36 +107,50 @@ therefore not a tail position of the function containing it.
 
 ## 5 Observations
 
-A perform is observable. Each one produces, in order with all other events:
+**A perform of a user effect is not an observation.** Neither is a resume, a
+discontinue, or entering or leaving a handler. An effect that is handled inside
+the program has no footprint outside it. What a program can be observed to do
+is unchanged from TC0-A: its outcome, and its `emit` events in order (later,
+its runtime and durable operations).
 
-| Event | When | Fields |
-| --- | --- | --- |
-| `Perform` | the handler is selected and the clause is entered | node of the perform, effect, operation, argument value |
-| `Resume` | the clause has returned and the segment is restored | node of the perform, result value |
+This is deliberate. It leaves a compiler free to inline a handler, to compile a
+perform to a direct call, or to remove a handler whose clauses are pure,
+provided outcome and emissions are preserved. A handler that should be visible
+emits in its clause.
 
-An aborted perform has a `Perform` and no `Resume`. Handler entry and exit
-produce no event. This is what a compiler must preserve about effects: the
-sequence of these events, interleaved with `emit` events, and the outcome.
+The reference machines still show every perform, resume and discontinue in
+their step records (§6). That is for locating a bug, not something compiled
+code must reproduce.
 
 ## 6 Reference steps
 
-These are properties of the reference machines, for locating a bug exactly.
-They are not obligations on compiled code.
+These are properties of the reference machines. They are not obligations on
+compiled code.
 
 | Step | Site | After | Frames |
 | --- | --- | --- | --- |
 | Dispatch `handle` | the handle node | Eval (the body) | handler frame pushed |
-| Dispatch `perform` | the perform node | Eval (its argument) | collect frame pushed |
-| Ready `perform` | the perform node | Eval (the clause body) | segment replaced by one clause frame |
+| Dispatch `perform`, `resume` | that node | Eval (its argument) | collect frame pushed |
+| Ready `perform`, clause `op(x)` | the perform node | Eval (the clause body) | segment replaced by one clause frame |
+| Ready `perform`, clause `op(x,k)` | the perform node | Eval (the clause body) | segment removed into `k`; one clause-exit frame pushed |
 | `ClauseReturn` | the perform node | Value | clause frame replaced by the segment |
+| `ClauseExitReturn` | the perform node | Value | clause-exit frame popped; the value is the handle's |
+| Ready `resume` | the resume node | Value (at the perform site) | resume-return frame pushed unless in tail position, then the segment |
+| `ResumeReturn` | the resume node | Value | resume-return frame popped; the value is the resume's |
+| Ready `discontinue` | the discontinue node | Abandon | discontinue-return frame pushed, then the segment |
+| `AbandonFrame` | the frame's node | Abandon | one frame discarded per step |
+| `DiscontinueReturn` | the discontinue node | Value (unit) | discontinue-return frame popped |
 | `HandleReturn` | the handle node | Value | handler frame popped |
 | `UnwindFrame` at a clause frame | the perform node | Unwind | clause frame replaced by the segment, which unwinds next, one frame per step |
-| `UnwindFrame` at a handler frame | the handle node | Unwind | handler frame popped |
 
-Depth is the number of active frames. A suspended segment counts as the one
-clause frame holding it.
+Depth is the number of active frames. A suspended segment held by a clause
+frame counts as that one frame; a segment held in a resumption counts as none.
 
-## 7 Slice H2: explicit one-shot resumption (specified, not implemented)
+A clause `op(x,k)` that traps before using `k` drops the segment without
+steps. With no resources in TC1 this cannot be observed. When resources exist,
+the segment's releases must happen at that point.
+
+## 7 Slice H2: explicit one-shot resumption
 
 A clause may name its resumption:
 
@@ -135,19 +158,28 @@ A clause may name its resumption:
 handle(E, [op(x, k) => c]..., body)        resume(k, e)        discontinue(k)
 ```
 
-- `k` is a resumption: the suspended segment as a value. `resume(k, v)`
-  restores it with v as the result of the perform, and its value is the value
-  of the handled body from that point. `discontinue(k)` abandons it, unwinding
-  the segment as an aborted perform does.
+- `k` stands for the suspended segment. `resume(k, v)` restores it with v as
+  the result of the perform. The handler is active again in the resumed body.
+- **The clause may continue after `resume` returns.** The value of
+  `resume(k, v)` is the value the handled body finally produces, and the value
+  of the clause is the value of the whole `handle`. So `c` has the type of the
+  `handle`, `e` has the operation's result type B, and `resume(k, e)` has the
+  type of the `handle`.
+- `discontinue(k)` abandons the segment, discarding it as an aborted perform
+  does, and has type Unit. The clause then continues, and its value is the
+  value of the `handle`.
 - **One-shot.** On every path through the clause, `k` is used exactly once, by
-  one `resume` or one `discontinue`. This is checked statically: `k` is an
-  affine binding that may not be captured by a closure, stored in data,
-  returned, or passed to a function. Zero uses or two uses are validation
-  errors.
-- An H1 clause `op(x) => c` means `op(x, k) => resume(k, c)` with the resume in
-  tail position. An implementation may run it without materializing `k`.
-- After `resume(k, v)` returns, the clause may continue; its value is then the
-  value of the `handle`. This is what distinguishes H2 from H1.
+  one `resume` or one `discontinue`. This is checked at validation:
+  - both branches of an `if`, and every arm of a `match`, must use each
+    resumption in scope the same number of times;
+  - `k` is not a value: it cannot be read as a variable, stored, returned or
+    passed;
+  - a closure cannot mention `k`;
+  - a clause of an inner handler cannot use the `k` of an outer clause, since
+    the inner clause may run any number of times.
+  A path that traps before using `k` is allowed: the perform is then aborted.
+- A tail-resumptive clause `op(x) => c` behaves as `op(x, k) => resume(k, c)`
+  with the resume in tail position. A resume in tail position pushes no frame.
 - **Multi-shot** resumption (using `k` more than once, as backtracking search
   needs) is not part of TC1. It will be admitted only where everything the
   suspended segment holds is duplicable, and is specified with the ownership
@@ -155,7 +187,7 @@ handle(E, [op(x, k) => c]..., body)        resume(k, e)        discontinue(k)
 
 ## 8 What resumptions will have to respect (not implemented)
 
-Recorded now so that H2 and the concurrency slice are designed against it:
+Recorded now so that the concurrency slice is designed against it:
 
 - A resumption carries the region support of the segment it suspends and cannot
   outlive those regions.
@@ -167,29 +199,46 @@ Recorded now so that H2 and the concurrency slice are designed against it:
   handler; and **durable** effects (transaction, durable job, durable inbox),
   discharged only by a handler that carries a storage contract.
 
-## 9 What H1 is checked against today
+## 9 What is checked today
 
-`sh harness/run-tc1-handlers.sh`
+```sh
+sh harness/run-tc1-handlers.sh          # model against the JavaScript implementation
+sh harness/run-solo5-pure-call.sh tc1   # model against the Solo5 guest
+```
 
-- **Fixtures** (`fixtures/tc1/handler-hand-cases.mjs`): eleven programs, each
-  with expectations written from this text before either machine ran: outcome,
-  the order of performed operations, emission order where relevant, and for two
-  programs the complete step staging.
-- **Agreement:** the Shen model (`models/tc1/handler-machine.shen`) and the
-  JavaScript implementation (`runtime/tc1/handler-machine.mjs`) agree step for
-  step on all eleven, and both satisfy all 28 expectations.
-- **Defects:** four defects injected into the implementation are each detected
-  on at least one fixture without crashing: clause return that forgets to
-  resume (9 fixtures), resumes twice (9), selection of the outermost handler
-  (2), and a clause run in the perform site's bindings (1).
+- **Fixtures** (`fixtures/tc1/handler-hand-cases.mjs`): twenty programs, eleven
+  for H1 and nine for H2, each with expectations written from this text before
+  any machine ran: outcome, the order of performed operations, emission order
+  where relevant, and for three programs the complete step staging.
+- **Model and implementation:** the Shen model
+  (`models/tc1/handler-machine.shen`) and the JavaScript implementation
+  (`runtime/tc1/handler-machine.mjs`) agree step for step on all twenty, over
+  625 steps, and both satisfy all 51 expectations.
+- **Model and Solo5 guest:** the C machine (`backends/solo5/pure-call`),
+  running as a Solo5 guest, agrees step for step with the model on the same
+  twenty programs.
+- **Defects:** six defects injected into the JavaScript implementation are each
+  detected on at least one fixture: forgotten resume (9 fixtures), double
+  resume (9), outermost-handler selection (2), clause run in the perform site's
+  bindings (1), `resume` yielding its argument instead of the body's result
+  (2), and a resumed segment without its handler (5, plus one run that crashes,
+  which is not counted).
+- **Validation:** unit tests reject, for the stated reason, a resumption used
+  zero times, twice, or on one path only; read as a value; captured by a
+  closure; used by an inner clause; and resumed with the wrong type.
 - **TC0-A subset:** the JavaScript handler machine gives the same steps,
   outcome and closure descriptors as the TC0-A implementation on all 5,774
-  TC0-A programs of the existing scopes.
+  TC0-A programs of the existing scopes, and the extended C machine still
+  agrees with the model on those and on the 8,745 exact-arithmetic programs.
 
-Not done for H1: generated or exhaustive handler programs, reduction, strict
-replay, catalog coverage, the Solo5 guest, and any soundness proof of the
-typing rules in §3. The fixtures, both machines and the harness share one
-author lineage.
+The two checks are optional rows of the TC0-A gate (`tc1-handler-slice`,
+`tc1-handler-guest`). TC1 gets its own gate when it has more than hand
+fixtures behind it.
+
+Not done: generated or exhaustive handler programs, reduction, strict replay,
+catalog coverage, and any soundness proof of the typing rules in §3 or of the
+one-shot check in §7. The fixtures, all three machines and the harness share
+one author lineage.
 
 ## 10 Answers to the earlier open questions
 
@@ -200,17 +249,25 @@ author lineage.
 | Q3 Is the segment unwound per frame on a clause trap? | Yes: one step discards the clause frame and exposes the segment, then one frame per step (§6) |
 | Q4 Which environment does a clause see? | The bindings at the `handle` node plus its binder (§3, §4) |
 | Q5 Can operation types be arrows? | Not in H1: serializable types only (§1) |
-| Q6 Which events are observable? | `Perform` and `Resume` (§5) |
+| Q6 Which events are observable? | None for user effects; performs appear only in step records (§5) |
 | Q7 What are the site nodes? | The perform node for clause return and clause abort; the handle node for handler entry and exit (§6) |
 | Q8 Handler stack or segments in the state? | Handlers are frames in the continuation; a suspended segment is held in one clause frame (§6) |
 | Q9 Canonical effect-set order? | Unsigned UTF-8 byte order, duplicates rejected (§3) |
 
-## 11 Decisions for the owner
+## 11 Decisions
 
-1. The event set of §5. It fixes what compiled code must preserve.
-2. The H1 restriction to serializable operation types (§1).
-3. H2's rule that the clause may continue after `resume` returns (§7). The
-   alternative, requiring `resume` in tail position, is simpler to implement
-   and to prove, and makes H2 no more expressive than H1 plus `discontinue`.
-4. Whether TC1 gets its own gate or extends the TC0-A gate. Today the slice is
-   one optional row of the TC0-A gate.
+Settled by the owner on 14 November 2026:
+
+1. A clause may continue after `resume` returns (§7).
+2. Performs of user effects are not observations (§5).
+3. Operation types stay serializable for now (§1).
+4. The slices are optional rows of the TC0-A gate until TC1 has its own (§9).
+
+Open:
+
+1. When to lift the serializable restriction, and what a closure passed
+   through an operation may capture.
+2. The elaboration from inferred effect rows at the surface to the finite
+   sets here.
+3. Whether a clause that traps before using its resumption should be a
+   validation error instead of an implicit abort.

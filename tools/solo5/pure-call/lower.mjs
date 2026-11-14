@@ -8,7 +8,8 @@ import {encode} from '../../tc0/canonical.mjs';
 
 export class UnsupportedGuestProgram extends Error {}
 const reject=message=>{throw new UnsupportedGuestProgram(message);};
-const TAGS=['unit','bool','int','bytes','var','let','if','lambda','apply','call','prim','emit','tuple','project','construct','match'];
+const TAGS=['unit','bool','int','bytes','var','let','if','lambda','apply','call','prim','emit','tuple','project','construct','match',
+  'handle','perform','resume','discontinue'];
 const OPS=['none','add','sub','mul','div','neg','lt','le','gt','ge','not','eq','bytes_length','bytes_index','bytes_concat'];
 const MAX_ID=(1n<<64n)-1n,MAX_OPERANDS=16;
 const id=value=>{if(!/^(0|[1-9][0-9]*)$/.test(value)||BigInt(value)>MAX_ID)reject('ID outside the guest adapter range');return `UINT64_C(${value})`;};
@@ -23,6 +24,7 @@ function free(e,bound,out) {
   else if(tag==='let'){free(x[1],bound,out);free(x[2],new Set([...bound,x[0]]),out);}
   else if(tag==='lambda')free(x[5],new Set([...bound,x[0]]),out);
   else if(tag==='match'){free(x[0],bound,out);for(const [,binders,body] of x.slice(1))free(body,new Set([...bound,...binders]),out);}
+  else if(tag==='handle'){for(const clause of x[1])free(clause.at(-1),new Set([...bound,...clause.slice(1,-1)]),out);free(x[2],bound,out);}
   else for(const child of operands(e))free(child,bound,out);
   return out;
 }
@@ -33,6 +35,8 @@ function operands(e) {
   if(tag==='construct')return x.slice(2);
   if(tag==='call'||tag==='emit')return [x[1]];
   if(tag==='project')return [x[0]];
+  if(tag==='perform')return [x[2]];
+  if(tag==='resume')return [x[1]];
   return [];
 }
 
@@ -61,7 +65,18 @@ export function lowerProgram(program,input,prefix) {
         const symbol=list(`b${at}_`,k,'uint64_t',binders.map(id));
         return `{${name(constructor)},${binders.length},${symbol},${visit(body)}}`;
       });
+    } else if(tag==='handle') {
+      // Clauses lower as arms: the operation name, then the argument binder and, when the
+      // clause names one, the resumption binder.
+      row.text=name(x[0]);
+      row.arms=x[1].map((clause,k)=>{
+        const binders=clause.slice(1,-1),symbol=list(`b${at}_`,k,'uint64_t',binders.map(id));
+        return `{${name(clause[0])},${binders.length},${symbol},${visit(clause.at(-1))}}`;
+      });
+      row.children=[visit(x[2])];
     } else {
+      if(tag==='perform'){row.text=name(x[0]);row.text2=name(x[1]);}
+      if(tag==='resume'||tag==='discontinue')row.binding=id(x[0]);
       if(tag==='prim'){if(!OPS.includes(x[0])||x[0]==='none')reject('Unsupported primitive');row.op=x[0];}
       if(tag==='call'){if(!index.has(x[0]))reject('Unknown function');row.index=String(index.get(x[0]));}
       if(tag==='emit')row.text=name(x[0]);

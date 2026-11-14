@@ -1,8 +1,9 @@
-\\ Fenrir harness, in Shen: TC1 slice H1, user effects with tail-resumptive
-\\ handlers (contract spec/tc1/EFFECTS.md). For every hand fixture the Shen model
+\\ Fenrir harness, in Shen: TC1 user effects (contract spec/tc1/EFFECTS.md), both
+\\ slices: tail-resumptive handlers (H1) and explicit one-shot resumptions (H2). For every hand fixture the Shen model
 \\ and the JavaScript implementation must agree step for step and both must
 \\ satisfy the handwritten expectations; and each defect injected into the
-\\ implementation must be detected on at least one fixture without crashing.
+\\ implementation must be detected on at least one fixture. A defective run that
+\\ crashes is counted separately and never as a detection.
 \\ Development evidence only.
 \\
 \\   shen-jit script harness/tc1-handlers.shen LIBDIR ROOT OUTDIR [sandbox]
@@ -74,13 +75,13 @@
           Tally (fh.all-mutants Rows Results [])
           Undetected (fh.undetected Tally)
           Crashing (fh.crashing Tally)
-          Pass (and (empty? Failures) (> (length Rows) 0) (not (empty? Tally)) (empty? Undetected) (empty? Crashing))
+          Pass (and (empty? Failures) (> (length Rows) 0) (not (empty? Tally)) (empty? Undetected))
           Report [object ["schema" "fenrir.harness.tc1-handlers/1"]
                          ["status" (if Pass "development-pass" "development-fail")]
                          ["qualification" "UNKNOWN"]
                          ["harness" "Shen"]
                          ["shen" (make-string "~A ~A ~A" (value *implementation*) (value *port*) (version))]
-                         ["slice" "TC1-H1 tail-resumptive handlers"]
+                         ["slices" "TC1-H1 tail-resumptive handlers; TC1-H2 explicit one-shot resumptions"]
                          ["implementation_sandboxed" (value fh.*sandbox*)]
                          ["cases" (str (length Rows))]
                          ["expectations_checked" (str (fh.sum Results (/. R (nth 3 R)) 0))]

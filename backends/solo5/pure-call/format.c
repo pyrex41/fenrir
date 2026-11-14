@@ -54,11 +54,12 @@ static void event(struct writer *w,const struct pc_event *e) {
     text(w,"}");
 }
 size_t pc_format_sample(const struct pc_sample *s,char *out,size_t cap) {
-    static const char *controls[]={"Eval","Value","Ready","Unwind","Join","Terminate","Terminal"};
+    static const char *controls[]={"Eval","Value","Ready","Unwind","Join","Terminate","Terminal","Abandon"};
     static const char *rules[]={"Dispatch","Ready","LetReturn","IfReturn","MatchReturn","ReturnReturn",
-                                "CollectReturn","UnwindFrame","Value","Unwind","Join","Terminate"};
+                                "CollectReturn","UnwindFrame","Value","Unwind","Join","Terminate",
+                                "HandleReturn","ClauseReturn","ClauseExitReturn","ResumeReturn","DiscontinueReturn","AbandonFrame"};
     static const char *sites[]={"RootJoinEntry","Join","Terminate"};
-    if(!s || !out || !cap || s->after<0 || s->after>PC_TERMINAL || s->rule<0 || s->rule>PR_TERMINATE ||
+    if(!s || !out || !cap || s->after<0 || s->after>PC_ABANDON || s->rule<0 || s->rule>PR_ABANDON_FRAME ||
        s->machine_site< -1 || s->machine_site>PS_TERMINATE || s->event_count>3)return 0;
     struct writer w={out,0,cap,0};
     text(&w,"{\"after\":");quote(&w,controls[s->after]);

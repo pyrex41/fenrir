@@ -19,6 +19,8 @@ import {generatePureCalls} from '../tc0/pure-call-generate.mjs';
 import {generatePureData} from '../tc0/pure-data-generate.mjs';
 import {enumeratePureData} from '../tc0/pure-data-enumerate.mjs';
 import {VALUES} from '../tc0/check-i64.mjs';
+import {HandlerMachine} from '../../runtime/tc1/handler-machine.mjs';
+import {cases as handlerCases,resumptionCases} from '../../fixtures/tc1/handler-hand-cases.mjs';
 
 const root=resolve(import.meta.dirname,'../..');
 const FUEL=200,CHUNK=250,INPUT=['int','0'];
@@ -84,9 +86,13 @@ function main() {
   const tools=toolchain(solo5);
   const out=resolve(root,'build/solo5/freerun-pure-call',`${Date.now()}-${process.pid}`);
   const exact=args.includes('--exact-arithmetic');
+  // --tc1: the TC1 handler fixtures (both slices), with the TC0-A hand cases alongside so
+  // the guest's two injected defects still have programs that expose them.
+  const tc1=args.includes('--tc1');
   const families=exact?{'exact-arithmetic':exactArithmeticCases()}
+    :tc1?{'tc1-handlers':[...handlerCases,...resumptionCases],hand:[...callHand,...dataHand]}
     :{hand:[...callHand,...dataHand],'generated-pure-call':generatePureCalls(32).cases,'generated-pure-data':generatePureData(24).cases};
-  if(bound&&!exact){
+  if(bound&&!exact&&!tc1){
     const exhaustive=enumeratePureData(bound,{maxCases:8000});
     if(exhaustive.truncated)throw new Error('Exhaustive family truncated');
     families[`exhaustive-${bound}`]=exhaustive.cases;
@@ -102,7 +108,9 @@ function main() {
     writeFileSync(resolve(out,'batch.json'),JSON.stringify({guest,tender:tools.tender,batch_sha256:lowered.batch_sha256,programs:resolve(out,'programs.json'),count:String(programs.length)})+'\n');
     console.log(out);return;
   }
-  const reference=mode=>checked.map(c=>{const r=new PureCallMachine(c.artifact,c.input,MODES[mode]).run(FUEL);return {execution:r.execution,steps:r.steps,outcome:r.outcome};});
+  // The TC1 implementation has no operand-order or overflow defect switches, so under --tc1
+  // only the normal run has a JavaScript reference; defective guest runs are still counted.
+  const reference=mode=>tc1&&mode!=='normal'?null:checked.map(c=>{const r=new (tc1?HandlerMachine:PureCallMachine)(c.artifact,c.input,tc1?{}:MODES[mode]).run(FUEL);return {execution:r.execution,steps:r.steps,outcome:r.outcome};});
   const guestRun=mode=>{const traces=[];for(let first=0;first<programs.length;first+=CHUNK)traces.push(...executeRange(tools,guest,lowered.batch_sha256,mode,first,Math.min(first+CHUNK,programs.length)));return traces;};
   const failures=[],outcomes={},perFamily={},mutants={};let steps=0;
   const normalCandidate=reference('normal');
@@ -110,8 +118,8 @@ function main() {
     const guestTraces=guestRun(mode),candidate=mode==='normal'?normalCandidate:reference(mode);
     let killed=0;
     programs.forEach((program,i)=>{
-      const g=guestTraces[i],c=candidate[i];
-      const divergence=g.execution!==c.execution?{epoch:'execution',guest:g.execution,candidate:c.execution}:firstDivergence(g.steps,c.steps);
+      const g=guestTraces[i],c=candidate?candidate[i]:null;
+      const divergence=!c?null:g.execution!==c.execution?{epoch:'execution',guest:g.execution,candidate:c.execution}:firstDivergence(g.steps,c.steps);
       if(divergence&&failures.length<20)failures.push({family:program.family,program:program.name,mode,...divergence});
       else if(divergence)failures.push({family:program.family,program:program.name,mode,epoch:divergence.epoch});
       if(mode==='normal') {

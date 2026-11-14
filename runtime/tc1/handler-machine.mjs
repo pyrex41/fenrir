@@ -1,5 +1,6 @@
-// Independent UNQUALIFIED implementation of TC1 slice H1: the TC0-A pure-call
-// language plus user effects with tail-resumptive handlers (spec/tc1/EFFECTS.md).
+// Independent UNQUALIFIED implementation of TC1: the TC0-A pure-call language plus
+// user effects, with tail-resumptive handlers (slice H1) and explicit one-shot
+// resumptions (slice H2). Contract: spec/tc1/EFFECTS.md.
 // No model, oracle or validator imports. Written separately from
 // runtime/tc0/pure-call-machine.mjs; it shares no code with it.
 //
@@ -8,6 +9,8 @@
 //   doubleResume               clause return restores the suspended segment twice
 //   outermostHandler           perform selects the outermost matching handler
 //   dynamicClauseEnvironment   a clause sees the perform site's bindings
+//   resumeReturnsArgument      resume(k,v) evaluates to v, not to the handled body's result
+//   shallowResume              the resumed segment comes back without its handler
 
 const MIN=-(1n<<63n),MAX=(1n<<63n)-1n;
 
@@ -20,6 +23,7 @@ function operands(e) {
   if(tag==='project')return [x[0]];
   if(tag==='call'||tag==='emit')return [x[1]];
   if(tag==='perform')return [x[2]];
+  if(tag==='resume')return [x[1]];
   return [];
 }
 
@@ -31,7 +35,7 @@ function free(e,bound,out) {
   else if(tag==='if')for(const c of x)free(c,bound,out);
   else if(tag==='lambda')free(x[5],new Set([...bound,x[0]]),out);
   else if(tag==='match'){free(x[0],bound,out);for(const [,binders,body] of x.slice(1))free(body,new Set([...bound,...binders]),out);}
-  else if(tag==='handle'){for(const [,binder,body] of x[1])free(body,new Set([...bound,binder]),out);free(x[2],bound,out);}
+  else if(tag==='handle'){for(const clause of x[1])free(clause.at(-1),new Set([...bound,...clause.slice(1,-1)]),out);free(x[2],bound,out);}
   else for(const c of operands(e))free(c,bound,out);
   return out;
 }
@@ -43,7 +47,7 @@ function lambdas(e,codes) {
   else if(tag==='let'){lambdas(x[1],codes);lambdas(x[2],codes);}
   else if(tag==='if')for(const c of x)lambdas(c,codes);
   else if(tag==='match'){lambdas(x[0],codes);for(const arm of x.slice(1))lambdas(arm[2],codes);}
-  else if(tag==='handle'){for(const clause of x[1])lambdas(clause[2],codes);lambdas(x[2],codes);}
+  else if(tag==='handle'){for(const clause of x[1])lambdas(clause.at(-1),codes);lambdas(x[2],codes);}
   else for(const c of operands(e))lambdas(c,codes);
 }
 
@@ -54,8 +58,8 @@ function equal(a,b) {
 }
 
 export class HandlerMachine {
-  constructor(artifact,input,{forgottenResume=false,doubleResume=false,outermostHandler=false,dynamicClauseEnvironment=false}={}) {
-    this.options={forgottenResume,doubleResume,outermostHandler,dynamicClauseEnvironment};
+  constructor(artifact,input,{forgottenResume=false,doubleResume=false,outermostHandler=false,dynamicClauseEnvironment=false,resumeReturnsArgument=false,shallowResume=false}={}) {
+    this.options={forgottenResume,doubleResume,outermostHandler,dynamicClauseEnvironment,resumeReturnsArgument,shallowResume};
     this.functions=new Map(artifact.functions.map(f=>[f.name,f]));
     this.codes=new Map();
     for(const f of artifact.functions){this.codes.set(f.id,{parameter:f.parameter_id,body:f.body});lambdas(f.body,this.codes);}
@@ -72,6 +76,7 @@ export class HandlerMachine {
     if(c.kind==='Ready')return {node:c.node,rule:'Ready'};
     if(c.kind==='Value'&&top)return {node:top.node,rule:top.kind+'Return'};
     if(c.kind==='Unwind'&&top)return {node:top.node,rule:'UnwindFrame'};
+    if(c.kind==='Abandon'&&top)return {node:top.node,rule:top.kind==='Discontinue'?'DiscontinueReturn':'AbandonFrame'};
     if(c.kind==='Value'||c.kind==='Unwind')return {machine:'RootJoinEntry',rule:c.kind};
     return {machine:c.kind,rule:c.kind};
   }
@@ -98,9 +103,9 @@ export class HandlerMachine {
       this.frames.push({kind:'Handle',node,effect:x[0],clauses:x[1],env:this.env});
       return this.enter(x[2],true);
     }
-    const strict={prim:x[0],construct:'construct',apply:'apply',tuple:'tuple',project:'project',call:'call',emit:'emit',perform:'perform'};
+    const strict={prim:x[0],construct:'construct',apply:'apply',tuple:'tuple',project:'project',call:'call',emit:'emit',perform:'perform',resume:'resume',discontinue:'discontinue'};
     if(!Object.hasOwn(strict,tag))throw new Error('Unsupported expression');
-    const metadata=tag==='call'||tag==='emit'?x[0]:tag==='project'?x[1]:tag==='construct'?[x[0],x[1]]:tag==='perform'?[x[0],x[1]]:null;
+    const metadata=tag==='call'||tag==='emit'?x[0]:tag==='project'?x[1]:tag==='construct'?[x[0],x[1]]:tag==='perform'?[x[0],x[1]]:tag==='resume'||tag==='discontinue'?x[0]:null;
     const pending=operands(expr),frame={kind:'Collect',node,operation:strict[tag],metadata,pending,values:[],env:this.env,tail};
     if(!pending.length){this.control={kind:'Ready',node,operation:frame.operation,metadata,values:[],tail};return;}
     this.frames.push(frame);this.enter(pending[0],false);
@@ -114,13 +119,14 @@ export class HandlerMachine {
       let env=frame.env;arm[1].forEach((binder,i)=>{env=this.bind(env,binder,value[3+i]);});
       this.env=env;return this.enter(arm[2],frame.tail);
     }
-    if(frame.kind==='Return'||frame.kind==='Handle'){this.env=frame.env;return this.produce(value);}
+    if(frame.kind==='Return'||frame.kind==='Handle'||frame.kind==='ClauseExit'){this.env=frame.env;return this.produce(value);}
+    if(frame.kind==='Resume'){this.env=frame.env;return this.produce(this.options.resumeReturnsArgument?frame.argument:value);}
     if(frame.kind==='Clause') {
       // Resume: the suspended segment goes back on top of the outer frames and the
       // perform site receives the clause's value.
       if(!this.options.forgottenResume)this.frames.push(...frame.segment);
       if(this.options.doubleResume)this.frames.splice(this.frames.length-frame.segment.length,0,...frame.segment);
-      this.env=frame.env;events.push({kind:'Resume',task:'0',node:frame.node,value});return this.produce(value);
+      this.env=frame.env;return this.produce(value);
     }
     // Collect: store the value and enter the next operand, or become Ready.
     this.env=frame.env;
@@ -134,25 +140,48 @@ export class HandlerMachine {
     this.env=this.bind(new Map(captures),parameter,argument);this.enter(body,true);
   }
 
-  perform(c,events) {
+  perform(c) {
     const [effect,operation]=c.metadata,argument=c.values[0];
     const matches=this.frames.map((f,i)=>f.kind==='Handle'&&f.effect===effect?i:-1).filter(i=>i>=0);
     if(!matches.length)throw new Error('Unhandled effect');
     const at=this.options.outermostHandler?matches[0]:matches.at(-1),handler=this.frames[at];
     const clause=handler.clauses.find(clause=>clause[0]===operation);if(!clause)throw new Error('No clause');
     // Suspend everything from the selected handler up to the perform site.
-    const segment=this.frames.splice(at);
+    const segment=this.frames.splice(at),definition=this.options.dynamicClauseEnvironment?this.env:handler.env;
+    if(clause.length===4) {
+      // Explicit resumption: the clause owns the segment as the value of k, and its own
+      // value becomes the value of the handle.
+      this.frames.push({kind:'ClauseExit',node:c.node,env:handler.env});
+      this.env=this.bind(this.bind(definition,clause[1],argument),clause[2],{resumption:segment,env:this.env});
+      return this.enter(clause[3],true);
+    }
     this.frames.push({kind:'Clause',node:c.node,segment,env:this.env});
-    events.push({kind:'Perform',task:'0',node:c.node,effect,operation,value:argument});
-    this.env=this.bind(this.options.dynamicClauseEnvironment?this.env:handler.env,clause[1],argument);
+    this.env=this.bind(definition,clause[1],argument);
     this.enter(clause[2],true);
+  }
+
+  resume(c) {
+    const k=this.env.get(c.metadata);if(!k?.resumption)throw new Error('Not a resumption');
+    // In tail position the resumed body's value goes straight to the frame below.
+    if(!c.tail)this.frames.push({kind:'Resume',node:c.node,env:this.env,argument:c.values[0]});
+    this.frames.push(...(this.options.shallowResume?k.resumption.slice(1):k.resumption));
+    this.env=k.env;this.produce(c.values[0]);
+  }
+
+  discontinue(c) {
+    const k=this.env.get(c.metadata);if(!k?.resumption)throw new Error('Not a resumption');
+    // Expose the segment above a marker frame; the Abandon phase discards it frame by frame.
+    this.frames.push({kind:'Discontinue',node:c.node,env:this.env},...k.resumption);
+    this.control={kind:'Abandon'};
   }
 
   ready(c,events) {
     const v=c.values,op=c.operation;
     if(op==='call'){const f=this.functions.get(c.metadata),code=this.codes.get(f.id);return this.call(code.parameter,code.body,[],v[0],c.node,c.tail);}
     if(op==='apply'){const code=this.codes.get(v[0].code_id);if(!code)throw new Error('Unknown code');return this.call(code.parameter,code.body,v[0].captures,v[1],c.node,c.tail);}
-    if(op==='perform')return this.perform(c,events);
+    if(op==='perform')return this.perform(c);
+    if(op==='resume')return this.resume(c);
+    if(op==='discontinue')return this.discontinue(c);
     if(op==='emit') {
       const identity={task:'0',node:c.node};
       events.push({kind:'Invoke',...identity,operation:'emit',label:c.metadata,value:v[0]},{kind:'Emit',...identity,label:c.metadata,value:v[0]},{kind:'Commit',...identity,operation:'emit',value:['unit']});
@@ -195,6 +224,11 @@ export class HandlerMachine {
         if(frame.kind==='Clause')this.frames.push(...frame.segment);
         this.env=frame.env;
       }
+    } else if(c.kind==='Abandon') {
+      const frame=this.frames.pop();
+      if(frame.kind==='Clause')this.frames.push(...frame.segment);
+      this.env=frame.env;
+      if(frame.kind==='Discontinue')this.produce(['unit']);
     } else if(c.kind==='Join'){events.push({kind:'ScopeExit',task:'0',scope:'0',outcome:c.outcome});this.control={kind:'Terminate',outcome:c.outcome};}
     else if(c.kind==='Terminate'){events.push({kind:'TaskTermination',task:'0',outcome:c.outcome});this.terminal=c.outcome;this.control={kind:'Terminal'};}
     else throw new Error('Control');

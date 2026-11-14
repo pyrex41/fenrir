@@ -98,28 +98,31 @@ source-identity row.
 ## TC1: effects and handlers
 
 ```sh
-sh harness/run-tc1-handlers.sh
+sh harness/run-tc1-handlers.sh          # model against the JavaScript implementation
+sh harness/run-solo5-pure-call.sh tc1   # model against the Solo5 guest
 ```
 
-**[tc1-handlers.shen](tc1-handlers.shen)** checks slice H1 of the TC1 effect
+**[tc1-handlers.shen](tc1-handlers.shen)** checks both slices of the TC1 effect
 contract ([spec/tc1/EFFECTS.md](../spec/tc1/EFFECTS.md), a draft for owner
-review): user effects with tail-resumptive handlers. On eleven hand fixtures
-the Shen model (`models/tc1/handler-machine.shen`) and an independent
-JavaScript implementation (`runtime/tc1/handler-machine.mjs`) agree step for
-step over 363 steps, both satisfy 28 handwritten expectations (outcome, order
-of performed operations, emission order, and two complete hand-derived step
-traces), and four defects injected into the implementation are each detected:
-forgotten resume (9 fixtures), double resume (9), outermost-handler selection
-(2), clause run in the perform site's bindings (1). It is one optional row of
-the gate, `tc1-handler-slice`.
+review): tail-resumptive handlers, and explicit one-shot resumptions with
+`resume` and `discontinue`. On twenty hand fixtures the Shen model
+(`models/tc1/handler-machine.shen`) and an independent JavaScript
+implementation (`runtime/tc1/handler-machine.mjs`) agree step for step over
+625 steps, both satisfy 51 handwritten expectations (outcome, order of
+performed operations, emission order, and three complete hand-derived step
+traces), and six defects injected into the implementation are each detected.
+
+The same twenty programs run in the Solo5 guest (the C machine was extended)
+and agree with the model step for step. The two checks are optional gate rows,
+`tc1-handler-slice` and `tc1-handler-guest`.
 
 Which machine runs a program is decided by its schema; `common.shen` loads
 both models. `expectations.shen` holds the expectation checks the hand-case
-and handler programs share.
+and handler programs share. Performs are read from step records: a user effect
+produces no event.
 
-Not done for TC1: explicit one-shot resumption (specified, slice H2),
-generated or exhaustive handler programs, reduction, strict replay, catalog
-coverage, and the Solo5 guest.
+Not done for TC1: generated or exhaustive handler programs, reduction, strict
+replay and catalog coverage.
 
 ## What is still not Shen
 

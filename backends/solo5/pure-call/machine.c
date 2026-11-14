@@ -12,7 +12,7 @@ static void *take(size_t bytes) {
 static int same(const char *a,const char *b) {while(*a && *a==*b){a++;b++;}return *a==*b;}
 static struct pc_value *fresh(int tag) {
     struct pc_value *v=take(sizeof *v);if(!v)return 0;
-    v->tag=tag;v->integer=0;v->text=0;v->constructor=0;v->count=0;v->fields=0;v->code=-1;v->captures=0;
+    v->tag=tag;v->integer=0;v->text=0;v->constructor=0;v->count=0;v->fields=0;v->code=-1;v->captures=0;v->segment=0;
     return v;
 }
 static const struct pc_value *scalar(int tag,int64_t n) {
@@ -68,7 +68,8 @@ int pc_init(struct pc_machine *m,const struct pc_program *p,int reverse,int wrap
     return m->env?1:-1;
 }
 static void site(const struct pc_machine *m,struct pc_sample *s) {
-    static const int returns[]={PR_LET_RETURN,PR_IF_RETURN,PR_MATCH_RETURN,PR_RETURN_RETURN,PR_COLLECT_RETURN};
+    static const int returns[]={PR_LET_RETURN,PR_IF_RETURN,PR_MATCH_RETURN,PR_RETURN_RETURN,PR_COLLECT_RETURN,
+                                PR_HANDLE_RETURN,PR_CLAUSE_RETURN,PR_CLAUSE_EXIT_RETURN,PR_RESUME_RETURN,PR_DISCONTINUE_RETURN};
     const struct pc_node *nodes=m->program->nodes;
     s->machine_site=-1;s->node=0;
     if(m->control==PC_EVAL){s->node=nodes[m->node].id;s->rule=PR_DISPATCH;}
@@ -76,6 +77,9 @@ static void site(const struct pc_machine *m,struct pc_sample *s) {
     else if((m->control==PC_VALUE || m->control==PC_UNWIND) && m->depth){
         const struct pc_frame *f=&m->frames[m->depth-1];
         s->node=nodes[f->node].id;s->rule=m->control==PC_VALUE?returns[f->kind]:PR_UNWIND_FRAME;
+    } else if(m->control==PC_ABANDON && m->depth){
+        const struct pc_frame *f=&m->frames[m->depth-1];
+        s->node=nodes[f->node].id;s->rule=f->kind==PF_DISCONTINUE?PR_DISCONTINUE_RETURN:PR_ABANDON_FRAME;
     } else if(m->control==PC_VALUE){s->machine_site=PS_ROOT_JOIN_ENTRY;s->rule=PR_VALUE;}
     else if(m->control==PC_UNWIND){s->machine_site=PS_ROOT_JOIN_ENTRY;s->rule=PR_UNWIND;}
     else if(m->control==PC_JOIN){s->machine_site=PS_JOIN;s->rule=PR_JOIN;}
@@ -87,7 +91,48 @@ static void trap(struct pc_machine *m,int code) {m->control=PC_UNWIND;m->trap=co
 static struct pc_frame *push(struct pc_machine *m,int kind,int node,int tail) {
     if(m->depth>=PC_MAX_FRAMES)return 0;
     struct pc_frame *f=&m->frames[m->depth++];
-    f->kind=kind;f->node=node;f->tail=tail;f->env=m->env;f->next=0;return f;
+    f->kind=kind;f->node=node;f->tail=tail;f->env=m->env;f->next=0;f->segment=0;return f;
+}
+/* TC1: copy the frames from index `at` to the top into the arena and remove them. */
+static const struct pc_segment *suspend(struct pc_machine *m,unsigned at) {
+    struct pc_segment *seg=take(sizeof *seg);if(!seg)return 0;
+    unsigned count=m->depth-at;
+    struct pc_frame *frames=take(count*sizeof *frames);if(!frames)return 0;
+    for(unsigned i=0;i<count;i++)frames[i]=m->frames[at+i];
+    seg->count=count;seg->frames=frames;m->depth=at;return seg;
+}
+/* TC1: put a suspended segment back on top of the frames. */
+static int restore(struct pc_machine *m,const struct pc_segment *seg) {
+    if(!seg || seg->count>PC_MAX_FRAMES-m->depth)return 0;
+    for(unsigned i=0;i<seg->count;i++)m->frames[m->depth++]=seg->frames[i];
+    return 1;
+}
+/* TC1: select the innermost active handler for the effect and enter its clause. */
+static int perform(struct pc_machine *m,const struct pc_node *n,const struct pc_value *argument) {
+    const struct pc_program *p=m->program;int at=-1;
+    for(int i=(int)m->depth-1;i>=0 && at<0;i--)
+        if(m->frames[i].kind==PF_HANDLE && same(p->nodes[m->frames[i].node].text,n->text))at=i;
+    if(at<0)return -1; /* an unhandled effect in a validated program is a defect, not a trap */
+    const struct pc_node *handler=&p->nodes[m->frames[at].node];const struct pc_env *definition=m->frames[at].env;
+    const struct pc_arm *clause=0;
+    for(unsigned i=0;i<handler->arm_count && !clause;i++)if(same(handler->arms[i].constructor,n->text2))clause=&handler->arms[i];
+    if(!clause || clause->binder_count<1 || clause->binder_count>2)return -1;
+    const struct pc_env *site=m->env;
+    const struct pc_segment *segment=suspend(m,(unsigned)at);if(!segment)return -1;
+    const struct pc_env *env=bind(clause->binders[0],argument,definition);if(!env)return -1;
+    if(clause->binder_count==2){
+        /* Explicit resumption: the clause owns the segment as the value of k, and its own
+         * value becomes the value of the handle. */
+        struct pc_value *k=fresh(PV_RESUMPTION);if(!k)return -1;
+        k->segment=segment;k->captures=site;
+        struct pc_frame *f=push(m,PF_CLAUSE_EXIT,m->node,0);if(!f)return -1;
+        f->env=definition;
+        env=bind(clause->binders[1],k,env);if(!env)return -1;
+    } else {
+        struct pc_frame *f=push(m,PF_CLAUSE,m->node,0);if(!f)return -1;
+        f->segment=segment; /* f->env is the perform site's environment, restored on resume */
+    }
+    m->env=env;enter(m,clause->body,1);return 1;
 }
 /* k-th operand to evaluate: grammar order, or reversed for the injected defect. */
 static unsigned operand(const struct pc_machine *m,const struct pc_node *n,unsigned k) {
@@ -132,6 +177,20 @@ static int ready(struct pc_machine *m,struct pc_sample *s) {
         if(!m->tail && !push(m,PF_RETURN,m->node,0))return -1;
         m->env=bind(parameter,argument,captures);if(!m->env)return -1;
         enter(m,body,1);return 1;
+    }
+    if(n->tag==PC_PERFORM)return perform(m,n,v[0]);
+    if(n->tag==PC_RESUME || n->tag==PC_DISCONTINUE){
+        const struct pc_value *k=lookup(m->env,n->binding);
+        if(!k || k->tag!=PV_RESUMPTION)return -1;
+        if(n->tag==PC_RESUME){
+            /* In tail position the resumed body's value goes straight to the frame below. */
+            if(!m->tail && !push(m,PF_RESUME,m->node,0))return -1;
+            if(!restore(m,k->segment))return -1;
+            m->env=k->captures;produce(m,v[0]);return 1;
+        }
+        /* Expose the segment above a marker; the abandon phase discards it frame by frame. */
+        if(!push(m,PF_DISCONTINUE,m->node,0) || !restore(m,k->segment))return -1;
+        m->control=PC_ABANDON;return 1;
     }
     switch(n->tag){
     case PC_EMIT: {
@@ -199,6 +258,10 @@ int pc_step(struct pc_machine *m,struct pc_sample *s) {
                 c->captures=bind(n->free[i],captured,c->captures);if(!c->captures)return -1;
             }
             v=c;break; }
+        case PC_HANDLE:
+            /* The handler frame is the body's return destination. */
+            if(n->child_count!=1 || !push(m,PF_HANDLE,m->node,0))return -1;
+            enter(m,n->children[0],1);break;
         case PC_LET:case PC_IF:case PC_MATCH:
             if(!n->child_count || !push(m,n->tag==PC_LET?PF_LET:n->tag==PC_IF?PF_IF:PF_MATCH,m->node,m->tail))return -1;
             enter(m,n->children[0],0);break;
@@ -236,13 +299,30 @@ int pc_step(struct pc_machine *m,struct pc_sample *s) {
                     for(unsigned i=0;i<n->child_count;i++)m->ready[i]=f->values[i];
                     m->control=PC_READY;m->node=f->node;m->tail=f->tail;
                 }
-            } /* PF_RETURN: caller environment restored; the value propagates. */
+            } else if(f->kind==PF_CLAUSE){
+                /* The clause returned: restore the suspended segment; the perform site gets the value. */
+                const struct pc_segment *segment=f->segment;
+                if(!restore(m,segment))return -1;
+            } /* PF_RETURN, PF_HANDLE, PF_CLAUSE_EXIT, PF_RESUME: environment restored; the value propagates. */
         }
     } else if(m->control==PC_READY){
         if(ready(m,s)!=1)return -1;
     } else if(m->control==PC_UNWIND){
-        if(m->depth)m->env=m->frames[--m->depth].env;
-        else m->control=PC_JOIN;
+        if(m->depth){
+            /* One frame per step. A clause frame gives back its suspended segment to be unwound next. */
+            const struct pc_frame f=m->frames[--m->depth];
+            if(f.kind==PF_CLAUSE && !restore(m,f.segment))return -1;
+            m->env=f.env;
+        } else m->control=PC_JOIN;
+    } else if(m->control==PC_ABANDON){
+        if(!m->depth)return -1;
+        const struct pc_frame f=m->frames[--m->depth];
+        if(f.kind==PF_CLAUSE && !restore(m,f.segment))return -1;
+        m->env=f.env;
+        if(f.kind==PF_DISCONTINUE){
+            const struct pc_value *unit=scalar(PV_UNIT,0);if(!unit)return -1;
+            produce(m,unit);
+        }
     } else if(m->control==PC_JOIN){
         s->events[0]=(struct pc_event){PE_SCOPE_EXIT,0,0,m->trap?0:m->value,m->trap};
         s->event_count=1;m->control=PC_TERMINATE;

@@ -1,5 +1,6 @@
-\\ TC1 handler machine, slice H1: the TC0-A pure-call machine plus user effects with
-\\ tail-resumptive handlers. Contract: spec/tc1/EFFECTS.md. UNQUALIFIED.
+\\ TC1 handler machine: the TC0-A pure-call machine plus user effects, with
+\\ tail-resumptive handlers (slice H1) and explicit one-shot resumptions (slice H2).
+\\ Contract: spec/tc1/EFFECTS.md. UNQUALIFIED.
 \\ Load ../tc0/i64.shen first. The TC0-A rules are those of
 \\ ../tc0/pure-call-machine.shen, restated under the tc1. prefix so that file and
 \\ its gate stay untouched; the additions are marked "H1".
@@ -13,7 +14,18 @@
 \\ So the clause's active handlers are exactly the ones outside the selected
 \\ handler: the selected handler and any handlers between it and the perform site
 \\ are inactive, and a perform of the same effect in a clause forwards outward.
-\\ Clauses are [Operation Binder Body].
+\\ Clauses are [Operation Binder Body] (H1) or [Operation Binder K Body] (H2).
+\\
+\\ H2 representation. An explicit clause binds K to [resumption Segment Env], the
+\\ suspended segment as a value, and runs over a [clause-exit Node Env] frame: its
+\\ value is the value of the handle. resume restores the segment over a
+\\ [resume-return Node Env] frame (none when the resume is in tail position), so the
+\\ handled body's final value becomes the value of the resume expression.
+\\ discontinue discards the segment frame by frame in the abandon phase, down to a
+\\ [discontinue-return Node Env] frame, then yields unit. Exactly-once use of K is
+\\ guaranteed by validation; the machine does not track it.
+\\ Performs produce no events: a user effect handled inside the program is not an
+\\ observation. The step records show every perform, resume and discontinue.
 (define tc1.lookup
  Id [[Id V] | Rest] -> V
  Id [_ | Rest] -> (tc1.lookup Id Rest)
@@ -42,6 +54,8 @@
  [match Node E Arms] -> (append (tc1.free E) (tc1.free-arms Arms))
  [handle Node Effect Clauses Body] -> (append (tc1.free-clauses Clauses) (tc1.free Body))
  [perform Node Effect Op Arg] -> (tc1.free Arg)
+ [resume Node K Arg] -> [K | (tc1.free Arg)]
+ [discontinue Node K] -> [K]
  [if Node | Args] -> (tc1.free-list Args)
  [apply Node | Args] -> (tc1.free-list Args))
 (define tc1.remove-all
@@ -50,7 +64,8 @@
 \\ H1: a clause's binder is bound in its body.
 (define tc1.free-clauses
  [] -> []
- [[Op Binder Body] | Clauses] -> (append (tc1.remove Binder (tc1.free Body)) (tc1.free-clauses Clauses)))
+ [[Op Binder Body] | Clauses] -> (append (tc1.remove Binder (tc1.free Body)) (tc1.free-clauses Clauses))
+ [[Op Binder K Body] | Clauses] -> (append (tc1.remove K (tc1.remove Binder (tc1.free Body))) (tc1.free-clauses Clauses)))
 (define tc1.free-arms
  [] -> []
  [[Ctor Binders Body] | Arms] -> (append (tc1.remove-all Binders (tc1.free Body)) (tc1.free-arms Arms)))
@@ -75,7 +90,10 @@
  [collect Node Op Meta Rest Values Env Tail] -> Env
  [return Node Env] -> Env
  [handler Node Effect Clauses Env] -> Env
- [clause-return Node Segment Env] -> Env)
+ [clause-return Node Segment Env] -> Env
+ [clause-exit Node Env] -> Env
+ [resume-return Node Env] -> Env
+ [discontinue-return Node Env] -> Env)
 (define tc1.collect
  Node Op Meta [First | Rest] Tail Env Frames Codes Names ->
  (tc1.transition [evaluate First false] Env [[collect Node Op Meta Rest [] Env Tail] | Frames] Codes Names [])
@@ -107,7 +125,10 @@
  [handle Node Effect Clauses Body] Tail Env Frames Codes Names ->
  (tc1.transition [evaluate Body true] Env [[handler Node Effect Clauses Env] | Frames] Codes Names [])
  \\ H1: perform collects its one argument, like a call.
- [perform Node Effect Op Arg] Tail Env Frames Codes Names -> (tc1.collect Node perform [Effect Op] [Arg] Tail Env Frames Codes Names))
+ [perform Node Effect Op Arg] Tail Env Frames Codes Names -> (tc1.collect Node perform [Effect Op] [Arg] Tail Env Frames Codes Names)
+ \\ H2: resume collects its one argument; discontinue has none and is Ready at once.
+ [resume Node K Arg] Tail Env Frames Codes Names -> (tc1.collect Node resume K [Arg] Tail Env Frames Codes Names)
+ [discontinue Node K] Tail Env Frames Codes Names -> (tc1.collect Node discontinue K [] Tail Env Frames Codes Names))
 (define tc1.numbers
  [] -> []
  [[int N] | Rest] -> [N | (tc1.numbers Rest)])
@@ -153,6 +174,7 @@
  Effect [Frame | Frames] Acc -> (tc1.split Effect Frames [Frame | Acc]))
 (define tc1.clause
  Op [[Op Binder Body] | _] -> [Binder Body]
+ Op [[Op Binder K Body] | _] -> [Binder K Body]
  Op [_ | Clauses] -> (tc1.clause Op Clauses)
  Op [] -> [invalid no-clause])
 \\ H1: enter the clause in the handler's definition environment plus its binder, with
@@ -162,7 +184,22 @@
  (tc1.run-clause Node Effect Op V Env Segment Outer HEnv (tc1.clause Op Clauses) Codes Names))
 (define tc1.run-clause
  Node Effect Op V Env Segment Outer HEnv [Binder Body] Codes Names ->
- (tc1.transition [evaluate Body true] [[Binder V] | HEnv] [[clause-return Node Segment Env] | Outer] Codes Names [[perform Node Effect Op V]]))
+ (tc1.transition [evaluate Body true] [[Binder V] | HEnv] [[clause-return Node Segment Env] | Outer] Codes Names [])
+ \\ H2: the clause holds the suspended segment as the value of K and runs over a
+ \\ clause-exit frame, in the handler's definition environment.
+ Node Effect Op V Env Segment Outer HEnv [Binder K Body] Codes Names ->
+ (tc1.transition [evaluate Body true] [[K [resumption Segment Env]] [Binder V] | HEnv] [[clause-exit Node HEnv] | Outer] Codes Names []))
+\\ H2: restore the segment and deliver V at the perform site. In tail position the
+\\ resumed body's value goes straight to the frame below; otherwise to a resume-return frame.
+(define tc1.resume
+ [resumption Segment PEnv] V true Node Env Frames Codes Names ->
+ (tc1.transition [value V] PEnv (append Segment Frames) Codes Names [])
+ [resumption Segment PEnv] V false Node Env Frames Codes Names ->
+ (tc1.transition [value V] PEnv (append Segment [[resume-return Node Env] | Frames]) Codes Names []))
+\\ H2: expose the segment for discarding, above a frame that marks where to stop.
+(define tc1.discontinue
+ [resumption Segment PEnv] Node Env Frames Codes Names ->
+ (tc1.transition [abandon] Env (append Segment [[discontinue-return Node Env] | Frames]) Codes Names []))
 (define tc1.step
  [tc1-state [evaluate E Tail] Env Frames Codes Names] -> (tc1.dispatch E Tail Env Frames Codes Names)
  [tc1-state [value V] Env [[bind Node Id Body OldEnv Tail] | Frames] Codes Names] ->
@@ -183,7 +220,13 @@
  \\ H1: the clause returned; restore the suspended segment and supply the value at the
  \\ perform site. The handler is active again in the resumed body.
  [tc1-state [value V] Env [[clause-return Node Segment OldEnv] | Outer] Codes Names] ->
- (tc1.transition [value V] OldEnv (append Segment Outer) Codes Names [[resume Node V]])
+ (tc1.transition [value V] OldEnv (append Segment Outer) Codes Names [])
+ \\ H2: the clause finished; its value is the value of the handle.
+ [tc1-state [value V] Env [[clause-exit Node OldEnv] | Frames] Codes Names] ->
+ (tc1.transition [value V] OldEnv Frames Codes Names [])
+ \\ H2: the resumed body finished; its value is the value of the resume expression.
+ [tc1-state [value V] Env [[resume-return Node OldEnv] | Frames] Codes Names] ->
+ (tc1.transition [value V] OldEnv Frames Codes Names [])
  [tc1-state [value V] Env [] Codes Names] -> (tc1.transition [join [ok V]] Env [] Codes Names [])
  [tc1-state [ready Node call Name [Arg] Tail] Env Frames Codes Names] ->
  (tc1.enter (tc1.lookup (tc1.lookup Name Names) Codes) [] Arg Tail Node Env Frames Codes Names)
@@ -192,6 +235,10 @@
  \\ H1: select the innermost active handler for the effect and enter its clause.
  [tc1-state [ready Node perform [Effect Op] [V] Tail] Env Frames Codes Names] ->
  (tc1.enter-clause Node Effect Op V Env (tc1.split Effect Frames []) Codes Names)
+ [tc1-state [ready Node resume K [V] Tail] Env Frames Codes Names] ->
+ (tc1.resume (tc1.lookup K Env) V Tail Node Env Frames Codes Names)
+ [tc1-state [ready Node discontinue K [] Tail] Env Frames Codes Names] ->
+ (tc1.discontinue (tc1.lookup K Env) Node Env Frames Codes Names)
  [tc1-state [ready Node emit Label [V] Tail] Env Frames Codes Names] ->
  (tc1.transition [value [unit]] Env Frames Codes Names [[invoke Node Label V] [emit Node Label V] [commit Node [unit]]])
  [tc1-state [ready Node tuple Meta Values Tail] Env Frames Codes Names] ->
@@ -209,6 +256,14 @@
  (tc1.transition [unwind Code] OldEnv (append Segment Outer) Codes Names [])
  [tc1-state [unwind Code] Env [Frame | Frames] Codes Names] ->
  (tc1.transition [unwind Code] (tc1.frame-env Frame) Frames Codes Names [])
+ \\ H2: abandon discards one frame per step, as unwinding does, and stops at the
+ \\ discontinue-return frame, where the clause continues with unit.
+ [tc1-state [abandon] Env [[discontinue-return Node OldEnv] | Frames] Codes Names] ->
+ (tc1.transition [value [unit]] OldEnv Frames Codes Names [])
+ [tc1-state [abandon] Env [[clause-return Node Segment OldEnv] | Outer] Codes Names] ->
+ (tc1.transition [abandon] OldEnv (append Segment Outer) Codes Names [])
+ [tc1-state [abandon] Env [Frame | Frames] Codes Names] ->
+ (tc1.transition [abandon] (tc1.frame-env Frame) Frames Codes Names [])
  [tc1-state [unwind Code] Env [] Codes Names] -> (tc1.transition [join [trap Code]] Env [] Codes Names [])
  [tc1-state [join Outcome] Env [] Codes Names] -> (tc1.transition [terminate Outcome] Env [] Codes Names [[scope-exit Outcome]])
  [tc1-state [terminate Outcome] Env [] Codes Names] -> (tc1.transition [terminal Outcome] Env [] Codes Names [[task-termination Outcome]]))
@@ -222,6 +277,10 @@
  [tc1-state [value V] Env [[return Node | Rest] | Frames] Codes Names] -> [node Node return-return]
  [tc1-state [value V] Env [[handler Node | Rest] | Frames] Codes Names] -> [node Node handle-return]
  [tc1-state [value V] Env [[clause-return Node | Rest] | Frames] Codes Names] -> [node Node clause-return]
+ [tc1-state [value V] Env [[clause-exit Node | Rest] | Frames] Codes Names] -> [node Node clause-exit-return]
+ [tc1-state [value V] Env [[resume-return Node | Rest] | Frames] Codes Names] -> [node Node resume-return]
+ [tc1-state [abandon] Env [[discontinue-return Node | Rest] | Frames] Codes Names] -> [node Node discontinue-return]
+ [tc1-state [abandon] Env [[Tag Node | Rest] | Frames] Codes Names] -> [node Node abandon-frame]
  [tc1-state [unwind Code] Env [[Tag Node | Rest] | Frames] Codes Names] -> [node Node unwind-frame]
  [tc1-state [value V] Env [] Codes Names] -> [machine root-join-entry value]
  [tc1-state [unwind Code] Env [] Codes Names] -> [machine root-join-entry unwind]

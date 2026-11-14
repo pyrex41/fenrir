@@ -50,6 +50,16 @@
 (define fh.arm
   [Ctor Binders Body] -> [Ctor Binders (fh.expr Body)])
 
+\\ A clause is [Operation Binder Body], or [Operation Binder K Body] with a named resumption.
+(define fh.clause
+  [Op Binder Body] -> [Op Binder (fh.expr Body)]
+  [Op Binder K Body] -> [Op Binder K (fh.expr Body)])
+
+(define fh.clause-codes
+  [] -> []
+  [[_ _ Body] | Clauses] -> (append (fh.lambda-codes Body) (fh.clause-codes Clauses))
+  [[_ _ _ Body] | Clauses] -> (append (fh.lambda-codes Body) (fh.clause-codes Clauses)))
+
 (define fh.exprs
   Es -> (map (/. E (fh.expr E)) Es))
 
@@ -72,8 +82,10 @@
   ["construct" Node Type Ctor | Args] -> [construct Node Type Ctor | (fh.exprs Args)]
   ["match" Node E | Arms] -> [match Node (fh.expr E) (map (/. A (fh.arm A)) Arms)]
   \\ TC1: effect and operation names stay strings; a clause is [Operation Binder Body].
-  ["handle" Node Effect Clauses Body] -> [handle Node Effect (map (/. C (fh.arm C)) Clauses) (fh.expr Body)]
+  ["handle" Node Effect Clauses Body] -> [handle Node Effect (map (/. C (fh.clause C)) Clauses) (fh.expr Body)]
   ["perform" Node Effect Op Arg] -> [perform Node Effect Op (fh.expr Arg)]
+  ["resume" Node K Arg] -> [resume Node K (fh.expr Arg)]
+  ["discontinue" Node K] -> [discontinue Node K]
   X -> (error "harness: unsupported expression ~S" X))
 
 \\ One [Id [Parameter Body]] entry per lambda in a translated expression.
@@ -81,8 +93,10 @@
   [lambda Node Id Body] -> [[Node [Id Body]] | (fh.lambda-codes Body)]
   [let Node Id Init Body] -> (append (fh.lambda-codes Init) (fh.lambda-codes Body))
   [match Node E Arms] -> (append (fh.lambda-codes E) (fh.arm-codes Arms))
-  [handle Node Effect Clauses Body] -> (append (fh.arm-codes Clauses) (fh.lambda-codes Body))
+  [handle Node Effect Clauses Body] -> (append (fh.clause-codes Clauses) (fh.lambda-codes Body))
   [perform Node Effect Op Arg] -> (fh.lambda-codes Arg)
+  [resume Node K Arg] -> (fh.lambda-codes Arg)
+  [discontinue Node K] -> []
   [Tag Node | Rest] -> (fh.codes-in Rest)
   _ -> [])
 
@@ -111,6 +125,7 @@
 \\ The machine a program runs on, by its schema.
 (define fh.state-tag
   "tc1-handler-demo/1" -> tc1-state
+  "tc1-handler-demo/2" -> tc1-state
   _ -> pure-call-state)
 
 (define fh.model-step
@@ -164,8 +179,6 @@
   [invoke Node Label V] -> [object ["kind" "Invoke"] ["task" "0"] ["node" Node] ["operation" "emit"] ["label" Label] ["value" (fh.value V)]]
   [emit Node Label V] -> [object ["kind" "Emit"] ["task" "0"] ["node" Node] ["label" Label] ["value" (fh.value V)]]
   [commit Node V] -> [object ["kind" "Commit"] ["task" "0"] ["node" Node] ["operation" "emit"] ["value" (fh.value V)]]
-  [perform Node Effect Op V] -> [object ["kind" "Perform"] ["task" "0"] ["node" Node] ["effect" Effect] ["operation" Op] ["value" (fh.value V)]]
-  [resume Node V] -> [object ["kind" "Resume"] ["task" "0"] ["node" Node] ["value" (fh.value V)]]
   [scope-exit O] -> [object ["kind" "ScopeExit"] ["task" "0"] ["scope" "0"] ["outcome" (fh.outcome O)]]
   [task-termination O] -> [object ["kind" "TaskTermination"] ["task" "0"] ["outcome" (fh.outcome O)]])
 
@@ -179,6 +192,10 @@
   collect-return -> "CollectReturn"
   handle-return -> "HandleReturn"
   clause-return -> "ClauseReturn"
+  clause-exit-return -> "ClauseExitReturn"
+  resume-return -> "ResumeReturn"
+  discontinue-return -> "DiscontinueReturn"
+  abandon-frame -> "AbandonFrame"
   unwind-frame -> "UnwindFrame"
   value -> "Value"
   unwind -> "Unwind"
@@ -199,6 +216,7 @@
   value -> "Value"
   ready -> "Ready"
   unwind -> "Unwind"
+  abandon -> "Abandon"
   join -> "Join"
   terminate -> "Terminate"
   terminal -> "Terminal")

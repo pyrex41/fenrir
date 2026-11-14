@@ -10,7 +10,8 @@ import {cases as tc0Cases} from '../../fixtures/tc0/pure-data-hand-cases.mjs';
 const check=p=>validatePureCallArtifact(encode(p),['int','0']);
 const base=cases.find(c=>c.name==='handler-basic').program;
 const clone=p=>JSON.parse(JSON.stringify(p));
-const rejects=(p,why)=>assert.throws(()=>check(p),InvalidPureCallArtifact,why);
+// With a pattern, the rejection must be for that reason and not, say, a source-map slip.
+const rejects=(p,why,pattern)=>assert.throws(()=>check(p),e=>e instanceof InvalidPureCallArtifact&&(!pattern||pattern.test(e.message)),why);
 // handler-basic body: ['handle',id,'Ask',[['ask',x,clause]],body]
 const handle=p=>p.functions[0].body;
 
@@ -68,6 +69,63 @@ test('on TC0-A programs the handler machine and the TC0-A implementation give th
 test('each injected defect changes the trace of at least one fixture', () => {
   for(const option of ['forgottenResume','doubleResume','outermostHandler','dynamicClauseEnvironment']) {
     const differs=cases.some(c=>{
+      const checked=check(c.program),good=new HandlerMachine(checked.artifact,checked.input).run(200);
+      try{return JSON.stringify(new HandlerMachine(checked.artifact,checked.input,{[option]:true}).run(200).steps)!==JSON.stringify(good.steps);}catch{return false;}
+    });
+    assert.ok(differs,option);
+  }
+});
+
+// ---------- Slice H2: explicit one-shot resumption ----------
+import {resumptionCases} from '../../fixtures/tc1/handler-hand-cases.mjs';
+const h2=resumptionCases.find(c=>c.name==='clause-continues-after-resume').program;
+// its handle: ['handle',id,'Ask',[['ask',x,k,clauseBody]],body]; clauseBody = let r = resume(k, x+1) in r*2
+const clauseOf=p=>handle(p)[3][0];
+const remap=p=>{p.source_map=p.source_map.filter(r=>JSON.stringify(p.functions).includes(`"${r.id}"`));return p;};
+let nextId=5000;const id=()=>String(nextId++);
+const located=(p,...ids)=>{for(const i of ids)p.source_map.push({id:i,file:'t',line:'0',column:'0'});return p;};
+
+test('every resumption fixture validates and runs to its handwritten outcome', () => {
+  for(const c of resumptionCases) {
+    const checked=check(c.program),run=new HandlerMachine(checked.artifact,checked.input).run(200);
+    assert.equal(run.execution,'Completed',c.name);
+    assert.deepEqual(run.outcome,c.expected_outcome,c.name);
+  }
+});
+test('a resumption must be used: zero uses is rejected', () => {
+  const p=clone(h2),clause=clauseOf(p),a=id();clause[3]=['int',a,'0'];rejects(located(remap(p),a),'k never used',/exactly once/);
+});
+test('a resumption must be used once: two uses are rejected', () => {
+  const p=clone(h2),clause=clauseOf(p),[k]=[clause[2]],a=id(),b=id(),c=id(),d=id(),e=id();
+  clause[3]=['prim',a,'add',['resume',b,k,['int',c,'1']],['resume',d,k,['int',e,'2']]];
+  rejects(located(remap(p),a,b,c,d,e),'k used twice',/exactly once/);
+});
+test('a resumption must be used on every path', () => {
+  const p=clone(h2),clause=clauseOf(p),k=clause[2],a=id(),b=id(),c=id(),d=id(),e=id();
+  clause[3]=['if',a,['bool',b,true],['resume',c,k,['int',d,'1']],['int',e,'0']];
+  rejects(located(remap(p),a,b,c,d,e),'k used in one branch only',/every path/);
+});
+test('a resumption is not a value and cannot be captured', () => {
+  const asValue=clone(h2),c1=clauseOf(asValue),a=id();c1[3]=['var',a,c1[2]];rejects(located(remap(asValue),a),'k as a variable',/not a value/);
+  const captured=clone(h2),c2=clauseOf(captured),k=c2[2],l=id(),u=id(),r=id(),n=id(),ap=id(),un=id();
+  c2[3]=['apply',ap,['lambda',l,u,'Unit','I64',[],[],['resume',r,k,['int',n,'1']]],['unit',un]];
+  rejects(located(remap(captured),l,r,n,ap,un),'k captured by a closure',/Unknown resumption/);
+});
+test('resume takes the operation result type and yields the handle type', () => {
+  const p=clone(h2),clause=clauseOf(p),k=clause[2],a=id(),b=id();clause[3]=['resume',a,k,['unit',b]];rejects(located(remap(p),a,b),'resume argument type',/Resume argument/);
+});
+test('an inner clause cannot use an outer clause\'s resumption', () => {
+  const p=clone(h2),clause=clauseOf(p),k=clause[2],h=id(),x=id(),r=id(),n=id(),pf=id(),pa=id();
+  // outer clause body: handle Ask { ask(x2) => resume(outerK, 1) } in perform ask 0
+  clause[3]=['handle',h,'Ask',[['ask',x,['resume',r,k,['int',n,'1']]]],['perform',pf,'Ask','ask',['int',pa,'0']]];
+  rejects(located(remap(p),h,r,n,pf,pa),'outer k used inside an inner clause',/Unknown resumption/);
+});
+test('the tail-resumptive schema rejects explicit resumptions', () => {
+  const p=clone(h2);p.schema_version='tc1-handler-demo/1';p.slice='TC1-H1';rejects(p,'H2 forms under the H1 schema',/Handler clause/);
+});
+test('each resumption defect changes the trace of at least one fixture', () => {
+  for(const option of ['resumeReturnsArgument','shallowResume']) {
+    const differs=resumptionCases.some(c=>{
       const checked=check(c.program),good=new HandlerMachine(checked.artifact,checked.input).run(200);
       try{return JSON.stringify(new HandlerMachine(checked.artifact,checked.input,{[option]:true}).run(200).steps)!==JSON.stringify(good.steps);}catch{return false;}
     });

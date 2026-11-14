@@ -1,13 +1,16 @@
 #!/bin/sh
 # Build a guest batch (JavaScript, for now) and hand it to the Shen harness.
-# Usage: sh harness/run-solo5-pure-call.sh [EXHAUSTIVE_NODES=5 | exact]
+# Usage: sh harness/run-solo5-pure-call.sh [EXHAUSTIVE_NODES=5 | exact | tc1]
 #   a number  hand cases, generated cases and the exhaustive grammar to that bound
 #   exact     the exact-arithmetic family: C guest arithmetic against the model's
+#   tc1       the TC1 handler fixtures (both slices) with the TC0-A hand cases
 # Needs build/vendor/solo5 built at the pinned commit. Shen/JIT: see harness/jit.sh.
 set -eu
 . "$(dirname "$0")/jit.sh"
 if [ "${1:-5}" = exact ]; then
   batch=$(node "$root/tools/solo5/freerun-pure-call.mjs" --exact-arithmetic --build-only)
+elif [ "${1:-5}" = tc1 ]; then
+  batch=$(node "$root/tools/solo5/freerun-pure-call.mjs" --tc1 --build-only)
 else
   batch=$(node "$root/tools/solo5/freerun-pure-call.mjs" --exhaustive-nodes "${1:-5}" --build-only)
 fi
