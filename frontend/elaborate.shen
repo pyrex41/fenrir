@@ -859,11 +859,35 @@
   _ [] Acc -> (reverse Acc)
   Effect [D | Ds] Acc -> (fe.operations Effect Ds [(fe.operation-declaration Effect (fe.keys Acc) D) | Acc]))
 
+\\ (effect Name (op A --> B) ...), or (effect Name durable (op A --> B) ...) for an
+\\ effect the host discharges (spec/tc1/DURABLE.md section 1). [Name Operations Class].
 (define fe.effect
-  [list L C [_ [sym _ _ Name] | Operations]] ->
+  [list L C [E N [sym _ _ "durable"] | Operations]] -> (fe.effect-with [list L C [E N | Operations]] "durable")
+  [list L C [E N [sym _ _ "ordinary"] | Operations]] -> (fe.effect-with [list L C [E N | Operations]] "ordinary")
+  [list _ _ [_ _ [sym L C Word] | _]] ->
+    (fe.fail L C (make-string "~A is not an effect class: an effect is written (effect Name (operation A --> B) ...), or (effect Name durable (operation A --> B) ...) for one the host discharges" Word))
+  F -> (fe.effect-with F "ordinary"))
+
+(define fe.effect-with
+  [list L C [_ [sym _ _ Name] | Operations]] Class ->
     (if (and (> (length Operations) 0) (< (length Operations) 9))
-        [Name (fe.operations Name Operations [])]
+        [Name (fe.operations Name Operations []) Class]
         (fe.fail L C (make-string "effect ~A must declare 1 to 8 operations" Name))))
+
+\\ TC1-D1: true when the program declares a durable effect; it is then an artifact of
+\\ schema tc1-durable-demo/1, and every effect object names its class.
+(define fe.durable-program?
+  [] -> false
+  [[_ _ "durable"] | _] -> true
+  [_ | Es] -> (fe.durable-program? Es))
+
+(define fe.durable-effect?
+  Name -> (= (nth 3 (fe.effect-entry Name (value fe.*effects*))) "durable"))
+
+(define fe.effect-entry
+  _ [] -> [none none none]
+  Name [[Name | Rest] | _] -> [Name | Rest]
+  Name [_ | Es] -> (fe.effect-entry Name Es))
 
 \\ (define name {A --> B} parameter ... -> body): [Name A B Line Column Parameters Body].
 (define fe.parameters
@@ -959,8 +983,13 @@
                      true)
          L (nth 4 Main)
          C (nth 5 Main)
-         Input (if (= (nth 2 Main) "I64") true
-                   (fe.fail L C (make-string "the entry function main must take I64 (it is run with input 0), but it takes ~A" (fe.show-type (nth 2 Main)))))
+         \\ TC1-D1: a program with durable effects is a handler run by a host, which
+         \\ supplies the request: main may take any serializable argument.
+         Input (cond ((= (nth 2 Main) "I64") true)
+                     ((and (fe.durable-program? (value fe.*effects*)) (fe.plain? (nth 2 Main) [])) true)
+                     ((fe.durable-program? (value fe.*effects*))
+                       (fe.fail L C (make-string "the entry function main must take a serializable argument (the request its host supplies), but it takes ~A" (fe.show-type (nth 2 Main)))))
+                     (true (fe.fail L C (make-string "the entry function main must take I64 (it is run with input 0), but it takes ~A" (fe.show-type (nth 2 Main))))))
          Output (if (fe.plain? (nth 3 Main) []) true
                     (fe.fail L C (make-string "the entry function main must return a serializable value, but its result type ~A contains a function" (fe.show-type (nth 3 Main)))))
       (fe.check-handled (fe.entry-effects Functions Results))))
@@ -969,10 +998,13 @@
   [["main" | _] | _] [[_ Effects] | _] -> Effects
   [_ | Fs] [_ | Rs] -> (fe.entry-effects Fs Rs))
 
-\\ Only Emit may remain at the entry: every user effect is handled inside the program.
+\\ Only Emit and durable effects may remain at the entry: every ordinary effect is
+\\ handled inside the program. The durable ones left are the residual effects, which
+\\ the host discharges (DURABLE.md section 2).
 (define fe.check-handled
   [] -> true
   [["Emit" | _] | Rest] -> (fe.check-handled Rest)
+  [[Name | _] | Rest] -> (fe.check-handled Rest) where (fe.durable-effect? Name)
   [[Name L C Cause] | _] ->
     (fe.fail L C (make-string "effect ~A is not handled: it comes from ~A, and no (handle ~A ...) encloses that on the way from the entry function main" Name Cause Name)))
 
@@ -985,8 +1017,12 @@
   [Name Constructors] -> [object ["constructors" (map (/. K [object ["fields" (hd (tl K))] ["name" (hd K)]]) Constructors)] ["name" Name]])
 
 (define fe.effect-object
-  [Name Ops] -> [object ["name" Name]
-                        ["operations" (map (/. O [object ["argument_type" (nth 2 O)] ["name" (hd O)] ["result_type" (nth 3 O)]]) Ops)]])
+  [Name Ops Class] Durable ->
+    (let Operations ["operations" (map (/. O [object ["argument_type" (nth 2 O)] ["name" (hd O)] ["result_type" (nth 3 O)]]) Ops)]
+      (if Durable [object ["class" Class] ["name" Name] Operations] [object ["name" Name] Operations])))
+
+(define fe.main-argument
+  Functions -> (let Main (fe.binding "main" Functions) (if (= Main none) "I64" (nth 2 Main))))
 
 (define fe.limit
   Forms What Max -> (if (> (length Forms) Max)
@@ -1019,13 +1055,14 @@
          Strict (do (set fe.*strict* true) (set fe.*next* 0) (set fe.*locations* []))
          Results (fe.pass Functions)
          Entry (fe.check-entry Functions Results)
+         Durable (fe.durable-program? Effects)
       [object ["contract_version" "tc1-draft-1"]
               ["datatypes" (map (/. D (fe.datatype-object D)) (tl Datatypes))]
-              ["effects" (map (/. E (fe.effect-object E)) Effects)]
+              ["effects" (map (/. E (fe.effect-object E Durable)) Effects)]
               ["entry" "main"]
               ["functions" (map (/. R (hd R)) Results)]
-              ["input_schema" [object ["type" "I64"]]]
+              ["input_schema" [object ["type" (fe.main-argument Functions)]]]
               ["module" Module]
-              ["schema_version" "tc1-handler-demo/2"]
-              ["slice" "TC1-H2"]
+              ["schema_version" (if Durable "tc1-durable-demo/1" "tc1-handler-demo/2")]
+              ["slice" (if Durable "TC1-D1" "TC1-H2")]
               ["source_map" (fe.source-map File (value fe.*locations*) [])]]))

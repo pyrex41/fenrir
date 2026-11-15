@@ -280,6 +280,86 @@ tapes, catalog coverage, the Solo5 guest, the frontend. Evidence is bounded
 exploration, development grade; the fixtures, both machines and the harness
 share one author lineage.
 
+## TC1: durable effects (slice D1)
+
+```sh
+sh harness/run-tc1-durable.sh        # model against sandboxed JavaScript, hand fixtures, ~1 s
+sh harness/run-solo5-durable.sh      # the same fixtures in the Solo5 guest over control protocol v2, ~4 s
+```
+
+Contract: [spec/tc1/DURABLE.md](../spec/tc1/DURABLE.md). A durable effect that no user
+handler encloses is a host request: the machine stops in `HostWait` with a
+`HostRequest` observation and continues only with the host's reply, typed at the
+boundary (an ill-typed reply is `HostViolation`, not a trap). Model:
+[models/tc1/durable-machine.shen](../models/tc1/durable-machine.shen), a new file on
+top of the unchanged handler machine; JavaScript:
+[runtime/tc1/durable-machine.mjs](../runtime/tc1/durable-machine.mjs), extending the
+JavaScript handler machine; C: `backends/solo5/pure-call` (`pc_reply`), driven over
+[protocol v2](../spec/solo5/pure-call-control-v2.md) by
+[solo5-durable.shen](solo5-durable.shen). Measured on 15 November 2026:
+
+| Check | Result |
+| --- | --- |
+| Hand fixtures ([fixtures/tc1/durable-hand-cases.mjs](../fixtures/tc1/durable-hand-cases.mjs)), expectations written from DURABLE.md before any machine ran | 16 cases (12 Completed, 3 HostViolation, 1 AwaitingHost); model and sandboxed JavaScript agree step for step, 244 model steps; all 51 expectations hold; each of the 5 expectation kinds is shown able to fail (a perturbed expectation is reported) |
+| Contradictions | one: the model accepted a reply with a field too many for a field-less constructor and then failed; the model was wrong, fixed, no expectation changed (`CONTRADICTIONS` in the fixture file) |
+| JavaScript defects (killed / survived / crashed) | `double_reply` 10/6/0, `late_request_record` 15/1/0, `early_request` 15/1/0, `host_first` 2/14/0, `stale_handler` 1/15/0, `unchecked_reply` 3/13/0, `seq_reuse` 1/15/0 |
+| Solo5 guest, protocol v2, one step per request | 16 of 16 agree with the model at every step: 244 steps, 568 frames, 15 replies sent; the 3 ill-typed replies are refused by the guest with `BadReply` before the program runs |
+| Strict replay | 16 tapes exact on 3 cold boots each, re-recorded byte-identically; 3 v2 tape negatives (edited reply value `Diverged`, dropped reply `Structure:AfterTerminal`, reply while running `Structure:ReplyNotAwaited`); 7 hostile replies (`BadState`, `BadReply` ×4, `BadPayload`, `NotRunning`); 5 v2 byte vectors |
+| v1 unchanged | `run-solo5-control.sh` after the change: 271 programs, 4,658 steps, defects 196 and 15, 43 tapes exact, as before |
+| Validator | [tools/tc1/validator-differential.mjs](../tools/tc1/validator-differential.mjs) against the validator before the edit: 137,469 verdicts on 24,153 programs of 10 existing corpora plus 6 mutation kinds aimed at the edit, all identical |
+
+Two hostile-tape predictions were wrong and corrected after the first run: a dropped
+reply was predicted to diverge live and is refused earlier by the structure check, and
+the reply-while-running edit was first written at the wrong frame.
+
+## Service example A2: the handler in Fenrir
+
+```sh
+sh harness/run-service-fenrir.sh                  # default A1 scope, ~2 min (guest ~8 s)
+sh harness/run-service-fenrir.sh replay-retained  # the 13 retained counterexamples, ~9 s
+```
+
+[examples/service/accepted-job.fen](../examples/service/accepted-job.fen) is the
+accepted-job handler as a Fenrir program (8 functions, 121 nodes), with `atomic`,
+`once` and `jobs-stage` as library functions in the same file; storage contract
+[spec/service/HANDLER.md](../spec/service/HANDLER.md),
+[models/service-a2/store-contract.shen](../models/service-a2/store-contract.shen).
+[service-fenrir.shen](service-fenrir.shen) loads the A1 explorer and turns each handler
+into an A1 machine: a `submit`/`complete` label runs the program on the Shen TC1-D1
+model with the label's request as input and the A1 store as the host.
+
+Default scope (A1's): 2 tenants, 2 keys, 2 digests; at most 3 submits, 2 deliveries,
+2 responses, 1 crash. Measured on 15 November 2026:
+
+| What | Result |
+| --- | --- |
+| Refinement | The handler's machine has A1's graph exactly: 251,374 product states, 122,801 system states, 1,093,203 edges, no violation of any of the 12 checks. Every handler step taken (3,336,483, the explorer's and the predicates') was compared with A1's `svc.step` from the same state: none differ |
+| Runs | 88 run prefixes computed, 68 distinct completed runs (request, host replies); by determinism they cover every edge |
+| JavaScript | the sandboxed TC1-D1 implementation agrees with the model on all 68 runs, 10,808 steps |
+| Solo5 guest | protocol v2, all 68 runs agree at every step (10,808 steps, 68 replies, 21,956 frames); 68 tapes replay exactly on one cold boot each (quick mode) |
+
+Handler mutants ([examples/service/mutants/](../examples/service/mutants/)), predictions
+in [spec/service/fenrir-mutant-predictions.json](../spec/service/fenrir-mutant-predictions.json)
+written before exploration; shortest counterexample per property (aim in bold):
+
+| Mutant | Caught by | States |
+| --- | --- | --- |
+| respond-before-commit | **response 2** (`response.durable`), retry 2 | 251,374 |
+| two-commits | **atomicity 1**, response 2, progress 3 | 677,782 (the in-flight second commit) |
+| no-key-check | **retry 2**, atomicity 2, response 2 | 519,054 |
+| wrong-tenant | **authority 1**, retry 2 (not predicted: the other tenant's key table answers) | 251,374 |
+| conflict-undetected | **retry 2** | 176,142 |
+| undeduplicated-delivery | **retry 2** (`retry.delivery`), progress 3 | 251,374 |
+| commit-inside-atomic | **rejected statically** by the frontend: `Store` is not allowed in the lambda `atomic` wants at `(Unit --> Writes)` | — |
+| equivalent-control | nothing; A1's graph | 251,374 |
+
+Every predicted length was right; the one difference is the unpredicted retry failure
+of wrong-tenant. All 13 counterexamples are retained in
+[spec/service/counterexamples-a2](../spec/service/counterexamples-a2) and replay.
+Limits: A1's scope only; capabilities are forgeable (DURABLE.md §9), so wrong-tenant
+is caught dynamically, not refused; the host is A1's store under the stated contract,
+not SQLite (that is A3); one author lineage for handler, contract, machines and harness.
+
 ## What is still not Shen
 
 | Piece | Now | Notes |
@@ -299,7 +379,8 @@ share one author lineage.
   arithmetic with exact results on 5,478 boundary cases.
 - The harness and the model run in one Shen process. A bug in Shen/JIT itself
   could affect both; the guest is the independent side.
-- Entry input is fixed at `["int","0"]`.
+- Entry input is fixed at `["int","0"]`, except for TC1-D1 programs, whose input is
+  part of the case (fixtures) or the A1 label (the service handler).
 - Shen/JIT is pinned in the flake (`nix build .#shen-jit`). The runner scripts
   use that output when nix is available; see [jit.sh](jit.sh).
 

@@ -1,0 +1,17 @@
+{
+  "schema": "fenrir.service.mutant-predictions/1",
+  "contract": "spec/service/HANDLER.md",
+  "provenance": "Hand-derived from the Fenrir handler mutants of HANDLER.md section 5 and the storage contract of section 3, before any exploration of a Fenrir handler was run, as for spec/service/mutant-predictions.json: 'expected' is the property each mutant is aimed at, with the predicted length of its shortest counterexample schedule; 'also' other properties predicted to fail; 'clean' properties predicted to hold within the bounds. The harness reports actual against predicted; a mismatch is reported, not hidden. commit-inside-atomic is predicted to be rejected statically and is not explored.",
+  "mutants": {
+    "respond-before-commit":   {"expected": {"response": 2},  "also": {"retry": 2}, "clean": ["authority", "atomicity", "recovery"]},
+    "two-commits":             {"expected": {"atomicity": 1}, "also": {"response": 2, "progress": 3}, "clean": ["authority"]},
+    "no-key-check":            {"expected": {"retry": 2},     "also": {"atomicity": 2, "response": 2}, "clean": ["authority", "recovery"]},
+    "wrong-tenant":            {"expected": {"authority": 1}, "also": {}, "clean": ["atomicity", "response", "recovery"]},
+    "conflict-undetected":     {"expected": {"retry": 2},     "also": {}, "clean": ["authority", "atomicity", "response", "recovery", "progress"]},
+    "undeduplicated-delivery": {"expected": {"retry": 2},     "also": {"progress": 3}, "clean": ["authority", "atomicity", "response", "recovery"]},
+    "equivalent-control":      {"expected": {}, "also": {}, "clean": ["authority", "atomicity", "response", "retry", "recovery", "progress"]}
+  },
+  "static": {
+    "commit-inside-atomic": "rejected by the frontend: effect Store is not allowed in the lambda that atomic wants at type (Unit --> Writes)"
+  }
+}

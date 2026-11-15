@@ -1,0 +1,8 @@
+\\ Round trip: the hand fixture single-request (fixtures/tc1/durable-hand-cases.mjs),
+\\ in surface syntax. Store is durable: the host discharges it.
+
+(effect Store durable
+  (put I64 --> I64))
+
+(define main {I64 --> I64}
+  input -> (+ (perform Store put 41) 1))

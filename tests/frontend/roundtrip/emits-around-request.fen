@@ -1,0 +1,10 @@
+\\ Round trip: the hand fixture emits-around-request, in surface syntax.
+
+(effect Store durable
+  (put I64 --> I64))
+
+(define main {I64 --> I64}
+  input -> (do (emit "before" 1)
+               (let r (perform Store put 2)
+                 (do (emit "after" r)
+                     r))))

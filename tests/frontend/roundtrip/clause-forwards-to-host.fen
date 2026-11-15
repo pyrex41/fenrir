@@ -1,0 +1,10 @@
+\\ Round trip: the hand fixture clause-forwards-to-host, in surface syntax. In its
+\\ clause the handler is inactive, so the clause's perform goes to the host.
+
+(effect Store durable
+  (put I64 --> I64))
+
+(define main {I64 --> I64}
+  input -> (handle Store
+             ((put x) -> (perform Store put (+ x 1)))
+             (perform Store put 1)))

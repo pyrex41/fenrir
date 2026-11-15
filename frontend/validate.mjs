@@ -19,9 +19,30 @@ import {encode,EncodingError,EncodingLimit} from '../tools/tc0/canonical.mjs';
 const path=process.argv[2];
 if(!path||process.argv.length!==3){console.error('usage: node frontend/validate.mjs ARTIFACT.json');process.exit(2);}
 const bytes=readFileSync(path);
+// TC1-D1 (spec/tc1/DURABLE.md section 10): a durable program's entry may take a request
+// of any serializable type, supplied by its host. The artifact does not depend on the
+// input, so it is validated with the least value of that type (its first constructor
+// that ends, recursively); the real request is validated where the host supplies it.
+function least(t,datatypes,depth=0) {
+  if(depth>16)return null;
+  if(t==='Unit')return ['unit'];if(t==='Bool')return ['bool',false];if(t==='I64')return ['int','0'];
+  if(t==='Bytes')return ['bytes',''];if(t==='TrapCode')return ['data','TrapCode','Overflow'];
+  if(Array.isArray(t)&&t[0]==='Tuple'){const vs=t.slice(1).map(x=>least(x,datatypes,depth+1));return vs.includes(null)?null:['tuple',...vs];}
+  if(Array.isArray(t)&&t[0]==='Data'){
+    for(const c of datatypes.find(d=>d.name===t[1])?.constructors??[]){
+      const vs=c.fields.map(f=>least(f,datatypes,depth+1));if(!vs.includes(null))return ['data',t[1],c.name,...vs];
+    }
+  }
+  return null;
+}
+function input(bytes) {
+  try{const a=JSON.parse(bytes.toString('utf8'));
+    if(a?.schema_version==='tc1-durable-demo/1')return least(a.input_schema?.type,a.datatypes??[])??['int','0'];}catch{}
+  return ['int','0'];
+}
 let report;
 try {
-  const {artifact,node_count}=validatePureCallArtifact(bytes,['int','0']);
+  const {artifact,node_count}=validatePureCallArtifact(bytes,input(bytes));
   const canonical=encode(artifact);
   report={status:'valid',nodes:node_count,functions:String(artifact.functions.length),canonical:canonical.equals(bytes),
     sha256:createHash('sha256').update(canonical).digest('hex')};

@@ -7,7 +7,9 @@ written as text, run, and its result seen. Every choice of spelling below is a
 proposal for the owner to confirm or change (§8 lists them). Nothing here is
 qualified, and nothing here adds to the language: the frontend translates text
 into an artifact of schema `tc1-handler-demo/2` (contract
-[EFFECTS.md](EFFECTS.md), slice TC1-H2). What a program means is decided by the
+[EFFECTS.md](EFFECTS.md), slice TC1-H2), or of schema `tc1-durable-demo/1`
+(contract [DURABLE.md](DURABLE.md), slice TC1-D1) when the program declares a
+durable effect. What a program means is decided by the
 Shen model; whether an artifact is well formed is decided by two validators that
 must agree: the JavaScript validator `tools/tc0/pure-call-artifact.mjs`, and the
 Shen one of `typing/`, which checks the structural rules and then accepts the
@@ -40,6 +42,7 @@ steps: 74
 program  ::= form...
 form     ::= (datatype Name constructor...)            constructor ::= Name | (Name type...)
            | (effect Name (operation type --> type)...)
+           | (effect Name durable (operation type --> type)...)   discharged by the host
            | (define name {type --> type} parameter... -> e)
 
 type     ::= Unit | Bool | I64 | Bytes | TrapCode | Name      a declared datatype
@@ -119,6 +122,20 @@ constructors of the built-in `TrapCode` (`Overflow`, `DivZero`, `Bounds`,
 serializable, with input 0 (the harness's fixed input). Every user effect must
 be handled by the time control reaches `main`'s caller: `main`'s effect set may
 contain only `Emit`.
+
+**Durable effects** (DURABLE.md). `(effect Store durable (commit Tx --> Reply))`
+declares an effect the host discharges. Its performs are typed like any other;
+one that no `handle` encloses is a host request. It may stay in `main`'s
+effect set: those are the program's residual effects, its capability manifest.
+A `handle` of a durable effect is allowed and reinterprets it. A program that
+declares a durable effect elaborates to schema `tc1-durable-demo/1`, every
+effect object carries its class (`ordinary` or `durable`; `ordinary` may also
+be written), and `main` may take any serializable argument: the request its
+host supplies. `run` has no host: a run that reaches a host request prints it
+(`host request 0: Store.put 41`) and stops with `outcome: none (waiting for the
+host's reply; run has no host)`; a `main` that takes a request is not run. The
+harnesses supply hosts (`harness/run-tc1-durable.sh`,
+`harness/run-service-fenrir.sh`).
 
 **Identity.** Every expression node and every function gets a decimal ID in
 source order and a source-map row with the file as named on the command line
@@ -212,9 +229,9 @@ every message):
 | Types | `WHAT has type FOUND, but EXPECTED is expected`, where WHAT is the role (the condition of if, operand 2 of +, the argument of f, field 1 of Some, the body of f, the else branch, this match arm, the clause for E.op, the value resumed with), followed where useful by where the expectation comes from |
 | Arity | operands of an operator, fields of a constructor, binders of a match arm, parameters against a tuple type, a call with no argument |
 | Data | `project` of a non-tuple or with an index out of range; `match` on a non-datatype; a match that is not exhaustive (naming the missing constructors), has two arms for one constructor, or an arm for a constructor of another type; `=` or `emit` on a value containing a function |
-| Effects | an effect that reaches `main` unhandled, at the perform, call or application it comes from; a handler with a clause missing or given twice; an effect in a lambda whose wanted type does not allow it; an operation type that is not serializable |
+| Effects | an ordinary effect that reaches `main` unhandled, at the perform, call or application it comes from; a handler with a clause missing or given twice; an effect in a lambda whose wanted type does not allow it (this is how a host round trip inside `atomic` is refused: `tests/frontend/bad/durable-perform-inside-atomic.fen`); an operation type that is not serializable; a word after the effect name that is not a class |
 | Resumptions | never used; used twice on a path (at the second use); branches that disagree; used as a value; used inside a lambda or another handler's clause; `resume` or `discontinue` of something that is not a resumption |
-| Entry | no `main`; `main` not taking `I64`; `main` returning a function |
+| Entry | no `main`; `main` not taking `I64` (or, with durable effects, not taking a serializable request); `main` returning a function |
 | Size | the validator's caps: 200 expression nodes, nesting depth 64, 256 octets in a bytes literal. This message has no position |
 
 Other exit statuses: 2 for usage or an unreadable file, 3 for a defect in the
@@ -235,8 +252,8 @@ an outcome, with status 0.
 - Lambdas with several parameters; operators with more than two operands;
   `and`/`or` (the artifact has none; `if` expresses them).
 - Qualified constructor names: hence the uniqueness rule in §2.
-- An entry input other than `I64` 0; the validator would allow any
-  serializable input type, the harness supplies only this one.
+- An entry input other than `I64` 0 for `run`. A program with durable effects
+  may take any serializable request, which only a harness host supplies.
 - Emit labels outside printable ASCII. A label is otherwise any text; the
   Solo5 guest's lowering additionally wants `[A-Za-z_][A-Za-z0-9_-]{0,63}`.
 - More than one error per run; warnings (an unused variable, a clause that
@@ -249,21 +266,25 @@ an outcome, with status 0.
 
 `sh frontend/test.sh`, development evidence only:
 
-- 12 accepted programs (8 under `examples/`, 4 under
-  `tests/frontend/programs/`) elaborate, pass both validators, run on the model
-  and give the outcome and emissions written in their headers. Every artifact a
+- 13 accepted programs (8 under `examples/`, 5 under
+  `tests/frontend/programs/`) elaborate, pass validation, run on the model
+  and give the outcome and emissions written in their headers (for
+  `durable-host-request.fen`, the host request and the wait). Every artifact a
   test elaborates or runs is judged by both validators; the Shen side's typing
   files are compiled once into a heap image under `build/typing/` (keyed by
   their contents and the Shen/JIT build), which keeps the added cost to about
   0.05 s a run: the suite took about 59 s before the Shen checker was wired in
   and about 75 s after, Solo5 skipped in both.
-- 69 wrong programs under `tests/frontend/bad/` are each rejected with the
+- 73 wrong programs under `tests/frontend/bad/` are each rejected with the
   stated message at the stated line and column. The positions were recorded
   from the elaborator's output after reading each one against its program;
   they are regression expectations, not independent predictions (two were
-  predicted by hand first, and one of those predictions was a miscount).
-- 27 hand fixtures (17 of `fixtures/tc1`, 10 of `fixtures/tc0`) rewritten in
-  surface syntax under `tests/frontend/roundtrip/`: the elaborated artifact
+  predicted by hand first, and one of those predictions was a miscount; of the
+  four TC1-D1 ones, all four were predicted by hand and two columns were
+  miscounts, corrected from the output).
+- 32 hand fixtures (17 of `fixtures/tc1` handler cases, 5 of the TC1-D1
+  durable cases, 10 of `fixtures/tc0`) rewritten in surface syntax under
+  `tests/frontend/roundtrip/`: the elaborated artifact
   has the fixture's outcome and emissions on the model, and is the fixture's
   program up to a renaming of IDs.
 - Elaborating each example twice gives the same bytes.
@@ -305,3 +326,7 @@ author.
 11. Symbols for arithmetic and comparison (`+`, `<=`, `=`), words for the rest.
 12. `main : {I64 --> T}` as the entry, with input 0.
 13. One error per run.
+14. `(effect Name durable (operation A --> B) ...)`: the class as a bare word after
+    the name, `ordinary` the default and also writable (TC1-D1).
+15. With a durable effect declared, `main` may take any serializable request; `run`
+    shows the first host request and stops, having no host.
