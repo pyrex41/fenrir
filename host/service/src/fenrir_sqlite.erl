@@ -47,6 +47,12 @@ counters(Port) ->
     end.
 
 close(Port) ->
+    case erlang:port_info(Port) of
+        undefined -> ok; %% the program is gone already
+        _ -> close_open(Port)
+    end.
+
+close_open(Port) ->
     catch port_command(Port, <<$C>>),
     receive {Port, {exit_status, _}} -> ok after 5000 -> catch port_close(Port), ok end.
 

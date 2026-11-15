@@ -1,0 +1,1 @@
+{"schema": "fenrir.service.history/1", "tenants": 2, "scenario": "duplicated-mutation-on-retry", "expect": "rejected", "note": "a retry with the same key and payload made a second report and job", "events": [["submit", 0, 0, 0, ["accepted", [0, 0, 0, 0, 0]]], ["respond", ["accepted", [0, 0, 0, 0, 0]]], ["submit", 0, 0, 0, ["accepted", [0, 0, 0, 1, 1]]]], "expect_index": 2}

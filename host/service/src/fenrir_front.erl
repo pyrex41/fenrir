@@ -33,9 +33,12 @@ request(Req) ->
     Outcome = try fenrir_worker:run(Worker, Req) of
                   {ok, V, St} -> {response(V), St};
                   {refused, Why} -> {{refused, Why}, #{}};
-                  {failed, _Why, St} -> {aborted, St};
-                  {O, _Why, St} -> {O, St}
-              catch exit:_ -> {indeterminate, #{worker_exit => true}}
+                  {failed, Why, St} -> {aborted, St#{why => Why}};
+                  {O, Why, St} -> {O, St#{why => Why}}
+              catch
+                  %% The request never reached a worker (one is being restarted): nothing ran.
+                  exit:{noproc, _} -> {aborted, #{worker_exit => noproc}};
+                  exit:Why -> {indeterminate, #{worker_exit => element(1, Why)}}
               end,
     {Out, Stats} = Outcome,
     case Out of

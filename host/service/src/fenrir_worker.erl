@@ -171,6 +171,11 @@ host_request(Record, St, I) ->
                 _ -> throw({fail, failed, {'BadSteps', host_request}, St})
             end,
     fenrir_faults:hit(w2_request_before_commit, maps:get(ctx, St)),
+    %% A guest that is already gone gets no commit made on its behalf.
+    Port = maps:get(port, St),
+    receive {Port, {exit_status, N}} -> throw({fail, failed, {tender_exit, N}, St})
+    after 0 -> ok
+    end,
     St1 = St#{commit := sent},
     case fenrir_store:commit(Value) of
         {reply, Reply} ->
