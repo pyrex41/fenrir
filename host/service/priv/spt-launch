@@ -1,0 +1,9 @@
+#!/bin/sh
+# Descriptor plumbing only (no semantics): run the stock Solo5 spt tender with the
+# Erlang port's stdin as the guest's ctlin device (fd 0, host -> guest) and the port's
+# stdout as the guest's ctlout device (fd 2, guest -> host), the console (fd 1) to a file.
+# An Erlang port gives a program stdin and stdout only; the tender wants ctlout on fd 2
+# and the console kept apart, so fd 2 is pointed at the port's stdout pipe and fd 1 at
+# the console file. exec keeps the process id, so the port's os_pid is the tender's.
+#   spt-launch TENDER IMAGE CONSOLE
+exec "$1" --mem=32 --net:ctlin=@0 --net:ctlout=@2 "$2" 2>&1 1>"$3"

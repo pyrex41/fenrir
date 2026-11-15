@@ -1,0 +1,271 @@
+%% A3: a supervised Fenrir worker. It owns at most ONE solo5-spt tender process at a time
+%% (one request per boot: control protocol v1/v2 runs exactly one program per boot, v1
+%% section 6) and speaks control protocol v2 (spec/solo5/pure-call-control-v2.md) with it:
+%%
+%%   boot   host/service/priv/spt-launch: solo5-spt --mem=32 --net:ctlin=@0 --net:ctlout=@2
+%%          IMAGE with the port's stdin as ctlin (host -> guest) and the port's stdout as
+%%          ctlout (guest -> host); the console goes to a file and is never parsed
+%%   Hello  protocol, machine profile, batch identity and program count must be the
+%%          image's (image.json); anything else is refused (Identity)
+%%   Init   the request's entry (the request is lowered into the image: v2 section 3),
+%%          its artifact identity and schema; Ready must repeat them
+%%   Run    64 steps at a time until HostWait or a terminal execution
+%%   HostRequest -> fenrir_store:commit/1 -> Reply (A frame) -> the HostReply step
+%%   Completed -> the program's result (TaskTermination outcome) -> Terminate -> Bye, exit 0
+%%
+%% The worker type-checks nothing the guest checks (the reply's type is checked by the
+%% guest, the request's by the image's validation); it validates framing and the session
+%% strictly (v1 section 4, host side) and fails closed: any deviation terminates the
+%% tender and the request has no response. A commit the store could not finish (busy,
+%% aborted, indeterminate) also ends the run without a reply (DURABLE.md section 4: the
+%% host answers exactly once or never; D1 has no failure constructor in this handler's
+%% Reply type, so a busy store cannot be told to the program).
+-module(fenrir_worker).
+-behaviour(gen_server).
+-export([start_link/2, run/2, run/3, check_image/1]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
+
+-define(FRAME_TIMEOUT, 10000).
+-define(RUN_STEPS, 64).
+
+start_link(Name, Opts) -> gen_server:start_link({local, Name}, ?MODULE, Opts, []).
+
+%% run(Worker, Request) -> {ok, ResultValue, Stats} | {refused, Why} | {Outcome, Why, Stats}
+%%   Outcome: busy | aborted (nothing committed) | indeterminate (a commit may have
+%%   happened and no response exists) | failed (no commit was attempted)
+run(Worker, Request) -> run(Worker, Request, 120000).
+run(Worker, Request, Timeout) -> gen_server:call(Worker, {run, Request}, Timeout).
+
+init(Opts) ->
+    process_flag(trap_exit, true),
+    case check_image(maps:get(image, Opts)) of
+        {ok, Image} -> {ok, Opts#{image_info => Image, boots => 0}};
+        {error, E} -> {stop, E}
+    end.
+
+%% The image descriptor, the image and tender identities, and the capability manifest.
+check_image(ImageJson) ->
+    try
+        I = json:decode(element(2, {ok, _} = file:read_file(ImageJson))),
+        Image = maps:get(<<"image">>, I),
+        Tender = maps:get(<<"tender">>, I),
+        ok = same_sha(Image, maps:get(<<"image_sha256">>, I), image),
+        ok = same_sha(Tender, maps:get(<<"tender_sha256">>, I), tender),
+        Artifact = filename:join(maps:get(<<"batch_dir">>, I), "artifacts/0.json"),
+        ok = same_sha(Artifact, maps:get(<<"artifact_sha256">>, I), artifact),
+        case fenrir_manifest:check(Artifact, I) of
+            ok -> {ok, I};
+            {refused, Why} -> {error, {capability_manifest_refused, Why}}
+        end
+    catch
+        throw:{identity, What} -> {error, {image_identity, What}};
+        C:E -> {error, {bad_image_descriptor, C, E}}
+    end.
+
+same_sha(File, Want, What) ->
+    case file:read_file(File) of
+        {ok, B} ->
+            case binary:encode_hex(crypto:hash(sha256, B), lowercase) of
+                Want -> ok;
+                _ -> throw({identity, What})
+            end;
+        _ -> throw({identity, {missing, What}})
+    end.
+
+handle_call({run, Request}, _From, S = #{image_info := I}) ->
+    case entry(Request, I) of
+        {ok, Program} ->
+            T0 = erlang:monotonic_time(microsecond),
+            Result = session(Program, S),
+            T1 = erlang:monotonic_time(microsecond),
+            {reply, stats(Result, T1 - T0), S#{boots := maps:get(boots, S) + 1}};
+        {refused, Why} -> {reply, {refused, Why}, S}
+    end.
+
+handle_cast(_, S) -> {noreply, S}.
+handle_info(_, S) -> {noreply, S}.
+terminate(_, _) -> ok.
+
+stats({ok, V, St}, Us) -> {ok, V, St#{us => Us}};
+stats({O, W, St}, Us) -> {O, W, St#{us => Us}}.
+
+%% The image entry of a request; requests outside the image's domain are refused.
+entry({submit, T, K, D, Payload}, I) when Payload =:= <<D>> -> find([<<"submit">>, T, K, D], I);
+entry({submit, _, _, _, _}, _) -> {refused, payload_outside_image_domain};
+entry({complete, T, J, Ok}, I) -> find([<<"complete">>, T, J, Ok], I);
+entry(_, _) -> {refused, unknown_request}.
+
+find(Req, I) ->
+    case [maps:get(<<"program">>, E) || E <- maps:get(<<"entries">>, I), maps:get(<<"request">>, E) =:= Req] of
+        [P] -> {ok, P};
+        [] -> {refused, request_outside_image_domain}
+    end.
+
+%% ---------- one session: one boot, one request ----------
+
+session(Program, S = #{image_info := I}) ->
+    Console = filename:join(maps:get(console_dir, S, "/tmp"), "console-" ++ atom_to_list(maps:get(name, S, worker)) ++ ".txt"),
+    Port = open_port({spawn_executable, maps:get(launcher, S)},
+                     [binary, exit_status, use_stdio, {args, [maps:get(<<"tender">>, I), maps:get(<<"image">>, I), Console]}]),
+    OsPid = case erlang:port_info(Port, os_pid) of {os_pid, P} -> P; _ -> undefined end,
+    Ctx = #{tender => OsPid, worker => self()},
+    St0 = #{port => Port, buf => <<>>, seq => 0, epoch => 0, requests => 0, commit => none, ctx => Ctx,
+            frames => 0, runs => 0, replies => []},
+    try
+        {Hello, St1} = expect(St0, $H),
+        ok = check_hello(Hello, I),
+        T = boot_time(),
+        {Ready, St2} = request(St1, $I, init_payload(Program, I), $Y),
+        ok = check_ready(Ready, Program, I),
+        drive(St2#{boot_us => T}, I)
+    catch
+        throw:{fail, Kind, Why, StF} -> kill(Port, OsPid), outcome(Kind, Why, StF);
+        throw:{fail, Kind, Why} -> kill(Port, OsPid), outcome(Kind, Why, St0)
+    end.
+
+boot_time() -> erlang:monotonic_time(microsecond).
+
+init_payload(Program, I) ->
+    fenrir_proto:init_payload(maps:get(<<"artifact_sha256">>, I), maps:get(<<"batch_sha256">>, I),
+                              maps:get(<<"fuel">>, I), "normal", Program, maps:get(<<"protocol">>, I),
+                              maps:get(<<"artifact_schema">>, I)).
+
+%% A failed session's outcome, from what the store did in it.
+outcome(Kind, Why, St) ->
+    O = case {Kind, maps:get(commit, St)} of
+            {busy, _} -> busy;
+            {aborted, none} -> aborted;
+            {aborted, _} -> indeterminate;
+            {indeterminate, _} -> indeterminate;
+            {_, none} -> failed;
+            {_, _} -> indeterminate
+        end,
+    {O, Why, summary(St)}.
+
+summary(St) -> maps:with([frames, runs, requests, commit, replies], St).
+
+kill(Port, OsPid) ->
+    catch port_close(Port),
+    is_integer(OsPid) andalso os:cmd("kill -9 " ++ integer_to_list(OsPid)),
+    ok.
+
+drive(St, I) ->
+    {J, St1} = request(St, $R, fenrir_proto:run_payload(?RUN_STEPS), $S),
+    {Records, St2} = records(J, St1, ?RUN_STEPS),
+    St3 = St2#{runs := maps:get(runs, St2) + 1},
+    case maps:get(<<"execution">>, J) of
+        <<"Running">> ->
+            maps:get(requests, St3) =:= 0 andalso fenrir_faults:hit(w1_before_request, maps:get(ctx, St3)),
+            drive(St3, I);
+        <<"HostWait">> -> host_request(lists:last(Records), St3, I);
+        <<"Completed">> -> completed(Records, St3);
+        Other -> throw({fail, failed, {execution, Other}, St3})
+    end.
+
+host_request(Record, St, I) ->
+    Seq = maps:get(requests, St),
+    Value = case [E || E <- maps:get(<<"events">>, Record), maps:get(<<"kind">>, E) =:= <<"HostRequest">>] of
+                [#{<<"seq">> := SeqB, <<"effect">> := <<"Store">>, <<"operation">> := <<"commit">>, <<"value">> := V}] ->
+                    SeqB =:= integer_to_binary(Seq) orelse throw({fail, failed, {'BadSteps', request_seq}, St}),
+                    try fenrir_value:from_json(V) catch _:_ -> throw({fail, failed, {'BadSteps', request_value}, St}) end;
+                _ -> throw({fail, failed, {'BadSteps', host_request}, St})
+            end,
+    fenrir_faults:hit(w2_request_before_commit, maps:get(ctx, St)),
+    St1 = St#{commit := sent},
+    case fenrir_store:commit(Value) of
+        {reply, Reply} ->
+            St2 = St1#{commit := committed, replies := maps:get(replies, St1) ++ [fenrir_value:encode(Reply)]},
+            fenrir_faults:hit(w3_commit_before_reply, maps:get(ctx, St2)),
+            {J, St3} = request(St2, $A, fenrir_proto:reply_payload(Seq, Reply), $S),
+            {Records, St4} = records(J, St3, 1),
+            Echo = [V || #{<<"events">> := Es} <- Records, #{<<"kind">> := <<"HostReply">>, <<"value">> := V} <- Es],
+            Echo =:= [json:decode(fenrir_value:encode(Reply))] orelse throw({fail, failed, {'BadSteps', reply_echo}, St4}),
+            fenrir_faults:hit(w4_reply_before_response, maps:get(ctx, St4)),
+            St5 = St4#{requests := Seq + 1},
+            case maps:get(<<"execution">>, J) of
+                <<"Running">> -> drive(St5, I);
+                <<"Completed">> -> completed(Records, St5);
+                X -> throw({fail, failed, {execution, X}, St5})
+            end;
+        busy -> throw({fail, busy, store_busy, St1#{commit := none}});
+        {aborted, Why} -> throw({fail, aborted, Why, St1#{commit := none}});
+        {indeterminate, Why} -> throw({fail, indeterminate, Why, St1})
+    end.
+
+completed(Records, St) ->
+    Out = [O || #{<<"events">> := Es} <- Records, #{<<"kind">> := <<"TaskTermination">>, <<"outcome">> := O} <- Es],
+    case Out of
+        [[<<"Ok">>, V]] ->
+            Value = try fenrir_value:from_json(V) catch _:_ -> throw({fail, failed, {'BadSteps', outcome}, St}) end,
+            {Bye, St1} = request(St, $X, fenrir_proto:terminate_payload(), $B),
+            <<"Completed">> = maps:get(<<"execution">>, Bye),
+            ok = finish(St1),
+            {ok, Value, summary(St1)};
+        [[<<"Trap">>, C]] -> throw({fail, failed, {trap, C}, St});
+        _ -> throw({fail, failed, {'BadSteps', no_outcome}, St})
+    end.
+
+%% After Bye: nothing more on ctlout, and the tender exits 0.
+finish(St = #{port := Port}) ->
+    receive
+        {Port, {data, _}} -> throw({fail, failed, 'TrailingOutput', St});
+        {Port, {exit_status, 0}} -> ok;
+        {Port, {exit_status, N}} -> throw({fail, failed, {'TenderFailure', N}, St})
+    after ?FRAME_TIMEOUT -> throw({fail, failed, 'HarnessTimeout', St})
+    end.
+
+%% ---------- frames ----------
+
+request(St, Type, Payload, Want) ->
+    Seq = maps:get(seq, St) + 1,
+    Port = maps:get(port, St),
+    try port_command(Port, fenrir_proto:frame(Type, Seq, Payload))
+    catch error:badarg -> throw({fail, failed, tender_gone, St})
+    end,
+    expect(St#{seq := Seq}, Want).
+
+expect(St = #{port := Port, buf := Buf, seq := Seq}, Want) ->
+    case fenrir_proto:parse(Buf, Seq) of
+        {frame, $E, J, _} -> throw({fail, failed, {'GuestError', maps:get(<<"code">>, J, unknown)}, St});
+        {frame, Want, J, Rest} -> {J, St#{buf := Rest, frames := maps:get(frames, St) + 1}};
+        {frame, _, _, _} -> throw({fail, failed, 'UnexpectedType', St});
+        {error, Code} -> throw({fail, failed, Code, St});
+        more ->
+            receive
+                {Port, {data, D}} -> expect(St#{buf := <<Buf/binary, D/binary>>}, Want);
+                {Port, {exit_status, N}} -> throw({fail, failed, {tender_exit, N}, St})
+            after ?FRAME_TIMEOUT -> throw({fail, failed, 'HarnessTimeout', St})
+            end
+    end.
+
+check_hello(H, I) ->
+    Want = #{<<"batch_sha256">> => maps:get(<<"batch_sha256">>, I),
+             <<"machine_profile">> => maps:get(<<"machine_profile">>, I),
+             <<"protocol">> => maps:get(<<"protocol">>, I),
+             <<"programs">> => integer_to_binary(maps:get(<<"programs">>, I))},
+    case maps:with(maps:keys(Want), H) =:= Want andalso is_map(maps:get(<<"limits">>, H, none)) of
+        true -> ok;
+        false -> throw({fail, failed, {'Identity', hello}})
+    end.
+
+check_ready(R, Program, I) ->
+    Want = #{<<"artifact_sha256">> => maps:get(<<"artifact_sha256">>, I), <<"epoch">> => <<"0">>,
+             <<"execution">> => <<"Running">>, <<"fuel">> => maps:get(<<"fuel">>, I), <<"mode">> => <<"normal">>,
+             <<"program">> => integer_to_binary(Program), <<"schema">> => maps:get(<<"artifact_schema">>, I)},
+    case maps:with(maps:keys(Want), R) =:= Want of
+        true -> ok;
+        false -> throw({fail, failed, {'Identity', ready}})
+    end.
+
+%% Steps records: 1..N records, epochs consecutive from the current epoch.
+records(J, St, N) ->
+    Steps = maps:get(<<"steps">>, J, none),
+    E0 = maps:get(epoch, St),
+    Ok = is_list(Steps) andalso length(Steps) >= 1 andalso length(Steps) =< N
+        andalso [maps:get(<<"epoch">>, R, none) || R <- Steps] =:= [integer_to_binary(E) || E <- lists:seq(E0, E0 + length(Steps) - 1)]
+        andalso maps:get(<<"epoch">>, J, none) =:= integer_to_binary(E0 + length(Steps))
+        andalso lists:member(maps:get(<<"execution">>, J, none), [<<"Running">>, <<"Completed">>, <<"BudgetExhausted">>, <<"HostWait">>]),
+    case Ok of
+        true -> {Steps, St#{epoch := E0 + length(Steps)}};
+        false -> throw({fail, failed, 'BadSteps', St})
+    end.
