@@ -1,18 +1,25 @@
-// Structure of the proposed TC1 gate manifest, and what moved out of the TC0-A one.
+// Structure of the TC1 gate manifest, its registration, and what moved out of the TC0-A one.
 // These are consistency checks on the manifests, NOT gate evidence: only the
 // evaluators (harness/tc1-gate.shen, harness/gate.shen) issue verdicts.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 import {MUTANTS} from '../../tools/tc1/handler-defects.mjs';
 import {enumerateHandlers} from '../../tools/tc1/handler-enumerate.mjs';
 const json=path=>JSON.parse(readFileSync(path,'utf8'));
 const manifest=json('spec/tc1/tc1-requirements.json'),evaluator=readFileSync('harness/tc1-gate.shen','utf8');
 
-test('the TC1 manifest is proposed, closed over its rows, and cites known ledger rows', () => {
+test('the TC1 manifest is owner-accepted, closed over its rows, and cites known ledger rows', () => {
   assert.equal(manifest.schema,'tc1-requirement-manifest/1');
-  // Proposed: acceptance and registration are the owner's decision, recorded elsewhere.
-  assert.equal(manifest.status,'proposed');
+  // Accepted by the owner's instruction, not by line review; the record the manifest names says so.
+  assert.equal(manifest.status,'owner-accepted');
+  const record=manifest.review.split('. ')[0];
+  assert.equal(record,'campaigns/tc1/TC1_GATE_REGISTRATION.md');
+  assert.match(readFileSync(record,'utf8'),/by instruction/);
+  assert.match(manifest.review,/not by line review/);
+  // The record is about this manifest, byte for byte: a changed manifest needs a new record.
+  assert.ok(readFileSync(record,'utf8').includes(createHash('sha256').update(readFileSync('spec/tc1/tc1-requirements.json')).digest('hex')));
   assert.equal(manifest.evaluator,'harness/tc1-gate.shen');
   const ids=manifest.rows.map(r=>r.id);
   assert.equal(new Set(ids).size,ids.length);
@@ -30,7 +37,7 @@ test('the required rows are the ones the gate was specified with', () => {
   const required=manifest.rows.filter(r=>r.required).map(r=>r.check);
   assert.deepEqual(required,['source-identity','toolchain-pinned','unit-suite','tc0-a-gate','tc1-handlers','tc1-exhaustive',
     ...Object.keys(MUTANTS).map(key=>'tc1-defect:'+key),'tc1-guest-hand','tc1-guest-exhaustive',
-    'tc1-random','tc1-guest-random','tc1-random-control','tc1-reduction','tc1-reduced-replay']);
+    'tc1-random','tc1-guest-random','tc1-random-control','tc1-reduction','tc1-reduced-replay','tc1-remote-model','tc1-remote-run']);
   // An optional row is never among a claim's rows or the prerequisites.
   const optional=manifest.rows.filter(r=>!r.required).map(r=>r.id);
   for(const rows of [...Object.values(manifest.claims),manifest.claim_prerequisites])assert.ok(!rows.some(id=>optional.includes(id)));
@@ -61,6 +68,49 @@ test('the generated-family rows, the manifest and the harness state the same sco
   const names=readFileSync('harness/tc1-defects.shen','utf8').match(/\(define fh\.defect-names\n  -> \[([^\]]*)\]\)/)[1].match(/[a-z_]+/g);
   assert.deepEqual(names,Object.keys(MUTANTS));
   assert.deepEqual(rows.match(/\(define fh\.tc1-control-defects\n  -> \[([^\]]*)\]\)/)[1].match(/[a-z_]+/g),Object.keys(MUTANTS));
+});
+
+test('the gate is registered by the rule the TC0-A gate uses, and the workflow protects what it depends on', () => {
+  const workflow=json('.pi/fenrir-workflow.json'),check=workflow.checks['tc1-qualification'],core=readFileSync('harness/gate-core.shen','utf8');
+  // The rule itself is shared and unchanged: owner-accepted manifest, and a workflow check whose command runs the gate.
+  assert.ok(core.includes('(and (= (fh.field "status" Manifest) "owner-accepted") (cons? Command) (element? Runner Command))'));
+  assert.ok(evaluator.includes('(fh.registered-as "tc1-qualification" "harness/run-tc1-gate.sh" Manifest)'));
+  assert.ok(readFileSync('harness/gate.shen','utf8').includes('(fh.registered-as "tc0-a-qualification" "harness/run-gate.sh" Manifest)'));
+  assert.equal(check.kind,'qualification');
+  assert.deepEqual(check.command,['sh','harness/run-tc1-gate.sh']);
+  // Everything the TC0-A gate depends on (it is a row of this gate), and the remote-perform system.
+  const paths=new Set(check.authorityPaths);
+  for(const path of workflow.checks['tc0-a-qualification'].authorityPaths)assert.ok(paths.has(path),path);
+  for(const path of ['supervisor','backends/solo5/remote','tools/solo5/remote-build.mjs','models/tc1','spec/tc1','harness','campaigns/tc1','flake.nix','flake.lock'])assert.ok(paths.has(path),path);
+  // The workflow's completion condition is still the TC0-A slice's: this record does not change it.
+  assert.deepEqual(workflow.requiredChecks,['tc0-a-qualification']);
+});
+
+test('the remote rows, the manifest and the checks state the same scope', () => {
+  const rows=readFileSync('harness/tc1-remote-rows.shen','utf8'),number=name=>Number(rows.match(new RegExp(`\\(define fh\\.${name} -> (\\d+)\\)`))[1]);
+  const text=id=>manifest.rows.find(r=>r.id===id).acceptance;
+  const model=readFileSync('harness/tc1-remote.shen','utf8'),run=readFileSync('harness/tc1-remote-run.shen','utf8');
+  const count=(source,from,to,pattern)=>source.slice(source.indexOf(from),source.indexOf(to)).match(pattern).length;
+  // Model check: systems, mutants, hand schedules.
+  assert.equal(count(model,'(define fr.systems','(define fr.system\n',/\[remote-config \[\[/g),number('remote-model-systems'));
+  assert.equal(count(model,'(define fr.mutants','(define fr.aimed',/\[[a-z-]+ "[a-z0-9-]+" "[a-z-]+"\]/g),number('remote-model-mutants'));
+  assert.equal(count(model,'(define fr.hand-schedules','(define fr.required-kinds',/\(fr\.hand "/g),number('remote-model-hand'));
+  assert.ok(model.includes(`["hand_schedules" (if Control "0" "${number('remote-model-hand')}")]`));
+  assert.ok(text('remote-model').includes(`${number('remote-model-systems')} small systems`)&&text('remote-model').includes(`${number('remote-model-mutants')} model mutants`)&&
+    text('remote-model').includes(`${number('remote-model-hand')} hand schedules`)&&text('remote-model').includes('Model-level bounded exploration'));
+  // Run check: hand schedules, seeds, free runs, defect switches.
+  assert.equal(count(run,'(define fx.hand\n','(define fx.drop-last',/^ +\[?\["[a-z0-9-]+" \(?(fx\.declared\)|\[\]) (true|false)$/gm),number('remote-run-hand'));
+  assert.equal(Number(run.match(/\(set fx\.\*seeds\* (\d+)\)/)[1]),number('remote-run-seeds'));
+  assert.equal(count(run,'(define fx.free-runs','(define fx.free\n',/\["free[a-z-]*" \[object/g),number('remote-run-free'));
+  assert.equal(count(run,'(define fx.defects','(define fx.command\n',/^ +\[?\["[a-z0-9-]+" \(?(fx\.declared\)|\[\]) (true|false)$/gm),number('remote-run-defects'));
+  assert.ok(text('remote-run').includes(`${number('remote-run-hand')} hand schedules, ${number('remote-run-seeds')} seeded schedules and ${number('remote-run-free')} free-running runs`)&&
+    text('remote-run').includes(`${number('remote-run-defects')} defect switches`)&&text('remote-run').includes('Observed histories on spt accepted by the model'));
+  // The two claims say what kind of evidence they are, and rest on these rows only.
+  assert.deepEqual(manifest.claim_evidence,{'remote-perform-model-properties-bounded':'model-level bounded exploration','remote-perform-observed-histories-spt':'observed histories on spt accepted by the model'});
+  assert.deepEqual(manifest.claims['remote-perform-model-properties-bounded'],['toolchain-pinned','remote-model']);
+  assert.deepEqual(manifest.claims['remote-perform-observed-histories-spt'],['toolchain-pinned','remote-model','remote-run']);
+  // One Erlang lookup, used by the runner and by the gate row.
+  assert.ok(readFileSync('harness/run-tc1-remote-run.sh','utf8').includes('harness/find-erlang.sh')&&rows.includes('harness/find-erlang.sh'));
 });
 
 test('the TC0-A manifest no longer carries the TC1 rows, and its evaluator no longer checks them', () => {

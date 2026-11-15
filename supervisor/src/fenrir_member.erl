@@ -4,7 +4,7 @@
 %% It decides nothing: fenrir_relay tells it what to do.
 -module(fenrir_member).
 -behaviour(gen_server).
--export([start_link/1, boot/1, kill/1, put/5, grant/1, take/2, wait_exit/2, info/1, store/1]).
+-export([start_link/1, boot/1, kill/1, put/5, grant/1, grant_hold/1, take/2, wait_exit/2, info/1, store/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -define(BLOCKS, 64).
@@ -20,7 +20,11 @@ kill(Pid) -> gen_server:call(Pid, kill, 20000).
 %% Append a record to the inbox; granted at once or held (see grant/1).
 put(Pid, Type, Ref, Payload, Grant) -> gen_server:call(Pid, {put, Type, Ref, Payload, Grant}, 20000).
 %% Let the image consume one more inbox record.
-grant(Pid) -> gen_server:call(Pid, grant, 20000).
+grant(Pid) -> gen_server:call(Pid, {grant, false}, 20000).
+%% The same, and the image is to stop just before it replies to that record,
+%% without exiting (the inbox header's hold, wire.h): the place for a kill
+%% between a peer's commit and its reply.
+grant_hold(Pid) -> gen_server:call(Pid, {grant, true}, 20000).
 %% The next outbox record: {ok, Record} | timeout | {exited, Status} | {malformed, Why}.
 take(Pid, TimeoutMs) -> gen_server:call(Pid, {take, TimeoutMs}, TimeoutMs + 20000).
 wait_exit(Pid, TimeoutMs) -> gen_server:call(Pid, {wait_exit, TimeoutMs}, TimeoutMs + 20000).
@@ -31,7 +35,7 @@ init(#{name := Name, kind := Kind, image := Image, tender := Tender, dir := Dir,
     process_flag(trap_exit, true),
     {ok, #{name => Name, kind => Kind, image => Image, tender => Tender, dir => Dir, life_ms => Life,
            options => Options, incarnation => 0, port => none, os_pid => none, exit => none,
-           console => [], consoles => [], count => 0, grant => 0, taken => 0, inbox => none, outbox => none}}.
+           console => [], consoles => [], count => 0, grant => 0, hold => 0, taken => 0, inbox => none, outbox => none}}.
 
 path(#{dir := Dir, name := Name}, What) -> filename:join(Dir, binary_to_list(Name) ++ "." ++ What).
 
@@ -43,7 +47,7 @@ handle_call(boot, _From, S0 = #{port := none}) ->
     ok = file:write_file(path(S1, "outbox"), Empty),
     {ok, In} = file:open(path(S1, "inbox"), [read, write, raw, binary]),
     {ok, Out} = file:open(path(S1, "outbox"), [read, raw, binary]),
-    S2 = S1#{incarnation := Inc, count := 0, grant := 0, taken := 0, inbox := In, outbox := Out,
+    S2 = S1#{incarnation := Inc, count := 0, grant := 0, hold := 0, taken := 0, inbox := In, outbox := Out,
              console := [], exit := none},
     ok = write_header(S2),
     Devices = ["--block:inbox=" ++ path(S2, "inbox"), "--block:outbox=" ++ path(S2, "outbox")] ++
@@ -87,11 +91,11 @@ handle_call({put, Type, Ref, Payload, Grant}, _From, S = #{inbox := In, count :=
     ok = write_header(S1),
     {reply, {ok, Seq}, S1};
 handle_call({put, _, _, _, _}, _From, S) -> {reply, {error, inbox_full}, S};
-handle_call(grant, _From, S = #{grant := Grant, count := Count}) when Grant < Count ->
-    S1 = S#{grant := Grant + 1},
+handle_call({grant, Hold}, _From, S = #{grant := Grant, count := Count}) when Grant < Count ->
+    S1 = S#{grant := Grant + 1, hold := case Hold of true -> Grant + 1; false -> maps:get(hold, S) end},
     ok = write_header(S1),
     {reply, ok, S1};
-handle_call(grant, _From, S) -> {reply, {error, nothing_to_grant}, S};
+handle_call({grant, _}, _From, S) -> {reply, {error, nothing_to_grant}, S};
 handle_call({take, TimeoutMs}, _From, S) ->
     {Reply, S1} = take_record(S, deadline(TimeoutMs)),
     {reply, Reply, S1};
@@ -154,8 +158,9 @@ close_files(S = #{inbox := In, outbox := Out}) ->
     [file:close(F) || F <- [In, Out], F =/= none],
     S#{inbox := none, outbox := none}.
 
-write_header(#{inbox := In, incarnation := Inc, count := Count, grant := Grant}) ->
-    file:pwrite(In, 0, fenrir_wire:header(#{magic => mailbox, kind => inbox, incarnation => Inc, count => Count, grant => Grant})).
+write_header(#{inbox := In, incarnation := Inc, count := Count, grant := Grant, hold := Hold}) ->
+    file:pwrite(In, 0, fenrir_wire:header(#{magic => mailbox, kind => inbox, incarnation => Inc, count => Count, grant => Grant,
+                                            hold => Hold})).
 
 %% The image may be writing its header while it is read here: a block that does
 %% not decode is read again until the deadline before it counts as malformed.

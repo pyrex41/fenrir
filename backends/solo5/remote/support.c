@@ -80,7 +80,7 @@ static int inbox_header(struct mailbox *m,struct frw_header *h) {
     return -EXIT_MALFORMED;
 }
 static int outbox_header(struct mailbox *m) {
-    struct frw_header h={FRW_MAILBOX_MAGIC,FRW_OUTBOX,m->incarnation,m->sent,m->sent};
+    struct frw_header h={FRW_MAILBOX_MAGIC,FRW_OUTBOX,m->incarnation,m->sent,m->sent,0};
     frw_encode_header(&h,block);
     return solo5_block_write(m->outbox,0,block,FRW_BLOCK)==SOLO5_R_OK?1:-EXIT_DEVICE;
 }
@@ -90,7 +90,7 @@ int mailbox_open(struct mailbox *m,uint64_t life_ns) {
     if(!acquire("inbox",&m->inbox,&m->inbox_blocks) || !acquire("outbox",&m->outbox,&m->outbox_blocks))return -EXIT_DEVICE;
     if((r=inbox_header(m,&h))!=1)return r;
     if(h.magic!=FRW_MAILBOX_MAGIC || h.kind!=FRW_INBOX)return -EXIT_MALFORMED;
-    m->incarnation=h.incarnation;m->count=h.count;m->grant=h.grant;m->consumed=0;m->sent=0;
+    m->incarnation=h.incarnation;m->count=h.count;m->grant=h.grant;m->hold=h.hold;m->consumed=0;m->sent=0;
     return 1;
 }
 int mailbox_announce(struct mailbox *m) {return outbox_header(m);}
@@ -109,7 +109,7 @@ int mailbox_receive(struct mailbox *m,struct frw_record *r) {
         /* The header may only move forward within one incarnation. */
         if(h.magic!=FRW_MAILBOX_MAGIC || h.kind!=FRW_INBOX || h.incarnation!=m->incarnation ||
            h.count<m->count || h.grant<m->grant || (uint64_t)h.count>=m->inbox_blocks)return -EXIT_MALFORMED;
-        m->count=h.count;m->grant=h.grant;
+        m->count=h.count;m->grant=h.grant;m->hold=h.hold;
         if(m->grant>m->consumed){
             uint32_t seq=m->consumed+1;
             if(solo5_block_read(m->inbox,(solo5_off_t)seq*FRW_BLOCK,block,FRW_BLOCK)!=SOLO5_R_OK)return -EXIT_DEVICE;
@@ -117,6 +117,14 @@ int mailbox_receive(struct mailbox *m,struct frw_record *r) {
             m->consumed=seq;
             return 1;
         }
+        solo5_time_t now=solo5_clock_monotonic();
+        if(now>=m->deadline)return -EXIT_LIFETIME;
+        pause_until(now+1000000u);
+    }
+}
+int mailbox_held(const struct mailbox *m,uint32_t seq) {return m->hold && m->hold==seq;}
+int mailbox_hold(struct mailbox *m) {
+    for(;;){
         solo5_time_t now=solo5_clock_monotonic();
         if(now>=m->deadline)return -EXIT_LIFETIME;
         pause_until(now+1000000u);

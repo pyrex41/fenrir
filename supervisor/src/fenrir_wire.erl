@@ -22,20 +22,25 @@ sealed(<<Head:24/binary, Crc:32/little, Tail/binary>>) ->
 zero(Bin) -> Bin =:= binary:copy(<<0>>, byte_size(Bin)).
 
 %% #{magic := mailbox | store, kind := inbox | outbox | store, incarnation, count, grant}
-header(#{magic := Magic, kind := Kind, incarnation := Inc, count := Count, grant := Grant}) ->
+%% and, for an inbox only, hold: the granted record the image is to stop at
+%% before it replies (0 or absent: none).
+header(H = #{magic := Magic, kind := Kind, incarnation := Inc, count := Count, grant := Grant}) ->
     M = case Magic of mailbox -> ?MAILBOX; store -> ?STORE end,
     K = case Kind of inbox -> 1; outbox -> 2; store -> 3 end,
+    Hold = maps:get(hold, H, 0),
+    true = Hold =:= 0 orelse (Kind =:= inbox andalso Hold =< Grant),
     seal(<<M:32/little, 1:16/little, K:16/little, Inc:32/little, Count:32/little, Grant:32/little,
-           0:32, 0:32, 0:((?BLOCK - 28) * 8)>>).
+           Hold:32/little, 0:32, 0:((?BLOCK - 28) * 8)>>).
 
 decode_header(<<M:32/little, 1:16/little, K:16/little, Inc:32/little, Count:32/little, Grant:32/little,
-                0:32, _Crc:32, Rest/binary>> = Block) when byte_size(Block) =:= ?BLOCK ->
+                Hold:32/little, _Crc:32, Rest/binary>> = Block) when byte_size(Block) =:= ?BLOCK ->
     case sealed(Block) andalso zero(Rest) of
         false -> malformed;
         true ->
             case {M, K} of
-                {?MAILBOX, 1} when Inc > 0, Grant =< Count ->
-                    {ok, #{magic => mailbox, kind => inbox, incarnation => Inc, count => Count, grant => Grant}};
+                {?MAILBOX, 1} when Inc > 0, Grant =< Count, Hold =< Grant ->
+                    {ok, #{magic => mailbox, kind => inbox, incarnation => Inc, count => Count, grant => Grant, hold => Hold}};
+                _ when Hold =/= 0 -> malformed;
                 {?MAILBOX, 2} when Inc > 0, Grant =:= Count ->
                     {ok, #{magic => mailbox, kind => outbox, incarnation => Inc, count => Count, grant => Grant}};
                 {?STORE, 3} when Inc =:= 0, Count =< Grant ->

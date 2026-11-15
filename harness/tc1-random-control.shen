@@ -1,4 +1,4 @@
-\\ Fenrir harness: the negative control of the generated-family row of the proposed TC1
+\\ Fenrir harness: the negative control of the generated-family row of the TC1
 \\ gate, on its own. It runs that row's check (fh.tc1-random-with, tc1-random-rows.shen)
 \\ on one seed with each injected defect of the JavaScript handler machine switched on,
 \\ and once with none. Pass: FAIL with every defect, PASS with none.

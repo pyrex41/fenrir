@@ -106,7 +106,7 @@ sh harness/run-tc1-random.sh                       # 20,000 generated handler pr
 sh harness/run-tc1-random.sh 20 1000 noguest       # the same without the guest, ~1 min
 sh harness/run-tc1-random-control.sh               # that check must fail with each injected defect switched on
 sh harness/run-tc1-reduce.sh                       # find, shrink and replay a failure per injected defect, ~30 s
-sh harness/run-tc1-gate.sh                         # the proposed TC1 gate, about 8 minutes
+sh harness/run-tc1-gate.sh                         # the TC1 gate, about 9 minutes
 ```
 
 The contract is [spec/tc1/EFFECTS.md](../spec/tc1/EFFECTS.md) (draft); its §9
@@ -122,10 +122,18 @@ has the numbers. In short:
   if the batch differs from it.
 - **[tc1-coverage.shen](tc1-coverage.shen):** all fifteen handler step kinds of
   the contract's step table are exercised.
-- **[tc1-gate.shen](tc1-gate.shen):** a separate gate for TC1 with nineteen
-  required rows, one of which is a passing TC0-A gate on the same commit. It is
-  proposed and unregistered, so it reports `qualification: UNKNOWN`. On a
-  committed tree its verdict is PASS.
+- **[tc1-gate.shen](tc1-gate.shen):** a separate gate for TC1 with twenty-one
+  required rows. One is a passing TC0-A gate on the same commit; two are the
+  checks of remote perform below. It was registered on 15 November 2026 by the
+  owner's instruction, as the check `tc1-qualification` with the manifest
+  `spec/tc1/tc1-requirements.json` (status `owner-accepted`); the
+  [registration record](../campaigns/tc1/TC1_GATE_REGISTRATION.md) says on
+  what basis, what the gate does not show, and how to revoke it. Its report
+  says `authority: owner-accepted, registered` and its `qualification` is its
+  verdict, by the rule the TC0-A gate uses. On a committed tree the verdict is
+  PASS on 21 of 21 required rows. That was a direct run, not a run through the
+  workflow controller on a supported runner, so there is no qualification
+  receipt.
 
 ### Remote perform
 
@@ -140,7 +148,24 @@ supervisor of [supervisor/](../supervisor/README.md) once per schedule,
 replays the event log it recorded through the model, checks the properties of
 [tc1-remote-properties.shen](tc1-remote-properties.shen) on the replay, and
 compares the guests' console frames and the peer's store with what the model
-says. Both are development evidence and in no gate.
+says.
+
+Both are rows of the TC1 gate ([tc1-remote-rows.shen](tc1-remote-rows.shen)),
+each with its negative control run first:
+
+| Row | Evidence class | Needs | Otherwise |
+| --- | --- | --- | --- |
+| remote-model | Model-level bounded exploration; no implementation is run | Six systems explored with no property failing, every step kind taken, nine mutants killed, nine hand schedules passing, control failed as required | FAIL; a report with other counts is UNKNOWN |
+| remote-run | Observed histories on `spt` accepted by the model | 13 hand, 40 seeded and 3 free-running schedules all accepted, every step kind taken, five defects killed, control failed as required | FAIL; no Erlang/OTP or no Solo5 build is BLOCKED; a supervisor that does not compile, or other counts, is UNKNOWN |
+
+The gate's toolchain row also requires that the Erlang/OTP found by
+[find-erlang.sh](find-erlang.sh), which the runner script uses too, is the
+flake's `erlang` output.
+
+A peer killed between its durable commit and its reply (EFFECTS.md §12.7,
+owner ruling of 15 November 2026) is a step of the model, a hand schedule and
+a possible choice of the seeded schedules in both checks, and one free-running
+run kills the peer there from outside.
 
 ### The generated family
 

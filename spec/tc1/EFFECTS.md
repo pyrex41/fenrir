@@ -1,22 +1,27 @@
 # TC1 effect contract
 
-Draft 4 • 15 November 2026 • For owner review
+Draft 5 • 15 November 2026 • For owner review
 
 **Status.** Written together with its implementation, at the owner's request,
 so the text and the behaviour can be reviewed side by side. Both slices are
 implemented in the Shen model, in an independent JavaScript implementation and
 in the C machine that runs as a Solo5 guest, and checked by the harness: H1,
-tail-resumptive handlers, and H2, explicit one-shot resumption. Nothing in this
-document is qualified. It supersedes §5 of
+tail-resumptive handlers, and H2, explicit one-shot resumption. The TC1 gate
+is registered (§9); no receipt from the workflow controller exists for it yet,
+and nothing here is proved. It supersedes §5 of
 [02_TINY_LANGUAGE_CORE.md](../../02_TINY_LANGUAGE_CORE.md) for TC1 and answers
 the open questions of the earlier handler task packet (PR #7); §10 lists them.
-Draft 4 adds §12, remote perform between images. That section is a contract
-and a Shen model checked by bounded exploration; it has no implementation.
+Draft 4 added §12, remote perform between images: a contract, a Shen model
+checked by bounded exploration, and a first implementation. Draft 5 records
+the owner's rulings of 15 November 2026 on questions 1, 2 and 10 of §12.10,
+specifies a peer's crash between its durable commit and its reply (§12.3,
+§12.7), and records that the TC1 gate has two rows for §12 and is registered
+(§9, §12.8, §12.11).
 
 Owner decisions of 14 November 2026 are folded in: a clause may continue after
 `resume` returns (§7); performs of user effects are not observations (§5);
-operation types stay serializable for now (§1); TC1 has its own gate, proposed
-and not yet registered (§9).
+operation types stay serializable for now (§1); TC1 has its own gate (§9),
+registered on 15 November 2026 by the owner's instruction.
 
 TC1 is TC0-A plus what is below. Everything TC0-A specifies (values, checked
 I64, evaluation order, calls, closures, data, traps, `emit`) is unchanged.
@@ -208,7 +213,7 @@ sh harness/run-tc1-handlers.sh                     # hand fixtures: model agains
 sh harness/run-tc1-exhaustive.sh                   # every program of grammar H: the same comparison
 sh harness/run-solo5-pure-call.sh tc1              # hand fixtures: model against the Solo5 guest
 sh harness/run-solo5-pure-call.sh tc1-exhaustive   # grammar H: model against the Solo5 guest
-sh harness/run-tc1-gate.sh                         # the proposed TC1 gate, all of the above and more
+sh harness/run-tc1-gate.sh                         # the TC1 gate, all of the above and more
 ```
 
 **Hand fixtures** (`fixtures/tc1/handler-hand-cases.mjs`). Twenty programs,
@@ -252,11 +257,19 @@ the extended C machine still agrees with the model on those and on the 8,745
 exact-arithmetic programs.
 
 **The TC1 gate** (`harness/tc1-gate.shen`, manifest
-`spec/tc1/tc1-requirements.json`) has fourteen required rows, including a
-passing TC0-A gate on the same commit, and aggregates as the TC0-A gate does.
-It is **proposed**: it reports `authority: UNREGISTERED` and
-`qualification: UNKNOWN` until the owner registers it. On a committed tree it
-gives verdict PASS on 14 of 14 required rows.
+`spec/tc1/tc1-requirements.json`) has twenty-one required rows, including a
+passing TC0-A gate on the same commit and two rows for remote perform (§12.8,
+§12.11), and aggregates as the TC0-A gate does. It is **registered**: on 15
+November 2026 the owner instructed that the two remote rows be added and the
+gate registered, the manifest's status is `owner-accepted`, and the workflow
+configuration has the check `tc1-qualification`. That was acceptance by
+instruction, not a line-by-line review;
+[the registration record](../../campaigns/tc1/TC1_GATE_REGISTRATION.md) says
+what was registered, what the gate does not show, and how to revoke it. The
+report now says `authority: owner-accepted, registered` and its
+`qualification` is its verdict. On a committed tree it gives verdict PASS on
+21 of 21 required rows. No run through the workflow controller on a supported
+runner has been made, so there is no qualification receipt.
 
 Not done: programs above 7 nodes; in the exhaustive family, effects with
 several operations, non-I64 operation types, closures, and resume and
@@ -287,8 +300,14 @@ Settled by the owner on 14 November 2026:
 1. A clause may continue after `resume` returns (§7).
 2. Performs of user effects are not observations (§5).
 3. Operation types stay serializable for now (§1).
-4. TC1 gets its own gate (§9). It exists and is proposed; registering it is
-   an owner decision.
+4. TC1 gets its own gate (§9).
+
+Settled by the owner on 15 November 2026, by instruction in conversation and
+not by line review:
+
+5. Questions 1, 2 and 10 of §12.10, as stated there.
+6. The two checks of remote perform are rows of the TC1 gate, and the gate is
+   registered (§9).
 
 Open:
 
@@ -309,8 +328,12 @@ model (§12.11). That is observed histories accepted, not a proof, and there is
 no `hvt` run. Paragraphs marked *Clarification (implementation)* were added
 because the implementation forced the question. The owner's decisions of 15 November
 2026 are taken as fixed: three outcomes and failure as data; no continuation
-crosses an image boundary; a static, declared topology. Where this section had
-to choose beyond them, the choice is listed in §12.10.
+crosses an image boundary; a static, declared topology. Later the same day
+the owner ruled on three of the choices this section had made beyond them:
+refusal of undeclared connections, who chooses the key, and a peer killed
+between its commit and its reply. Those are marked in §12.10; the other
+choices listed there are still open. Both checks of this section are rows of
+the TC1 gate (§9).
 
 ### 12.1 Systems
 
@@ -355,13 +378,20 @@ attempt for the same request id; that is what a retry is.
 
 - **Caller obligation.** A key stands for one operation and one argument. What
   a peer does with a key reused for a different argument is not specified.
-- **Peer obligation: idempotent per request id.** Acting on a request is one
-  atomic durable step: either the request id has a reply record, and the peer
-  sends that value again and changes nothing; or it applies the request,
-  records the reply, and sends it. The record is durable, so this holds across
-  the peer's restarts. The obligation covers every way a request can arrive
-  twice: a copy duplicated by the supervisor, a retry after `timed_out`, and a
-  caller that restarted and performs again.
+- **Peer obligation: idempotent per request id.** Acting on a request has two
+  parts, in this order. First the *commit*, one atomic durable step: if the
+  request id has a reply record, nothing changes; otherwise the request is
+  applied and its reply recorded, together. Then the *reply*: the recorded
+  value is sent. The record is durable, so this holds across the peer's
+  restarts. The obligation covers every way a request can arrive twice: a copy
+  duplicated by the supervisor, a retry after `timed_out`, and a caller that
+  restarted and performs again.
+- **Commit before reply.** A peer never sends a reply for which it has no
+  durable record. A crash can fall between the two parts (§12.7): the request
+  is then applied and recorded, and no reply for it exists. Whether a request
+  id has been applied is what the peer's durable store says, and nothing else:
+  not what the supervisor saw, and not its record of events (owner ruling,
+  §12.10 question 10).
 
 ### 12.4 Outcomes
 
@@ -413,9 +443,8 @@ back along the connection of its request.
 This is an authority property: which member can cause which other member to
 act. It is not confidentiality (§12.9).
 
-*Clarification (implementation).* The first implementation assumes the answer
-to question 1 of §12.10 that was recommended for it: the first check is when
-the system is assembled. Each image carries the connections its program was
+*Clarification (implementation); owner ruling of 15 November 2026 (§12.10
+question 1).* The first check is when the system is assembled. Each image carries the connections its program was
 built with, and if one of them is not in the manifest the supervisor starts no
 member at all. The refusal above stays as the backstop behind it,
 because it does not depend on what an image says about itself. A system that
@@ -430,6 +459,28 @@ it and the volatile state of a fresh image: the program starts from its
 beginning, no perform is pending, and the inbox is empty. Messages in flight
 stay with the supervisor, which may still deliver or drop them.
 
+**A crash between a peer's commit and its reply** (owner ruling of 15 November
+2026, §12.10 question 10). The peer has committed the oldest request in its
+inbox and crashes before any reply is emitted. Afterwards the durable store
+has the application and its reply record; no reply for it is in flight; the
+image, with the rest of its inbox, is lost as in any crash; and nobody outside
+the peer has seen the action. The request had been handed over, so `peer_down`
+is not possible for it: the caller can only get `timed_out`. When a copy of
+the same request id reaches the peer again, in this incarnation's successor or
+any later one, the peer finds the record and sends the recorded value: the
+request is applied once, and the retry's `reply(v)` carries the value that was
+committed before the crash.
+
+In the model this is one step, `crash-after-commit`, enabled wherever acting
+would apply a request and a crash is possible. It is one step and not a
+separate commit and reply because nothing of the peer can happen between its
+commit and its reply except the crash, and every other member's steps commute
+with that gap. It adds no reachable state: the state after it is the state
+after acting, losing the reply, and crashing. What it adds is a way to get
+there in which no reply ever existed, which is what an implementation does
+when the kill lands there. Where acting would only replay, a crash before the
+reply changes nothing durable and is the ordinary crash.
+
 So a restarted caller performs its requests again with the same keys, and the
 peer answers from its records. A caller that must not start over keeps its
 progress in its durable store; that is the durable workflow level of amendment
@@ -442,6 +493,13 @@ step: issued, refused, handed, acted (applied or replayed, with the value),
 outcome, stale-reply, dropped, duplicated, crashed, restarted. As in amendment
 §14, one member's events are ordered; events of different members are not.
 
+The record is what the supervisor could observe, and it is not the authority
+on what a peer did (owner ruling, §12.10 question 10). It learns of an action
+from the reply. A peer that crashed after its commit and before its reply is
+recorded as crashed-after-commit when the supervisor placed the crash there or
+found the commit in the peer's store afterwards; the store is on the host
+side. A later `replayed` is justified by the store, whatever the record says.
+
 ```sh
 sh harness/run-tc1-remote.sh       # explores the model, its mutants, and a negative control
 ```
@@ -453,33 +511,35 @@ steps; drops, timeouts, restarts and reordering are not bounded.
 
 | System | Crashes, duplicates | States | Transitions | Schedules |
 | --- | --- | --- | --- | --- |
-| Caller, peer; one request, one retry | 1, 1 | 32,171 | 147,134 | 8,025,082,041,873 |
-| The same | 2, 0 | 261,140 | 1,250,008 | 49,484,158,988,752,448 |
-| Caller, peer; two requests, one retry on the first | 1, 0 | 221,847 | 1,086,275 | 11,992,843,538,162,608 |
-| Caller, two peers; one connection undeclared | 2, 1 | 37,689 | 157,327 | 258,248,093,937 |
-| Two callers using the same key, one peer | 1, 1 | 33,065 | 144,944 | 287,911,634,530 |
-| Caller is a tc1 handler-machine program with one retry; peer | 1, 1 | 47,605 | 225,864 | 97,146,742,095,094 |
+| Caller, peer; one request, one retry | 1, 1 | 32,171 | 147,206 | 8,025,082,064,588 |
+| The same | 2, 0 | 261,140 | 1,250,936 | 49,484,159,104,057,142 |
+| Caller, peer; two requests, one retry on the first | 1, 0 | 221,847 | 1,086,413 | 11,992,843,538,401,883 |
+| Caller, two peers; one connection undeclared | 2, 1 | 37,689 | 157,675 | 258,249,267,395 |
+| Two callers using the same key, one peer | 1, 1 | 33,065 | 145,220 | 287,912,716,706 |
+| Caller is a tc1 handler-machine program with one retry; peer | 1, 1 | 47,605 | 225,968 | 97,146,742,198,864 |
 
 A schedule is a maximal path; the longest has 34 steps. In all 633,517 states
-and 3,011,552 transitions, no property below fails.
+and 3,013,418 transitions, no property below fails. The crash between commit
+and reply (§12.7) accounts for 1,866 of the transitions and for no state: the
+state counts are those of draft 4.
 
 | Property | Statement |
 | --- | --- |
 | single-outcome | No attempt has two outcomes |
 | resolved-at-termination | When no step is enabled, every attempt has exactly one outcome, except those whose caller crashed while waiting, which have none |
-| reply-implies-acted | An observed `reply(v)` has `v` in the peer's durable record for that request id |
+| reply-implies-acted | An observed `reply(v)` has `v` in the peer's durable record for that request id. Judged against the store, not against a record of who saw the peer act |
 | peer-down-not-handed | Other than as a refusal, `peer_down` is reported only while the peer is down, for a request id never handed to it and absent from its record |
 | peer-down-sealed | From `peer_down` until the caller issues the request id again: no copy in flight, none handed over, no record |
-| applied-at-most-once | No request id is applied twice; acting on a recorded request id leaves the durable store unchanged |
+| applied-at-most-once | No request id is applied twice; acting on a recorded request id leaves the durable store unchanged; a crash after a commit leaves the store with exactly that one application and its record more than before |
 | declared-edges-only | Everything in a member's inbox or record came along a declared connection |
-| crash-isolation | A crash or restart changes no other member, not the member's durable store, and nothing in flight |
+| crash-isolation | A crash or restart changes no other member, not the member's durable store, and nothing in flight. A crash after a commit changes no other member and nothing in flight: no reply is emitted |
 
-Eight defects, each a switch on the model, are each caught on the property
+Nine defects, each a switch on the model, are each caught on the property
 they are aimed at. The schedule shown is a shortest one.
 
 | Defect | Caught by | Shortest schedule |
 | --- | --- | --- |
-| `peer_down` reported after hand-over | peer-down-not-handed | issue, hand over, crash peer, peer-down |
+| `peer_down` reported after hand-over | peer-down-not-handed | issue, hand over, crash peer after its commit, peer-down: the caller is told the peer has not acted, and it has |
 | Supervisor answers for a dead peer | reply-implies-acted | crash peer, issue, forged reply |
 | Peer applies a recorded request id again | applied-at-most-once | issue, duplicate, hand over, act, hand over, act |
 | Supervisor carries an undeclared connection | declared-edges-only | issue, timeout, issue to the undeclared peer, hand over |
@@ -487,10 +547,17 @@ they are aimed at. The schedule shown is a shortest one.
 | A crash resets the callers waiting on it | crash-isolation | issue, crash peer |
 | `peer_down` destroys only its own attempt's copies | peer-down-sealed | issue, timeout, crash peer, issue, peer-down |
 | The timeout never fires | resolved-at-termination | issue, hand over, crash peer, restart peer |
+| Peer replies first and commits afterwards | reply-implies-acted | issue, hand over, act (reply sent, nothing committed), deliver reply |
+
+The last was added with the crash between commit and reply: it is the order
+of the two parts of acting, which §12.3 now fixes. In that defect the caller
+holds a reply for which the store has no record, at once, and for good if the
+peer then crashes.
 
 A defective run that raises an error would be reported as crashed and not as
-caught; none does. Eight hand-written schedules, with expectations taken from
-this text, pass. As a negative control, the same checker run with the
+caught; none does. Nine hand-written schedules, with expectations taken from
+this text, pass; one is the crash between commit and reply, the timeout, the
+restart, and the retry answered from the record with one application. As a negative control, the same checker run with the
 non-idempotent peer in place of the model reports failure and exits with
 status 1; the runner requires that.
 
@@ -500,7 +567,8 @@ as the caller (`models/tc1/remote-tc1-caller.shen`): the handler machine runs
 to a perform of a bound effect that no frame handles, keeps its frames, and is
 given the outcome as the value of that perform.
 
-This is in no gate.
+This check is the row `remote-model` of the TC1 gate (§9). Its evidence class
+is model-level bounded exploration: no implementation is run.
 
 *Clarification (implementation).* Three things the list of events leaves open,
 which the implementation had to settle:
@@ -546,17 +614,19 @@ which the implementation had to settle:
 
 ### 12.10 Open questions for the owner
 
+Questions 1, 2 and 10 have owner rulings, given on 15 November 2026 by
+instruction in conversation, not by line review of this text. The others are
+open.
+
 1. **Refusal.** An undeclared connection returns `peer_down` here, because the
    guarantee is the same and the outcomes stay three. Alternatives: reject the
    program at build time and fault the image if it tries; or a fourth outcome.
-   *Assumed by the first implementation, not yet an owner ruling:* rejected
-   when the system is assembled from the manifest, with the run-time refusal
-   kept as a backstop (§12.6).
+   **Owner ruling, 15 November 2026:** rejected when the system is assembled
+   from the manifest, with the run-time refusal kept as a backstop (§12.6).
 2. **Who chooses the key.** Here the program does, as part of the argument, so
    that a retry and a restarted caller name the same request. The alternative,
    ids assigned by the supervisor, cannot survive the caller's restart.
-   *Assumed by the first implementation, not yet an owner ruling:* the program
-   chooses.
+   **Owner ruling, 15 November 2026:** the program chooses (§12.3).
 3. **May the supervisor duplicate?** Allowed here, to be safe. If the OTP
    supervisor never redelivers, the clause can go; retries still need §12.3.
 4. **`peer_down` only while the peer is down.** The supervisor could also
@@ -579,11 +649,15 @@ which the implementation had to settle:
     after it, and the supervisor learns of the action from the reply. A peer
     killed in between has acted and the supervisor's record does not say so.
     The outcomes are unaffected, since after hand-over nothing but `reply` and
-    `timed_out` is possible; but the record of §12.8 is then incomplete, and a
-    replay of it through the model fails at the later `replayed`. Either the
-    supervisor completes its record from the peer's durable store when the
-    peer restarts (the store is on the host side), or the record is specified
-    as what the supervisor could observe. Not decided; not handled.
+    `timed_out` is possible; but the record of §12.8 was then incomplete, and
+    a replay of it through the model failed at the later `replayed`.
+    **Owner ruling, 15 November 2026:** the model accepts a replay when the
+    durable store shows the request was applied. The store is the durable
+    truth; the supervisor's log is not. Done as follows: acting is commit and
+    then reply (§12.3); the crash between them is a step of the model (§12.7);
+    the properties are judged against the store (§12.8); the implementation
+    can place the kill there and can find out afterwards that it happened
+    (§12.11).
 
 ### 12.11 First implementation
 
@@ -617,19 +691,35 @@ durable store. The model's caller is the same program, read from the build.
 
 | Schedules | Number | Result |
 | --- | --- | --- |
-| Written by hand from this section | 12 | Accepted; the recorded steps are the schedule's and the outcomes the expected ones |
-| Seeded (1 crash, 1 duplicate, until no step is enabled) | 40, 599 steps | Accepted |
-| Free-running, one of them with the peer killed from outside | 2 | Accepted |
+| Written by hand from this section | 13 | Accepted; the recorded steps are the schedule's and the outcomes the expected ones |
+| Seeded (1 crash, 1 duplicate, until no step is enabled) | 40, 601 steps | Accepted; two of them take the crash between commit and reply |
+| Free-running, two of them with the peer killed from outside | 3 | Accepted |
 
 The hand schedules cover: plain reply; request dropped, timeout, retry applied;
 reply dropped, timeout, retry replayed; peer killed before hand-over,
 `peer_down`; peer killed after hand-over, `timed_out`, restart, retry (applied
-if it had not acted, replayed from the surviving store if it had); no
+if it had not acted, replayed from the surviving store if it had); peer killed
+between its commit and its reply, `timed_out`, restart, the retry given the
+committed value, applied once; no
 `peer_down` offered after a hand-over; a duplicate applied once; a reply after
 `timed_out` discarded; a caller restarted from its beginning; an undeclared
 connection refused at start, and at run time with the start-time check off.
 Every step kind of the model occurs. Each scheduled run was made twice with
 equal recordings.
+
+*The crash between commit and reply, for real.* The supervisor grants the
+peer image the request with a mark in the inbox header (`hold`, wire format in
+the supervisor's README) that makes the image stop, without exiting, after
+its commit and before its reply. The supervisor waits until the peer's store
+file shows the record and then kills the tender process with `kill -9`, as for
+any crash. The step is offered where acting would apply, which the supervisor
+reads from the store file, not from its log. In the free-running mode the
+supervisor places no kills. A peer that dies inside an act is found dead with
+no reply; the supervisor compares the store with what it read before the
+grant and records `crash-after-commit` if the record appeared, `crash` if
+not. One free-running run kills the peer there from outside the step machine;
+the supervisor finds it, restarts the peer, and the retry is answered from the
+record. Before this draft that run ended in an error.
 
 | Defect, as a switch on the real system | Caught by | Schedule |
 | --- | --- | --- |
@@ -637,6 +727,12 @@ equal recordings.
 | Peer image applies a recorded request id again | (a): the model has only `replayed` there | issue, duplicate, hand over, hand over, act, act |
 | Supervisor hands over a reply after `timed_out` | (a): the model has only `discard-reply` there | issue, hand over, act, timeout, deliver reply |
 | Supervisor carries an undeclared connection (start-time check off) | (a): the model has only `refuse` there | issue, hand over, act, deliver reply |
+| Peer image replies first and commits afterwards | (c): the peer's store file has no application where the model has one | issue, hand over, crash between commit and reply, deliver reply |
+
+In the last, the kill finds a reply and no commit. The supervisor records what
+it saw, an act by the reply and then the crash, and the caller is given the
+reply. (a) and (b) accept that log: by the log the peer acted. Only the store
+says otherwise, which is the point of the ruling on question 10.
 
 Each of these recordings, replayed through the corresponding model mutant, is
 accepted and violates the property that mutant is aimed at in §12.8. A run
@@ -645,8 +741,15 @@ negative control the checker is run with the non-idempotent peer image in
 place of the peer: it reports failure and exits with status 1, and the runner
 requires that.
 
+This check is the row `remote-run` of the TC1 gate (§9). Its evidence class is
+observed histories on `spt` accepted by the model.
+
 Limits. One two-member system and a few dozen histories of it: (a) to (c) say
 those histories are ones the model allows, nothing more. The supervisor's log
-is its own account. In the scheduled modes a crash is taken only between
-steps, with the images at rest, so question 10 of §12.10 does not arise there.
-No defect above is caught by (c) alone. No `hvt` run, no proof, no gate.
+is its own account. In the scheduled modes a crash is taken between steps,
+with the images at rest, or at the one place inside a step described above,
+with the image's cooperation; a kill at any other instant inside a step (in
+the middle of the store's two writes, or between the reply's two) is not
+placed and not exercised. The first four defects are caught by (a), the last
+by (c) alone. Two free-running runs depend on the wall clock. No `hvt` run and
+no proof.

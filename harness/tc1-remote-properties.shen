@@ -47,6 +47,7 @@
 
 \\ single-outcome: a perform never has two outcomes.
 \\ reply-implies-acted: an observed reply v means the peer's durable log records v for that request id.
+\\ It is judged against the store, not against any record of who saw the peer act.
 (define fr.attempt-violations
   S [] -> []
   S [[Tag Caller Peer Rid Fate Outcomes] | Attempts] ->
@@ -118,6 +119,33 @@
                      (not (= (fr.durable M) (fr.durable (fr.member-of (hd M) Post)))))
                 ["applied-at-most-once"] []))
 
+\\ A crash between the commit and the reply (EFFECTS.md §12.3, §12.7). Judged
+\\ against the durable store, which is all that survives it:
+\\   applied-at-most-once  the request id had no reply record, and the store
+\\                         afterwards is the store before plus exactly that one
+\\                         application and its record;
+\\   crash-isolation       no other member changes and nothing in flight changes:
+\\                         in particular no reply is emitted.
+(define fr.rest-changed?
+  _ [] [] -> false
+  Name [[Name | _] | Pre] [[Name | _] | Post] -> (fr.rest-changed? Name Pre Post)
+  Name [M | Pre] [M | Post] -> (fr.rest-changed? Name Pre Post)
+  _ _ _ -> true)
+
+(define fr.commit-crash-violations
+  Name M Pre Post ->
+    (let Entry (hd (fr.inbox M))
+         Key [(hd (tl Entry)) (hd (tl (tl Entry)))]
+         After (fr.member-of Name Post)
+      (append (if (or (fr.rest-changed? Name (remote.members Pre) (remote.members Post))
+                      (not (= (remote.net Pre) (remote.net Post))))
+                  ["crash-isolation"] [])
+              (if (and (= (remote.assoc Key (fr.log M)) [])
+                       (= (hd (fr.durable After)) (+ 1 (hd (fr.durable M))))
+                       (= (remote.unrecord Key (fr.log After)) (fr.log M))
+                       (not (= (remote.assoc Key (fr.log After)) [])))
+                  [] ["applied-at-most-once"]))))
+
 \\ peer-down-not-handed: peer-down is reported only while the peer is down and
 \\ only for a request id of which no copy was ever handed to it; so the peer has
 \\ no record of it.
@@ -132,6 +160,7 @@
   Config Pre [crash Name] Post -> (fr.isolation Name Pre Post)
   Config Pre [restart Name] Post -> (fr.isolation Name Pre Post)
   Config Pre [act Name | _] Post -> (fr.act-violations (fr.member-of Name Pre) Post)
+  Config Pre [crash-after-commit Name _] Post -> (fr.commit-crash-violations Name (fr.member-of Name Pre) Pre Post)
   Config Pre [peer-down Tag] Post -> (fr.peer-down-violations (remote.attempt Tag (hd (remote.ghost Pre))) Pre)
   _ _ _ _ -> [])
 

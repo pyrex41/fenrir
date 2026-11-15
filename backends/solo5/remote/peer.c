@@ -10,10 +10,17 @@
  * written first, then the header that counts it. The header write is the
  * commit; a record beyond the header's count does not exist.
  *
- * Command line: "life=<milliseconds>" or "life=<milliseconds> non-idempotent".
- * The second form is a deliberate defect, for the harness: a request id that
- * has a record is applied again.
- * Console frames: Hello (with the store as found), one Act per request. */
+ * Order (EFFECTS.md §12.3): the commit first, then the reply. A kill between
+ * the two leaves the record and no reply; the next copy of the request id is
+ * answered from the record. The supervisor can place a kill exactly there: when
+ * the inbox header's hold names the request, the image stops after the commit
+ * and before the Act frame and the reply, and waits to be killed (wire.h).
+ *
+ * Command line: "life=<milliseconds>", optionally followed by one deliberate
+ * defect, for the harness:
+ *   non-idempotent        a request id that has a record is applied again
+ *   reply-before-commit   the reply is sent first and the commit made after it
+ * Console frames: Hello (with the store as found), one Act per request replied to. */
 #include "support.h"
 #define MAX_RECORDS 62u
 static struct mailbox box;
@@ -24,7 +31,7 @@ static struct frw_call table[MAX_RECORDS];
 static uint8_t block[FRW_BLOCK];
 
 static int store_header(void) {
-    struct frw_header h={FRW_STORE_MAGIC,FRW_STORE,0,records,applications};
+    struct frw_header h={FRW_STORE_MAGIC,FRW_STORE,0,records,applications,0};
     frw_encode_header(&h,block);
     return solo5_block_write(store,0,block,FRW_BLOCK)==SOLO5_R_OK;
 }
@@ -51,19 +58,29 @@ static int store_open(void) {
     }
     return 0;
 }
+/* The durable commit of one application: the record, then the header that
+ * counts it. 0 ok, otherwise an exit code. */
+static int commit(uint32_t slot,const struct frw_call *call) {
+    if(!store_record(slot,call))return fault("store write",EXIT_DEVICE);
+    table[slot]=*call;applications++;
+    if(slot==records)records++;
+    if(!store_header())return fault("store commit",EXIT_DEVICE);
+    return 0;
+}
 int solo5_app_main(const struct solo5_start_info *info) {
-    uint64_t life;const char *rest;int e,defect=0;
+    uint64_t life;const char *rest;int e,defect=0,early=0;
     if(!parse_life(info->cmdline,&life,&rest))return EXIT_USAGE;
     if(word_is(rest,"non-idempotent"))defect=1;
+    else if(word_is(rest,"reply-before-commit"))early=1;
     else if(*rest)return EXIT_USAGE;
     if((e=mailbox_open(&box,life))!=1)return fault("cannot open the mailboxes",-e);
     if((e=store_open()))return fault("cannot open the store",e);
     out_begin();out_text("{\"kind\":\"Hello\",\"role\":\"peer\",\"wire\":\"1\",\"incarnation\":\"");out_natural(box.incarnation);
     out_text("\",\"applications\":\"");out_natural(applications);out_text("\",\"records\":\"");out_natural(records);
-    out_text(defect?"\",\"defect\":\"non-idempotent\"}":"\",\"defect\":\"none\"}");frame_end();
+    out_text(defect?"\",\"defect\":\"non-idempotent\"}":early?"\",\"defect\":\"reply-before-commit\"}":"\",\"defect\":\"none\"}");frame_end();
     if((e=mailbox_announce(&box))!=1)return fault("cannot announce",-e);
     for(;;){
-        struct frw_record r;struct frw_call call;struct frw_result result;uint32_t slot=records;
+        struct frw_record r;struct frw_call call;struct frw_result result;uint32_t slot=records;int apply;
         if((e=mailbox_receive(&box,&r))!=1){
             if(e==-EXIT_LIFETIME){frame_text("{\"kind\":\"Lifetime\"}");return EXIT_LIFETIME;}
             return fault("malformed inbox",-e);
@@ -71,17 +88,19 @@ int solo5_app_main(const struct solo5_start_info *info) {
         if(r.type!=FRW_DELIVER || !frw_get_call(&r,&call))return fault("malformed request",EXIT_MALFORMED);
         for(uint32_t i=0;i<records;i++)
             if(frw_name_same(table[i].name,call.name) && table[i].key==call.key)slot=i;
-        if(slot<records && !defect){
+        apply=!(slot<records && !defect);
+        if(!apply){
             result.code=FRW_REPLAYED;result.value=table[slot].value;
         } else {
             if(slot>=MAX_RECORDS || (uint64_t)slot+1>=store_blocks)return fault("store full",EXIT_MACHINE);
-            /* Apply: the counter. Record, then commit by the header. */
+            /* Apply: the counter. */
             call.value=(int64_t)applications+1;
-            if(!store_record(slot,&call))return fault("store write",EXIT_DEVICE);
-            table[slot]=call;applications++;
-            if(slot==records)records++;
-            if(!store_header())return fault("store commit",EXIT_DEVICE);
             result.code=FRW_APPLIED;result.value=call.value;
+            if(!early && (e=commit(slot,&call)))return e;
+        }
+        /* Committed, not replied: where the supervisor may ask for the image to stop. */
+        if(!early && mailbox_held(&box,r.seq)){
+            mailbox_hold(&box);frame_text("{\"kind\":\"Lifetime\"}");return EXIT_LIFETIME;
         }
         out_begin();out_text("{\"kind\":\"Act\",\"seq\":\"");out_natural(r.seq);out_text("\",\"caller\":\"");out_name(call.name);
         out_text("\",\"key\":\"");out_integer(call.key);
@@ -90,5 +109,10 @@ int solo5_app_main(const struct solo5_start_info *info) {
         struct frw_record reply;
         frw_put_result(&result,&reply,FRW_REPLY);reply.ref=r.seq;
         if((e=mailbox_send(&box,&reply))!=1)return fault("cannot send the reply",-e);
+        if(early){
+            /* The defect: replied, not committed. */
+            if(mailbox_held(&box,r.seq)){mailbox_hold(&box);frame_text("{\"kind\":\"Lifetime\"}");return EXIT_LIFETIME;}
+            if(apply && (e=commit(slot,&call)))return e;
+        }
     }
 }

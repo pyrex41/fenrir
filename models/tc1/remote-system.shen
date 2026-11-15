@@ -33,6 +33,18 @@
 \\             Sealed  [Caller Peer Rid]       peer-down reported, not issued since
 \\   Budget  [Crashes Duplicates]   how many crash and duplicate steps remain
 \\
+\\ Acting, and a crash inside it (owner ruling of 15 November 2026, EFFECTS.md
+\\ §12.10 question 10). A peer acts in two parts, in this order: the durable
+\\ commit (the application and its reply record, together), then the reply. The
+\\ step act is both parts with no crash in between. The step crash-after-commit
+\\ is the commit followed by the peer's crash before any reply is emitted: the
+\\ store has the record, nothing is in flight for it, and no one outside the
+\\ peer has seen the action. It is one step and not two because nothing of the
+\\ peer can happen between its commit and its reply but the crash, and every
+\\ other member's steps commute with that gap. A later copy of the same request
+\\ id is then answered from the record (act ... replayed): whether a request was
+\\ applied is read from the durable store and from nothing else.
+\\
 \\ A request id is (Caller, Rid): Rid is chosen by the caller program and is the
 \\ idempotency key. A Tag [Caller N] names one perform (one attempt); the
 \\ supervisor assigns it and never reuses it. Outcomes are [reply V], [peer-down]
@@ -66,6 +78,7 @@
 \\   linked-crash               a crash resets the callers waiting on the crashed member
 \\   purge-by-attempt           peer-down discards only its own attempt's copies
 \\   no-timeout                 the timeout never fires
+\\   reply-before-commit        the peer sends its reply first and commits afterwards
 
 \\ ---------- a total order on terms, for canonical sets ----------
 
@@ -372,16 +385,31 @@
   Key [[Key _] | Rest] -> Rest
   Key [R | Rest] -> [R | (remote.unrecord Key Rest)])
 
-\\ One atomic step: either the request id has a reply record, which is sent again
-\\ and nothing else changes; or the request is applied, its reply recorded, and
-\\ the reply sent. Application and record are durable together.
+\\ One step: either the request id has a reply record, which is sent again and
+\\ nothing else changes; or the request is applied and its reply recorded (the
+\\ commit: application and record are durable together), and then the reply is
+\\ sent. The commit comes first. remote.commit-crash is the same commit with a
+\\ crash in place of the reply.
 (define remote.act-on
   Config S Name Count Log Volatile Tag Caller Rid Payload [none] _ ->
     [[[act Name Tag ignored] [[acted Tag Name ignored]] (remote.set-member [Name up [Count Log] Volatile] S)]]
+  \\ Mutant only: the second half of a reply sent before its commit.
+  Config S Name Count Log Volatile Tag Caller Rid [uncommitted Value] [counter] _ ->
+    [[[act Name Tag committed] [[acted Tag Name committed Value]]
+      (remote.applied [Name Caller Rid]
+        (remote.set-member [Name up [(+ Count 1) (remote.record [Caller Rid] Value Log)] Volatile] S))]]
   Config S Name Count Log Volatile Tag Caller Rid Payload [counter] [Value] ->
     [[[act Name Tag replayed] [[acted Tag Name replayed Value]]
       (remote.send-reply [rep Tag Caller Name Rid Value] (remote.set-member [Name up [Count Log] Volatile] S))]]
     where (not (remote.mutant? Config non-idempotent-peer))
+  \\ Mutant only: the reply goes out and the commit is left for the peer's next
+  \\ step, as the head of its inbox. A crash in between loses the commit.
+  Config S Name Count Log [Program Pending Inbox] Tag Caller Rid Payload [counter] _ ->
+    (let Value [int (str (+ Count 1))]
+      [[[act Name Tag applied] [[acted Tag Name applied Value]]
+        (remote.send-reply [rep Tag Caller Name Rid Value]
+          (remote.set-member [Name up [Count Log] [Program Pending [[Tag Caller Rid [uncommitted Value]] | Inbox]]] S))]])
+    where (remote.mutant? Config reply-before-commit)
   Config S Name Count Log Volatile Tag Caller Rid Payload [counter] _ ->
     (let Value [int (str (+ Count 1))]
       [[[act Name Tag applied] [[acted Tag Name applied Value]]
@@ -395,6 +423,30 @@
 (define remote.applied
   Key [Members Net Sup [Attempts Applied Sealed] Budget] ->
     [Members Net Sup [Attempts (remote.count-application Key Applied) Sealed] Budget])
+
+\\ ---------- a crash between the commit and the reply ----------
+
+(define remote.commit-crash-steps
+  Config S -> (remote.concat (map (/. M (remote.commit-crash Config S M)) (remote.members S))))
+
+\\ The peer commits the oldest request in its inbox and crashes before it
+\\ replies. Enabled where act would apply (no reply record for the request id)
+\\ and a crash is left in the budget. Where act would replay, a crash before the
+\\ reply changes nothing durable and is the step crash. The store keeps the
+\\ commit; the image, with the rest of its inbox, is lost; no reply is in flight.
+(define remote.commit-crash
+  Config S [Name up [Count Log] [Program Pending [[Tag Caller Rid Payload] | Inbox]]] ->
+    (let Value [int (str (+ Count 1))]
+      [[[crash-after-commit Name Tag] [[acted Tag Name committed Value] [crashed Name]]
+        (remote.linked Config Name (remote.members S)
+          (remote.spend-crash
+            (remote.reset Config [Name up [(+ Count 1) (remote.record [Caller Rid] Value Log)] [Program Pending Inbox]] down
+              (remote.applied [Name Caller Rid] S))))]])
+    where (and (> (hd (remote.budget S)) 0)
+               (= (remote.handler Config Name) [counter])
+               (not (remote.mutant? Config reply-before-commit))
+               (= (remote.assoc [Caller Rid] Log) []))
+  _ _ _ -> [])
 
 \\ ---------- timeout and peer-down ----------
 
@@ -498,7 +550,8 @@
 
 (define remote.successors
   Config S -> (remote.concat [(remote.program-steps Config S) (remote.net-steps Config S) (remote.act-steps Config S)
-                              (remote.waiting-steps Config S) (remote.crash-steps Config S) (remote.restart-steps Config S)]))
+                              (remote.waiting-steps Config S) (remote.crash-steps Config S) (remote.commit-crash-steps Config S)
+                              (remote.restart-steps Config S)]))
 
 \\ Follow a schedule, a list of labels, from S. Result [State Trace]: the state
 \\ reached and the observable events in order. A label that is not enabled is an error.

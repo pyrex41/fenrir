@@ -20,7 +20,7 @@
  *   8  u32 incarnation                   8  u32 seq (its block number)
  *  12  u32 count                        12  u32 incarnation
  *  16  u32 grant                        16  u32 ref
- *  20  u32 zero                         20  u32 length of the payload
+ *  20  u32 hold                         20  u32 length of the payload
  *  24  u32 crc                          24  u32 crc
  *  28  zero to the end                  28  u32 zero
  *                                       32  payload, then zero to the end
@@ -28,6 +28,11 @@
  * Mailbox header: count is the number of records written. In an inbox, grant
  * is how many of them the guest may consume (grant <= count): the supervisor's
  * scheduling of when the image runs. In an outbox grant equals count.
+ * hold is zero except in an inbox, where it may be the number of a granted
+ * record (hold <= grant): the image consumes that record and then stops just
+ * before it would send the reply, without exiting, until it is killed. This is
+ * how the supervisor places a kill between a peer's durable commit and its
+ * reply (EFFECTS.md §12.7). It exists for scheduled runs; an image never sets it.
  * Store header (the peer's durable store): incarnation is zero, count is the
  * number of reply records, grant is the number of applications.
  *
@@ -54,7 +59,7 @@ enum frw_type { FRW_REQUEST=1,FRW_OUTCOME=2,FRW_DELIVER=3,FRW_REPLY=4,FRW_HALT=5
 enum frw_kind { FRW_INBOX=1,FRW_OUTBOX=2,FRW_STORE=3 };
 enum frw_outcome { FRW_REPLIED=1,FRW_PEER_DOWN=2,FRW_TIMED_OUT=3 };
 enum frw_how { FRW_APPLIED=1,FRW_REPLAYED=2 };
-struct frw_header { uint32_t magic; uint16_t kind; uint32_t incarnation,count,grant; };
+struct frw_header { uint32_t magic; uint16_t kind; uint32_t incarnation,count,grant,hold; };
 struct frw_record { uint16_t type; uint32_t seq,incarnation,ref,length; uint8_t payload[FRW_PAYLOAD_MAX]; };
 /* Payload views. */
 struct frw_call { char name[FRW_NAME]; int64_t key,value; };   /* REQUEST, DELIVER, STORED */

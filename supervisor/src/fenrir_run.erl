@@ -9,14 +9,17 @@
 %%           that is down, and record as a crash a member whose OS process is
 %%           found dead. This is the only mode in which time matters. For tests,
 %%           kill = [{Member, N}] kills that member's OS process from outside the
-%%           relay once N steps have been taken.
+%%           relay once N steps have been taken, and kill_in_act = [{Member, N}]
+%%           kills it inside its Nth act, after its durable commit and before
+%%           its reply.
 -module(fenrir_run).
 -export([run/1]).
 
 %% #{status, error} merged into the run report by fenrir_main.
 run(#{mode := list, steps := Steps}) -> list(Steps, 0);
 run(#{mode := seeded, seed := Seed, max_steps := Max}) -> seeded(Seed, Max);
-run(#{mode := free, timeout_ms := Timeout, deadline_ms := Deadline, kill := Kill}) ->
+run(#{mode := free, timeout_ms := Timeout, deadline_ms := Deadline, kill := Kill, kill_in_act := InAct}) ->
+    [ok = fenrir_relay:arm_kill_in_act(Name, N) || {Name, N} <- InAct],
     free(#{timeout => Timeout, deadline => erlang:monotonic_time(millisecond) + Deadline}, Kill, 0, #{}).
 
 failed(Reason) -> #{status => <<"error">>, error => unicode:characters_to_binary(io_lib:format("~0p", [Reason]))}.

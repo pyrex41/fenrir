@@ -30,13 +30,14 @@ static int zero(const uint8_t *p,unsigned from,unsigned to) {
 void frw_encode_header(const struct frw_header *h,uint8_t block[FRW_BLOCK]) {
     for(unsigned i=0;i<FRW_BLOCK;i++)block[i]=0;
     put32(block,h->magic);put16(block+4,(uint16_t)FRW_VERSION);put16(block+6,h->kind);
-    put32(block+8,h->incarnation);put32(block+12,h->count);put32(block+16,h->grant);
+    put32(block+8,h->incarnation);put32(block+12,h->count);put32(block+16,h->grant);put32(block+20,h->hold);
     seal(block);
 }
 int frw_decode_header(const uint8_t block[FRW_BLOCK],struct frw_header *h) {
-    if(!sealed(block) || get16(block+4)!=FRW_VERSION || get32(block+20) || !zero(block,28,FRW_BLOCK))return 0;
+    if(!sealed(block) || get16(block+4)!=FRW_VERSION || !zero(block,28,FRW_BLOCK))return 0;
     h->magic=get32(block);h->kind=get16(block+6);
-    h->incarnation=get32(block+8);h->count=get32(block+12);h->grant=get32(block+16);
+    h->incarnation=get32(block+8);h->count=get32(block+12);h->grant=get32(block+16);h->hold=get32(block+20);
+    if(h->hold && (h->magic!=FRW_MAILBOX_MAGIC || h->kind!=FRW_INBOX || h->hold>h->grant))return 0;
     if(h->magic==FRW_MAILBOX_MAGIC){
         if(h->kind!=FRW_INBOX && h->kind!=FRW_OUTBOX)return 0;
         if(!h->incarnation || h->grant>h->count)return 0;

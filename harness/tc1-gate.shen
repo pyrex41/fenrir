@@ -1,7 +1,10 @@
-\\ TC1 gate evaluator, in Shen: effects and handlers, contract spec/tc1/EFFECTS.md.
-\\ PROPOSED. Its manifest, spec/tc1/tc1-requirements.json, is not owner-accepted and
-\\ this evaluator is not registered in .pi/fenrir-workflow.json, so its report says
-\\ authority UNREGISTERED and qualification UNKNOWN whatever the rows say.
+\\ TC1 gate evaluator, in Shen: effects and handlers, and remote perform, contract
+\\ spec/tc1/EFFECTS.md. Registered as the check tc1-qualification in
+\\ .pi/fenrir-workflow.json, with the manifest spec/tc1/tc1-requirements.json, by the
+\\ owner's instruction of 2026-11-15; see campaigns/tc1/TC1_GATE_REGISTRATION.md.
+\\ The verdict counts as a qualification only while the manifest is owner-accepted
+\\ and the workflow configuration names this evaluator; otherwise the report says
+\\ authority UNREGISTERED and qualification UNKNOWN.
 \\
 \\   shen-jit script harness/tc1-gate.shen LIBDIR ROOT OUTDIR SHEN_JIT_EXECUTABLE [NONCE CHECK_ID SOURCE_SHA256 CONFIG_SHA256]
 \\
@@ -11,13 +14,17 @@
 \\ not report, or a check it does not know is UNKNOWN.
 \\ This file holds the TC1 row checks and the registration rule. The TC0-A rows are
 \\ not restated: the TC0-A evaluator is run as one prerequisite row. The rows for the
-\\ generated family, its reduction and its replay are in harness/tc1-random-rows.shen.
+\\ generated family, its reduction and its replay are in harness/tc1-random-rows.shen;
+\\ the two rows for remote perform, and the Erlang half of the toolchain row, are in
+\\ harness/tc1-remote-rows.shen.
 
 (set fh.*lib* (cn (hd (tl (value *argv*))) "/"))
 (set fh.*root* (cn (hd (tl (tl (value *argv*)))) "/"))
 (load (cn (value fh.*root*) "harness/gate-core.shen"))
 \\ The rows for the generated family.
 (load (cn (value fh.*root*) "harness/tc1-random-rows.shen"))
+\\ The rows for remote perform.
+(load (cn (value fh.*root*) "harness/tc1-remote-rows.shen"))
 
 \\ ---------- the scope this gate requires ----------
 \\ The node bound of the exhaustive family and the number of programs of grammar H
@@ -132,7 +139,7 @@
 
 (define fh.check
   "source-identity" Memo -> (fh.source-identity Memo)
-  "toolchain-pinned" Memo -> (fh.toolchain-pinned Memo)
+  "toolchain-pinned" Memo -> (fh.tc1-toolchain-pinned Memo)
   "unit-suite" Memo -> (fh.unit-suite "tests/tc0/*.test.mjs tests/tc1/*.test.mjs" Memo)
   "tc0-a-gate" Memo -> (fh.tc0-a-gate Memo)
   "tc1-handlers" Memo -> (fh.tc1-handlers Memo)
@@ -151,11 +158,13 @@
   "tc1-random-control" Memo -> (fh.tc1-random-control Memo)
   "tc1-reduction" Memo -> (fh.tc1-reduction Memo)
   "tc1-reduced-replay" Memo -> (fh.tc1-reduced-replay Memo)
+  "tc1-remote-model" Memo -> (fh.tc1-remote-model Memo)
+  "tc1-remote-run" Memo -> (fh.tc1-remote-run Memo)
   Name Memo -> (fh.row "UNKNOWN" [(cn "The evaluator has no check named " Name)] [] Memo))
 
 \\ Registered: the manifest is owner-accepted and the workflow has a tc1-qualification
-\\ check that runs this gate. Neither holds today.
+\\ check that runs this gate. The rule is the TC0-A gate's (fh.registered-as).
 (define fh.registered?
   Manifest -> (fh.registered-as "tc1-qualification" "harness/run-tc1-gate.sh" Manifest))
 
-(fh.gate-main "spec/tc1/tc1-requirements.json" "tc1-requirement-manifest/1" "tc1-gate-run/1" "harness/tc1-gate.shen" "TC1 gate (Shen, proposed)")
+(fh.gate-main "spec/tc1/tc1-requirements.json" "tc1-requirement-manifest/1" "tc1-gate-run/1" "harness/tc1-gate.shen" "TC1 gate (Shen)")

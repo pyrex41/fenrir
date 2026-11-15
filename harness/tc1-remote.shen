@@ -11,7 +11,8 @@
 \\ history variables (attempts, applications, sealed request ids), which the
 \\ model's own steps maintain.
 \\ Evidence level: bounded exploration of a model. This file runs no
-\\ implementation; harness/tc1-remote-run.shen does. Development evidence only; in no gate.
+\\ implementation; harness/tc1-remote-run.shen does. Its report is the remote-model row
+\\ of the TC1 gate (harness/tc1-gate.shen).
 \\
 \\   shen-jit script harness/tc1-remote.shen LIBDIR ROOT check CONTROL
 \\   shen-jit script harness/tc1-remote.shen LIBDIR ROOT negative-control
@@ -237,7 +238,8 @@
       [late-reply-accepted "two-members-one-request" "single-outcome"]
       [linked-crash "two-members-one-request" "crash-isolation"]
       [purge-by-attempt "two-members-one-request" "peer-down-sealed"]
-      [no-timeout "two-members-one-request" "resolved-at-termination"]])
+      [no-timeout "two-members-one-request" "resolved-at-termination"]
+      [reply-before-commit "two-members-one-request" "reply-implies-acted"]])
 
 (define fr.aimed
   Expected [] -> []
@@ -299,6 +301,22 @@
                             [[issue c p "1"] [deliver-request [c 1]] [act p [c 1] applied] [crash p] [restart p] [crash c] [restart c]
                              [issue c p "1"] [deliver-request [c 2]] [act p [c 2] replayed]])
                      (= (fr.durable (fr.member-of p (hd R))) [1 [[[c "1"] [int "1"]]]]))))
+         \\ killed between its commit and its reply: the store has the record and nothing is in flight;
+         \\ the request was handed over, so no peer-down; the retry is answered from the record, applied once
+         (fr.hand "committed-then-crashed-is-replayed"
+           (freeze (let R (remote.run A (remote.initial A 1 0) [[issue c p "1"] [deliver-request [c 1]] [crash-after-commit p [c 1]]])
+                        Ls (fr.labels A (hd R))
+                        R2 (remote.run A (hd R) [[timeout [c 1]] [restart p] [issue c p "1"] [deliver-request [c 2]]])
+                        Ls2 (fr.labels A (hd R2))
+                        R3 (remote.run A (hd R2) [[act p [c 2] replayed] [deliver-reply [c 2] [int "1"]]])
+                     (and (= (remote.net (hd R)) [])
+                          (= (remote.status p (hd R)) down)
+                          (= (fr.durable (fr.member-of p (hd R))) [1 [[[c "1"] [int "1"]]]])
+                          (element? [timeout [c 1]] Ls) (not (element? [peer-down [c 1]] Ls))
+                          (element? [act p [c 2] replayed] Ls2) (not (element? [act p [c 2] applied] Ls2))
+                          (= (fr.durable (fr.member-of p (hd R3))) [1 [[[c "1"] [int "1"]]]])
+                          (= (hd (tl (hd (hd (tl (remote.ghost (hd R3))))))) 1)
+                          (element? [outcome [c 2] [reply [int "1"]]] (hd (tl R3)))))))
          \\ an undeclared connection: nothing in flight, peer-down at once
          (fr.hand "undeclared-is-refused"
            (freeze (let R (remote.run U (remote.initial U 0 0) [[issue c p "1"] [timeout [c 1]] [refuse c q "2"]])
@@ -328,7 +346,7 @@
 
 (define fr.required-kinds
   -> [issue refuse finish deliver-request deliver-reply discard-reply drop duplicate act-applied act-replayed
-      timeout peer-down crash restart outcome-reply outcome-peer-down outcome-timed-out])
+      crash-after-commit timeout peer-down crash restart outcome-reply outcome-peer-down outcome-timed-out])
 
 (define fr.merge-kinds
   [] Acc -> Acc
@@ -379,7 +397,7 @@
                          ["systems" (map (/. B (hd B)) Baselines)]
                          ["step_kinds_not_exercised" Missing]
                          ["hand_schedules_failed" Hand]
-                         ["hand_schedules" (if Control "0" "8")]
+                         ["hand_schedules" (if Control "0" "9")]
                          ["mutants" (map (/. M (hd (tl M))) Mutants)]
                          ["mutants_not_killed" (map (/. M (fh.field "mutant" M)) NotKilled)]
                          ["negative_control" (value fr.*control*)]]

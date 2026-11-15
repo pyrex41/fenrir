@@ -1,5 +1,5 @@
 #!/bin/sh
-# Negative control of the generated-family row of the proposed TC1 gate: the row's
+# Negative control of the generated-family row of the TC1 gate: the row's
 # check must be FAIL with each injected defect switched on in the JavaScript
 # implementation, and PASS with none (harness/tc1-random-control.shen).
 # Usage: sh harness/run-tc1-random-control.sh

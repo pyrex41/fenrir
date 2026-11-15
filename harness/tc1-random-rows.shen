@@ -1,4 +1,4 @@
-\\ Rows of the proposed TC1 gate for the generated handler family: agreement on the
+\\ Rows of the TC1 gate for the generated handler family: agreement on the
 \\ family, the family in the Solo5 guest, the negative control, reduction of a failure
 \\ per injected defect, and replay of the reduced failures. Load after gate-core.shen.
 \\ Loaded by tc1-gate.shen, and by tc1-random-control.shen to run the control alone.

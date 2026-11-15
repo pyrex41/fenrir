@@ -5,7 +5,7 @@
 %% This server is a step machine. Its steps are those of the model
 %% models/tc1/remote-system.shen, with the same labels: issue, refuse, finish,
 %% deliver-request, deliver-reply, discard-reply, drop, duplicate, act, timeout,
-%% peer-down, crash, restart. enabled/0 lists the steps that can be taken now;
+%% peer-down, crash, crash-after-commit, restart. enabled/0 lists the steps that can be taken now;
 %% step/1 takes one and returns its label. Who chooses the next step (a schedule,
 %% a seeded choice, or the free-running policy with a clock) is fenrir_run's
 %% business. Every step taken is appended to the event log.
@@ -14,9 +14,11 @@
 %%   peer-down-after-handover   peer-down offered although a copy was handed over
 %%   late-reply-accepted        a reply for an attempt that timed out is given to the caller
 %%   relay-undeclared           requests are carried whatever the manifest says
+%% Two more are switches of the peer image, passed on its command line:
+%%   non-idempotent-peer, reply-before-commit (backends/solo5/remote/peer.c)
 -module(fenrir_relay).
 -behaviour(gen_server).
--export([start_link/0, assemble/1, enabled/0, step/1, observe/0, inject_kill/1, report/0, shutdown/0]).
+-export([start_link/0, assemble/1, enabled/0, step/1, observe/0, inject_kill/1, arm_kill_in_act/2, report/0, shutdown/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
 -define(SETTLE_MS, 5000).
@@ -36,6 +38,10 @@ observe() -> gen_server:call(?MODULE, observe, 120000).
 %% For tests of the free-running mode: kill a member's OS process behind the
 %% relay's back, as an outside failure would. Nothing is recorded.
 inject_kill(Name) -> gen_server:call(?MODULE, {inject_kill, Name}, 120000).
+%% For tests of the free-running mode: in the member's Nth act, kill its OS
+%% process behind the relay's back after its durable commit and before its
+%% reply. Nothing is recorded: the relay has to find out what happened.
+arm_kill_in_act(Name, N) -> gen_server:call(?MODULE, {arm_kill_in_act, Name, N}, 120000).
 report() -> gen_server:call(?MODULE, report, 120000).
 shutdown() -> gen_server:call(?MODULE, shutdown, 120000).
 
@@ -62,6 +68,11 @@ handle_call({step, Command}, _From, S0) ->
                         {ok, Label, S2} ->
                             Seen = #{label => Label, enabled => [label(E) || E <- Enabled]},
                             {reply, {ok, Label}, S2#{log := [Seen | maps:get(log, S2)]}};
+                        {ok, Label, S2, Then} ->
+                            %% One command, two steps: what else was enabled between them was not looked at.
+                            Seen = #{label => Label, enabled => [label(E) || E <- Enabled]},
+                            After = #{label => Then, enabled => <<"unobserved">>},
+                            {reply, {ok, Label}, S2#{log := [After, Seen | maps:get(log, S2)]}};
                         {error, Reason, S2} -> {reply, {error, Reason}, S2}
                     end
             end;
@@ -79,6 +90,8 @@ handle_call(observe, _From, S = #{assembled := true, order := Order}) ->
     {reply, {ok, Dead}, S1};
 handle_call({inject_kill, Name}, _From, S) ->
     {reply, fenrir_member:kill(pid(Name, S)), S};
+handle_call({arm_kill_in_act, Name, N}, _From, S) ->
+    {reply, ok, S#{kill_in_act := [{Name, N} | maps:get(kill_in_act, S)]}};
 handle_call(report, _From, S0) ->
     %% Let every image reach its next scheduling point, so that its console is complete.
     {Settled, S} = settle(S0),
@@ -160,7 +173,13 @@ assemble_system(Spec = #{members := Members, connections := Edges}) ->
     end.
 
 start_members(Spec = #{members := Members, connections := Edges, defects := Defects}, Base) ->
-    Options = fun(peer) -> case lists:member(<<"non-idempotent-peer">>, Defects) of true -> " non-idempotent"; false -> "" end;
+    Has = fun(Defect) -> lists:member(Defect, Defects) end,
+    Options = fun(peer) ->
+                      case {Has(<<"non-idempotent-peer">>), Has(<<"reply-before-commit">>)} of
+                          {true, _} -> " non-idempotent";
+                          {_, true} -> " reply-before-commit";
+                          _ -> ""
+                      end;
                  (caller) -> ""
               end,
     Pids = maps:from_list(
@@ -175,7 +194,8 @@ start_members(Spec = #{members := Members, connections := Edges, defects := Defe
               kinds => maps:from_list([{maps:get(name, M), maps:get(kind, M)} || M <- Members]),
               members => maps:from_list([{N, #{status => down, pending => none, inbox => [], next => idle}} || N <- Order]),
               net => [], handed => [], tags => maps:from_list([{N, 1} || N <- Order]), attempts => #{},
-              budget => {maps:get(crashes, Spec), maps:get(duplicates, Spec)}, log => []},
+              budget => {maps:get(crashes, Spec), maps:get(duplicates, Spec)}, log => [],
+              acts => #{}, kill_in_act => []},
     boot_all(Order, S).
 
 boot_all([], S) -> {ok, S};
@@ -261,8 +281,20 @@ enabled_steps(S = #{order := Order, members := Members, net := Net, budget := {C
            _ -> []
        end || Name <- Order]),
     Crash = [{crash, Name} || Name <- Order, Up(Name), Crashes > 0],
+    %% A kill between a peer's commit and its reply: where acting would apply,
+    %% which is read from the peer's durable store, not from the event log.
+    CommitCrash = [{crash_after_commit, Name, Tag}
+                   || Crashes > 0, {act, Name, Tag} <- Act, not recorded(Name, hd(maps:get(inbox, maps:get(Name, Members))), S)],
     Restart = [{restart, Name} || Name <- Order, Down(Name)],
-    Program ++ Link ++ Act ++ Waiting ++ Crash ++ Restart.
+    Program ++ Link ++ Act ++ Waiting ++ Crash ++ CommitCrash ++ Restart.
+
+%% Whether the peer's durable store has a reply record for the request id of an
+%% inbox entry. The store is on the host side and is the only place that says so.
+recorded(Name, {_, Caller, Rid, _, _}, S) ->
+    case fenrir_member:store(pid(Name, S)) of
+        #{records := Records} -> lists:any(fun({C, K, _}) -> C =:= Caller andalso integer_to_binary(K) =:= Rid end, Records);
+        _ -> false
+    end.
 
 declared(Caller, Peer, S = #{edges := Edges}) ->
     defect(<<"relay-undeclared">>, S) orelse lists:member([Caller, Peer], Edges).
@@ -286,6 +318,7 @@ label({act, Name, Tag}) -> [<<"act">>, Name, tag(Tag)];
 label({timeout, Tag}) -> [<<"timeout">>, tag(Tag)];
 label({peer_down, Tag}) -> [<<"peer-down">>, tag(Tag)];
 label({crash, Name}) -> [<<"crash">>, Name];
+label({crash_after_commit, Name, Tag}) -> [<<"crash-after-commit">>, Name, tag(Tag)];
 label({restart, Name}) -> [<<"restart">>, Name].
 
 %% A command names a step by its label or by a prefix of it; an act may carry
@@ -368,13 +401,31 @@ take_step({drop, Message}, S = #{net := Net}) ->
     {ok, label({drop, Message}), S#{net := Net -- [Message]}};
 take_step({duplicate, Message}, S = #{net := Net, budget := {Crashes, Duplicates}}) ->
     {ok, label({duplicate, Message}), S#{net := lists:sort([Message | Net]), budget := {Crashes, Duplicates - 1}}};
-take_step({act, Name, Tag}, S = #{net := Net}) ->
+take_step({act, Name, Tag}, S0 = #{net := Net, acts := Acts, kill_in_act := Armed}) ->
     %% The peer image is let run on the oldest request in its inbox. Its reply
     %% record says whether it applied the request or replayed a recorded reply.
-    M = #{inbox := [{Tag, Caller, Rid, _, Seq} | Inbox]} = member(Name, S),
-    Pid = pid(Name, S),
-    ok = fenrir_member:grant(Pid),
+    M = #{inbox := [Entry = {Tag, Caller, Rid, _, Seq} | Inbox]} = member(Name, S0),
+    Pid = pid(Name, S0),
+    Nth = maps:get(Name, Acts, 0) + 1,
+    S = S0#{acts := Acts#{Name => Nth}},
+    Before = recorded(Name, Entry, S),
+    case lists:member({Name, Nth}, Armed) of
+        false -> ok = fenrir_member:grant(Pid);
+        true ->
+            %% Test only: an outside kill placed after the commit. Not recorded.
+            ok = fenrir_member:grant_hold(Pid),
+            _ = await_commit(Name, Entry, S, erlang:monotonic_time(millisecond) + ?SETTLE_MS),
+            ok = fenrir_member:kill(Pid)
+    end,
     case fenrir_member:take(Pid, ?SETTLE_MS) of
+        {exited, _} ->
+            %% The image died inside the act, without the supervisor killing it,
+            %% and no reply will come. Whether it acted is read from its store.
+            {ok, Crash, S1} = crashed(Name, S),
+            case (not Before) andalso recorded(Name, Entry, S) of
+                true -> {ok, label({crash_after_commit, Name, Tag}), S1};
+                false -> {ok, Crash, S1}
+            end;
         {ok, Record = #{type := reply, ref := Seq}} ->
             case fenrir_wire:decode_result(reply, Record) of
                 {ok, How, Value} ->
@@ -406,10 +457,54 @@ take_step({crash, Name}, S = #{budget := {Crashes, Duplicates}}) ->
         ok -> crashed(Name, S#{budget := {Crashes - 1, Duplicates}});
         {error, Reason} -> {error, {crash, Name, Reason}, S}
     end;
+take_step({crash_after_commit, Name, Tag}, S = #{net := Net, budget := {Crashes, Duplicates}}) ->
+    %% The peer is let run on the oldest request in its inbox, told to stop
+    %% before it replies. When its store shows the commit, it is killed.
+    M = #{inbox := [Entry = {Tag, Caller, Rid, _, Seq} | Inbox]} = member(Name, S),
+    Pid = pid(Name, S),
+    ok = fenrir_member:grant_hold(Pid),
+    Seen = await_commit(Name, Entry, S, erlang:monotonic_time(millisecond) + ?SETTLE_MS),
+    Killed = fenrir_member:kill(Pid),
+    Spent = S#{budget := {Crashes - 1, Duplicates}},
+    case {Seen, Killed} of
+        {committed, ok} ->
+            {ok, _, S1} = crashed(Name, Spent),
+            {ok, label({crash_after_commit, Name, Tag}), S1};
+        {{replied, Record = #{ref := Seq}}, ok} ->
+            %% Not the step that was asked for: the image replied with nothing
+            %% committed. What happened is recorded as it was seen: an act, by
+            %% the reply, and then the crash.
+            case fenrir_wire:decode_result(reply, Record) of
+                {ok, How, Value} ->
+                    S1 = set_member(Name, M#{inbox := Inbox}, Spent),
+                    {ok, Crash, S2} = crashed(Name, S1#{net := lists:sort([{rep, Tag, Caller, Name, Rid, Value} | Net])}),
+                    {ok, label({act, Name, Tag}) ++ [atom_to_binary(How)], S2, Crash};
+                malformed -> {error, {malformed_reply, Name}, S}
+            end;
+        Other -> {error, {crash_after_commit, Name, Other}, S}
+    end;
 take_step({restart, Name}, S) ->
     case boot(Name, S) of
         {ok, S1} -> {ok, label({restart, Name}), S1};
         {error, Reason} -> {error, Reason, S}
+    end.
+
+%% Wait for the peer's store to show a reply record for the request id of the
+%% inbox entry: committed. A peer that sends a record first has not committed:
+%% {replied, Record}. Otherwise what stopped the wait.
+await_commit(Name, Entry, S, Deadline) ->
+    case recorded(Name, Entry, S) of
+        true -> committed;
+        false ->
+            case fenrir_member:take(pid(Name, S), 1) of
+                {ok, Record} -> {replied, Record};
+                timeout ->
+                    case erlang:monotonic_time(millisecond) >= Deadline of
+                        true -> timeout;
+                        false -> await_commit(Name, Entry, S, Deadline)
+                    end;
+                Other -> Other
+            end
     end.
 
 %% The image is gone, killed by a crash step or found dead. Its volatile state

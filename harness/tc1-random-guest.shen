@@ -1,6 +1,6 @@
 \\ Fenrir harness: the generated TC1 family in the Solo5 guest. Load after common.shen,
 \\ with fh.*jit* set to the Shen/JIT executable. Shared by tc1-random.shen and the
-\\ proposed TC1 gate (tc1-random-rows.shen).
+\\ TC1 gate (tc1-random-rows.shen).
 \\
 \\ Nothing is compared here. For each seed, the programs tc1-random.shen wrote
 \\ (OUT/seed-<i>.jsonl) are built into one guest image by the JavaScript builder

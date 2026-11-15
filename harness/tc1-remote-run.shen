@@ -23,8 +23,15 @@
 \\ recorded run must fail (a), (b) or (c). A run that ends in an error is
 \\ counted as crashed, never as killed.
 \\
+\\ A peer killed between its durable commit and its reply is one of the model's
+\\ steps (crash-after-commit, EFFECTS.md §12.7). The supervisor places that kill
+\\ in the scheduled modes and, in the free-running mode, finds out from the
+\\ peer's store that it happened. The log is judged like any other; what says
+\\ the request was applied is the store file, compared in (c).
+\\
 \\ Evidence level: observed histories of one small system on the spt tender,
-\\ accepted by the model. No hvt run, no proof. Development evidence; in no gate.
+\\ accepted by the model. No hvt run, no proof. Its report is the remote-run row
+\\ of the TC1 gate (harness/tc1-gate.shen).
 \\
 \\   shen-jit script harness/tc1-remote-run.shen LIBDIR ROOT BUILD EBIN ERL WORK check CONTROL
 \\   shen-jit script harness/tc1-remote-run.shen LIBDIR ROOT BUILD EBIN ERL WORK negative-control
@@ -83,6 +90,7 @@
   ["timeout" T] -> [timeout (fx.tag T)]
   ["peer-down" T] -> [peer-down (fx.tag T)]
   ["crash" N] -> [crash N]
+  ["crash-after-commit" N T] -> [crash-after-commit N (fx.tag T)]
   ["restart" N] -> [restart N]
   L -> (error "harness: unknown event ~S" L))
 
@@ -101,6 +109,7 @@
   [timeout T] -> ["timeout" (fx.tag-json T)]
   [peer-down T] -> ["peer-down" (fx.tag-json T)]
   [crash N] -> ["crash" N]
+  [crash-after-commit N T] -> ["crash-after-commit" N (fx.tag-json T)]
   [restart N] -> ["restart" N]
   L -> (error "harness: no JSON for the label ~S" L))
 
@@ -167,13 +176,14 @@
   L [_ | Steps] -> (fx.find L Steps))
 
 \\ The model's enabled steps as the supervisor would name them. In the free-running
-\\ mode a crash is not a step the supervisor can take, only one it can find has
-\\ happened, so it does not list crashes there.
+\\ mode a crash, between steps or between a commit and its reply, is not a step
+\\ the supervisor can take, only one it can find has happened, so it does not
+\\ list crashes there.
 (set fx.*free* false)
 
 (define fx.model-enabled
   Steps -> (let All (map (/. Step (fx.before (hd Step))) Steps)
-             (if (value fx.*free*) (fx.keep (/. L (not (= (hd L) "crash"))) All) All)))
+             (if (value fx.*free*) (fx.keep (/. L (not (element? (hd L) ["crash" "crash-after-commit"]))) All) All)))
 
 \\ Enabled is what the supervisor recorded as enabled before each step, or the
 \\ symbol unchecked. A crash the free-running supervisor found, rather than
@@ -255,8 +265,11 @@
   _ _ -> false)
 
 \\ [Caller Rid How Value] for each action of peer M, with the request id of the attempt.
+\\ A commit the peer was killed after is not among them: the image printed
+\\ nothing for it. It shows in the store the next incarnation finds, and in the store file.
 (define fx.model-acts
   M Attempts [] -> []
+  M Attempts [[acted _ M committed _] | Es] -> (fx.model-acts M Attempts Es)
   M Attempts [[acted Tag M How V] | Es] ->
     (let A (remote.attempt Tag Attempts)
       [[(hd (tl A)) (hd (tl (tl (tl A)))) (str How) (fh.value V)] | (fx.model-acts M Attempts Es)])
@@ -397,11 +410,15 @@
 (define fx.budget
   Key Schedule -> (let V (fh.member Key Schedule) (if (= V []) 0 (fx.number V))))
 
+\\ The crashes among some steps, of either kind.
+(define fx.crashes
+  Steps -> (let Kinds (map (/. L (hd L)) Steps) (+ (fx.count crash Kinds) (fx.count crash-after-commit Kinds))))
+
 \\ The model's crash budget for a run. A schedule states it. A free run has
 \\ none: there it is the number of crashes that were found to have happened.
 (define fx.crash-budget
   Schedule Labels -> (if (= (fh.field "mode" Schedule) "free")
-                         (fx.count crash (map (/. L (hd L)) Labels))
+                         (fx.crashes Labels)
                          (fx.budget "crashes" Schedule)))
 
 \\ Result [Verdict Detail Info], Info [Labels Outcomes Terminal] when the log could be replayed.
@@ -472,7 +489,7 @@
                                 ["events" []] ["consoles" []] ["stores" []]]))))
 
 (define fx.list-schedule
-  Steps -> [object ["mode" "list"] ["crashes" (str (fx.count crash (map (/. L (hd L)) Steps)))]
+  Steps -> [object ["mode" "list"] ["crashes" (str (fx.crashes Steps))]
                    ["duplicates" (str (fx.count duplicate (map (/. L (hd L)) Steps)))]
                    ["steps" (map (/. L (fx.label-json L)) Steps)]])
 
@@ -534,6 +551,11 @@
                   [issue C P "7"] [deliver-request (T 2)] [act P (T 2) replayed] [deliver-reply (T 2) One]] (Second 3))
          "completed" [["timed_out"] ["reply" ["int" "1"]] ["reply" ["int" "2"]]] 2
          "killed after it applied: timed-out; the restarted peer has its record and replays it"]
+        ["peer-killed-between-commit-and-reply" (fx.declared) true
+         (append [[issue C P "7"] [deliver-request (T 1)] [crash-after-commit P (T 1)] [timeout (T 1)] [restart P]
+                  [issue C P "7"] [deliver-request (T 2)] [act P (T 2) replayed] [deliver-reply (T 2) One]] (Second 3))
+         "completed" [["timed_out"] ["reply" ["int" "1"]] ["reply" ["int" "2"]]] 2
+         "killed after its durable commit and before its reply: nothing in flight, only timed-out; the restarted peer finds the record in its store and the retry gets the committed value; applied once"]
         ["no-peer-down-after-handover" (fx.declared) true
          [[issue C P "7"] [deliver-request (T 1)] [crash P] [peer-down (T 1)]]
          "step-not-enabled" [] 0
@@ -654,7 +676,11 @@
         ["relay-undeclared" [] false
          [[issue C P "7"] [deliver-request (T 1)] [act P (T 1)] [deliver-reply (T 1)]]
          undeclared-delivery "declared-edges-only"
-         "the supervisor carries a connection the manifest lacks (start-time check switched off)"]]))
+         "the supervisor carries a connection the manifest lacks (start-time check switched off)"]
+        ["reply-before-commit" (fx.declared) true
+         [[issue C P "7"] [deliver-request (T 1)] [crash-after-commit P (T 1)] [deliver-reply (T 1)]]
+         reply-before-commit "reply-implies-acted"
+         "the peer image sends its reply first and commits afterwards; killed in between, it has replied with no durable record"]]))
 
 \\ A schedule as commands: the supervisor reports what happened, so a command
 \\ may leave out the end of a label.
@@ -664,7 +690,7 @@
   L -> (fx.label-json L))
 
 (define fx.command-schedule
-  Steps -> [object ["mode" "list"] ["crashes" (str (fx.count crash (map (/. L (hd L)) Steps)))]
+  Steps -> [object ["mode" "list"] ["crashes" (str (fx.crashes Steps))]
                    ["duplicates" (str (fx.count duplicate (map (/. L (hd L)) Steps)))]
                    ["steps" (map (/. L (fx.command L)) Steps)]])
 
@@ -717,11 +743,16 @@
 \\ process is killed from outside the supervisor's step machine once two steps
 \\ have been taken (the request is then in the peer's inbox): the supervisor has
 \\ to find the peer dead, restart it, and time the caller out on the clock.
+\\ In the third it is killed inside its first act, after its commit and before
+\\ its reply: the supervisor has to find it dead and learn from its store that it
+\\ had committed; the retry is then answered from the record.
 (define fx.free-runs
   -> [["free" [object ["mode" "free"] ["timeout_ms" "2000"] ["deadline_ms" "20000"]]
        [["reply" ["int" "1"]] ["reply" ["int" "2"]]] []]
       ["free-peer-killed" [object ["mode" "free"] ["timeout_ms" "300"] ["deadline_ms" "20000"] ["kill" [["peer" "2"]]]]
-       [["timed_out"] ["reply" ["int" "1"]] ["reply" ["int" "2"]]] [crash restart timeout]]])
+       [["timed_out"] ["reply" ["int" "1"]] ["reply" ["int" "2"]]] [crash restart timeout]]
+      ["free-peer-killed-after-commit" [object ["mode" "free"] ["timeout_ms" "300"] ["deadline_ms" "20000"] ["kill_in_act" [["peer" "1"]]]]
+       [["timed_out"] ["reply" ["int" "1"]] ["reply" ["int" "2"]]] [crash-after-commit restart timeout]]])
 
 \\ Result [Passed Json Labels].
 (define fx.free
@@ -741,7 +772,7 @@
 
 (define fx.required-kinds
   -> [issue refuse finish deliver-request deliver-reply discard-reply drop duplicate act-applied act-replayed
-      timeout peer-down crash restart])
+      crash-after-commit timeout peer-down crash restart])
 
 (define fx.tally
   [] Acc -> Acc
@@ -814,6 +845,7 @@
                          ["seeded_budgets" "1 crash, 1 duplicate, at most 120 steps"]
                          ["seeded_failed" (map (/. S [object ["seed" (str (hd S))] ["failures" (hd (tl S))]]) (fh.take 5 SeedsFailed))]
                          ["seeded_steps" (str (fx.sum (map (/. S (length (nth 3 S))) Seeds)))]
+                         ["seeded_schedules_with_a_crash_after_commit" (str (length (fx.keep (/. S (fr.any? (/. L (= (hd L) crash-after-commit)) (nth 3 S))) Seeds)))]
                          ["seeded_ran_until_no_step_was_enabled" (str (length (fx.keep (/. S (nth 4 S)) Seeds)))]
                          ["free_runs" (map (/. F (hd (tl F))) Free)]
                          ["steps_by_kind" (fx.kinds-json Kinds)]

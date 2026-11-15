@@ -34,7 +34,8 @@ schedule(#{<<"mode">> := <<"seeded">>, <<"seed">> := Seed} = S) ->
 schedule(#{<<"mode">> := <<"free">>} = S) ->
     #{mode => free, timeout_ms => number(maps:get(<<"timeout_ms">>, S, 2000)),
       deadline_ms => number(maps:get(<<"deadline_ms">>, S, 20000)),
-      kill => [{Name, number(N)} || [Name, N] <- maps:get(<<"kill">>, S, [])]}.
+      kill => [{Name, number(N)} || [Name, N] <- maps:get(<<"kill">>, S, [])],
+      kill_in_act => [{Name, number(N)} || [Name, N] <- maps:get(<<"kill_in_act">>, S, [])]}.
 
 run(SpecFile) ->
     %% The argument is a file name, or the JSON text itself.
@@ -51,7 +52,8 @@ run(SpecFile) ->
                end,
     Schedule = maps:get(<<"schedule">>, Spec),
     Defects = maps:get(<<"defects">>, Spec, []),
-    Known = [<<"peer-down-after-handover">>, <<"late-reply-accepted">>, <<"relay-undeclared">>, <<"non-idempotent-peer">>],
+    Known = [<<"peer-down-after-handover">>, <<"late-reply-accepted">>, <<"relay-undeclared">>, <<"non-idempotent-peer">>,
+             <<"reply-before-commit">>],
     [] = Defects -- Known,
     Members = [#{name => maps:get(<<"name">>, M),
                  kind => case maps:get(<<"kind">>, M) of <<"caller">> -> caller; <<"peer">> -> peer end,

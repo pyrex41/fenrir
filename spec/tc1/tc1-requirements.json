@@ -1,8 +1,8 @@
 {
  "schema": "tc1-requirement-manifest/1",
- "status": "proposed",
+ "status": "owner-accepted",
  "slice": "TC1",
- "contract": "spec/tc1/EFFECTS.md (tc1-draft-1: slices H1 and H2)",
+ "contract": "spec/tc1/EFFECTS.md (draft 5: slices H1 and H2, and remote perform, section 12)",
  "ledger": "spec/tc0/requirement-ledger-a.json",
  "evaluator": "harness/tc1-gate.shen",
  "aggregation": "As the TC0-A gate (TC0-GATE, 02 \u00a714): any required row FAIL -> FAIL; else any BLOCKED -> BLOCKED; else any UNKNOWN -> UNKNOWN; else PASS. A defect killed on no program is FAIL; a crash is never a kill. An evaluator error or a check that does not report is UNKNOWN. Every row's reasons are reported whatever the aggregate. Optional rows never satisfy a required row.",
@@ -23,7 +23,7 @@
     "G0-TOOLCHAIN-BASELINE"
    ],
    "check": "toolchain-pinned",
-   "acceptance": "The Shen/JIT executable and library directory the gate runs on resolve to the flake's shen-jit output. No nix or no such flake output: BLOCKED. Another executable: UNKNOWN."
+   "acceptance": "The Shen/JIT executable and library directory the gate runs on resolve to the flake's shen-jit output, and the Erlang/OTP the supervisor would be built and run with (harness/find-erlang.sh) resolves to the flake's erlang output. No nix, no such flake output, or no Erlang/OTP at all: BLOCKED. Another Shen/JIT or another Erlang/OTP: UNKNOWN."
   },
   {
    "id": "unit-suite",
@@ -181,6 +181,24 @@
    "acceptance": "harness/tc1-replay.shen, in a fresh process, on the failures the random-reduction row recorded in this run: for each of the six defects the original and the shrunk choice lists regenerate programs of the recorded sizes (the shrunk one exactly the recorded program), the model and the undefective implementation agree on both, and the defective implementation completes with a different trace on both, on the shrunk program first differing from the model at the recorded step. No reduction in this run: UNKNOWN."
   },
   {
+   "id": "remote-model",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "check": "tc1-remote-model",
+   "acceptance": "harness/tc1-remote.shen, as harness/run-tc1-remote.sh runs it. Model-level bounded exploration: no implementation is run. The whole reachable state graph of 6 small systems of models/tc1/remote-system.shen is explored and every property of spec/tc1/EFFECTS.md section 12.8 holds in every state and on every step; every step kind of the model is taken; each of the 9 model mutants is killed on the property it is aimed at (an error is never a kill); the 9 hand schedules pass; and the negative control, the same checker with the non-idempotent peer in place of the model, run first, failed with a failure exit status. Any of these not so: FAIL. No report, or other numbers of systems, mutants or hand schedules: UNKNOWN."
+  },
+  {
+   "id": "remote-run",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "check": "tc1-remote-run",
+   "acceptance": "harness/tc1-remote-run.shen, as harness/run-tc1-remote-run.sh runs it. Observed histories on spt accepted by the model: the Erlang/OTP supervisor (supervisor/) with a caller image and a peer image as Solo5 guests on the spt tender, run under 13 hand schedules, 40 seeded schedules and 3 free-running runs. Every recorded run is accepted: each recorded step is enabled in the model and the supervisor's enabled steps are the model's, the properties of section 12.8 hold on the replay, and the images' consoles and the peer's store file are what the model says; every scheduled run is made twice with equal recordings; every step kind of the model occurs; each of the 5 defect switches of the real system is killed (an error is never a kill); and the negative control, the non-idempotent peer image judged as if it were the peer, run first, failed with a failure exit status. Any of these not so: FAIL. Erlang/OTP not available, or the images cannot be built (Solo5 not built at the pinned commit): BLOCKED. A supervisor that does not compile, no report, other numbers of schedules or defects, or another tender: UNKNOWN. Two free-running runs depend on the wall clock."
+  },
+  {
    "id": "handler-step-coverage",
    "required": false,
    "ledger": [
@@ -221,6 +239,15 @@
    "guest-exhaustive-small",
    "guest-random-family"
   ],
+  "remote-perform-model-properties-bounded": [
+   "toolchain-pinned",
+   "remote-model"
+  ],
+  "remote-perform-observed-histories-spt": [
+   "toolchain-pinned",
+   "remote-model",
+   "remote-run"
+  ],
   "tc0-a-preserved": [
    "unit-suite",
    "tc0-a-gate"
@@ -230,7 +257,11 @@
   "source-identity",
   "tc0-a-gate"
  ],
- "review": "None. This manifest is PROPOSED: it is not owner-accepted and the evaluator is not registered in .pi/fenrir-workflow.json, so every report says authority UNREGISTERED and qualification UNKNOWN. Registration is the owner's decision.",
- "model": "models/tc1/handler-machine.shen with models/tc0/i64.shen, run in-process by the Shen harness on the flake-pinned Shen/JIT",
- "not_covered": "Strict replay of whole runs against recorded tapes (the reduced-replay row re-runs and re-compares; it does not replay a tape), a versioned and hashed transition catalog for the handler steps (the optional coverage row measures against the table in EFFECTS.md section 6), and any soundness proof of the typing or one-shot rules. Grammar H has one-operation effects with I64 operation types only, no closures, and programs of at most 7 nodes. The generated family is a sample, not a scope: 20,000 programs of at most 40 nodes from fixed seeds, with three effects (one of two operations, one of them returning Bool), no closures, datatypes, tuples or bytes, no Unit-typed operations, and no handle of a type other than I64; its reduction shrinks to a small failing program, not to a proven smallest one. The guest is compared with the model on the generated family, not with the six implementation defects."
+ "review": "campaigns/tc1/TC1_GATE_REGISTRATION.md. Owner-accepted on 2026-11-15 by instruction in conversation, not by line review of the manifest, the evaluator or the checks; the status says owner-accepted, not owner-reviewed, for that reason. Registered as the check tc1-qualification in .pi/fenrir-workflow.json.",
+ "model": "models/tc1/handler-machine.shen with models/tc0/i64.shen, and for the remote rows models/tc1/remote-system.shen with models/tc1/remote-tc1-caller.shen, run in-process by the Shen harness on the flake-pinned Shen/JIT",
+ "not_covered": "Strict replay of whole runs against recorded tapes (the reduced-replay row re-runs and re-compares; it does not replay a tape), a versioned and hashed transition catalog for the handler steps (the optional coverage row measures against the table in EFFECTS.md section 6), and any soundness proof of the typing or one-shot rules. Grammar H has one-operation effects with I64 operation types only, no closures, and programs of at most 7 nodes. The generated family is a sample, not a scope: 20,000 programs of at most 40 nodes from fixed seeds, with three effects (one of two operations, one of them returning Bool), no closures, datatypes, tuples or bytes, no Unit-typed operations, and no handle of a type other than I64; its reduction shrinks to a small failing program, not to a proven smallest one. The guest is compared with the model on the generated family, not with the six implementation defects. Remote perform: the model rows explore 6 small systems under budgets of crash and duplicate steps, and the checker reads history variables the model's own steps maintain; the run row is one two-member system and a few dozen recorded histories on the spt tender, with block-device mailboxes as the transport, I64 arguments and replies, and a supervisor whose event log is its own account. No hvt run, no network transport, no liveness, no supervisor failure, no proof. See spec/tc1/EFFECTS.md sections 12.9 and 12.11.",
+ "claim_evidence": {
+  "remote-perform-model-properties-bounded": "model-level bounded exploration",
+  "remote-perform-observed-histories-spt": "observed histories on spt accepted by the model"
+ }
 }

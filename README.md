@@ -57,7 +57,18 @@ store. The amendment changes no TC0 evidence.
   Solo5 guest. All three agree step for step on twenty hand fixtures and on
   every one of 12,693 enumerated handler programs, and six injected defects
   are each detected. A separate TC1 gate (`sh harness/run-tc1-gate.sh`) passes
-  14 of 14 required rows; it is proposed and not registered.
+  21 of 21 required rows on a committed tree. It was registered on 15 November
+  2026 by the owner's instruction, not by line review
+  ([record](campaigns/tc1/TC1_GATE_REGISTRATION.md)); no run through the
+  workflow controller has been made, so it has no qualification receipt.
+- **Remote perform between images.** EFFECTS.md §12: a perform that crosses an
+  image boundary returns `reply v`, `peer_down` or `timed_out`. There is a
+  Shen model, explored exhaustively on six small systems, and a first
+  implementation, an Erlang/OTP supervisor ([supervisor/](supervisor/README.md))
+  relaying between two Solo5 `spt` guests through block-device mailboxes,
+  whose recorded runs the model accepts. Both checks are rows of the TC1 gate.
+  That is bounded exploration of a model and observed histories of one small
+  system: no `hvt` run and no proof.
 - **Service model.** [verification/service/](verification/service/) is a Rocq
   model of a tenant-scoped request that atomically records a report, a durable
   job and its retry result before answering, with write isolation, atomicity,

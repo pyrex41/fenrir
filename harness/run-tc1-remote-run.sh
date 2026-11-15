@@ -8,16 +8,15 @@
 # The negative control runs first: with the non-idempotent peer in place of the
 # peer, the same checker must report a failure and exit with status 1.
 # Needs: Solo5 at the pinned commit (FENRIR_SOLO5 or build/vendor/solo5),
-# Erlang/OTP (FENRIR_ERLANG, else the flake's erlang, else erl and erlc on PATH),
+# Erlang/OTP (harness/find-erlang.sh: FENRIR_ERLANG, else the flake's erlang, else
+# erl and erlc on PATH),
 # node, and Shen/JIT (harness/jit.sh). No KVM: the spt tender only.
+# The TC1 gate's remote-run row (harness/tc1-remote-rows.shen) does the same steps.
 # Usage: sh harness/run-tc1-remote-run.sh
 set -eu
 . "$(dirname "$0")/jit.sh"
-if [ -z "${FENRIR_ERLANG:-}" ] && command -v nix >/dev/null 2>&1; then
-  FENRIR_ERLANG=$(cd "$root" && nix build --no-link --print-out-paths .#erlang 2>/dev/null) || FENRIR_ERLANG=
-fi
-if [ -n "${FENRIR_ERLANG:-}" ]; then erl="$FENRIR_ERLANG/bin/erl"; erlc="$FENRIR_ERLANG/bin/erlc"
-else erl=$(command -v erl); erlc=$(command -v erlc); fi
+erlang=$(sh "$root/harness/find-erlang.sh") || { echo "Erlang/OTP not found (FENRIR_ERLANG, the flake's erlang, or erl and erlc on PATH)" >&2; exit 2; }
+erl=$(printf '%s\n' "$erlang" | sed -n 1p); erlc=$(printf '%s\n' "$erlang" | sed -n 2p)
 out="$root/build/remote-run/$(date +%s)-$$"
 mkdir -p "$out/ebin" "$out/control" "$out/check"
 sh "$root/supervisor/build.sh" "$erlc" "$out/ebin" >&2
