@@ -75,9 +75,9 @@
 \\ Each check gives [] when it holds or a one-line reason. Run is [Execution Detail Steps M].
 (define fh.check-entry
   "terminations" [T Want] Es -> (if (fh.same? Want (fh.termination-of T Es)) [] (cn "termination of task " T))
-  "terminations_one_of" [T Wants] Es -> (if (fh.member-of? (fh.termination-of T Es) Wants) [] (cn "termination of task " T " (one of)"))
+  "terminations_one_of" [T Wants] Es -> (if (fh.member-of? (fh.termination-of T Es) Wants) [] (cn "termination of task " (cn T " (one of)")))
   "emissions" [T Want] Es -> (if (fh.same? Want (fh.emission-list (fh.of-task T Es))) [] (cn "emissions of task " T))
-  "emissions_one_of" [T Wants] Es -> (if (fh.member-of? (fh.emission-list (fh.of-task T Es)) Wants) [] (cn "emissions of task " T " (one of)"))
+  "emissions_one_of" [T Wants] Es -> (if (fh.member-of? (fh.emission-list (fh.of-task T Es)) Wants) [] (cn "emissions of task " (cn T " (one of)")))
   "task_kinds" [T Want] Es -> (if (fh.same? Want (map (/. E (fh.field "kind" E)) (fh.of-task T Es))) [] (cn "event kinds of task " T))
   "channel_kinds" [C Want] Es -> (if (fh.same? Want (fh.channel-kinds C Es)) [] (cn "sequence of channel " C))
   "order" [P Q] Es -> (let I (fh.first-match P Es 0) J (fh.first-match Q Es 0)
