@@ -1,0 +1,1 @@
+{"schema": "fenrir.service.history/1", "tenants": 2, "scenario": "job-lost-runner-drained", "expect": "rejected", "note": "after the crash the runner found nothing to deliver although an accepted job is pending", "events": [["submit", 0, 0, 0, ["accepted", [0, 0, 0, 0, 0]]], ["respond", ["accepted", [0, 0, 0, 0, 0]]], ["crash", "node"], ["drained"]], "expect_index": 3}

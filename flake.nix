@@ -174,6 +174,18 @@
         doCheck = false; # its tests need every Shen target port installed
       };
 
+      # ---- BEGIN stage A3 host service (host/service/): additive, self-contained block ----
+      # The OTP host and the SQLite port program of stage A3 (04_DIRECTION_AMENDMENT.md
+      # section 8), pinned by this flake's nixpkgs input: Erlang/OTP from beamPackages,
+      # SQLite (library and headers) for the C port program, gcc to build it, and
+      # nodejs_22 for the existing image build step. No hex/rebar dependency is fetched.
+      a3-tools = pkgs.buildEnv {
+        name = "fenrir-a3-tools";
+        paths = [ pkgs.beamPackages.erlang pkgs.sqlite.out pkgs.sqlite.dev pkgs.sqlite.bin pkgs.gcc pkgs.nodejs_22 ];
+        pathsToLink = [ "/bin" "/lib" "/include" ];
+      };
+      # ---- END stage A3 host service ----
+
       # Links the pinned host oracle where the development checks expect it.
       link-toolchain = pkgs.writeShellScriptBin "fenrir-link-toolchain" ''
         set -eu
@@ -197,7 +209,7 @@
         pathsToLink = [ "/bin" "/lib" "/share" ];
       };
     in {
-      packages.${system} = { inherit shen-scheme shen-cl shen-jit solo5 yggdrasil link-toolchain aarch64-verification; default = link-toolchain; };
+      packages.${system} = { inherit shen-scheme shen-cl shen-jit solo5 yggdrasil link-toolchain aarch64-verification; default = link-toolchain; } // { fenrir-a3-tools = a3-tools; }; # A3: additive
       apps.${system}.default = { type = "app"; program = "${link-toolchain}/bin/fenrir-link-toolchain"; };
       devShells.${system}.default = pkgs.mkShell {
         packages = [ pkgs.nodejs_22 pkgs.python3 pkgs.sbcl pkgs.go_1_27 shen-scheme yggdrasil ];

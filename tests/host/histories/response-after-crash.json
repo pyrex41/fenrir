@@ -1,0 +1,1 @@
+{"schema": "fenrir.service.history/1", "tenants": 2, "scenario": "response-after-crash", "expect": "rejected", "note": "a crash empties the outbox: the response cannot be delivered afterwards", "events": [["submit", 0, 0, 0, ["accepted", [0, 0, 0, 0, 0]]], ["crash", "node"], ["respond", ["accepted", [0, 0, 0, 0, 0]]]], "expect_index": 2}

@@ -1,0 +1,1 @@
+{"schema": "fenrir.service.history/1", "tenants": 2, "scenario": "cross-tenant-effect", "expect": "rejected", "note": "a submit under tenant 0 advanced tenant 1's counter", "events": [["submit", 0, 0, 0, ["accepted", [0, 0, 0, 0, 0]]], ["observe", [[[[0, 0]], [[0, 0, "pending"]], [[0, 0, [0, 0, 0, 0, 0]]], 1], [[], [], [], 1]]]], "expect_index": 1}

@@ -1,0 +1,1 @@
+{"schema": "fenrir.service.history/1", "tenants": 2, "scenario": "reused-key-accepted", "expect": "rejected", "note": "a reused key with another payload must be a conflict", "events": [["submit", 0, 0, 0, ["accepted", [0, 0, 0, 0, 0]]], ["submit", 0, 0, 1, ["accepted", [0, 0, 0, 0, 0]]]], "expect_index": 1}

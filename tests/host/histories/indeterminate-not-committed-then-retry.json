@@ -1,0 +1,1 @@
+{"schema": "fenrir.service.history/1", "tenants": 2, "scenario": "indeterminate-not-committed-then-retry", "expect": "accepted", "note": "lost before commit: the retry commits", "events": [["submit", 0, 0, 1, ["indeterminate"]], ["observe", [[[], [], [], 0], [[], [], [], 0]]], ["submit", 0, 0, 1, ["accepted", [0, 0, 1, 0, 0]]]]}

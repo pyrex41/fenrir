@@ -1,0 +1,9 @@
+{application, fenrir_service,
+ [{description, "Fenrir A3: accepted-job service, OTP host for Solo5 workers with a SQLite adapter"},
+  {vsn, "0.1.0"},
+  {registered, [fenrir_service_sup, fenrir_store, fenrir_worker_sup, fenrir_front, fenrir_runner, fenrir_holder]},
+  {applications, [kernel, stdlib, crypto]},
+  {mod, {fenrir_service_app, []}},
+  {env, []},
+  {modules, [fenrir_service_app, fenrir_service_sup, fenrir_store, fenrir_sqlite, fenrir_worker, fenrir_proto,
+             fenrir_value, fenrir_manifest, fenrir_front, fenrir_runner, fenrir_holder, fenrir_faults, fenrir_node]}]}.
