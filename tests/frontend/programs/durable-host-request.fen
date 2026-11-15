@@ -1,0 +1,14 @@
+\\ A durable effect left unhandled at main is a residual effect: the host discharges
+\\ it (spec/tc1/DURABLE.md). run has no host, so it shows the first request, which
+\\ the argument's emit precedes, and stops there.
+\\
+\\ Expected:
+\\ > emit "argument": 41
+\\ > host request 0: Store.put 41
+\\ > outcome: none (waiting for the host's reply; run has no host)
+
+(effect Store durable
+  (put I64 --> I64))
+
+(define main {I64 --> I64}
+  input -> (+ (perform Store put (do (emit "argument" 41) 41)) 1))

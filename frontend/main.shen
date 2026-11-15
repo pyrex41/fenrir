@@ -28,6 +28,7 @@
 (load (cn (value fh.*root*) "harness/common.shen"))
 (load (cn (value fh.*root*) "frontend/reader.shen"))
 (load (cn (value fh.*root*) "frontend/elaborate.shen"))
+(load (cn (value fh.*root*) "harness/tc1-durable-common.shen"))
 
 (define fe.finish
   Status Text -> (do (write-to-file (cn (value fe.*work*) "result") Text)
@@ -134,9 +135,46 @@
   ["Trap" _] Steps Artifact -> (fe.position (fe.trap-node Steps) (map (/. R (fh.canon R)) (fh.field "source_map" Artifact)))
   _ _ _ -> "")
 
+\\ TC1-D1 (spec/tc1/DURABLE.md): a program with durable effects runs on the durable
+\\ model with no host. Its first host request ends the run: run shows it and says that
+\\ the program waits for a host (the harness supplies one: harness/run-tc1-durable.sh,
+\\ harness/run-service-fenrir.sh). A main that takes a request cannot be run here.
+(define fe.execute-durable
+  Artifact Fuel ->
+    (let Main (hd (fh.keep-main (fh.field "functions" Artifact)))
+         Takes (fh.field "argument_type" Main)
+         Refused (if (= Takes "I64") true
+                     (fe.finish 1 (make-string "the entry function main takes ~A, a request its host supplies: run has only input 0; run it under a host~%" (json.stringify Takes []))))
+         Run (dh.run Artifact ["int" "0"] [replies] Fuel)
+         Steps (nth 2 Run)
+         Text (cn (fe.emissions Steps) (fe.requests (dt.events-of Steps)))
+      (cond ((= (hd Run) "Completed")
+              (let Outcome (fh.model-outcome Steps)
+                (fe.finish 0 (cn Text (make-string "outcome: ~A~%~Asteps: ~A~%" (fe.show-outcome Outcome) (fe.trap-line Outcome Steps Artifact) (length Steps))))))
+            ((= (hd Run) "AwaitingHost")
+              (fe.finish 0 (cn Text (make-string "outcome: none (waiting for the host's reply; run has no host)~%steps: ~A~%" (length Steps)))))
+            (true (fe.finish 4 (cn Text (make-string "outcome: none (stopped after the budget of ~A steps; set FENRIR_FUEL to raise it)~%" Fuel)))))))
+
+(define fh.keep-main
+  [] -> []
+  [F | Fs] -> (if (= (fh.field "name" F) "main") [F] (fh.keep-main Fs)))
+
+(define dt.events-of
+  [] -> []
+  [S | Ss] -> (append (fh.field "events" S) (dt.events-of Ss)))
+
+(define fe.requests
+  [] -> ""
+  [E | Es] -> (cn (if (= (fh.field "kind" E) "HostRequest")
+                      (make-string "host request ~A: ~A.~A ~A~%" (fh.field "seq" E) (fh.field "effect" E) (fh.field "operation" E) (fe.show-value (fh.field "value" E)))
+                      "")
+                  (fe.requests Es)))
+
 \\ Run the artifact decoded from Text and report emissions in order, the outcome
 \\ and the number of model steps. Entry input is the harness's fixed 0.
 (define fe.execute
+  Text Fuel -> (fe.execute-durable (json.parse Text [[byte-limit 16777216]]) Fuel)
+    where (fh.starts? "tc1-durable-demo/1" (fh.field "schema_version" (json.parse Text [[byte-limit 16777216]])))
   Text Fuel ->
     (let Artifact (json.parse Text [[byte-limit 16777216]])
          Run (fh.run (fh.state Artifact) Fuel 0 [])

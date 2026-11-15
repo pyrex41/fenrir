@@ -1,0 +1,6 @@
+\\ expect 6:35 effect Store, which comes from this perform, is not allowed in a lambda that must have type (Unit --> I64)
+(effect Store durable (commit I64 --> I64))
+(define atomic {(Unit --> I64) --> I64} build -> (perform Store commit (build unit)))
+\\ The body of atomic computes the transaction as data: no host round trip inside it.
+(define main {I64 --> I64} input ->
+  (atomic (lambda (u : Unit) (+ 1 (perform Store commit input)))))

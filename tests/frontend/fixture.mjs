@@ -13,6 +13,7 @@ import {encode} from '../../tools/tc0/canonical.mjs';
 import {cases as callHand} from '../../fixtures/tc0/pure-call-hand-cases.mjs';
 import {cases as dataHand} from '../../fixtures/tc0/pure-data-hand-cases.mjs';
 import {cases as handlerCases,resumptionCases} from '../../fixtures/tc1/handler-hand-cases.mjs';
+import {cases as durableCases} from '../../fixtures/tc1/durable-hand-cases.mjs';
 
 const differ=(where,a,b)=>{console.log(`${where}: ${JSON.stringify(a)} against ${JSON.stringify(b)}`);process.exit(1);};
 // Canonical encoding, so that the order of object keys does not matter.
@@ -60,7 +61,7 @@ function same(a,b) {
 
 const [command,first,second]=process.argv.slice(2);
 if(command==='write'&&second) {
-  const found=[...callHand,...dataHand,...handlerCases,...resumptionCases].find(c=>c.name===first);
+  const found=[...callHand,...dataHand,...handlerCases,...resumptionCases,...durableCases].find(c=>c.name===first);
   if(!found){console.error(`no hand fixture is named ${first}`);process.exit(2);}
   writeFileSync(second,JSON.stringify(found.program));
 } else if(command==='same'&&second) {
