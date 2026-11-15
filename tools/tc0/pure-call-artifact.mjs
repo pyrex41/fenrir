@@ -12,6 +12,10 @@
 // Channel, Outcome, SendResult, ReceiveResult; and the runtime effects Task and
 // Channel in effect sets. Everything it adds is gated on that schema, so the older
 // schemas validate exactly as before.
+// Schema tc1-durable-demo/1 (contract spec/tc1/DURABLE.md, slice TC1-D1) adds to
+// tc1-handler-demo/2 effect classes: every effect declaration has a class, ordinary or
+// durable, and the entry's effect set may contain durable effects (the residual row).
+// It has no task forms. Everything it adds is gated on that schema.
 import {decode,encode,decimal} from './canonical.mjs';
 export class InvalidPureCallArtifact extends Error {}
 export class PureCallValidationLimit extends Error {}
@@ -19,6 +23,8 @@ export const PURE_CALL_SCHEMAS=Object.freeze(['tc0-a-pure-call-demo/1','tc0-a-pu
 export const TC1_HANDLER_SCHEMA='tc1-handler-demo/1';
 export const TC1_RESUMPTION_SCHEMA='tc1-handler-demo/2';
 export const TC1_TASK_SCHEMA='tc1-task-demo/1';
+export const TC1_DURABLE_SCHEMA='tc1-durable-demo/1';
+export const EFFECT_CLASSES=Object.freeze(['ordinary','durable']);
 // Runtime effects a TC1-C1 artifact may name in effect sets (CONCURRENCY.md section 2).
 const TASK_RUNTIME_EFFECTS=Object.freeze(['Task','Channel']);
 export const RESERVED_EFFECTS=Object.freeze(['Emit','Task','Channel','Time','Resource']);
@@ -38,8 +44,8 @@ const dataTags=new Set(['bytes','tuple','project','construct','match']);
 export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,maxBytes=256,maxValueNodes=1000,maxCapacity=8}={}){
  for(const n of [maxNodes,maxDepth,maxBytes,maxValueNodes,maxCapacity])if(!Number.isSafeInteger(n)||n<1)throw new TypeError('Invalid cap');
  const a=decode(bytes);object(a,['contract_version','schema_version','slice','module','datatypes','effects','functions','entry','input_schema','source_map']);
- const tasks=a.schema_version===TC1_TASK_SCHEMA,resumptions=tasks||a.schema_version===TC1_RESUMPTION_SCHEMA,handlers=resumptions||a.schema_version===TC1_HANDLER_SCHEMA;
- if(handlers?(a.contract_version!=='tc1-draft-1'||a.slice!==(tasks?'TC1-C1':resumptions?'TC1-H2':'TC1-H1')):(a.contract_version!=='0.2'||!PURE_CALL_SCHEMAS.includes(a.schema_version)||a.slice!=='TC0-A'))fail('Identity');text(a.module);
+ const tasks=a.schema_version===TC1_TASK_SCHEMA,durable=a.schema_version===TC1_DURABLE_SCHEMA,resumptions=tasks||durable||a.schema_version===TC1_RESUMPTION_SCHEMA,handlers=resumptions||a.schema_version===TC1_HANDLER_SCHEMA;
+ if(handlers?(a.contract_version!=='tc1-draft-1'||a.slice!==(tasks?'TC1-C1':durable?'TC1-D1':resumptions?'TC1-H2':'TC1-H1')):(a.contract_version!=='0.2'||!PURE_CALL_SCHEMAS.includes(a.schema_version)||a.slice!=='TC0-A'))fail('Identity');text(a.module);
  const data=handlers||a.schema_version==='tc0-a-pure-call-demo/2';
  if(array(a.effects).length&&!handlers)fail('Effect declarations unsupported');
  // Effect sets: at most Emit before TC1; under TC1 any declared effect or Emit, in
@@ -85,7 +91,9 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
  // Effect declarations: operations A -> B. In this slice A and B are serializable
  // types, so no closure crosses an operation boundary.
  if(a.effects.length>8)fail('Effect count');
- for(const d of a.effects){object(d,['name','operations']);identifier(d.name);if(RESERVED_EFFECTS.includes(d.name)||declared.has(d.name))fail('Effect name');
+ for(const d of a.effects){object(d,durable?['name','class','operations']:['name','operations']);identifier(d.name);
+  // TC1-D1: every declaration names its class (DURABLE.md section 1).
+  if(durable&&!EFFECT_CLASSES.includes(d.class))fail('Effect class');if(RESERVED_EFFECTS.includes(d.name)||declared.has(d.name))fail('Effect name');
   if(!array(d.operations).length||d.operations.length>8)fail('Operation count');const seen=new Set();
   for(const o of d.operations){object(o,['name','argument_type','result_type']);identifier(o.name);if(seen.has(o.name))fail('Duplicate operation');seen.add(o.name);type(o.argument_type);type(o.result_type);if(!plain(o.argument_type)||!plain(o.result_type))fail('Operation types must be serializable');}
   declared.set(d.name,d);}
@@ -103,7 +111,7 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
  const fresh=(id,location=false)=>{unsigned(id);if(ID.has(id))fail('Duplicate ID');ID.add(id);if(location)locations.add(id);};
  if(!array(a.functions).length||a.functions.length>32)fail('Function count');
  for(const f of a.functions){object(f,['id','name','parameter_id','argument_type','result_type','effects','body']);fresh(f.id,true);fresh(f.parameter_id);text(f.name);if(functions.has(f.name))fail('Duplicate function name');type(f.argument_type);type(f.result_type);effects(f.effects);functions.set(f.name,f);}
- const entry=functions.get(a.entry);if(!entry)fail('Entry');if(entry.effects.some(k=>k!=='Emit'&&!(tasks&&TASK_RUNTIME_EFFECTS.includes(k))))fail('Entry must handle every user effect');if(!plain(entry.argument_type)||!plain(entry.result_type))fail('Serializable entry');object(a.input_schema,['type']);if(!same(a.input_schema.type,entry.argument_type))fail('Input schema');value(input,entry.argument_type);
+ const entry=functions.get(a.entry);if(!entry)fail('Entry');if(entry.effects.some(k=>k!=='Emit'&&!(tasks&&TASK_RUNTIME_EFFECTS.includes(k))&&!(durable&&declared.get(k)?.class==='durable')))fail('Entry must handle every user effect');if(!plain(entry.argument_type)||!plain(entry.result_type))fail('Serializable entry');object(a.input_schema,['type']);if(!same(a.input_schema.type,entry.argument_type))fail('Input schema');value(input,entry.argument_type);
  const union=rows=>new Set(rows.flatMap(r=>[...r.effects]));
  const free=rows=>new Set(rows.flatMap(r=>[...r.free]));
  const primitive={add:['I64','I64','I64'],sub:['I64','I64','I64'],mul:['I64','I64','I64'],div:['I64','I64','I64'],neg:['I64','I64'],lt:['I64','I64','Bool'],le:['I64','I64','Bool'],gt:['I64','I64','Bool'],ge:['I64','I64','Bool'],not:['Bool','Bool'],bytes_length:['Bytes','I64'],bytes_index:['Bytes','I64','I64'],bytes_concat:['Bytes','Bytes','Bytes']};
@@ -205,4 +213,12 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
  codes.sort((a,b)=>BigInt(a.code_id)<BigInt(b.code_id)?-1:1);
  function freeze(v){if(v&&typeof v==='object'){for(const x of Object.values(v))freeze(x);Object.freeze(v);}return v;}
  return freeze({artifact:a,input:decode(encode(input)),codes,node_count:String(count)});
+}
+// TC1-D1 (DURABLE.md section 2): the residual row of a validated artifact, its
+// capability manifest. The durable effects in the entry's effect set, each with its
+// full declaration. Empty for every older schema.
+export function residualEffects(artifact){
+ if(artifact.schema_version!==TC1_DURABLE_SCHEMA)return [];
+ const entry=artifact.functions.find(f=>f.name===artifact.entry);
+ return artifact.effects.filter(d=>d.class==='durable'&&entry.effects.includes(d.name));
 }
