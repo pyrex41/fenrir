@@ -346,17 +346,19 @@ the D a proof binds is the derivation. This is the same machinery
   the checker does: the probe `bytes-type-under-schema-1` is a derivation the
   search builds and the checker rejects) **or more** (budget). Neither matters
   for what is accepted: if R_S is wrong, search fails, or builds a derivation the
-  checker rejects. Proof search is bounded by `maxinferences` (2,000,000
+  checker rejects; either way the program is not accepted, which on a valid
+  program shows up as a disagreement with the JavaScript validator. Proof search is bounded by `maxinferences` (2,000,000
   inferences per proof); running out is UNKNOWN.
 - Shen's checker *was* drivable for the object language here; the costs found
   were load time (a rule that spelled the derivation node out as its type
   pattern took Shen about a second to compile; built by `ts.close` it takes
-  milliseconds) and the quoting.
+  milliseconds; the whole rule set about 0.3 s, which the frontend saves by
+  running from a Shen/JIT heap image that holds it compiled) and the quoting.
 
 `typing/unsound.shen` adds three deliberately unsound rule sets to the search
 (any expression has any type; the one-shot rule forgotten; perform without its
 effect), the analogue of `unsound-rule.shen`. Shen takes them silently and
-finds "derivations" of ill-typed programs; the checker rejects every one (§11).
+finds "derivations" of ill-typed programs; the checker rejects every one (§12).
 
 ## 10 The fixed checker
 
