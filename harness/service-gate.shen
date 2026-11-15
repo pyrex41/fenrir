@@ -653,6 +653,10 @@
          Present (if (string? Out) (hd (fh.exec "test" ["-s" Sample] 30)) 1)
       (if (or (= Report []) (not (= Present 0)))
           (fh.row "UNKNOWN" ["No A4 refinement report or no run sample in this run"] [] Memo)
+      (if (not (and (sg.a4-scope-matches? Report)
+                    (sg.untruncated? (fh.member "exploration" (fh.member "refinement" Report)))
+                    (= (fh.member "ran" (fh.member "javascript_sample" Report)) true)))
+          (fh.row "UNKNOWN" ["The A4 refinement report of this run is at another scope, truncated, or its JavaScript side did not run; its sample is not evidence"] [] Memo)
           (let Built (fh.exec "node" [(cn (value fh.*root*) "tools/solo5/control-durable-build.mjs") "--programs" Sample] 1800)
             (if (= (hd Built) -1)
                 (fh.row "UNKNOWN" ["The Solo5 batch build did not complete within its time limit"] [] Memo)
@@ -674,7 +678,7 @@
                                   (fh.row "PASS" [] [["programs" (sg.show (fh.member "programs" G))] ["steps_agreed" (sg.show (fh.member "steps_agreed" G))]
                                                      ["total_boots" (sg.show (fh.member "total_boots" G))]] Memo)
                                   (fh.row "FAIL" ["The Solo5 guest diverges from the model on an A4 run, a tape did not replay exactly, or a hostile-host result was unexpected"]
-                                          [["failures" (json.stringify (fh.member "failures" G) [])]] Memo))))))))))))
+                                          [["failures" (json.stringify (fh.member "failures" G) [])]] Memo)))))))))))))
 
 \\ Replay each retained A4 counterexample in a fresh process: the 43 of the A4 model
 \\ (spec/service/counterexamples-a4, harness/service-upgrade.shen) and the 16 of the Fenrir
