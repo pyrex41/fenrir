@@ -198,7 +198,7 @@ SQLite fits the model unusually well. It has one writer at a time, so transactio
 | Stage | Deliverable | State |
 | --- | --- | --- |
 | A0 | Abstract protocol model with the properties above proved, plus a negative control | **Done at model level:** [verification/service/AcceptedJob.v](verification/service/AcceptedJob.v) |
-| A1 | The contract as an executable Shen model, which becomes its authoritative statement; Gleipnir explores schedules, crashes and duplicate deliveries against it, with the volatile-mailbox design as a mutant that must be caught | Next |
+| A1 | The contract as an executable Shen model, which becomes its authoritative statement; Gleipnir explores schedules, crashes and duplicate deliveries against it, with the volatile-mailbox design as a mutant that must be caught | **Bounded exploration passed, development grade (15 November 2026):** [models/service/accepted-job.shen](models/service/accepted-job.shen), [spec/service/ACCEPTED_JOB.md](spec/service/ACCEPTED_JOB.md). 2 tenants, 2 keys, 2 digests, at most 3 submits, 2 deliveries, 2 responses, 1 crash: 251,374 product states, 1,093,203 edges, no violation; volatile-mailbox caught (recovery, 3 steps) with eight other mutants, equivalent control not flagged; JavaScript implementation agrees on all 629,165 runtime edges. Shen-to-Rocq correspondence by reading only. See [harness/README.md](harness/README.md) |
 | A2 | The handler written as a Fenrir program against `atomic`, `once`, `jobs.stage` library interfaces | Needs TC1 effects and the frontend |
 | A3 | SQLite adapter under an OTP supervisor, Fenrir worker in Solo5, black-box crash and history tests against the contract | After A2 |
 | A4 | A versioned upgrade that preserves pending work | Later |

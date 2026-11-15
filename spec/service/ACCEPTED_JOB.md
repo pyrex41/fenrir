@@ -248,3 +248,24 @@ transactions per tenant), no confidentiality, no liveness theorem, no
 indeterminate commit, no external effects, no authentication or retention,
 abstract ids and digests. Bounded exploration adds its own limit: only the
 explored parameters and budgets.
+
+## 10 Measured against the predictions
+
+Default scope (harness/README.md): every mutant was caught by every property
+it was aimed at, and the equivalent control was not flagged and produced the
+model's graph exactly. Where the run differed from the hand predictions in
+[mutant-predictions.json](mutant-predictions.json) (left as written):
+
+- `non-atomic-write`: response discipline fails at 2 steps, not 3, and progress
+  at 3, not 4. A retry *before* the job is staged (`submit, submit`) already
+  replays an acceptance whose job does not exist; the prediction assumed a
+  crash first.
+- `respond-before-commit` also fails `retry.issued` at 2 steps (not predicted):
+  a second submit with another digest, computed against the uncommitted store,
+  is accepted although an acceptance for that key was already issued.
+- `volatile-status` also fails `authority.frame` at 3 steps (not predicted):
+  the crash carries no tenant capability, so any store change it makes is a
+  frame violation.
+
+Retained shortest counterexamples: [counterexamples/](counterexamples)
+(replay with `sh harness/run-service-explore.sh replay-retained`).

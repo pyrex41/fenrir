@@ -276,9 +276,9 @@
 (define sx.budget-json
   [S C R X] -> [object ["submits" S] ["deliveries" C] ["responses" R] ["crashes" X]])
 
-(define sx.string-of
-  S -> S where (string? S)
-  S -> (str S))
+\\ A path under the repository root, relative to it.
+(define sx.relative
+  Path -> (if (fh.starts? (value fh.*root*) Path) (fh.drop (value fh.*root*) Path) Path))
 
 (define sx.counterexample
   Name Params Budget [Property Check Kind Schedule] Path ->
@@ -293,7 +293,7 @@
             ["budgets" (sx.budget-json Budget)]
             ["schedule" (map (/. L (sx.label L)) Schedule)]
             ["final_state" (sx.state (hd (sx.run-schedule (smu.machine Name) Params Schedule)))]
-            ["replay" (cn "sh harness/run-service-explore.sh replay " Path)]])
+            ["replay" (cn "sh harness/run-service-explore.sh replay " (sx.relative Path))]])
 
 (define sx.run-schedule
   Machine Params Schedule -> (sx.run-from (sx.step-fn Machine) (svc.initial (hd Params)) Schedule))
@@ -366,7 +366,8 @@
          Length (sx.int (fh.field "length" C))
          Schedule (map (/. L (sx.decode-label L)) (fh.field "schedule" C))
          Run (sx.replay-run (smu.machine Name) (sx.decode-params (fh.field "params" C)) Schedule)
-         At (if (= (hd Run) disabled) none (sx.first-index Check Run))
+         Disabled (and (cons? Run) (= (hd Run) disabled))
+         At (if Disabled none (sx.first-index Check Run))
          Reproduced (and (= At Length) (= (length Schedule) Length))
       [Reproduced
        [object ["schema" "fenrir.service.replay/1"]
@@ -374,8 +375,8 @@
                ["qualification" "UNKNOWN"]
                ["file" Path] ["machine" Name] ["check" Check] ["length" Length]
                ["first_failure_at" (if (= At none) null At)]
-               ["schedule_enabled" (not (= (hd Run) disabled))]
-               ["checks_failing" (if (= (hd Run) disabled) [] (map (/. F [object ["check" (nth 2 F)] ["at" (hd F)]]) Run))]]]))
+               ["schedule_enabled" (not Disabled)]
+               ["checks_failing" (if Disabled [] (map (/. F [object ["check" (nth 2 F)] ["at" (hd F)]]) Run))]]]))
 
 \\ ---------- hand traces ----------
 
@@ -561,7 +562,7 @@
 
 (define sx.written-json
   [Property Len Check Path Reproduced] ->
-    [object ["property" (str Property)] ["length" Len] ["check" Check] ["counterexample" Path] ["replay_reproduced" Reproduced]])
+    [object ["property" (str Property)] ["length" Len] ["check" Check] ["counterexample" (sx.relative Path)] ["replay_reproduced" Reproduced]])
 
 (define sx.mutant-run
   Name Params Budget Cap Predictions Model ->

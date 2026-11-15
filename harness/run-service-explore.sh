@@ -11,6 +11,8 @@
 #   sh harness/run-service-explore.sh replay FILE
 #       Re-execute a retained counterexample (e.g. spec/service/counterexamples/*.json);
 #       exits 0 exactly when the named check first fails at the recorded step.
+#   sh harness/run-service-explore.sh retain OUTDIR
+#       Copy the counterexamples of a run into spec/service/counterexamples.
 #   sh harness/run-service-explore.sh replay-retained
 #       Replay every retained counterexample under spec/service/counterexamples.
 set -eu
@@ -23,9 +25,21 @@ run() {
 status=0
 case "${1:-}" in
   replay)
-    report=$(run replay "$2" 2>&1) || status=$?
+    case "$2" in /*) file=$2 ;; *) file=$PWD/$2 ;; esac
+    report=$(run replay "$file" 2>&1) || status=$?
     printf '%s\n' "$report" | tail -n 1
     exit "$status" ;;
+  retain)
+    # Copy a run's counterexamples (OUTDIR given) into spec/service/counterexamples,
+    # pointing each file's replay command at its retained copy.
+    rm -rf "$out"
+    mkdir -p "$root/spec/service/counterexamples"
+    for f in "$2"/counterexamples/*.json; do
+      sed 's#build/harness/service-explore/[^"]*/counterexamples/#spec/service/counterexamples/#' "$f" \
+        > "$root/spec/service/counterexamples/$(basename "$f")"
+    done
+    ls "$root/spec/service/counterexamples"
+    exit 0 ;;
   replay-retained)
     for f in "$root"/spec/service/counterexamples/*.json; do
       line=$(run replay "$f" 2>&1 | tail -n 1) || true
