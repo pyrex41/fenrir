@@ -119,16 +119,47 @@ performed operations, emission order, and three complete hand-derived step
 traces), and six defects injected into the implementation are each detected.
 
 The same twenty programs run in the Solo5 guest (the C machine was extended)
-and agree with the model step for step. The two checks are optional gate rows,
-`tc1-handler-slice` and `tc1-handler-guest`.
+and agree with the model step for step.
 
 Which machine runs a program is decided by its schema; `common.shen` loads
 both models. `expectations.shen` holds the expectation checks the hand-case
 and handler programs share. Performs are read from step records: a user effect
 produces no event.
 
-Not done for TC1: generated or exhaustive handler programs, reduction, strict
-replay and catalog coverage.
+The TC1 loop, each program its own harness process:
+
+```sh
+sh harness/run-tc1-exhaustive.sh        # grammar H up to 7 nodes, ~30 s
+sh harness/run-tc1-generated.sh         # generated family G, ~11 s
+sh harness/run-tc1-reduction.sh DEFECT  # one discovery-reduction-replay campaign, 8-25 s
+sh harness/run-tc1-strict-replay.sh     # ~9 s
+sh harness/run-tc1-gate.sh              # the proposed TC1 gate, ~4 min (runs the TC0-A gate too)
+```
+
+| Program | What it checks | Measured |
+| --- | --- | --- |
+| [tc1-exhaustive.shen](tc1-exhaustive.shen) | Every program of grammar H up to 7 nodes, model against implementation, six defects | 12,693 programs, 263,222 steps, all agree |
+| [tc1-generated.shen](tc1-generated.shen) | The 2,048 programs of family G (`tools/tc1/handler-generate.mjs`), beyond H: multi-operation effects, closures under other handlers, clauses continuing after resume, discontinue, traps; the handler behaviours its traces exercise ([tc1-features.shen](tc1-features.shen)); six defects | 2,048 agree over 80,611 steps; all ten behaviours exercised (7 to 332 programs each); every defect killed (21 to 572 programs) |
+| [tc1-reduction.shen](tc1-reduction.shen) | Discover the first generated program showing a defect's discrepancy class, reduce by typed handler-aware proposals accepted only on fresh observations of the same class, replay original and minimized strictly | forgotten_resume and double_resume 61 to 4 nodes; outermost_handler 61 to 23; shallow_resume 56 to 12 |
+| [tc1-strict-replay.shen](tc1-strict-replay.shen) | Tapes ([tc1-replay.shen](tc1-replay.shen), `tools/tc1/handler-replay.mjs`) for the hand fixtures and the retained failures (`fixtures/tc1/handler-retained-failures.json`) | 20 of 20 admitted; 8 retained admitted without the defect, 8 diverge at the retained epoch with it |
+| [tc1-coverage.shen](tc1-coverage.shen) | Every handler step of the hand, exhaustive and generated traces against the hashed catalog `spec/tc1/handler-catalog.json`, with depth changes | 29 of 29 transitions; none outside the catalog |
+
+Each of these was shown to fail when it should, on a copy of the tree: an
+implementation fault made default (2,048 to 1,744 agreeing, hand fixtures
+disagree, tapes not admitted), the generator without closures (one behaviour
+unexercised), a wrong discrepancy class or a defect that always crashes (no
+discovery), an edited retained case (campaign does not match it) or epoch
+(replay does not diverge there), a wrong catalog pin, a removed, an extra and
+a contradicted transition.
+
+The proposed TC1 gate ([tc1-gate.shen](tc1-gate.shen), manifest
+`spec/tc1/tc1-requirements.json`) on a committed tree, 15 November 2026: 18 of
+21 required rows PASS; `tc0-a-gate`, `guest-hand-fixtures` and
+`guest-exhaustive-small` are BLOCKED where Solo5 is not built, so the verdict
+there is BLOCKED. Authority UNREGISTERED, qualification UNKNOWN.
+
+Not done for TC1: exhaustive exploration beyond grammar H, and reduction
+campaigns for the two defects that show only through later values.
 
 ## What is still not Shen
 

@@ -1,0 +1,3970 @@
+{
+ "schema": "tc1-handler-retained-failures/1",
+ "status": "development-retained-not-qualified",
+ "producer": "harness/tc1-reduction.shen, one campaign per defect over the generated family G (tools/tc1/handler-generate.mjs); the minimized case is the smallest found, not a global minimum",
+ "use": "harness/tc1-strict-replay.shen replays every case: the defect-free implementation must be admitted against the model trace, and the implementation with the named defect must diverge at divergence_epoch. harness/tc1-reduction.shen reports whether a fresh campaign reproduces exactly these cases.",
+ "cases": [
+  {
+   "defect": "forgotten_resume",
+   "role": "original",
+   "name": "forgotten_resume-original",
+   "from": "tc1-generated-6",
+   "discrepancy": "clause-return-drops-segment",
+   "divergence_epoch": "77",
+   "nodes": "61",
+   "program": {
+    "contract_version": "tc1-draft-1",
+    "schema_version": "tc1-handler-demo/2",
+    "slice": "TC1-H2",
+    "module": "tc1-generated-6",
+    "datatypes": [],
+    "effects": [
+     {
+      "name": "Ask",
+      "operations": [
+       {
+        "name": "ask",
+        "argument_type": "I64",
+        "result_type": "I64"
+       }
+      ]
+     },
+     {
+      "name": "Cell",
+      "operations": [
+       {
+        "name": "get",
+        "argument_type": "Unit",
+        "result_type": "I64"
+       },
+       {
+        "name": "put",
+        "argument_type": "I64",
+        "result_type": "Unit"
+       }
+      ]
+     }
+    ],
+    "functions": [
+     {
+      "id": "0",
+      "name": "main",
+      "parameter_id": "1",
+      "argument_type": "I64",
+      "result_type": "I64",
+      "effects": [
+       "Emit"
+      ],
+      "body": [
+       "handle",
+       "61",
+       "Cell",
+       [
+        [
+         "get",
+         "2",
+         "3",
+         [
+          "let",
+          "13",
+          "4",
+          [
+           "discontinue",
+           "5",
+           "3"
+          ],
+          [
+           "handle",
+           "12",
+           "Ask",
+           [
+            [
+             "ask",
+             "6",
+             "7",
+             [
+              "resume",
+              "9",
+              "7",
+              [
+               "int",
+               "8",
+               "0"
+              ]
+             ]
+            ]
+           ],
+           [
+            "call",
+            "11",
+            "deep",
+            [
+             "int",
+             "10",
+             "2"
+            ]
+           ]
+          ]
+         ]
+        ],
+        [
+         "put",
+         "14",
+         [
+          "let",
+          "40",
+          "15",
+          [
+           "emit",
+           "38",
+           "e0",
+           [
+            "let",
+            "37",
+            "16",
+            [
+             "let",
+             "35",
+             "17",
+             [
+              "emit",
+              "30",
+              "e1",
+              [
+               "handle",
+               "29",
+               "Ask",
+               [
+                [
+                 "ask",
+                 "18",
+                 [
+                  "let",
+                  "23",
+                  "19",
+                  [
+                   "emit",
+                   "21",
+                   "e2",
+                   [
+                    "int",
+                    "20",
+                    "0"
+                   ]
+                  ],
+                  [
+                   "int",
+                   "22",
+                   "5"
+                  ]
+                 ]
+                ]
+               ],
+               [
+                "let",
+                "28",
+                "24",
+                [
+                 "emit",
+                 "26",
+                 "e3",
+                 [
+                  "var",
+                  "25",
+                  "14"
+                 ]
+                ],
+                [
+                 "var",
+                 "27",
+                 "14"
+                ]
+               ]
+              ]
+             ],
+             [
+              "let",
+              "34",
+              "31",
+              [
+               "var",
+               "32",
+               "14"
+              ],
+              [
+               "var",
+               "33",
+               "31"
+              ]
+             ]
+            ],
+            [
+             "var",
+             "36",
+             "14"
+            ]
+           ]
+          ],
+          [
+           "unit",
+           "39"
+          ]
+         ]
+        ]
+       ],
+       [
+        "prim",
+        "60",
+        "mul",
+        [
+         "handle",
+         "55",
+         "Ask",
+         [
+          [
+           "ask",
+           "41",
+           [
+            "let",
+            "46",
+            "42",
+            [
+             "emit",
+             "44",
+             "e4",
+             [
+              "var",
+              "43",
+              "41"
+             ]
+            ],
+            [
+             "var",
+             "45",
+             "41"
+            ]
+           ]
+          ]
+         ],
+         [
+          "call",
+          "54",
+          "tick",
+          [
+           "perform",
+           "53",
+           "Ask",
+           "ask",
+           [
+            "let",
+            "52",
+            "47",
+            [
+             "emit",
+             "50",
+             "e5",
+             [
+              "perform",
+              "49",
+              "Cell",
+              "get",
+              [
+               "unit",
+               "48"
+              ]
+             ]
+            ],
+            [
+             "int",
+             "51",
+             "3"
+            ]
+           ]
+          ]
+         ]
+        ],
+        [
+         "let",
+         "59",
+         "56",
+         [
+          "int",
+          "57",
+          "0"
+         ],
+         [
+          "var",
+          "58",
+          "56"
+         ]
+        ]
+       ]
+      ]
+     },
+     {
+      "id": "62",
+      "name": "tick",
+      "parameter_id": "63",
+      "argument_type": "I64",
+      "result_type": "I64",
+      "effects": [
+       "Emit"
+      ],
+      "body": [
+       "let",
+       "70",
+       "64",
+       [
+        "emit",
+        "66",
+        "tick",
+        [
+         "var",
+         "65",
+         "63"
+        ]
+       ],
+       [
+        "prim",
+        "69",
+        "add",
+        [
+         "var",
+         "67",
+         "63"
+        ],
+        [
+         "int",
+         "68",
+         "1"
+        ]
+       ]
+      ]
+     },
+     {
+      "id": "71",
+      "name": "deep",
+      "parameter_id": "72",
+      "argument_type": "I64",
+      "result_type": "I64",
+      "effects": [
+       "Ask"
+      ],
+      "body": [
+       "if",
+       "85",
+       [
+        "prim",
+        "76",
+        "lt",
+        [
+         "int",
+         "74",
+         "0"
+        ],
+        [
+         "var",
+         "75",
+         "72"
+        ]
+       ],
+       [
+        "handle",
+        "82",
+        "Ask",
+        [
+         [
+          "ask",
+          "73",
+          [
+           "var",
+           "77",
+           "72"
+          ]
+         ]
+        ],
+        [
+         "call",
+         "81",
+         "deep",
+         [
+          "prim",
+          "80",
+          "sub",
+          [
+           "var",
+           "78",
+           "72"
+          ],
+          [
+           "int",
+           "79",
+           "1"
+          ]
+         ]
+        ]
+       ],
+       [
+        "perform",
+        "84",
+        "Ask",
+        "ask",
+        [
+         "var",
+         "83",
+         "72"
+        ]
+       ]
+      ]
+     }
+    ],
+    "entry": "main",
+    "input_schema": {
+     "type": "I64"
+    },
+    "source_map": [
+     {
+      "id": "0",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "5",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "8",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "9",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "10",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "11",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "12",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "13",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "20",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "21",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "22",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "23",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "25",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "26",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "27",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "28",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "29",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "30",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "32",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "33",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "34",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "35",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "36",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "37",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "38",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "39",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "40",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "43",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "44",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "45",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "46",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "48",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "49",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "50",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "51",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "52",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "53",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "54",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "55",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "57",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "58",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "59",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "60",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "61",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "62",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "65",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "66",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "67",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "68",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "69",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "70",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "71",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "74",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "75",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "76",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "77",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "78",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "79",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "80",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "81",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "82",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "83",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "84",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "85",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     }
+    ]
+   }
+  },
+  {
+   "defect": "forgotten_resume",
+   "role": "minimized",
+   "name": "forgotten_resume-minimized",
+   "from": "reduction-50",
+   "discrepancy": "clause-return-drops-segment",
+   "divergence_epoch": "6",
+   "nodes": "4",
+   "program": {
+    "contract_version": "tc1-draft-1",
+    "schema_version": "tc1-handler-demo/1",
+    "slice": "TC1-H1",
+    "module": "tc1-generated-6",
+    "datatypes": [],
+    "effects": [
+     {
+      "name": "Ask",
+      "operations": [
+       {
+        "name": "ask",
+        "argument_type": "I64",
+        "result_type": "I64"
+       }
+      ]
+     }
+    ],
+    "functions": [
+     {
+      "id": "0",
+      "name": "main",
+      "parameter_id": "1",
+      "argument_type": "I64",
+      "result_type": "I64",
+      "effects": [
+       "Emit"
+      ],
+      "body": [
+       "handle",
+       "55",
+       "Ask",
+       [
+        [
+         "ask",
+         "41",
+         [
+          "var",
+          "88",
+          "41"
+         ]
+        ]
+       ],
+       [
+        "perform",
+        "53",
+        "Ask",
+        "ask",
+        [
+         "int",
+         "51",
+         "3"
+        ]
+       ]
+      ]
+     }
+    ],
+    "entry": "main",
+    "input_schema": {
+     "type": "I64"
+    },
+    "source_map": [
+     {
+      "id": "0",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "51",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "53",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "55",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "88",
+      "file": "tc1-reduced",
+      "line": "0",
+      "column": "0"
+     }
+    ]
+   }
+  },
+  {
+   "defect": "double_resume",
+   "role": "original",
+   "name": "double_resume-original",
+   "from": "tc1-generated-6",
+   "discrepancy": "clause-return-duplicates-segment",
+   "divergence_epoch": "77",
+   "nodes": "61",
+   "program": {
+    "contract_version": "tc1-draft-1",
+    "schema_version": "tc1-handler-demo/2",
+    "slice": "TC1-H2",
+    "module": "tc1-generated-6",
+    "datatypes": [],
+    "effects": [
+     {
+      "name": "Ask",
+      "operations": [
+       {
+        "name": "ask",
+        "argument_type": "I64",
+        "result_type": "I64"
+       }
+      ]
+     },
+     {
+      "name": "Cell",
+      "operations": [
+       {
+        "name": "get",
+        "argument_type": "Unit",
+        "result_type": "I64"
+       },
+       {
+        "name": "put",
+        "argument_type": "I64",
+        "result_type": "Unit"
+       }
+      ]
+     }
+    ],
+    "functions": [
+     {
+      "id": "0",
+      "name": "main",
+      "parameter_id": "1",
+      "argument_type": "I64",
+      "result_type": "I64",
+      "effects": [
+       "Emit"
+      ],
+      "body": [
+       "handle",
+       "61",
+       "Cell",
+       [
+        [
+         "get",
+         "2",
+         "3",
+         [
+          "let",
+          "13",
+          "4",
+          [
+           "discontinue",
+           "5",
+           "3"
+          ],
+          [
+           "handle",
+           "12",
+           "Ask",
+           [
+            [
+             "ask",
+             "6",
+             "7",
+             [
+              "resume",
+              "9",
+              "7",
+              [
+               "int",
+               "8",
+               "0"
+              ]
+             ]
+            ]
+           ],
+           [
+            "call",
+            "11",
+            "deep",
+            [
+             "int",
+             "10",
+             "2"
+            ]
+           ]
+          ]
+         ]
+        ],
+        [
+         "put",
+         "14",
+         [
+          "let",
+          "40",
+          "15",
+          [
+           "emit",
+           "38",
+           "e0",
+           [
+            "let",
+            "37",
+            "16",
+            [
+             "let",
+             "35",
+             "17",
+             [
+              "emit",
+              "30",
+              "e1",
+              [
+               "handle",
+               "29",
+               "Ask",
+               [
+                [
+                 "ask",
+                 "18",
+                 [
+                  "let",
+                  "23",
+                  "19",
+                  [
+                   "emit",
+                   "21",
+                   "e2",
+                   [
+                    "int",
+                    "20",
+                    "0"
+                   ]
+                  ],
+                  [
+                   "int",
+                   "22",
+                   "5"
+                  ]
+                 ]
+                ]
+               ],
+               [
+                "let",
+                "28",
+                "24",
+                [
+                 "emit",
+                 "26",
+                 "e3",
+                 [
+                  "var",
+                  "25",
+                  "14"
+                 ]
+                ],
+                [
+                 "var",
+                 "27",
+                 "14"
+                ]
+               ]
+              ]
+             ],
+             [
+              "let",
+              "34",
+              "31",
+              [
+               "var",
+               "32",
+               "14"
+              ],
+              [
+               "var",
+               "33",
+               "31"
+              ]
+             ]
+            ],
+            [
+             "var",
+             "36",
+             "14"
+            ]
+           ]
+          ],
+          [
+           "unit",
+           "39"
+          ]
+         ]
+        ]
+       ],
+       [
+        "prim",
+        "60",
+        "mul",
+        [
+         "handle",
+         "55",
+         "Ask",
+         [
+          [
+           "ask",
+           "41",
+           [
+            "let",
+            "46",
+            "42",
+            [
+             "emit",
+             "44",
+             "e4",
+             [
+              "var",
+              "43",
+              "41"
+             ]
+            ],
+            [
+             "var",
+             "45",
+             "41"
+            ]
+           ]
+          ]
+         ],
+         [
+          "call",
+          "54",
+          "tick",
+          [
+           "perform",
+           "53",
+           "Ask",
+           "ask",
+           [
+            "let",
+            "52",
+            "47",
+            [
+             "emit",
+             "50",
+             "e5",
+             [
+              "perform",
+              "49",
+              "Cell",
+              "get",
+              [
+               "unit",
+               "48"
+              ]
+             ]
+            ],
+            [
+             "int",
+             "51",
+             "3"
+            ]
+           ]
+          ]
+         ]
+        ],
+        [
+         "let",
+         "59",
+         "56",
+         [
+          "int",
+          "57",
+          "0"
+         ],
+         [
+          "var",
+          "58",
+          "56"
+         ]
+        ]
+       ]
+      ]
+     },
+     {
+      "id": "62",
+      "name": "tick",
+      "parameter_id": "63",
+      "argument_type": "I64",
+      "result_type": "I64",
+      "effects": [
+       "Emit"
+      ],
+      "body": [
+       "let",
+       "70",
+       "64",
+       [
+        "emit",
+        "66",
+        "tick",
+        [
+         "var",
+         "65",
+         "63"
+        ]
+       ],
+       [
+        "prim",
+        "69",
+        "add",
+        [
+         "var",
+         "67",
+         "63"
+        ],
+        [
+         "int",
+         "68",
+         "1"
+        ]
+       ]
+      ]
+     },
+     {
+      "id": "71",
+      "name": "deep",
+      "parameter_id": "72",
+      "argument_type": "I64",
+      "result_type": "I64",
+      "effects": [
+       "Ask"
+      ],
+      "body": [
+       "if",
+       "85",
+       [
+        "prim",
+        "76",
+        "lt",
+        [
+         "int",
+         "74",
+         "0"
+        ],
+        [
+         "var",
+         "75",
+         "72"
+        ]
+       ],
+       [
+        "handle",
+        "82",
+        "Ask",
+        [
+         [
+          "ask",
+          "73",
+          [
+           "var",
+           "77",
+           "72"
+          ]
+         ]
+        ],
+        [
+         "call",
+         "81",
+         "deep",
+         [
+          "prim",
+          "80",
+          "sub",
+          [
+           "var",
+           "78",
+           "72"
+          ],
+          [
+           "int",
+           "79",
+           "1"
+          ]
+         ]
+        ]
+       ],
+       [
+        "perform",
+        "84",
+        "Ask",
+        "ask",
+        [
+         "var",
+         "83",
+         "72"
+        ]
+       ]
+      ]
+     }
+    ],
+    "entry": "main",
+    "input_schema": {
+     "type": "I64"
+    },
+    "source_map": [
+     {
+      "id": "0",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "5",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "8",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "9",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "10",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "11",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "12",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "13",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "20",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "21",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "22",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "23",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "25",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "26",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "27",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "28",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "29",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "30",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "32",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "33",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "34",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "35",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "36",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "37",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "38",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "39",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "40",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "43",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "44",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "45",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "46",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "48",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "49",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "50",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "51",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "52",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "53",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "54",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "55",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "57",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "58",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "59",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "60",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "61",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "62",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "65",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "66",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "67",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "68",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "69",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "70",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "71",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "74",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "75",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "76",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "77",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "78",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "79",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "80",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "81",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "82",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "83",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "84",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "85",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     }
+    ]
+   }
+  },
+  {
+   "defect": "double_resume",
+   "role": "minimized",
+   "name": "double_resume-minimized",
+   "from": "reduction-50",
+   "discrepancy": "clause-return-duplicates-segment",
+   "divergence_epoch": "6",
+   "nodes": "4",
+   "program": {
+    "contract_version": "tc1-draft-1",
+    "schema_version": "tc1-handler-demo/1",
+    "slice": "TC1-H1",
+    "module": "tc1-generated-6",
+    "datatypes": [],
+    "effects": [
+     {
+      "name": "Ask",
+      "operations": [
+       {
+        "name": "ask",
+        "argument_type": "I64",
+        "result_type": "I64"
+       }
+      ]
+     }
+    ],
+    "functions": [
+     {
+      "id": "0",
+      "name": "main",
+      "parameter_id": "1",
+      "argument_type": "I64",
+      "result_type": "I64",
+      "effects": [
+       "Emit"
+      ],
+      "body": [
+       "handle",
+       "55",
+       "Ask",
+       [
+        [
+         "ask",
+         "41",
+         [
+          "var",
+          "88",
+          "41"
+         ]
+        ]
+       ],
+       [
+        "perform",
+        "53",
+        "Ask",
+        "ask",
+        [
+         "int",
+         "51",
+         "3"
+        ]
+       ]
+      ]
+     }
+    ],
+    "entry": "main",
+    "input_schema": {
+     "type": "I64"
+    },
+    "source_map": [
+     {
+      "id": "0",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "51",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "53",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "55",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "88",
+      "file": "tc1-reduced",
+      "line": "0",
+      "column": "0"
+     }
+    ]
+   }
+  },
+  {
+   "defect": "outermost_handler",
+   "role": "original",
+   "name": "outermost_handler-original",
+   "from": "tc1-generated-6",
+   "discrepancy": "selected-other-handler",
+   "divergence_epoch": "75",
+   "nodes": "61",
+   "program": {
+    "contract_version": "tc1-draft-1",
+    "schema_version": "tc1-handler-demo/2",
+    "slice": "TC1-H2",
+    "module": "tc1-generated-6",
+    "datatypes": [],
+    "effects": [
+     {
+      "name": "Ask",
+      "operations": [
+       {
+        "name": "ask",
+        "argument_type": "I64",
+        "result_type": "I64"
+       }
+      ]
+     },
+     {
+      "name": "Cell",
+      "operations": [
+       {
+        "name": "get",
+        "argument_type": "Unit",
+        "result_type": "I64"
+       },
+       {
+        "name": "put",
+        "argument_type": "I64",
+        "result_type": "Unit"
+       }
+      ]
+     }
+    ],
+    "functions": [
+     {
+      "id": "0",
+      "name": "main",
+      "parameter_id": "1",
+      "argument_type": "I64",
+      "result_type": "I64",
+      "effects": [
+       "Emit"
+      ],
+      "body": [
+       "handle",
+       "61",
+       "Cell",
+       [
+        [
+         "get",
+         "2",
+         "3",
+         [
+          "let",
+          "13",
+          "4",
+          [
+           "discontinue",
+           "5",
+           "3"
+          ],
+          [
+           "handle",
+           "12",
+           "Ask",
+           [
+            [
+             "ask",
+             "6",
+             "7",
+             [
+              "resume",
+              "9",
+              "7",
+              [
+               "int",
+               "8",
+               "0"
+              ]
+             ]
+            ]
+           ],
+           [
+            "call",
+            "11",
+            "deep",
+            [
+             "int",
+             "10",
+             "2"
+            ]
+           ]
+          ]
+         ]
+        ],
+        [
+         "put",
+         "14",
+         [
+          "let",
+          "40",
+          "15",
+          [
+           "emit",
+           "38",
+           "e0",
+           [
+            "let",
+            "37",
+            "16",
+            [
+             "let",
+             "35",
+             "17",
+             [
+              "emit",
+              "30",
+              "e1",
+              [
+               "handle",
+               "29",
+               "Ask",
+               [
+                [
+                 "ask",
+                 "18",
+                 [
+                  "let",
+                  "23",
+                  "19",
+                  [
+                   "emit",
+                   "21",
+                   "e2",
+                   [
+                    "int",
+                    "20",
+                    "0"
+                   ]
+                  ],
+                  [
+                   "int",
+                   "22",
+                   "5"
+                  ]
+                 ]
+                ]
+               ],
+               [
+                "let",
+                "28",
+                "24",
+                [
+                 "emit",
+                 "26",
+                 "e3",
+                 [
+                  "var",
+                  "25",
+                  "14"
+                 ]
+                ],
+                [
+                 "var",
+                 "27",
+                 "14"
+                ]
+               ]
+              ]
+             ],
+             [
+              "let",
+              "34",
+              "31",
+              [
+               "var",
+               "32",
+               "14"
+              ],
+              [
+               "var",
+               "33",
+               "31"
+              ]
+             ]
+            ],
+            [
+             "var",
+             "36",
+             "14"
+            ]
+           ]
+          ],
+          [
+           "unit",
+           "39"
+          ]
+         ]
+        ]
+       ],
+       [
+        "prim",
+        "60",
+        "mul",
+        [
+         "handle",
+         "55",
+         "Ask",
+         [
+          [
+           "ask",
+           "41",
+           [
+            "let",
+            "46",
+            "42",
+            [
+             "emit",
+             "44",
+             "e4",
+             [
+              "var",
+              "43",
+              "41"
+             ]
+            ],
+            [
+             "var",
+             "45",
+             "41"
+            ]
+           ]
+          ]
+         ],
+         [
+          "call",
+          "54",
+          "tick",
+          [
+           "perform",
+           "53",
+           "Ask",
+           "ask",
+           [
+            "let",
+            "52",
+            "47",
+            [
+             "emit",
+             "50",
+             "e5",
+             [
+              "perform",
+              "49",
+              "Cell",
+              "get",
+              [
+               "unit",
+               "48"
+              ]
+             ]
+            ],
+            [
+             "int",
+             "51",
+             "3"
+            ]
+           ]
+          ]
+         ]
+        ],
+        [
+         "let",
+         "59",
+         "56",
+         [
+          "int",
+          "57",
+          "0"
+         ],
+         [
+          "var",
+          "58",
+          "56"
+         ]
+        ]
+       ]
+      ]
+     },
+     {
+      "id": "62",
+      "name": "tick",
+      "parameter_id": "63",
+      "argument_type": "I64",
+      "result_type": "I64",
+      "effects": [
+       "Emit"
+      ],
+      "body": [
+       "let",
+       "70",
+       "64",
+       [
+        "emit",
+        "66",
+        "tick",
+        [
+         "var",
+         "65",
+         "63"
+        ]
+       ],
+       [
+        "prim",
+        "69",
+        "add",
+        [
+         "var",
+         "67",
+         "63"
+        ],
+        [
+         "int",
+         "68",
+         "1"
+        ]
+       ]
+      ]
+     },
+     {
+      "id": "71",
+      "name": "deep",
+      "parameter_id": "72",
+      "argument_type": "I64",
+      "result_type": "I64",
+      "effects": [
+       "Ask"
+      ],
+      "body": [
+       "if",
+       "85",
+       [
+        "prim",
+        "76",
+        "lt",
+        [
+         "int",
+         "74",
+         "0"
+        ],
+        [
+         "var",
+         "75",
+         "72"
+        ]
+       ],
+       [
+        "handle",
+        "82",
+        "Ask",
+        [
+         [
+          "ask",
+          "73",
+          [
+           "var",
+           "77",
+           "72"
+          ]
+         ]
+        ],
+        [
+         "call",
+         "81",
+         "deep",
+         [
+          "prim",
+          "80",
+          "sub",
+          [
+           "var",
+           "78",
+           "72"
+          ],
+          [
+           "int",
+           "79",
+           "1"
+          ]
+         ]
+        ]
+       ],
+       [
+        "perform",
+        "84",
+        "Ask",
+        "ask",
+        [
+         "var",
+         "83",
+         "72"
+        ]
+       ]
+      ]
+     }
+    ],
+    "entry": "main",
+    "input_schema": {
+     "type": "I64"
+    },
+    "source_map": [
+     {
+      "id": "0",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "5",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "8",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "9",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "10",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "11",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "12",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "13",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "20",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "21",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "22",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "23",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "25",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "26",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "27",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "28",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "29",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "30",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "32",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "33",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "34",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "35",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "36",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "37",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "38",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "39",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "40",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "43",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "44",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "45",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "46",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "48",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "49",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "50",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "51",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "52",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "53",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "54",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "55",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "57",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "58",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "59",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "60",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "61",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "62",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "65",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "66",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "67",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "68",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "69",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "70",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "71",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "74",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "75",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "76",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "77",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "78",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "79",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "80",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "81",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "82",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "83",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "84",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "85",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     }
+    ]
+   }
+  },
+  {
+   "defect": "outermost_handler",
+   "role": "minimized",
+   "name": "outermost_handler-minimized",
+   "from": "reduction-132",
+   "discrepancy": "selected-other-handler",
+   "divergence_epoch": "44",
+   "nodes": "23",
+   "program": {
+    "contract_version": "tc1-draft-1",
+    "schema_version": "tc1-handler-demo/2",
+    "slice": "TC1-H2",
+    "module": "tc1-generated-6",
+    "datatypes": [],
+    "effects": [
+     {
+      "name": "Ask",
+      "operations": [
+       {
+        "name": "ask",
+        "argument_type": "I64",
+        "result_type": "I64"
+       }
+      ]
+     },
+     {
+      "name": "Cell",
+      "operations": [
+       {
+        "name": "get",
+        "argument_type": "Unit",
+        "result_type": "I64"
+       },
+       {
+        "name": "put",
+        "argument_type": "I64",
+        "result_type": "Unit"
+       }
+      ]
+     }
+    ],
+    "functions": [
+     {
+      "id": "0",
+      "name": "main",
+      "parameter_id": "1",
+      "argument_type": "I64",
+      "result_type": "I64",
+      "effects": [
+       "Emit"
+      ],
+      "body": [
+       "handle",
+       "61",
+       "Cell",
+       [
+        [
+         "get",
+         "2",
+         "3",
+         [
+          "let",
+          "13",
+          "4",
+          [
+           "discontinue",
+           "5",
+           "3"
+          ],
+          [
+           "handle",
+           "12",
+           "Ask",
+           [
+            [
+             "ask",
+             "6",
+             [
+              "int",
+              "8",
+              "0"
+             ]
+            ]
+           ],
+           [
+            "call",
+            "11",
+            "deep",
+            [
+             "int",
+             "10",
+             "2"
+            ]
+           ]
+          ]
+         ]
+        ],
+        [
+         "put",
+         "14",
+         [
+          "unit",
+          "39"
+         ]
+        ]
+       ],
+       [
+        "let",
+        "52",
+        "47",
+        [
+         "emit",
+         "50",
+         "e5",
+         [
+          "perform",
+          "49",
+          "Cell",
+          "get",
+          [
+           "unit",
+           "48"
+          ]
+         ]
+        ],
+        [
+         "int",
+         "51",
+         "3"
+        ]
+       ]
+      ]
+     },
+     {
+      "id": "71",
+      "name": "deep",
+      "parameter_id": "72",
+      "argument_type": "I64",
+      "result_type": "I64",
+      "effects": [
+       "Ask"
+      ],
+      "body": [
+       "if",
+       "85",
+       [
+        "prim",
+        "76",
+        "lt",
+        [
+         "int",
+         "74",
+         "0"
+        ],
+        [
+         "var",
+         "75",
+         "72"
+        ]
+       ],
+       [
+        "handle",
+        "82",
+        "Ask",
+        [
+         [
+          "ask",
+          "73",
+          [
+           "var",
+           "77",
+           "72"
+          ]
+         ]
+        ],
+        [
+         "call",
+         "81",
+         "deep",
+         [
+          "int",
+          "88",
+          "0"
+         ]
+        ]
+       ],
+       [
+        "perform",
+        "84",
+        "Ask",
+        "ask",
+        [
+         "var",
+         "83",
+         "72"
+        ]
+       ]
+      ]
+     }
+    ],
+    "entry": "main",
+    "input_schema": {
+     "type": "I64"
+    },
+    "source_map": [
+     {
+      "id": "0",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "5",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "8",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "10",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "11",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "12",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "13",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "39",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "48",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "49",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "50",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "51",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "52",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "61",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "71",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "74",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "75",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "76",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "77",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "81",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "82",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "83",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "84",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "85",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "88",
+      "file": "tc1-reduced",
+      "line": "0",
+      "column": "0"
+     }
+    ]
+   }
+  },
+  {
+   "defect": "shallow_resume",
+   "role": "original",
+   "name": "shallow_resume-original",
+   "from": "tc1-generated-5",
+   "discrepancy": "resume-drops-handler",
+   "divergence_epoch": "34",
+   "nodes": "56",
+   "program": {
+    "contract_version": "tc1-draft-1",
+    "schema_version": "tc1-handler-demo/2",
+    "slice": "TC1-H2",
+    "module": "tc1-generated-5",
+    "datatypes": [
+     {
+      "name": "Opt",
+      "constructors": [
+       {
+        "name": "None",
+        "fields": []
+       },
+       {
+        "name": "Some",
+        "fields": [
+         "I64"
+        ]
+       }
+      ]
+     }
+    ],
+    "effects": [
+     {
+      "name": "Cell",
+      "operations": [
+       {
+        "name": "get",
+        "argument_type": "Unit",
+        "result_type": "I64"
+       },
+       {
+        "name": "put",
+        "argument_type": "I64",
+        "result_type": "Unit"
+       }
+      ]
+     }
+    ],
+    "functions": [
+     {
+      "id": "0",
+      "name": "main",
+      "parameter_id": "1",
+      "argument_type": "I64",
+      "result_type": "I64",
+      "effects": [
+       "Emit"
+      ],
+      "body": [
+       "match",
+       "68",
+       [
+        "if",
+        "56",
+        [
+         "prim",
+         "39",
+         "lt",
+         [
+          "prim",
+          "8",
+          "div",
+          [
+           "if",
+           "6",
+           [
+            "bool",
+            "3",
+            true
+           ],
+           [
+            "int",
+            "4",
+            "0"
+           ],
+           [
+            "int",
+            "5",
+            "-2"
+           ]
+          ],
+          [
+           "int",
+           "7",
+           "2"
+          ]
+         ],
+         [
+          "handle",
+          "38",
+          "Cell",
+          [
+           [
+            "get",
+            "9",
+            [
+             "handle",
+             "22",
+             "Cell",
+             [
+              [
+               "get",
+               "10",
+               [
+                "let",
+                "14",
+                "11",
+                [
+                 "int",
+                 "12",
+                 "2"
+                ],
+                [
+                 "var",
+                 "13",
+                 "11"
+                ]
+               ]
+              ],
+              [
+               "put",
+               "15",
+               [
+                "unit",
+                "16"
+               ]
+              ]
+             ],
+             [
+              "let",
+              "21",
+              "17",
+              [
+               "perform",
+               "19",
+               "Cell",
+               "put",
+               [
+                "int",
+                "18",
+                "3"
+               ]
+              ],
+              [
+               "int",
+               "20",
+               "3"
+              ]
+             ]
+            ]
+           ],
+           [
+            "put",
+            "23",
+            "24",
+            [
+             "resume",
+             "26",
+             "24",
+             [
+              "unit",
+              "25"
+             ]
+            ]
+           ]
+          ],
+          [
+           "handle",
+           "37",
+           "Cell",
+           [
+            [
+             "get",
+             "27",
+             [
+              "int",
+              "28",
+              "1"
+             ]
+            ],
+            [
+             "put",
+             "29",
+             "30",
+             [
+              "resume",
+              "32",
+              "30",
+              [
+               "unit",
+               "31"
+              ]
+             ]
+            ]
+           ],
+           [
+            "if",
+            "36",
+            [
+             "bool",
+             "33",
+             false
+            ],
+            [
+             "int",
+             "34",
+             "1"
+            ],
+            [
+             "int",
+             "35",
+             "1"
+            ]
+           ]
+          ]
+         ]
+        ],
+        [
+         "construct",
+         "54",
+         "Opt",
+         "Some",
+         [
+          "handle",
+          "53",
+          "Cell",
+          [
+           [
+            "get",
+            "40",
+            "41",
+            [
+             "resume",
+             "43",
+             "41",
+             [
+              "int",
+              "42",
+              "2"
+             ]
+            ]
+           ],
+           [
+            "put",
+            "44",
+            "45",
+            [
+             "resume",
+             "47",
+             "45",
+             [
+              "unit",
+              "46"
+             ]
+            ]
+           ]
+          ],
+          [
+           "let",
+           "52",
+           "48",
+           [
+            "perform",
+            "50",
+            "Cell",
+            "put",
+            [
+             "int",
+             "49",
+             "3"
+            ]
+           ],
+           [
+            "int",
+            "51",
+            "0"
+           ]
+          ]
+         ]
+        ],
+        [
+         "construct",
+         "55",
+         "Opt",
+         "None"
+        ]
+       ],
+       [
+        "Some",
+        [
+         "2"
+        ],
+        [
+         "call",
+         "60",
+         "tick",
+         [
+          "prim",
+          "59",
+          "div",
+          [
+           "int",
+           "57",
+           "3"
+          ],
+          [
+           "int",
+           "58",
+           "1"
+          ]
+         ]
+        ]
+       ],
+       [
+        "None",
+        [],
+        [
+         "let",
+         "67",
+         "61",
+         [
+          "int",
+          "62",
+          "1"
+         ],
+         [
+          "if",
+          "66",
+          [
+           "bool",
+           "63",
+           true
+          ],
+          [
+           "var",
+           "64",
+           "61"
+          ],
+          [
+           "int",
+           "65",
+           "1"
+          ]
+         ]
+        ]
+       ]
+      ]
+     },
+     {
+      "id": "69",
+      "name": "tick",
+      "parameter_id": "70",
+      "argument_type": "I64",
+      "result_type": "I64",
+      "effects": [
+       "Emit"
+      ],
+      "body": [
+       "let",
+       "77",
+       "71",
+       [
+        "emit",
+        "73",
+        "tick",
+        [
+         "var",
+         "72",
+         "70"
+        ]
+       ],
+       [
+        "prim",
+        "76",
+        "add",
+        [
+         "var",
+         "74",
+         "70"
+        ],
+        [
+         "int",
+         "75",
+         "1"
+        ]
+       ]
+      ]
+     }
+    ],
+    "entry": "main",
+    "input_schema": {
+     "type": "I64"
+    },
+    "source_map": [
+     {
+      "id": "0",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "3",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "4",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "5",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "6",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "7",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "8",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "12",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "13",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "14",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "16",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "18",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "19",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "20",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "21",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "22",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "25",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "26",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "28",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "31",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "32",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "33",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "34",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "35",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "36",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "37",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "38",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "39",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "42",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "43",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "46",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "47",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "49",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "50",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "51",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "52",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "53",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "54",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "55",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "56",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "57",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "58",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "59",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "60",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "62",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "63",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "64",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "65",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "66",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "67",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "68",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "69",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "72",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "73",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "74",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "75",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "76",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "77",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     }
+    ]
+   }
+  },
+  {
+   "defect": "shallow_resume",
+   "role": "minimized",
+   "name": "shallow_resume-minimized",
+   "from": "reduction-39",
+   "discrepancy": "resume-drops-handler",
+   "divergence_epoch": "11",
+   "nodes": "12",
+   "program": {
+    "contract_version": "tc1-draft-1",
+    "schema_version": "tc1-handler-demo/2",
+    "slice": "TC1-H2",
+    "module": "tc1-generated-5",
+    "datatypes": [
+     {
+      "name": "Opt",
+      "constructors": [
+       {
+        "name": "None",
+        "fields": []
+       },
+       {
+        "name": "Some",
+        "fields": [
+         "I64"
+        ]
+       }
+      ]
+     }
+    ],
+    "effects": [
+     {
+      "name": "Cell",
+      "operations": [
+       {
+        "name": "get",
+        "argument_type": "Unit",
+        "result_type": "I64"
+       },
+       {
+        "name": "put",
+        "argument_type": "I64",
+        "result_type": "Unit"
+       }
+      ]
+     }
+    ],
+    "functions": [
+     {
+      "id": "0",
+      "name": "main",
+      "parameter_id": "1",
+      "argument_type": "I64",
+      "result_type": "I64",
+      "effects": [
+       "Emit"
+      ],
+      "body": [
+       "match",
+       "68",
+       [
+        "construct",
+        "54",
+        "Opt",
+        "Some",
+        [
+         "handle",
+         "53",
+         "Cell",
+         [
+          [
+           "get",
+           "40",
+           [
+            "int",
+            "42",
+            "2"
+           ]
+          ],
+          [
+           "put",
+           "44",
+           "45",
+           [
+            "resume",
+            "47",
+            "45",
+            [
+             "unit",
+             "46"
+            ]
+           ]
+          ]
+         ],
+         [
+          "let",
+          "52",
+          "48",
+          [
+           "perform",
+           "50",
+           "Cell",
+           "put",
+           [
+            "int",
+            "49",
+            "3"
+           ]
+          ],
+          [
+           "int",
+           "51",
+           "0"
+          ]
+         ]
+        ]
+       ],
+       [
+        "Some",
+        [
+         "2"
+        ],
+        [
+         "int",
+         "79",
+         "0"
+        ]
+       ],
+       [
+        "None",
+        [],
+        [
+         "int",
+         "62",
+         "1"
+        ]
+       ]
+      ]
+     }
+    ],
+    "entry": "main",
+    "input_schema": {
+     "type": "I64"
+    },
+    "source_map": [
+     {
+      "id": "0",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "42",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "46",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "47",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "49",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "50",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "51",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "52",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "53",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "54",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "62",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "68",
+      "file": "tc1-generated",
+      "line": "0",
+      "column": "0"
+     },
+     {
+      "id": "79",
+      "file": "tc1-reduced",
+      "line": "0",
+      "column": "0"
+     }
+    ]
+   }
+  }
+ ]
+}
