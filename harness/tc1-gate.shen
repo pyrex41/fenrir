@@ -25,6 +25,14 @@
 (define fh.tc1-bound -> "7")
 (define fh.tc1-programs -> "12693")
 
+\\ The number of programs of grammar G (tools/tc1/task-enumerate.mjs, slice C1) the
+\\ task exploration must cover. The harness derives the same number from the grammar;
+\\ the manifest's acceptance text states it.
+(define fh.tc1-task-programs -> "3600")
+
+\\ Every n-th program of the 5-node grammar joins the Solo5 control check's batch.
+(define fh.solo5-control-stride -> "25")
+
 \\ The generated family G (tools/tc1/handler-generate.mjs): the number of programs a
 \\ complete batch holds, which is also the family's size.
 (define fh.tc1-generated-programs -> "2048")
@@ -218,6 +226,85 @@
                                              ["catalog" (make-string "~A ~A" (fh.member "catalog_version" Report) (fh.member "catalog_sha256" Report))]] Memo)
                           (fh.row "UNKNOWN" ["The handler coverage harness did not report"] [] Memo))))))))
 
+\\ ---------- optional rows: slice C1 (tasks and channels) and the Solo5 control channel ----------
+
+\\ A decimal count the harness reports as a string, above zero. Anything else is not.
+(define fh.positive-count?
+  X -> (and (string? X) (> (tc0.i64.small X) 0)))
+
+(define fh.tc1-tasks
+  Memo ->
+    (let Report (fh.harness "tc1-tasks.shen" [(fh.subdir "tc1-tasks") "sandbox"] 600)
+         Status (fh.member "status" Report)
+      (if (= Status "development-pass")
+          (fh.row "PASS" [] [["cases" (fh.member "cases" Report)] ["runs" (fh.member "runs" Report)]
+                             ["expectations_checked" (fh.member "expectations_checked" Report)]
+                             ["defects" (json.stringify (fh.member "defects" Report) [])]
+                             ["defects_crashing" (json.stringify (fh.member "defects_crashing" Report) [])]] Memo)
+          (if (= Status "development-fail")
+              (fh.row "FAIL" ["TC1 task slice: disagreement, a failed expectation, a non-production schedule, or an undetected defect"]
+                      [["failures" (json.stringify (fh.member "failures" Report) [])]
+                       ["defects_undetected" (json.stringify (fh.member "defects_undetected" Report) [])]] Memo)
+              (fh.row "UNKNOWN" ["The TC1 task harness did not report"] [] Memo)))))
+
+\\ The commuting obligation on the whole of grammar G. Only a complete, untruncated scope
+\\ of exactly the required programs can pass; a partial one is UNKNOWN, never PASS.
+(define fh.tc1-task-explore
+  Memo ->
+    (let Report (fh.harness "tc1-task-explore.shen" [(fh.subdir "tc1-task-explore") "sandbox"] 1800)
+         Programs (fh.member "programs" Report)
+         Compared (fh.member "witnesses_compared" Report)
+         Detail [["programs" (if (string? Programs) Programs "")] ["witnesses_compared" (if (string? Compared) Compared "")]
+                 ["witnesses_agreeing" (let A (fh.member "witnesses_agreeing" Report) (if (string? A) A ""))]]
+      (if (= Report [])
+          (fh.row "UNKNOWN" ["The TC1 task exploration did not report (or exceeded its time limit)"] [] Memo)
+          (if (or (not (= (fh.member "scope_complete" Report) true)) (not (= Programs (fh.tc1-task-programs)))
+                  (not (= (fh.member "bounds_hit" Report) "0")))
+              (fh.row "UNKNOWN" [(make-string "The exploration was truncated or incomplete: scope_complete ~A, ~A programs (~A required), bounds hit ~A"
+                                              (fh.member "scope_complete" Report) Programs (fh.tc1-task-programs) (fh.member "bounds_hit" Report))]
+                      Detail Memo)
+              (if (and (= (fh.member "status" Report) "development-pass")
+                       (= (fh.member "obligation_holds" Report) true)
+                       (fh.positive-count? (fh.member "programs_failing_the_check" (fh.member "broken_send_not_a_point" Report)))
+                       (fh.positive-count? (fh.member "programs_failing_the_check" (fh.member "broken_eager_cancel" Report)))
+                       (fh.positive-count? Compared)
+                       (= (fh.member "witnesses_agreeing" Report) Compared))
+                  (fh.row "PASS" [] [["programs" Programs]
+                                     ["obligation_holds" "true"]
+                                     ["broken_send_not_a_point_fails_on" (fh.member "programs_failing_the_check" (fh.member "broken_send_not_a_point" Report))]
+                                     ["broken_eager_cancel_fails_on" (fh.member "programs_failing_the_check" (fh.member "broken_eager_cancel" Report))]
+                                     ["witnesses_compared" Compared]] Memo)
+                  (fh.row "FAIL" ["The commuting obligation does not hold on every program, a broken variant passed the check everywhere, or a witness disagrees with the model"]
+                          (append Detail [["obligation_holds" (make-string "~A" (fh.member "obligation_holds" Report))]
+                                          ["unequal_examples" (json.stringify (fh.member "unequal_examples" Report) [])]
+                                          ["witness_disagreements" (json.stringify (fh.member "witness_disagreements" Report) [])]]) Memo))))))
+
+\\ The host-controlled Solo5 guest, driven step by step by Shen (harness/solo5-control.shen),
+\\ as harness/run-solo5-control.sh does. No Solo5, or a guest build that fails: BLOCKED.
+\\ The harness not completing in time, or not reporting: UNKNOWN.
+(define fh.solo5-control
+  Memo ->
+    (let Built (fh.exec "node" [(cn (value fh.*root*) "tools/solo5/control-pure-call-build.mjs") "--stride" (fh.solo5-control-stride)] 1800)
+      (if (not (= (hd Built) 0))
+          (fh.row "BLOCKED" ["The Solo5 control batch or guests could not be built (is Solo5 available at the pinned commit?)"] [] Memo)
+          (let Batch (fh.last-line-of (hd (tl Built)))
+               Run (fh.subdir "solo5-control")
+               R (fh.exec (value fh.*jit*) ["script" (cn (value fh.*root*) "harness/solo5-control.shen") (value fh.*lib*) (value fh.*root*) Batch Run] 1800)
+               Report (fh.last-report (hd (tl R)))
+               Status (fh.member "status" Report)
+            (if (element? (hd R) [126 127])
+                (fh.row "BLOCKED" ["Shen/JIT could not be started for the Solo5 control harness"] [] Memo)
+                (if (= Status "development-pass")
+                    (fh.row "PASS" [] [["programs" (fh.member "programs" Report)] ["stride" (fh.solo5-control-stride)]
+                                       ["total_boots" (fh.member "total_boots" Report)]] Memo)
+                    (if (= Status "development-fail")
+                        (fh.row "FAIL" ["The Solo5 control check failed: a divergence between the guest and the model, a tape that did not replay exactly, or an unexpected hostile-peer result"] [] Memo)
+                        (fh.row "UNKNOWN" ["The Solo5 control harness did not report (or exceeded its time limit)"] [] Memo))))))))
+
+(define fh.last-line-of
+  Text -> (let Lines (fh.lines Text)
+            (if (empty? Lines) "" (fh.trim (hd (reverse Lines))))))
+
 (define fh.check
   "source-identity" Memo -> (fh.source-identity Memo)
   "toolchain-pinned" Memo -> (fh.toolchain-pinned Memo)
@@ -240,6 +327,9 @@
   "tc1-guest-hand" Memo -> (fh.guest-row (fh.guest-batch ["--tc1"]) Memo)
   "tc1-guest-exhaustive" Memo -> (fh.tc1-guest-exhaustive Memo)
   "tc1-catalog-coverage" Memo -> (fh.tc1-catalog-coverage Memo)
+  "tc1-tasks" Memo -> (fh.tc1-tasks Memo)
+  "tc1-task-explore" Memo -> (fh.tc1-task-explore Memo)
+  "solo5-control" Memo -> (fh.solo5-control Memo)
   Name Memo -> (fh.row "UNKNOWN" [(cn "The evaluator has no check named " Name)] [] Memo))
 
 \\ Registered: the manifest is owner-accepted and the workflow has a tc1-qualification

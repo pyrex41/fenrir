@@ -2,7 +2,7 @@
  "schema": "tc1-requirement-manifest/1",
  "status": "proposed",
  "slice": "TC1",
- "contract": "spec/tc1/EFFECTS.md (tc1-draft-1: slices H1 and H2)",
+ "contract": "spec/tc1/EFFECTS.md (tc1-draft-1: slices H1 and H2); the optional rows also use spec/tc1/CONCURRENCY.md (tc1-draft-1: slice C1) and spec/solo5/pure-call-control-v1.md",
  "catalog": "spec/tc1/handler-catalog.json",
  "catalog_sha256": "018dee318b47c91ca6fa8b7a8d291a5ab27867a9ffdf0e676bd7329e89276a19",
  "ledger": "spec/tc0/requirement-ledger-a.json",
@@ -205,6 +205,33 @@
    ],
    "check": "tc1-catalog-coverage",
    "acceptance": "harness/tc1-coverage.shen: every transition of the versioned handler catalog spec/tc1/handler-catalog.json (tc1-handler-catalog/1, 29 transitions, derived from EFFECTS.md section 6 and the TC0-A catalog; its file digest is pinned by the evaluator and stated in catalog_sha256 here) is exercised by this run's agreeing hand, exhaustive or generated model traces. A catalog whose digest differs from the pin is UNKNOWN; an uncovered transition is UNKNOWN and is listed; a handler step with no transition, or whose depth change contradicts its transition, is FAIL. A measure of the traces, not of compiled code."
+  },
+  {
+   "id": "task-hand-fixtures",
+   "required": false,
+   "ledger": [
+    "TC1-C-TASKS"
+   ],
+   "check": "tc1-tasks",
+   "acceptance": "Optional. harness/tc1-tasks.shen: on every TC1-C1 hand fixture under every recorded schedule the model and the sandboxed implementation agree step for step, every handwritten expectation holds, every production-policy schedule is a production schedule by the model's records, and each of the nine injected task defects is killed on some run; crashes are never kills. No report: UNKNOWN."
+  },
+  {
+   "id": "task-commuting-obligation",
+   "required": false,
+   "ledger": [
+    "TC1-C-TASKS"
+   ],
+   "check": "tc1-task-explore",
+   "acceptance": "Optional. harness/tc1-task-explore.shen: on every program of grammar G (tools/tc1/task-enumerate.mjs), 3,600 programs, the observation sets of all reference schedules and all production schedules are equal (CONCURRENCY.md section 9), no exploration bound is hit, both broken variants (production not switching after send; cancellation delivered at any step) fail the check on some program, and the sandboxed implementation agrees with the model, step for step, on one witness schedule for every reference observation class. A scope that is incomplete or truncated, a program count other than 3,600 (the number the evaluator holds, which the harness also derives from the grammar), or no report is UNKNOWN; anything else that does not hold is FAIL."
+  },
+  {
+   "id": "solo5-control-replay",
+   "required": false,
+   "ledger": [
+    "SOLO5-CONTROL-REPLAY"
+   ],
+   "check": "solo5-control",
+   "acceptance": "Optional. harness/solo5-control.shen on the batch of tools/solo5/control-pure-call-build.mjs at stride 25 (the TC0-A hand cases, the TC1 handler fixtures and every 25th program of the 5-node exhaustive grammar): the host-controlled Solo5 guest agrees with the model step for step in every mode, the injected guest defects stop at the exact first diverging step, every tape replays exactly on cold boots, and every hostile-peer test gives its expected rejection. Status development-pass is PASS; a failing report is FAIL. Solo5 or Shen/JIT unavailable, or the guest build failing: BLOCKED. A timeout or no report: UNKNOWN, never PASS."
   }
  ],
  "claims": {
@@ -260,5 +287,5 @@
  ],
  "review": "None. This manifest is PROPOSED: it is not owner-accepted and the evaluator is not registered in .pi/fenrir-workflow.json, so every report says authority UNREGISTERED and qualification UNKNOWN. Registration is the owner's decision.",
  "model": "models/tc1/handler-machine.shen with models/tc0/i64.shen, run in-process by the Shen harness on the flake-pinned Shen/JIT",
- "not_covered": "Exhaustive exploration beyond grammar H (at most 7 nodes; one-operation effects with I64 operation types, no closures): the generated family G is sampled, not exhaustive. The reduction campaigns cover four of the six injected defects (dynamic_clause_environment and resume_returns_argument show their first difference only through later values, for which no discrepancy class is defined). Steps the step record does not tell apart (which of two frames at one node an AbandonFrame or UnwindFrame step discards) are one catalog transition each. Multi-shot resumption, runtime and durable effects, and any soundness proof of the typing or one-shot rules."
+ "not_covered": "Exhaustive exploration beyond grammar H (at most 7 nodes; one-operation effects with I64 operation types, no closures): the generated family G is sampled, not exhaustive. The reduction campaigns cover four of the six injected defects (dynamic_clause_environment and resume_returns_argument show their first difference only through later values, for which no discrepancy class is defined). Steps the step record does not tell apart (which of two frames at one node an AbandonFrame or UnwindFrame step discards) are one catalog transition each. Multi-shot resumption, runtime and durable effects, and any soundness proof of the typing or one-shot rules. Slice C1 (structured tasks and bounded channels) is covered only by the optional rows task-hand-fixtures and task-commuting-obligation, which no claim and no required row relies on: its contract (spec/tc1/CONCURRENCY.md) is a draft whose provisional choices (section 13) the owner has not confirmed, exploration is bounded to grammar G (2-3 tasks, one or two channels), and there is no generated-program campaign, reduction, strict replay, transition catalog, Solo5 guest or frontend for tasks. The optional row solo5-control-replay covers a stride sample of the pure-call and handler programs, not the whole families, and no claim relies on it."
 }

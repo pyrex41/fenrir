@@ -7,6 +7,7 @@ import {readFileSync} from 'node:fs';
 import {MUTANTS} from '../../tools/tc1/handler-defects.mjs';
 import {enumerateHandlers} from '../../tools/tc1/handler-enumerate.mjs';
 import {FAMILY_SIZE} from '../../tools/tc1/handler-generate.mjs';
+import {enumerateTasks} from '../../tools/tc1/task-enumerate.mjs';
 import {createHash} from 'node:crypto';
 const json=path=>JSON.parse(readFileSync(path,'utf8'));
 const manifest=json('spec/tc1/tc1-requirements.json'),evaluator=readFileSync('harness/tc1-gate.shen','utf8');
@@ -76,4 +77,39 @@ test('the catalog the evaluator pins is the catalog file, and the manifest state
   assert.equal(manifest.catalog_sha256,pinned);
   assert.equal(json(path).transitions.length,29);
   assert.ok(manifest.rows.find(r=>r.id==='catalog-coverage').acceptance.includes('29 transitions'));
+});
+
+test('the optional C1 and Solo5 control rows are optional, name their ledger rows, and no claim relies on them', () => {
+  const optional=manifest.rows.filter(r=>!r.required);
+  assert.deepEqual(optional.map(r=>[r.id,r.check,r.ledger]),[
+    ['task-hand-fixtures','tc1-tasks',['TC1-C-TASKS']],
+    ['task-commuting-obligation','tc1-task-explore',['TC1-C-TASKS']],
+    ['solo5-control-replay','solo5-control',['SOLO5-CONTROL-REPLAY']]]);
+  assert.deepEqual(Object.keys(manifest.claims).filter(c=>manifest.claims[c].some(id=>optional.some(r=>r.id===id))),[]);
+  // The service contract model is not TC1: its exploration is not a row of this gate.
+  assert.ok(!manifest.rows.some(r=>/service/.test(r.id)||/service/.test(r.check)||/service/.test(r.acceptance)));
+  const ledger=json(manifest.ledger).rows;
+  for(const id of ['TC1-C-TASKS','SOLO5-CONTROL-REPLAY']) {
+    const row=ledger.find(r=>r.id===id);
+    assert.equal(row.status,'DEVELOPMENT-EVIDENCE',id);
+    assert.ok(row.gaps.length,id+' states its gaps');
+  }
+  assert.ok(ledger.find(r=>r.id==='TC1-C-TASKS').gaps.some(g=>/§13/.test(g)),'the unconfirmed owner choices stay visible');
+  assert.ok(/CONCURRENCY\.md/.test(manifest.not_covered)&&/solo5-control-replay/.test(manifest.not_covered));
+});
+
+test('the evaluator, the manifest and the task enumerator state the same C1 scope, and the optional rows cannot turn an unknown into a pass', () => {
+  const programs=evaluator.match(/\(define fh\.tc1-task-programs -> "(\d+)"\)/)[1];
+  assert.equal(enumerateTasks().count,programs);
+  assert.ok(manifest.rows.find(r=>r.id==='task-commuting-obligation').acceptance.includes(Number(programs).toLocaleString('en-US')+' programs'));
+  assert.equal(evaluator.match(/\(define fh\.solo5-control-stride -> "(\d+)"\)/)[1],'25');
+  assert.ok(manifest.rows.find(r=>r.id==='solo5-control-replay').acceptance.includes('stride 25'));
+  // Only a harness-reported development-pass (and, for the exploration, a complete scope) is PASS.
+  const slice=name=>{const at=evaluator.indexOf(`(define ${name}\n`);return evaluator.slice(at,evaluator.indexOf('\n(define ',at+1));};
+  for(const name of ['fh.tc1-tasks','fh.tc1-task-explore','fh.solo5-control'])assert.ok(slice(name).length>100,name);
+  assert.ok(/did not report/.test(slice('fh.tc1-tasks'))&&/"UNKNOWN"/.test(slice('fh.tc1-tasks')));
+  assert.ok(/scope_complete/.test(slice('fh.tc1-task-explore'))&&/bounds_hit/.test(slice('fh.tc1-task-explore')));
+  assert.ok(/"BLOCKED"/.test(slice('fh.solo5-control'))&&/exceeded its time limit/.test(slice('fh.solo5-control')));
+  // Evaluation order puts the optional rows after every required row, so the verdict is the required rows'.
+  assert.ok(manifest.rows.findLastIndex(r=>r.required)<manifest.rows.findIndex(r=>!r.required));
 });
