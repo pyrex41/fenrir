@@ -205,6 +205,8 @@
       };
       devShells.${system}.aarch64-verification = pkgs.mkShell {
         packages = [ aarch64-verification ];
+        # rocq resolves its standard library from here (the buildEnv's binaries are links).
+        ROCQPATH = "${aarch64-verification}/lib/coq/9.3/user-contrib";
       };
     };
 }

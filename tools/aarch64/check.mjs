@@ -1,32 +1,25 @@
-import {spawnSync} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync,copyFileSync} from 'node:fs';
+import {tool as findTool,run} from './toolchain.mjs';
 import {resolve} from 'node:path';
 import assert from 'node:assert/strict';
 import {compileArtifact,writeBuild,proofInstance,sha256} from './compile.mjs';
-import {fixture} from './fixtures.mjs';
+import {fixture,UNARY_CASES} from './fixtures.mjs';
 import {encode} from '../tc0/canonical.mjs';
 import {PureCallMachine} from '../../runtime/tc0/pure-call-machine.mjs';
 const root=resolve(import.meta.dirname,'../..');
 // Fresh directory means stale .vo files or reports cannot satisfy this run.
 const out=resolve(root,'build/aarch64',`${Date.now()}-${process.pid}`);mkdirSync(out,{recursive:true});
-function command(exe,args,{cwd=out,ok=true}={}) {
- const r=spawnSync(exe,args,{cwd,timeout:120000,maxBuffer:16*1024*1024});
- if(r.error||r.signal)throw new Error(`${exe}: ${r.error||r.signal}`);
- if(ok&&r.status!==0)throw new Error(`${exe} ${args.join(' ')}: ${r.stderr}\n${r.stdout}`);
- return r;
-}
+// Tool names as first published; toolchain.mjs maps them to Rocq 9 / nixpkgs names.
+const ALIAS={coqc:'coqc',coqchk:'coqchk','aarch64-linux-gnu-as':'as','aarch64-linux-gnu-ld':'ld','aarch64-linux-gnu-objcopy':'objcopy','qemu-aarch64':'qemu'};
+function command(exe,args,{cwd=out,ok=true}={}) {return run(ALIAS[exe],args,{cwd,ok,timeout:120000});}
 const versions={};
-for(const [tool,args] of [['coqc',['--version']],['coqchk',['--version']],['aarch64-linux-gnu-as',['--version']],['aarch64-linux-gnu-ld',['--version']],['aarch64-linux-gnu-objcopy',['--version']],['qemu-aarch64',['--version']]]) {
- const r=command(tool,args);versions[tool]=r.stdout.toString().split('\n')[0];
-}
+for(const name of Object.keys(ALIAS)){const t=findTool(ALIAS[name]);versions[name]=`${t.exe}: ${t.version}`;}
 copyFileSync(resolve(root,'verification/aarch64/Core.v'),resolve(out,'Core.v'));
 const flags=['-Q',out,'FenrirARM'];
 const audit=[];
 function prove(file){const r=command('coqc',[...flags,file]);audit.push(r.stdout.toString());return r;}
 prove('Core.v');
-const cases=[[],[['add',0]],[['add',1]],[['add',4095]],[['sub',1]],[['sub',4095]],[['neg']],
- [['add',1],['sub',1]],[['sub',1],['add',1]],[['neg'],['neg']],
- [['add',4095],['neg'],['sub',4095]],Array.from({length:12},(_,i)=>[i%2?'sub':'add',i*37])];
+const cases=UNARY_CASES;
 const lo=-(1n<<63n),hi=(1n<<63n)-1n;
 const inputs=[lo,lo+1n,lo+4094n,lo+4095n,-4096n,-1n,0n,1n,4095n,4096n,(1n<<53n)+1n,hi-4095n,hi-4094n,hi-1n,hi];
 // Deterministic full-width samples complement boundary cases; never a proof.
