@@ -1,3 +1,26 @@
+# Recorded development validation — 2026-11-15, with the call profile
+
+Base: `claude/keen-ptolemy-w9d7ve` at `3674ec1` plus the call-profile commits.
+Entry point `sh verification/aarch64/check.sh`, 6 min 21 s, same tools as the
+record below. Full record: [validation-2026-11-15-call.json](validation-2026-11-15-call.json).
+
+- Unary and expr profiles: unchanged results (12 + 70 exact-image theorems,
+  564 + 2,520 QEMU comparisons, 3 + 10 rejected mutants), now with `BL` in
+  the instruction type and decoder; every earlier proof re-checks.
+- `fenrir-aarch64-checked-call/1`: `call_correct`, `tail_calls_constant_stack`,
+  `tail_program_correct` closed under the global context; 14 programs, each
+  with `exact_image_correct` closed, 5 tail-only ones also with
+  `exact_image_tail_correct`; 14 GNU-as byte agreements; 436 QEMU comparisons
+  agree with `PureCallMachine` (including 60,000-deep recursion and a
+  200,000-iteration tail loop); 8 frame mutants rejected by proof and by
+  execution; rocqchk replayed 21 modules.
+- Shen differential: 94 programs × 40 inputs = 3,760 cases (480 call cases);
+  `failures = []` proved; a 4-case falsified control refuted exactly.
+- `node --test tests/tc0/*.test.mjs tests/tc1/*.test.mjs tests/aarch64/*.test.mjs`:
+  228 passed, 0 failed, 0 skipped.
+
+Not run: physical ARM hardware, Sail, Islaris, Solo5 on AArch64, the GitHub workflow.
+
 # Recorded development validation — 2026-11-15
 
 Base: this branch after merging PR #8 (`codex/aarch64-checked-core` at

@@ -18,7 +18,7 @@ runtime lemmas reusable for later Shen/Scheme and foreign-binary clients.
 | ARM-02 | Independently checked original artifact decoding/projection and correspondence to exact Shen TC0 semantics | Open. Tested only: the Shen differential (harness/aarch64-differential.shen) agrees on 3,280 cases; the projection in `tools/aarch64` is unverified; a proof goes through Búri's KLambda semantics of the model (amendment §3) |
 | ARM-03 | Pin Arm/Sail model and execution profile; prove each emitted instruction/flag/control-transfer summary against it | Open; continues Búri's ARM foundation (below), not restarted here |
 | ARM-04 | Prove loaded image, instruction addresses, ABI, register framing and fault conditions; compose instruction summaries | Open |
-| ARM-05 | Extend source semantics and backend to branches, calls, closures, bytes and immutable algebraic values; prove heap/stack relations | Partly: binary operations with intermediate traps, comparisons and Bool, `if` with byte-offset branches, `let` and variables in stack slots (expr profile). Calls, closures, bytes and data open; next step below |
+| ARM-05 | Extend source semantics and backend to branches, calls, closures, bytes and immutable algebraic values; prove heap/stack relations | Partly: binary operations with intermediate traps, comparisons and Bool, `if` with byte-offset branches, `let` and variables in stack slots (expr profile); first-order calls, recursion and tail calls in constant stack (call profile). Closures, bytes, tuples and data open; next steps below |
 | ARM-06 | Allocation and resource exhaustion contract, runtime primitives, startup and termination for complete guest image | Open |
 | ARM-07 | Actual effect handlers, residual-effect capability derivation, device/host boundary and bypass exclusion | Open; requires a new real-I/O profile beyond TC0 |
 | ARM-08 | Handlers, structured tasks, channels, cancellation, cleanup and scheduler refinement | Open |
@@ -57,22 +57,28 @@ feasibility question that choosing a library does not settle), and
 [Zellic/V12's research preview](https://github.com/Zellic/x86-formal-verification-research)
 as the first comparison benchmark.
 
-## Next increment in ARM-05: first-order calls
+## ARM-05: calls (done) and what follows
 
-Not started. Target: `call` of a first-order `I64 → I64`/`Bool` function of the
-same artifact, then a self tail call. What it needs, in order:
+Done as `fenrir-aarch64-checked-call/1` (README, ABI.md `fenrir-aarch64-call-abi/1`).
+Decisions: the expr machine is kept and the call machine simulates it on
+non-RET steps, so the expression proof is reused; the source semantics is
+fuel-indexed and the theorem is relative to termination; the stack bound is the
+semantics' own `need`, and tail-only tables get a constant bound
+(`tail_calls_constant_stack`). Profile restrictions: one parameter; calls only
+as a `let` initializer or in tail position; no stack-overflow detection.
 
-1. Machine: RET becomes a jump to `X[n]` and the run ends when the PC leaves the
-   image (an exit address), instead of halting at RET; BL writes X30. Re-prove
-   the expr profile on that machine first (its statement does not change).
-2. Callee frame: save `x30` and `x9`, restore them on the success and every trap
-   path; trap statuses propagate by `cbnz x1` after each `bl`.
-3. Source: `eval` with a function table and fuel (the Shen model has no fuel; the
-   profile restricts calls to earlier functions so fuel = number of functions
-   suffices, and the theorem says so); tail calls need a loop measure and a
-   separate termination premise.
-4. A per-function specification proved by induction on the call graph, composed
-   at each call site; the result ABI gets a version 2 if the frame changes.
+Next, in order:
+
+1. Several parameters (pass in x0..x7 or on the stack; extends the frame
+   layout and `fenrir-aarch64-call-abi` to version 2).
+2. Calls inside expressions without the A-normal-form restriction (needs the
+   expression compiler itself to know about calls and the caller-saved
+   temporaries on the stack).
+3. Stack-overflow detection (a limit check in the prologue and a new trap, which
+   is a contract change: TC0 has no stack trap) or a proof obligation on the
+   loader that enough stack exists.
+4. Closures and immutable data: a heap model, allocation and its exhaustion
+   contract (ARM-06), and the representation relation for tuples and datatypes.
 
 ## Integration ownership
 
