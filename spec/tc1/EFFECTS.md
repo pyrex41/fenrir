@@ -1,6 +1,6 @@
 # TC1 effect contract
 
-Draft 2 • 14 November 2026 • For owner review
+Draft 3 • 15 November 2026 • For owner review
 
 **Status.** Written together with its implementation, at the owner's request,
 so the text and the behaviour can be reviewed side by side. Both slices are
@@ -13,8 +13,8 @@ the open questions of the earlier handler task packet (PR #7); §10 lists them.
 
 Owner decisions of 14 November 2026 are folded in: a clause may continue after
 `resume` returns (§7); performs of user effects are not observations (§5);
-operation types stay serializable for now (§1); the slices are one optional
-row each of the TC0-A gate until TC1 has its own (§9).
+operation types stay serializable for now (§1); TC1 has its own gate, proposed
+and not yet registered (§9).
 
 TC1 is TC0-A plus what is below. Everything TC0-A specifies (values, checked
 I64, evaluation order, calls, closures, data, traps, `emit`) is unchanged.
@@ -202,43 +202,67 @@ Recorded now so that the concurrency slice is designed against it:
 ## 9 What is checked today
 
 ```sh
-sh harness/run-tc1-handlers.sh          # model against the JavaScript implementation
-sh harness/run-solo5-pure-call.sh tc1   # model against the Solo5 guest
+sh harness/run-tc1-handlers.sh                     # hand fixtures: model against the JavaScript implementation
+sh harness/run-tc1-exhaustive.sh                   # every program of grammar H: the same comparison
+sh harness/run-solo5-pure-call.sh tc1              # hand fixtures: model against the Solo5 guest
+sh harness/run-solo5-pure-call.sh tc1-exhaustive   # grammar H: model against the Solo5 guest
+sh harness/run-tc1-gate.sh                         # the proposed TC1 gate, all of the above and more
 ```
 
-- **Fixtures** (`fixtures/tc1/handler-hand-cases.mjs`): twenty programs, eleven
-  for H1 and nine for H2, each with expectations written from this text before
-  any machine ran: outcome, the order of performed operations, emission order
-  where relevant, and for three programs the complete step staging.
-- **Model and implementation:** the Shen model
-  (`models/tc1/handler-machine.shen`) and the JavaScript implementation
-  (`runtime/tc1/handler-machine.mjs`) agree step for step on all twenty, over
-  625 steps, and both satisfy all 51 expectations.
-- **Model and Solo5 guest:** the C machine (`backends/solo5/pure-call`),
-  running as a Solo5 guest, agrees step for step with the model on the same
-  twenty programs.
-- **Defects:** six defects injected into the JavaScript implementation are each
-  detected on at least one fixture: forgotten resume (9 fixtures), double
-  resume (9), outermost-handler selection (2), clause run in the perform site's
-  bindings (1), `resume` yielding its argument instead of the body's result
-  (2), and a resumed segment without its handler (5, plus one run that crashes,
-  which is not counted).
-- **Validation:** unit tests reject, for the stated reason, a resumption used
-  zero times, twice, or on one path only; read as a value; captured by a
-  closure; used by an inner clause; and resumed with the wrong type.
-- **TC0-A subset:** the JavaScript handler machine gives the same steps,
-  outcome and closure descriptors as the TC0-A implementation on all 5,774
-  TC0-A programs of the existing scopes, and the extended C machine still
-  agrees with the model on those and on the 8,745 exact-arithmetic programs.
+**Hand fixtures** (`fixtures/tc1/handler-hand-cases.mjs`). Twenty programs,
+eleven for H1 and nine for H2, each with expectations written from this text
+before any machine ran: outcome, the order of performed operations, emission
+order where relevant, and for three programs the complete step staging. The
+Shen model and the JavaScript implementation agree step for step on all twenty
+(625 steps) and both satisfy all 51 expectations; the Solo5 guest agrees with
+the model on the same programs.
 
-The two checks are optional rows of the TC0-A gate (`tc1-handler-slice`,
-`tc1-handler-guest`). TC1 gets its own gate when it has more than hand
-fixtures behind it.
+**Exhaustive family** (`tools/tc1/handler-enumerate.mjs`, grammar H in its
+header). Every program of a bounded grammar of handler programs up to 7 nodes:
+12,693 programs, 2,826 of them with explicit resumptions. Counts for sizes 1 to
+5 are derived by hand in the test; sizes 6 and 7 come from two independent
+counting recurrences. The grammar has two one-operation effects, both clause
+forms, nested handlers, forwarding, tail and non-tail resume, discontinue, an
+emitting form, and division by zero as its trap.
 
-Not done: generated or exhaustive handler programs, reduction, strict replay,
-catalog coverage, and any soundness proof of the typing rules in §3 or of the
-one-shot check in §7. The fixtures, all three machines and the harness share
-one author lineage.
+- Model against JavaScript implementation: 12,693 of 12,693 agree on every
+  step and the outcome, over 263,222 steps (11,192 Ok, 1,501 DivZero).
+- Model against Solo5 guest: the same programs, none differing.
+- No disagreement between the three machines was found.
+
+**Defects.** Six defects injected into the JavaScript implementation are each
+detected, on the exhaustive family, on this many programs: forgotten resume
+2,885; double resume 2,836; outermost-handler selection 421; clause run in the
+perform site's bindings 237; `resume` yielding its argument 16; a resumed
+segment without its handler 425. A defective run that crashes or runs out of
+steps (149 runs in all) is counted separately and never as a detection.
+
+**Step coverage.** All fifteen handler step kinds of §6 are exercised, by the
+hand traces alone and by the exhaustive traces alone.
+
+**Validation.** Unit tests reject, for the stated reason, a resumption used
+zero times, twice, or on one path only; read as a value; captured by a
+closure; used by an inner clause; and resumed with the wrong type.
+
+**TC0-A subset.** The JavaScript handler machine gives the same runs as the
+TC0-A implementation on all 5,774 TC0-A programs of the existing scopes, and
+the extended C machine still agrees with the model on those and on the 8,745
+exact-arithmetic programs.
+
+**The TC1 gate** (`harness/tc1-gate.shen`, manifest
+`spec/tc1/tc1-requirements.json`) has fourteen required rows, including a
+passing TC0-A gate on the same commit, and aggregates as the TC0-A gate does.
+It is **proposed**: it reports `authority: UNREGISTERED` and
+`qualification: UNKNOWN` until the owner registers it. On a committed tree it
+gives verdict PASS on 14 of 14 required rows.
+
+Not done: programs above 7 nodes; in the exhaustive family, effects with
+several operations, non-I64 operation types, closures, and resume and
+discontinue on different paths of one clause (the hand fixtures cover those);
+a randomly generated family; reduction of a failing handler program; strict
+replay; and any soundness proof of the typing rules in §3 or of the one-shot
+check in §7. The fixtures, the grammar, all three machines and the harness
+share one author lineage.
 
 ## 10 Answers to the earlier open questions
 
@@ -261,7 +285,8 @@ Settled by the owner on 14 November 2026:
 1. A clause may continue after `resume` returns (§7).
 2. Performs of user effects are not observations (§5).
 3. Operation types stay serializable for now (§1).
-4. The slices are optional rows of the TC0-A gate until TC1 has its own (§9).
+4. TC1 gets its own gate (§9). It exists and is proposed; registering it is
+   an owner decision.
 
 Open:
 

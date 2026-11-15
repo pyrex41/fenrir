@@ -41,14 +41,23 @@ store. The amendment changes no TC0 evidence.
   the sandbox. **Sections below from "How far along are we?" onward describe
   work done with the Python tools and keep its numbers; where they name a
   `tools/check-tc0-*.py` command, the equivalent is now under `harness/`.**
+- **A frontend.** Programs can be written as text and run:
+  `sh frontend/fenrir.sh run examples/transaction.fen`. The reader and
+  elaborator are Shen ([frontend/](frontend/)); they resolve names, synthesize
+  types, infer effect sets, check the one-shot rule and report errors with
+  line and column. The syntax is S-expressions and is a draft
+  ([spec/tc1/SURFACE.md](spec/tc1/SURFACE.md)). `sh frontend/test.sh` runs 12
+  programs to their stated results, checks 69 rejected programs, and shows 27
+  existing fixtures rewritten in surface syntax elaborate to the same program.
 - **Effects and handlers (TC1).** [spec/tc1/EFFECTS.md](spec/tc1/EFFECTS.md)
   is a draft effect contract: declared effects, `perform` and `handle`, finite
   effect sets, dynamic handler selection, and explicit one-shot resumptions
   (`resume`, `discontinue`) whose exactly-once use is checked at validation.
-  Both slices run in a Shen model, an independent JavaScript implementation
-  and the Solo5 guest, and all three agree step for step on twenty hand
-  fixtures with 51 handwritten expectations; six injected defects are each
-  detected. Generated handler programs, reduction and replay are not done.
+  It runs in a Shen model, an independent JavaScript implementation and the
+  Solo5 guest. All three agree step for step on twenty hand fixtures and on
+  every one of 12,693 enumerated handler programs, and six injected defects
+  are each detected. A separate TC1 gate (`sh harness/run-tc1-gate.sh`) passes
+  14 of 14 required rows; it is proposed and not registered.
 - **Service model.** [verification/service/](verification/service/) is a Rocq
   model of a tenant-scoped request that atomically records a report, a durable
   job and its retry result before answering, with write isolation, atomicity,

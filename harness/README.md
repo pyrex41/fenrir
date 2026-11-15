@@ -98,31 +98,50 @@ source-identity row.
 ## TC1: effects and handlers
 
 ```sh
-sh harness/run-tc1-handlers.sh          # model against the JavaScript implementation
-sh harness/run-solo5-pure-call.sh tc1   # model against the Solo5 guest
+sh harness/run-tc1-handlers.sh                     # hand fixtures, model against the JavaScript implementation
+sh harness/run-tc1-exhaustive.sh                   # 12,693 enumerated handler programs, the same comparison
+sh harness/run-solo5-pure-call.sh tc1              # hand fixtures in the Solo5 guest
+sh harness/run-solo5-pure-call.sh tc1-exhaustive   # the enumerated programs in the Solo5 guest
+sh harness/run-tc1-gate.sh                         # the proposed TC1 gate, about 4 minutes
 ```
 
-**[tc1-handlers.shen](tc1-handlers.shen)** checks both slices of the TC1 effect
-contract ([spec/tc1/EFFECTS.md](../spec/tc1/EFFECTS.md), a draft for owner
-review): tail-resumptive handlers, and explicit one-shot resumptions with
-`resume` and `discontinue`. On twenty hand fixtures the Shen model
-(`models/tc1/handler-machine.shen`) and an independent JavaScript
-implementation (`runtime/tc1/handler-machine.mjs`) agree step for step over
-625 steps, both satisfy 51 handwritten expectations (outcome, order of
-performed operations, emission order, and three complete hand-derived step
-traces), and six defects injected into the implementation are each detected.
+The contract is [spec/tc1/EFFECTS.md](../spec/tc1/EFFECTS.md) (draft); its §9
+has the numbers. In short:
 
-The same twenty programs run in the Solo5 guest (the C machine was extended)
-and agree with the model step for step. The two checks are optional gate rows,
-`tc1-handler-slice` and `tc1-handler-guest`.
+- **[tc1-handlers.shen](tc1-handlers.shen):** twenty hand fixtures covering
+  tail-resumptive handlers and explicit one-shot resumptions; model and
+  implementation agree and both meet 51 handwritten expectations.
+- **[tc1-exhaustive.shen](tc1-exhaustive.shen):** every program of a bounded
+  handler grammar up to 7 nodes, 12,693 programs. Model and implementation
+  agree on all of them, and each of the implementation's six injected defects
+  is detected. The harness derives the expected program count itself and fails
+  if the batch differs from it.
+- **[tc1-coverage.shen](tc1-coverage.shen):** all fifteen handler step kinds of
+  the contract's step table are exercised.
+- **[tc1-gate.shen](tc1-gate.shen):** a separate gate for TC1 with fourteen
+  required rows, one of which is a passing TC0-A gate on the same commit. It is
+  proposed and unregistered, so it reports `qualification: UNKNOWN`. On a
+  committed tree its verdict is PASS.
 
-Which machine runs a program is decided by its schema; `common.shen` loads
-both models. `expectations.shen` holds the expectation checks the hand-case
-and handler programs share. Performs are read from step records: a user effect
-produces no event.
+[gate-core.shen](gate-core.shen) holds what the two gates share: row
+evaluation, aggregation, claims, the drift check and the controller record.
+Each gate file supplies its manifest, its registration rule and its checks.
+`tc1-defects.shen` holds the defect classification the two handler programs
+share; `expectations.shen` the expectation checks.
 
-Not done for TC1: generated or exhaustive handler programs, reduction, strict
-replay and catalog coverage.
+Which machine runs a program is decided by its schema. Performs are read from
+step records: a user effect produces no event.
+
+Not done for TC1: programs above 7 nodes, a randomly generated family,
+reduction of a failing handler program, and strict replay.
+
+## Frontend
+
+`sh frontend/fenrir.sh run FILE` elaborates a program written in the surface
+syntax ([spec/tc1/SURFACE.md](../spec/tc1/SURFACE.md), draft), has the
+JavaScript validator check the artifact, and runs it on the model in the same
+process, reusing `common.shen`. `sh frontend/test.sh` is its test suite. It is
+not part of either gate.
 
 ## What is still not Shen
 

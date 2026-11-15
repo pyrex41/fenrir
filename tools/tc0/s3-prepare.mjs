@@ -39,7 +39,8 @@ const WITHHELD=['README.md','PI_CLM_HANDOFF.md','campaigns','.pi',
  'spec/tc0/requirement-ledger-a.json','tools/tc0/check-requirement-ledger.mjs','tests/tc0/requirement-ledger.test.mjs',
  'spec/tc0/tc0-a-requirements.json',
  // Evaluator-side Shen harness: the gate, the campaigns and the repair evaluation.
- 'harness/README.md','harness/run-gate.sh','harness/gate.shen','harness/reduction.shen',
+ 'harness/README.md','harness/run-gate.sh','harness/gate.shen','harness/gate-core.shen','harness/tc1-gate.shen','harness/run-tc1-gate.sh',
+ 'spec/tc1/tc1-requirements.json','harness/reduction.shen',
  'harness/model-vs-candidate.shen','harness/repair-evaluation.shen','tools/tc0/replay-reference.mjs'];
 const REWRITES=[
  ['tools/tc0/pure-call-replay.mjs',',arm_by_position:m.armByPosition===true}','}'],

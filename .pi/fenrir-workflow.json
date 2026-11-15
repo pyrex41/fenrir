@@ -59,7 +59,9 @@
         "tests/tc0/requirement-ledger.test.mjs",
         "tests/tc0/s3-repair.test.mjs",
         "tests/tc0/sandbox.test.mjs",
-        "tests/tc1/handler-artifact.test.mjs"
+        "tests/tc1/handler-artifact.test.mjs",
+        "tests/tc1/handler-enumeration.test.mjs",
+        "tests/tc1/gate-manifest.test.mjs"
       ],
       "timeoutSeconds": 120,
       "authorityPaths": []
