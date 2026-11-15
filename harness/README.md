@@ -207,9 +207,29 @@ program and every witness agreeing; UNKNOWN for an incomplete or truncated scope
 or no report; FAIL otherwise) and `solo5-control-replay` (`solo5-control.shen` at
 stride 25, about 20 s: PASS on `development-pass`, FAIL on `development-fail`,
 BLOCKED where Solo5 or the guest build is unavailable, UNKNOWN on a timeout or no
-report). The accepted-job exploration (`service-explore.shen`) is not a row: it
-checks the service contract of application example A1, which is not part of
-slice TC1.
+report).
+
+Four more optional rows cover the durable and typing work, each reading its
+program's own report (none can pass without it; no claim relies on them):
+`durable-hand-fixtures` (`tc1-durable.shen`: PASS on `development-pass`, FAIL on
+`development-fail`, UNKNOWN without a report or on a timeout), `durable-guest`
+(`solo5-durable.shen` over control protocol v2 on the D1 hand fixtures: PASS on
+`development-pass` with every program agreeing, FAIL on a failing report, BLOCKED
+where Solo5 or Shen/JIT is unavailable or the guest build exits nonzero, UNKNOWN on a
+timeout or no report), `durable-validator-differential`
+(`tools/tc1/validator-differential.mjs` against the validator at the parent of the D1
+edit, read from git at a pinned revision and digest: PASS only with all 137,469 verdicts
+identical and the 10 corpora at their pinned program counts, 24,153 programs; a
+difference or other counts is FAIL; no old copy or no report is UNKNOWN) and
+`typing-differential` (`typing/run.shen`, about 2.5 min: PASS only on
+`development-pass` with no family whose acceptance disagrees and no probe on which the
+Shen side departs from the contract; a derivation search out of budget, no report or a
+timeout is UNKNOWN; FAIL otherwise). The validator differential is still meaningful
+after the later effect-name fix (b4f4af2): run against the pre-D1 validator with the
+current one, all verdicts are identical, so that fix changes no verdict on these corpora.
+
+The accepted-job contract (A1) and its Fenrir handler (A2) are not part of slice TC1
+and are not rows of this gate; they have their own proposed gate, below.
 
 Not done for TC1: exhaustive exploration beyond grammar H, and reduction
 campaigns for the two defects that show only through later values.
@@ -359,6 +379,31 @@ of wrong-tenant. All 13 counterexamples are retained in
 Limits: A1's scope only; capabilities are forgeable (DURABLE.md §9), so wrong-tenant
 is caught dynamically, not refused; the host is A1's store under the stated contract,
 not SQLite (that is A3); one author lineage for handler, contract, machines and harness.
+
+## The proposed service gate
+
+```sh
+sh harness/run-service-gate.sh          # the proposed service gate, SERVICE_TIME
+```
+
+[service-gate.shen](service-gate.shen), manifest
+[spec/service/service-requirements.json](../spec/service/service-requirements.json)
+(`proposed`; authority UNREGISTERED, qualification UNKNOWN; not registered in the
+workflow), on [gate-core.shen](gate-core.shen) with the same aggregation rule as the other
+gates. It gathers the accepted-job work (contract A1, handler A2), which is not slice
+TC1, so the TC1 gate has no row for it. Ten required rows, each reading the report of a
+harness program: `source-identity`, `toolchain-pinned`, `service-unit-tests`
+(`tests/service`), `a1-exploration` (`service-explore.shen` at the pinned scope: the model
+complete and not truncated, every mutant caught, the equivalent control unflagged;
+truncated or another scope is UNKNOWN), `a1-model-vs-js-differential` (629,165 runtime
+edges), `a2-refinement` (`service-fenrir.shen`: the handler gives the A1 model's next state
+and response on every edge, 3,336,483 steps), `a2-js-agreement`, `a2-solo5-agreement`
+(the handler's runs in the host-controlled Solo5 guest, quick mode; BLOCKED without
+Solo5), `a2-handler-mutants` (six caught, the control unflagged, `commit-inside-atomic`
+rejected statically) and `retained-counterexamples-replay` (22 A1 and 13 A2 files, each in
+a fresh process). Fields the rows rely on are those the programs report; nothing was
+added to them. Bounded exploration at the stated scope, development grade; the
+Shen-to-Rocq correspondence is by reading (ledger row `SERVICE-ACCEPTED-JOB`).
 
 ## What is still not Shen
 

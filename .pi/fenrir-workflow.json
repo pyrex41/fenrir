@@ -93,6 +93,8 @@
         "runtime/tc0",
         "tools/solo5/freerun-pure-call.mjs",
         "tools/solo5/freerun.mjs",
+        "tools/solo5/native-arithmetic/lower.mjs",
+        "tools/solo5/shen-expression.mjs",
         "tools/solo5/pure-call",
         "backends/solo5/pure-call",
         "tests/tc0",

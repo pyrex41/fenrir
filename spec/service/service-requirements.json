@@ -1,0 +1,130 @@
+{
+ "schema": "service-requirement-manifest/1",
+ "status": "proposed",
+ "slice": "SERVICE-A1-A2",
+ "contract": "spec/service/ACCEPTED_JOB.md (stage A1: the accepted-job contract, its Shen model and JavaScript implementation) and spec/service/HANDLER.md (stage A2: the handler in Fenrir, refining the A1 model; it runs on the draft TC1-D1 durable effects of spec/tc1/DURABLE.md and the Solo5 control protocol v2, spec/solo5/pure-call-control-v2.md). The contract is not part of slice TC1: the TC1 gate (spec/tc1/tc1-requirements.json) has no row for it.",
+ "ledger": "spec/tc0/requirement-ledger-a.json",
+ "evaluator": "harness/service-gate.shen",
+ "aggregation": "As the TC0-A and TC1 gates (TC0-GATE, 02 §14): any required row FAIL -> FAIL; else any BLOCKED -> BLOCKED; else any UNKNOWN -> UNKNOWN; else PASS. A mutant caught by no property, or a flagged equivalent control, is FAIL; a truncated exploration is never PASS. An evaluator error or a check that does not report is UNKNOWN. Every row's reasons are reported whatever the aggregate.",
+ "scope": "Accepted-job bounded exploration at 2 tenants, 2 keys, 2 payload digests; per schedule at most 3 submits, 2 deliveries, 2 responses and 1 crash; state cap 2,000,000 (the default of harness/run-service-explore.sh and harness/run-service-fenrir.sh). The evaluator pins this scope, the A1 model's 251,374 product states, the 629,165 runtime edges the model and the JavaScript implementation must share, the mutants of each exploration, and the 22 and 13 retained counterexamples.",
+ "rows": [
+  {
+   "id": "source-identity",
+   "required": true,
+   "ledger": [
+    "G0-TOOLCHAIN-BASELINE"
+   ],
+   "check": "source-identity",
+   "acceptance": "Clean worktree at a committed HEAD; every later row binds to it. A dirty tree is UNKNOWN (evidence not source-bound)."
+  },
+  {
+   "id": "toolchain-pinned",
+   "required": true,
+   "ledger": [
+    "G0-TOOLCHAIN-BASELINE"
+   ],
+   "check": "toolchain-pinned",
+   "acceptance": "The Shen/JIT executable and library directory the gate runs on resolve to the flake's shen-jit output. No nix or no such flake output: BLOCKED. Another executable: UNKNOWN."
+  },
+  {
+   "id": "service-unit-tests",
+   "required": true,
+   "ledger": [
+    "SERVICE-ACCEPTED-JOB"
+   ],
+   "check": "service-unit-tests",
+   "acceptance": "node --test tests/service/*.test.mjs: no failures (the JavaScript implementation against the hand-derived traces and small hand-derived exploration counts, and the manifest structure). Any skipped test is UNKNOWN."
+  },
+  {
+   "id": "a1-exploration",
+   "required": true,
+   "ledger": [
+    "SERVICE-ACCEPTED-JOB"
+   ],
+   "check": "service-a1-explore",
+   "acceptance": "harness/service-explore.shen at the scope above, JavaScript side sandboxed: the hand traces agree; the Shen model's exploration is complete and not truncated (251,374 product states) with no violation of any property; each of the 9 mutants is caught by at least one property and passes its prediction check; the equivalent control is caught by none; every property and every check fails on some mutant. A truncated or incomplete exploration, another scope, or another set of mutants is UNKNOWN; a violation, a mutant caught by nothing or a flagged control is FAIL; no report is UNKNOWN. Bounded exploration, development grade."
+  },
+  {
+   "id": "a1-model-vs-js-differential",
+   "required": true,
+   "ledger": [
+    "SERVICE-ACCEPTED-JOB"
+   ],
+   "check": "service-a1-differential",
+   "acceptance": "From the same run: the sandboxed JavaScript implementation (runtime/service/accepted-job.mjs), explored by its own driver, gives the same state, label, next state and response as the model on each of 629,165 distinct runtime edges, with none on one side only and none duplicated; its exploration is not truncated. A different edge count (the scope moved) is UNKNOWN; a difference is FAIL; no A1 report is UNKNOWN."
+  },
+  {
+   "id": "a2-refinement",
+   "required": true,
+   "ledger": [
+    "SERVICE-ACCEPTED-JOB"
+   ],
+   "check": "service-a2-refinement",
+   "acceptance": "harness/service-fenrir.shen at the scope above, after elaborating examples/service/accepted-job.fen and its mutants with the frontend: the handler, run on the Shen TC1-D1 model against the storage contract of spec/service/HANDLER.md, gives on every explored edge (3,336,483 steps) the same next state and response as the A1 model, and the same graph (251,374 product states, no violation). A truncated exploration, another scope, or a frontend failure that is not a rejection is UNKNOWN; a step that differs is FAIL; no report is UNKNOWN."
+  },
+  {
+   "id": "a2-js-agreement",
+   "required": true,
+   "ledger": [
+    "SERVICE-ACCEPTED-JOB"
+   ],
+   "check": "service-a2-js",
+   "acceptance": "From the same run: the sandboxed JavaScript TC1-D1 implementation (runtime/tc1/durable-machine.mjs) agrees step for step with the Shen durable model on every distinct run of the handler (request and host replies) that the exploration performed. It did not run, or no A2 report: UNKNOWN; a run that differs: FAIL."
+  },
+  {
+   "id": "a2-solo5-agreement",
+   "required": true,
+   "ledger": [
+    "SERVICE-ACCEPTED-JOB"
+   ],
+   "check": "service-a2-solo5",
+   "acceptance": "harness/solo5-durable.shen (quick) on the batch of tools/solo5/control-durable-build.mjs built from the run sample of the same A2 run: the host-controlled Solo5 guest over control protocol v2 agrees with the Shen durable model on every run of the sample (the guest is driven on exactly as many programs as the JavaScript sample has runs), every tape replays exactly and the v2 byte vectors hold. Solo5 or Shen/JIT unavailable, or the guest build exiting nonzero: BLOCKED. A different number of programs, a timeout or no report: UNKNOWN; a divergence: FAIL."
+  },
+  {
+   "id": "a2-handler-mutants",
+   "required": true,
+   "ledger": [
+    "SERVICE-ACCEPTED-JOB"
+   ],
+   "check": "service-a2-mutants",
+   "acceptance": "From the same A2 run: each of the 6 handler mutants of examples/service/mutants is caught by at least one A1 property with its exploration complete and not truncated; the equivalent control is caught by none; the mutant commit-inside-atomic is rejected statically by the frontend (a perform of Store inside the lambda atomic takes). A truncated exploration or another set of mutants is UNKNOWN; a mutant caught by nothing, a flagged control or a mutant that is no longer rejected statically is FAIL; no A2 report is UNKNOWN."
+  },
+  {
+   "id": "retained-counterexamples-replay",
+   "required": true,
+   "ledger": [
+    "SERVICE-ACCEPTED-JOB"
+   ],
+   "check": "service-retained-replay",
+   "acceptance": "Each of the 22 retained A1 counterexamples (spec/service/counterexamples, replayed by harness/service-explore.shen) and each of the 13 retained A2 counterexamples (spec/service/counterexamples-a2, replayed by harness/service-fenrir.shen on the elaborated handlers of the A2 row) is re-executed in a fresh process and reports reproduced: the named check first fails at the recorded step. Another number of retained files, a replay that gives no report or no A2 elaboration in this run: UNKNOWN; a counterexample that is not reproduced: FAIL."
+  }
+ ],
+ "claims": {
+  "accepted-job-bounded-exploration-clean": [
+   "toolchain-pinned",
+   "service-unit-tests",
+   "a1-exploration"
+  ],
+  "accepted-job-implementation-agrees": [
+   "toolchain-pinned",
+   "a1-model-vs-js-differential"
+  ],
+  "fenrir-handler-refines-model-bounded": [
+   "toolchain-pinned",
+   "a2-refinement",
+   "a2-js-agreement",
+   "a2-solo5-agreement"
+  ],
+  "handler-mutants-caught": [
+   "a1-exploration",
+   "a2-handler-mutants",
+   "retained-counterexamples-replay"
+  ]
+ },
+ "claim_prerequisites": [
+  "source-identity"
+ ],
+ "review": "None. This manifest is PROPOSED: it is not owner-accepted and the evaluator is not registered in .pi/fenrir-workflow.json, so every report says authority UNREGISTERED and qualification UNKNOWN. Registration is the owner's decision.",
+ "model": "models/service/accepted-job.shen and models/service/accepted-job-properties.shen (A1), models/service-a2/store-contract.shen (A2), run in-process by the Shen harness on the flake-pinned Shen/JIT with the TC1-D1 durable model models/tc1/durable-machine.shen",
+ "not_covered": "The correspondence between the Shen model and the Rocq A0 model (by reading, not proved) and any proof of the properties: everything here is bounded exploration at the stated scope (2 tenants, 2 keys, 2 digests, small budgets), not a proof and not an unbounded refinement claim. The mutants and their predictions are written by the same author lineage as the model; the equivalent control shows only that the monitor does not flag one behaviour-preserving variant. The handler runs on the draft TC1-D1 durable effects (spec/tc1/DURABLE.md: owner choices unconfirmed, capabilities forgeable), so wrong-tenant is caught dynamically, not refused. The host is the A1 store under the stated storage contract (HANDLER.md section 3, owner choices in section 6 unconfirmed), not a real database (stage A3). The Solo5 row covers the distinct runs of the handler under quick mode (one replay per tape, no hostile-host or tape-negative tests); the full guest checks are the optional TC1 row durable-guest, which does not run the handler. Progress holds only under the stated delivery-fairness and availability assumptions. The contract is not part of slice TC1, and a pass of this gate says nothing about it."
+}
