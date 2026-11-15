@@ -36,6 +36,7 @@ step "build: SQLite port program and Erlang modules"
 "$tools/bin/gcc" -std=c11 -O2 -Wall -Wextra -Werror -D_POSIX_C_SOURCE=200809L -I"$tools/include" \
   "$here/c_src/fenrir_sqlite_port.c" -L"$tools/lib" -Wl,-rpath,"$tools/lib" -lsqlite3 -o "$out/bin/fenrir_sqlite_port"
 "$tools/bin/erlc" -Wall -Werror -o "$ebin" "$here"/src/*.erl "$here"/test/*.erl
+cp "$here/src/fenrir_service.app.src" "$ebin/fenrir_service.app"
 FENRIR_SQLITE_PORT="$out/bin/fenrir_sqlite_port"
 export FENRIR_SQLITE_PORT
 

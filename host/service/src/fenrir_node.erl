@@ -65,6 +65,11 @@ command(fired, _) -> fenrir_faults:fired();
 command(pids, _) -> #{beam => list_to_integer(os:getpid()), sqlite_port => fenrir_store:port_os_pid()};
 command({concurrent, Requests}, _) -> concurrent(Requests);
 command(ping, _) -> pong;
+command(diag, _) ->
+    Sup = whereis(fenrir_worker_sup),
+    #{children => catch supervisor:which_children(fenrir_worker_sup),
+      worker_sup => catch erlang:process_info(Sup, [current_stacktrace, message_queue_len, status]),
+      w1 => whereis(w1)};
 command(stop, _) -> ok.
 
 %% Run requests at once, one caller process each (the workers are picked round-robin).

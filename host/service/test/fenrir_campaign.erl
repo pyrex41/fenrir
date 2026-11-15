@@ -298,9 +298,10 @@ crash_point(Ctx, Point, Action, Op, R) ->
               Outcome = classify(Out, NodeDied),
               {S5, Retry} = recover(S4, Target),
               After = snapshot_of(S5),
+              Diag = case Retry of gave_up -> {element(1, ?D:cmd(S5, diag)), lists:sublist(maps:get(whys, S5, []), 3)}; _ -> none end,
               {S5, [check(fault_fired, Fired, Point),
                     check(outcome_as_predicted, lists:member(Outcome, predicted(Point, Action, Op)), {Outcome, predicted(Point, Action, Op)}),
-                    check(retry_definite, Retry =/= gave_up, Retry),
+                    check(retry_definite, Retry =/= gave_up, {Retry, Diag}),
                     check(no_pending_job_after_drain, no_pending(After), After),
                     check(accepted_work_kept, kept(Before, After), {Before, After})]}
       end).
@@ -313,10 +314,11 @@ classify({conflict, _, _}, _) -> answered;
 classify(delivered, _) -> answered;
 classify(Out, _) -> Out.
 
-%% A seeded prefix: 1 + R mod 3 accepted submits on tenant T = R mod 3, told.
+%% A seeded prefix: 1 + R mod 2 accepted submits on tenant T = R mod 3 (keys 0 and 1
+%% only, so the faulted submit's key 2 is always fresh and reaches the writes), told.
 prefix(S, R) ->
     T = R rem 3,
-    S1 = lists:foldl(fun(K, A) -> element(2, ?D:submit_told(A, T, K, (K + R) rem 2)) end, S, lists:seq(0, R rem 3)),
+    S1 = lists:foldl(fun(K, A) -> element(2, ?D:submit_told(A, T, K, (K + R) rem 2)) end, S, lists:seq(0, R rem 2)),
     {T, S1}.
 
 %% The faulted request: a fresh submit (key 2 of tenant T, so it commits), or the
@@ -338,7 +340,7 @@ retry_complete(S, _, _, _, 0) -> {gave_up, S};
 retry_complete(S, T, J, Ok, N) ->
     case ?D:complete(S, T, J, Ok) of
         {delivered, S1} -> {delivered, S1};
-        {_, S1} -> retry_complete(S1, T, J, Ok, N - 1)
+        {_, S1} -> ?D:backoff(N), retry_complete(S1, T, J, Ok, N - 1)
     end.
 
 no_pending(Snap) when is_list(Snap) -> [] =:= [J || [_, Jobs, _, _] <- Snap, [_, _, <<"pending">>] = J <- Jobs];

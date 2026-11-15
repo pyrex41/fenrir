@@ -9,7 +9,7 @@
 %% responses that never arrived (an indeterminate outcome), crashes, store observations
 %% through the service's API, and deliveries.
 -module(fenrir_drive).
--export([new/2, start/1, stop/1, kill/1, call/2, call/3, cmd/2,
+-export([new/2, start/1, stop/1, kill/1, call/2, call/3, cmd/2, backoff/1,
          submit/4, submit_told/4, complete/4, respond/2, crash/2, observe/1, drain/2, fault/3,
          event/2, events/1, told/1, write_history/3, audit/2, retry_submit/5, concurrent/2,
          fresh_db/1]).
@@ -132,7 +132,8 @@ note_stats(S, Req, Stats) ->
               Rs -> [{Req, Rs} | maps:get(coverage, S)]
           end,
     Lat = case maps:get(us, Stats, none) of none -> maps:get(latencies, S); Us -> [Us | maps:get(latencies, S)] end,
-    S#{coverage := Cov, latencies := Lat}.
+    Whys = case maps:get(why, Stats, none) of none -> maps:get(whys, S, []); W -> [W | maps:get(whys, S, [])] end,
+    S#{coverage := Cov, latencies := Lat, whys => Whys}.
 
 respond(S, E) ->
     EJ = out_json(E),
@@ -150,11 +151,15 @@ submit_told(S, T, K, D) ->
         Other -> Other
     end.
 
+%% A client's backoff before its next attempt (a restarted worker may not be up yet).
+backoff(N) -> timer:sleep(40 * (6 - min(N, 5))).
+
 %% Retry a submit until it has a definite outcome (at most N attempts).
 retry_submit(S, _T, _K, _D, 0) -> {gave_up, S};
 retry_submit(S, T, K, D, N) ->
     case submit_told(S, T, K, D) of
-        {Out, S1} when Out =:= busy; Out =:= aborted; Out =:= indeterminate -> retry_submit(S1, T, K, D, N - 1);
+        {Out, S1} when Out =:= busy; Out =:= aborted; Out =:= indeterminate ->
+            backoff(N), retry_submit(S1, T, K, D, N - 1);
         Other -> Other
     end.
 
@@ -202,7 +207,7 @@ drain(S, Opts, N) ->
              end,
     case call(S, {run_jobs, maps:with([duplicate], Opts)}, OnNote) of
         {ok, {jobs_done, 0}, S1} -> event(S1, [<<"drained">>]);
-        {ok, {jobs_done, _}, S1} -> drain(S1, Opts, N - 1);
+        {ok, {jobs_done, _}, S1} -> backoff(N), drain(S1, Opts, N - 1);
         {died, _, S1} ->
             S2 = case maps:get(inflight, S1, none) of
                      none -> S1;

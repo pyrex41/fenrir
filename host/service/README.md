@@ -17,7 +17,7 @@ executions that were not run.
 
 ```
 sh host/service/check.sh          # quick, about 3 minutes here
-sh host/service/check.sh full     # every campaign repeated 5 times
+sh host/service/check.sh full     # every campaign repeated 5 times, about 7 minutes
 ```
 
 It builds everything through nix (`nix build .#fenrir-a3-tools`: Erlang/OTP 28.5,
