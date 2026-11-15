@@ -19,12 +19,6 @@
 (load (cn (value fh.*root*) "harness/tc1-task-common.shen"))
 (load (cn (value fh.*root*) "harness/tc1-defects.shen"))
 
-\\ The nine defects of runtime/tc1/task-machine.mjs. The harness holds the list itself, so
-\\ a batch that leaves one out cannot pass.
-(define fh.task-defect-names
-  -> ["stale_waiter" "waiter_not_woken" "waiter_woken_twice" "eager_cancel" "lifo_channel"
-      "no_sibling_cancel" "capacity_off_by_one" "lost_wakeup_close" "lost_wakeup_await"])
-
 \\ ---------- expectations (fixtures/tc1/task-hand-cases.mjs header) ----------
 
 (define fh.lookup-member
@@ -135,10 +129,6 @@
       (if (= Reasons [])
           (fh.task-tally (tl (fh.field "mutants" Row)) Model Tally)
           Tally)))
-
-(define fh.task-tally
-  [] _ Tally -> Tally
-  [[Name Run] | Runs] Model Tally -> (fh.task-tally Runs Model (fh.tally-one Name (fh.task-verdict Model Run) Tally)))
 
 (define fh.sum-of
   [] _ N -> N
