@@ -7,7 +7,7 @@
 // and the tender, toolchain and host kernel are trusted as built.
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, copyFileSync} from 'node:fs';
+import {existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync, copyFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {isDeepStrictEqual} from 'node:util';
 import {lower, dataHeader} from './native-arithmetic/lower.mjs';
@@ -47,16 +47,44 @@ export function frames(output) {
   return result;
 }
 
+// Where the built Solo5 lives: --solo5 / FENRIR_SOLO5, else the hand-built checkout at
+// build/vendor/solo5, else the flake's solo5 output (the same order harness/solo5.sh uses).
+export function solo5Dir(explicit) {
+  if(explicit)return resolve(explicit);
+  if(process.env.FENRIR_SOLO5)return resolve(process.env.FENRIR_SOLO5);
+  const vendor=resolve(root,'build/vendor/solo5');
+  if(existsSync(vendor))return vendor;
+  const r=spawnSync('nix',['build','--no-link','--print-out-paths','.#solo5'],{cwd:root,encoding:'utf8',env:process.env});
+  if(r.status===0&&r.stdout.trim())return r.stdout.trim().split('\n').pop();
+  throw new Error('Solo5 is not available: no build/vendor/solo5, no FENRIR_SOLO5, and `nix build .#solo5` failed'+(r.error?': '+r.error.message:''));
+}
+
+// Identity of the Solo5 under test. A git checkout must be at the pinned commit with no
+// modified tracked files. The flake output has no .git: it must sit in the Nix store and
+// carry COMMIT equal to the pin; its store path derives from the flake.lock hash of the
+// source fetched at exactly that rev, so the path is the recorded identity.
+export function solo5Identity(solo5) {
+  if(existsSync(resolve(solo5,'.git'))) {
+    if(must('git',['-C',solo5,'rev-parse','HEAD']).trim()!==SOLO5_COMMIT)throw new Error('Solo5 checkout is not the pinned commit');
+    if(must('git',['-C',solo5,'status','--porcelain','--untracked-files=no']).trim())throw new Error('Solo5 checkout has modified tracked files');
+    return {kind:'git-checkout',commit:SOLO5_COMMIT,path:solo5};
+  }
+  const real=realpathSync(solo5);
+  if(!real.startsWith('/nix/store/')||!/-solo5-/.test(real))throw new Error('Solo5 directory has no .git and is not the flake solo5 output');
+  if(!existsSync(resolve(real,'COMMIT'))||readFileSync(resolve(real,'COMMIT'),'utf8').trim()!==SOLO5_COMMIT)throw new Error('Solo5 flake output does not record the pinned commit');
+  return {kind:'flake-store-path',commit:SOLO5_COMMIT,path:real};
+}
+
 export function toolchain(solo5) {
-  if(must('git',['-C',solo5,'rev-parse','HEAD']).trim()!==SOLO5_COMMIT)throw new Error('Solo5 checkout is not the pinned commit');
-  if(must('git',['-C',solo5,'status','--porcelain','--untracked-files=no']).trim())throw new Error('Solo5 checkout has modified tracked files');
+  solo5=solo5Dir(solo5);
+  const identity=solo5Identity(solo5);
   const bin=resolve(solo5,'toolchain/bin');
   const cc=readdirSync(bin).find(name=>name.endsWith('-solo5-none-static-cc'));
   if(!cc)throw new Error('Solo5 toolchain is not built');
   const prefix=cc.slice(0,-3);
   const tools={cc:resolve(bin,cc),ld:resolve(bin,prefix+'-ld'),elftool:resolve(solo5,'elftool/solo5-elftool'),tender:resolve(solo5,'tenders/spt/solo5-spt')};
   for(const path of Object.values(tools))if(!existsSync(path))throw new Error('Missing '+path);
-  return {...tools,triple:prefix,tender_sha256:sha(readFileSync(tools.tender))};
+  return {...tools,identity,triple:prefix,tender_sha256:sha(readFileSync(tools.tender))};
 }
 
 export function build(tools,artifactBytes,dir) {
@@ -100,7 +128,7 @@ export function firstDivergence(a,b) {
 function main() {
   const args=process.argv.slice(2);
   const option=(name,fallback)=>{const i=args.indexOf(name);return i<0?fallback:args[i+1];};
-  const solo5=resolve(option('--solo5',resolve(root,'build/vendor/solo5')));
+  const solo5=option('--solo5',null);
   const maxCases=Number(option('--max-cases','80'));
   if(!Number.isSafeInteger(maxCases)||maxCases<1||maxCases>400)throw new Error('--max-cases must be 1..400');
   const shen=option('--shen',null);
@@ -135,7 +163,7 @@ function main() {
     qualification:'UNKNOWN',
     scope:'TC0-A arithmetic demo schema /1; stock spt tender; observed free run compared with '+(model?'the Shen expression model and the JS expression machine':'the JS expression machine only; no Shen oracle run'),
     shen_oracle:model?{executable_sha256:sha(readFileSync(resolve(shen))),model_steps_compared:String(modelSteps)}:'not-run',
-    solo5_commit:SOLO5_COMMIT,triple:tools.triple,tender_sha256:tools.tender_sha256,fuel:String(FUEL),
+    solo5_commit:SOLO5_COMMIT,solo5_identity:tools.identity,triple:tools.triple,tender_sha256:tools.tender_sha256,fuel:String(FUEL),
     programs:String(programs.length),reference_steps_compared:String(steps),outcomes,
     reverse_operand_mutant:{killed:String(mutantKilled),survived_equivalent:String(mutantSurvived)},failures};
   writeFileSync(resolve(out,'report.json'),JSON.stringify(report,null,2)+'\n');

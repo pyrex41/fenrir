@@ -6,9 +6,11 @@
 #   tc1       the TC1 handler fixtures (both slices) with the TC0-A hand cases
 #   tc1-exhaustive  every program of the TC1 handler grammar H to the node bound
 #             (tools/tc1/handler-enumerate.mjs), with the TC0-A hand cases
-# Needs build/vendor/solo5 built at the pinned commit. Shen/JIT: see harness/jit.sh.
+# Needs Solo5 at the pinned commit (harness/solo5.sh: FENRIR_SOLO5, build/vendor/solo5 or the
+# flake's solo5 output). Shen/JIT: see harness/jit.sh.
 set -eu
 . "$(dirname "$0")/jit.sh"
+. "$(dirname "$0")/solo5.sh"
 if [ "${1:-5}" = exact ]; then
   batch=$(node "$root/tools/solo5/freerun-pure-call.mjs" --exact-arithmetic --build-only)
 elif [ "${1:-5}" = tc1 ]; then

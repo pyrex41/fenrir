@@ -81,7 +81,7 @@ export function exactArithmeticCases() {
 function main() {
   const args=process.argv.slice(2);
   const option=(name,fallback)=>{const i=args.indexOf(name);return i<0?fallback:args[i+1];};
-  const solo5=resolve(option('--solo5',resolve(root,'build/vendor/solo5')));
+  const solo5=option('--solo5',null);
   const bound=Number(option('--exhaustive-nodes','4'));
   if(!Number.isSafeInteger(bound)||bound<0||bound>5)throw new Error('--exhaustive-nodes must be 0..5');
   const tools=toolchain(solo5);
@@ -114,7 +114,7 @@ function main() {
   // (harness/solo5-pure-call.shen) and stop. No comparison happens in this process.
   if(args.includes('--build-only')) {
     writeFileSync(resolve(out,'programs.json'),JSON.stringify(checked.map(c=>c.artifact)));
-    writeFileSync(resolve(out,'batch.json'),JSON.stringify({guest,tender:tools.tender,batch_sha256:lowered.batch_sha256,programs:resolve(out,'programs.json'),count:String(programs.length),
+    writeFileSync(resolve(out,'batch.json'),JSON.stringify({guest,tender:tools.tender,solo5_identity:tools.identity,batch_sha256:lowered.batch_sha256,programs:resolve(out,'programs.json'),count:String(programs.length),
       families:Object.fromEntries(Object.entries(families).map(([family,cases])=>[family,String(cases.length)]))})+'\n');
     console.log(out);return;
   }
@@ -143,7 +143,7 @@ function main() {
   const report={schema:'fenrir.solo5.freerun-pure-call-development/1',status:failures.length||noKill?'development-fail':'development-pass',
     qualification:'UNKNOWN',
     scope:'TC0-A pure-call demo schemas /1 and /2; stock spt tender; observed free run compared with the JS pure-call machine; entry input ["int","0"]',
-    guest_sha256:sha(readFileSync(guest)),batch_sha256:lowered.batch_sha256,fuel:String(FUEL),
+    solo5_identity:tools.identity,guest_sha256:sha(readFileSync(guest)),batch_sha256:lowered.batch_sha256,fuel:String(FUEL),
     programs:String(programs.length),programs_by_family:perFamily,reference_steps_compared:String(steps),outcomes,mutants,
     failure_count:String(failures.length),failures:failures.slice(0,20)};
   writeFileSync(resolve(out,'report.json'),JSON.stringify(report,null,2)+'\n');

@@ -164,7 +164,7 @@ What "Solo5 up" still needs, in order:
 2. `hvt` under KVM. The development container used here has no `/dev/kvm`; `spt` is a seccomp-sandboxed process, not a virtual machine.
 3. AArch64, where the proved code lane (PR #8) and the earlier measured profile live.
 4. Entry inputs other than unit, bool and int, and IDs above 2^64, which the guest lowering refuses today.
-5. Registration of these checks with the workflow controller, and a pinned build of Solo5 in the flake.
+5. Registration of these checks with the workflow controller, and a pinned build of Solo5 in the flake (done: `nix build .#solo5`, 15 November 2026).
 
 Supervision restarts computation; it does not make state or messages durable. Durability comes from a persistence and acknowledgment protocol with a contract (§8).
 

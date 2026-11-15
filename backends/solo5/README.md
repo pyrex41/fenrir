@@ -27,12 +27,37 @@ Pi development continuation is provided by the project extension. After one `/re
 The measured profile above needs the retained Docker image and Linux/AArch64. This
 path needs neither. It was run on Linux x86-64 without Docker and without KVM.
 
+Solo5 comes from the flake, which needs only Nix (no apt, no Docker, no KVM):
+
+```sh
+nix build .#solo5          # Solo5 v0.9.3 at 38e0c348be23..., libseccomp and pkg-config from nixpkgs
+node tools/solo5/freerun.mjs --max-cases 80
+```
+
+The flake fetches Solo5 at exactly commit `38e0c348be231a2a3c59510a5caabf562792679f`
+(locked by NAR hash in `flake.lock`) and builds it with `./configure.sh && make`. Its only
+build-side additions are the `include/version.h.distrib` a git-less tree needs (the
+header `git describe` gives for the tag) and `-Wno-error=address`, because v0.9.3 predates
+nixpkgs' gcc; no source file is modified. The output is the built tree, so the tools find
+`tenders/spt/solo5-spt`, `elftool/solo5-elftool` and `toolchain/bin` where they do in a
+hand-built checkout. The Solo5 location is chosen in this order, by `harness/solo5.sh` and
+again by `tools/solo5/freerun.mjs`: `FENRIR_SOLO5` (a directory), the hand-built checkout
+at `build/vendor/solo5`, the flake's `solo5` output. The guest build also needs a host `cc`
+on `PATH` (the Solo5 wrapper calls it).
+
+The hand-built route still works:
+
 ```sh
 sudo apt-get install -y libseccomp-dev pkg-config
 git clone --depth 1 --branch v0.9.3 https://github.com/Solo5/solo5.git build/vendor/solo5
 (cd build/vendor/solo5 && ./configure.sh && make)        # must be commit 38e0c348be23
-node tools/solo5/freerun.mjs --max-cases 80
 ```
+
+Identity: a git checkout must be at the pinned commit with no modified tracked files. The
+flake output has no `.git`: the tools require it to be in the Nix store with a `COMMIT`
+file equal to the pin, and the store path, which derives from the locked source hash, is
+what reports record (`solo5_identity` in the reports and in a guest batch's `batch.json`)
+in place of a `git rev-parse`.
 
 `freerun.mjs` checks the Solo5 checkout is the pinned commit with no modified tracked
 files, lowers each artifact with the existing `native-arithmetic/lower.mjs`, compiles

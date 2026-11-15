@@ -6,7 +6,7 @@
 // tools, imported unchanged; the comparison is the Shen harness's.
 //
 //   node tests/frontend/solo5-batch.mjs ARTIFACT.json...
-// prints the batch directory. Needs build/vendor/solo5 built at the pinned commit.
+// prints the batch directory. Needs Solo5 at the pinned commit: build/vendor/solo5, FENRIR_SOLO5, or the flake's solo5 output.
 import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {toolchain} from '../../tools/solo5/freerun.mjs';
@@ -17,7 +17,7 @@ import {validatePureCallArtifact} from '../../tools/tc0/pure-call-artifact.mjs';
 const root=resolve(import.meta.dirname,'../..'),INPUT=['int','0'];
 const files=process.argv.slice(2);
 if(!files.length){console.error('usage: node tests/frontend/solo5-batch.mjs ARTIFACT.json...');process.exit(2);}
-const tools=toolchain(resolve(root,'build/vendor/solo5'));
+const tools=toolchain();
 const out=resolve(root,'build/frontend/solo5',`${Date.now()}-${process.pid}`);
 const artifacts=files.map(file=>validatePureCallArtifact(readFileSync(file),INPUT).artifact);
 const lowered=lowerBatch(artifacts.map(program=>({program,input:INPUT})));

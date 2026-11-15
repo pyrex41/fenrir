@@ -18,8 +18,8 @@ is the first execution target, with BEAM as supervisor and SQLite as the first
 store. The amendment changes no TC0 evidence.
 
 - **Solo5 lane (development).** Fenrir programs run as guests of a stock Solo5
-  `spt` tender, built from the pinned Solo5 commit on Linux x86-64 with no
-  Docker and no KVM. `sh harness/run-solo5-pure-call.sh` compares every
+  `spt` tender, built from the pinned Solo5 commit (`nix build .#solo5`, or by
+  hand) on Linux x86-64 with no Docker and no KVM. `sh harness/run-solo5-pure-call.sh` compares every
   reference step of 5,774 programs (calls, closures, datatypes, match, bytes;
   86,286 steps) with the Shen model: all agree, and the guest's two injected
   defects are detected (4,019 and 238 programs). The host observes a free run;

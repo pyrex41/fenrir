@@ -16,9 +16,11 @@
     yggdrasil-src = { url = "git+https://github.com/pyrex41/yggdrasil?rev=a40d8c5b6ed1eb2b5d7a4511e61d0304ce9a2e3d"; flake = false; };
     # Shen/JIT v0.7: host of the Shen harness (harness/) and of the model it runs.
     shen-jit-src = { url = "git+https://github.com/tizoc/shen-jit?rev=2f4b48bf9aabc2b93379d15f1818e4209137eb60"; flake = false; };
+    # Solo5 v0.9.3 at the commit the Solo5 lane pins (tools/solo5/freerun.mjs SOLO5_COMMIT).
+    solo5-src = { url = "git+https://github.com/Solo5/solo5?rev=38e0c348be231a2a3c59510a5caabf562792679f"; flake = false; };
   };
 
-  outputs = { self, nixpkgs, shen-cl-src, yggdrasil-src, shen-jit-src }:
+  outputs = { self, nixpkgs, shen-cl-src, yggdrasil-src, shen-jit-src, solo5-src }:
     let
       system = "x86_64-linux"; # shen-scheme v0.26 ships a Linux x86-64 binary only
       pkgs = nixpkgs.legacyPackages.${system};
@@ -69,6 +71,57 @@
         dontStrip = true;
         dontPatchELF = true;
         dontFixup = true;
+      };
+
+      # Stock Solo5 at the pinned commit, built in place the way the hand-built checkout is
+      # (./configure.sh && make) with nixpkgs' libseccomp and pkg-config, and installed as
+      # the built tree: the tools read tenders/spt/solo5-spt, elftool/solo5-elftool and the
+      # toolchain wrapper under toolchain/bin. No source file is modified; the store path
+      # derives from the locked source hash, and COMMIT records the pinned commit.
+      solo5 = pkgs.stdenv.mkDerivation {
+        pname = "solo5";
+        version = "0.9.3-38e0c348";
+        src = solo5-src;
+        nativeBuildInputs = [ pkgs.pkg-config pkgs.gnumake ];
+        buildInputs = [ pkgs.libseccomp ];
+        dontConfigure = true;
+        dontStrip = true;
+        dontPatchELF = true;
+        dontFixup = true;
+        hardeningDisable = [ "all" ];
+        buildPhase = ''
+          # A source tree without .git needs the release tarball's version header; this is
+          # what scripts/gen_version_h.sh would print for the tagged commit (git describe).
+          cat > include/version.h.distrib <<'EOM'
+          /* Automatically generated, do not edit */
+
+          #ifndef __VERSION_H__
+          #define __VERSION_H__
+
+          #define SOLO5_VERSION "v0.9.3"
+
+          #endif
+          EOM
+          # Solo5 builds with -Werror and v0.9.3 predates nixpkgs' gcc: demote only the
+          # newer diagnostics to warnings. The source is not touched.
+          export NIX_CFLAGS_COMPILE="$NIX_CFLAGS_COMPILE -Wno-error=address"
+          sh ./configure.sh
+          make
+          test -x tenders/spt/solo5-spt
+          test -x elftool/solo5-elftool
+        '';
+        installPhase = ''
+          mkdir -p $out
+          cp -r . $out/
+          # The in-tree toolchain links its headers and bindings by absolute build path.
+          find $out -type l | while read -r link; do
+            target=$(readlink "$link")
+            case "$target" in
+              "$PWD"/*) ln -sfn "$out/''${target#"$PWD"/}" "$link" ;;
+            esac
+          done
+          echo 38e0c348be231a2a3c59510a5caabf562792679f > $out/COMMIT
+        '';
       };
 
       shen-kernel = pkgs.fetchurl {
@@ -128,7 +181,7 @@
         echo "yggdrasil: ${yggdrasil}/bin/yggdrasil"
       '';
     in {
-      packages.${system} = { inherit shen-scheme shen-cl shen-jit yggdrasil link-toolchain; default = link-toolchain; };
+      packages.${system} = { inherit shen-scheme shen-cl shen-jit solo5 yggdrasil link-toolchain; default = link-toolchain; };
       apps.${system}.default = { type = "app"; program = "${link-toolchain}/bin/fenrir-link-toolchain"; };
       devShells.${system}.default = pkgs.mkShell {
         packages = [ pkgs.nodejs_22 pkgs.python3 pkgs.sbcl pkgs.go_1_27 shen-scheme yggdrasil ];

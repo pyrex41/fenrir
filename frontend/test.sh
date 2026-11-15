@@ -15,11 +15,12 @@
 #   stable      elaborating twice gives the same bytes
 #   Solo5       the examples, elaborated, run in the Solo5 guest and agree with
 #               the model step for step (harness/solo5-pure-call.shen). Skipped,
-#               and said so, when build/vendor/solo5 is not built.
+#               and said so, when no Solo5 is available (harness/solo5.sh).
 #
 # Development evidence only. Exit status 0 when nothing failed.
 set -u
 . "$(dirname "$0")/../harness/jit.sh"
+. "$(dirname "$0")/../harness/solo5.sh"
 # Resolve Shen/JIT once for every fenrir.sh below.
 FENRIR_SHEN_JIT=$jit
 export FENRIR_SHEN_JIT
@@ -97,7 +98,7 @@ done
 
 # The guest and the harness both stop at 200 steps, so longer programs are
 # compared over their first 200 steps only.
-if [ -x "$root/build/vendor/solo5/tenders/spt/solo5-spt" ]; then
+if [ -n "$FENRIR_SOLO5" ] && [ -x "$FENRIR_SOLO5/tenders/spt/solo5-spt" ]; then
   set --
   for file in examples/*.fen; do set -- "$@" "$work/$(basename "$file" .fen).json"; done
   guest=$#
@@ -111,7 +112,7 @@ if [ -x "$root/build/vendor/solo5/tenders/spt/solo5-spt" ]; then
     solo5="FAILED"; fail "Solo5 guest build" "$(cat "$work/err")"
   fi
 else
-  solo5="skipped (build/vendor/solo5 is not built)"
+  solo5="skipped (no Solo5: build/vendor/solo5, FENRIR_SOLO5 or the flake solo5 output)"
 fi
 
 printf 'frontend tests: %s accepted programs, %s rejected programs, %s round trips, %s stable artifacts; Solo5: %s; failures: %s\n' \

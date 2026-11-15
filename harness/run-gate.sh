@@ -5,6 +5,7 @@
 # controller's check record on standard output.
 set -eu
 . "$(dirname "$0")/jit.sh"
+. "$(dirname "$0")/solo5.sh"
 out="$root/build/harness/gate/$(date +%s)-$$"
 mkdir -p "$out"
 status=0

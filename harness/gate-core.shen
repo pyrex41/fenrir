@@ -89,7 +89,7 @@
       (if (= Directory blocked) blocked (fh.harness "solo5-pure-call.shen" [Directory] 1800))))
 
 (define fh.guest-row
-  blocked Memo -> (fh.row "BLOCKED" ["The Solo5 guest batch could not be built (is build/vendor/solo5 built at the pinned commit?)"] [] Memo)
+  blocked Memo -> (fh.row "BLOCKED" ["The Solo5 guest batch could not be built (no Solo5 at the pinned commit: build/vendor/solo5, FENRIR_SOLO5, or `nix build .#solo5`)"] [] Memo)
   Report Memo ->
     (let Status (fh.member "status" Report)
       (if (= Status "development-pass")

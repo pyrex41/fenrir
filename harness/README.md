@@ -13,6 +13,12 @@ sh harness/run-solo5-pure-call.sh exact    # exact arithmetic: C guest against t
 sh harness/run-model-vs-candidate.sh       # JavaScript implementation against the model, ~11 s
 ```
 
+Solo5 checks need Solo5 v0.9.3 at the pinned commit. `harness/solo5.sh` picks, in order,
+`FENRIR_SOLO5` (a directory), a hand-built `build/vendor/solo5`, or the flake's
+`nix build .#solo5` output; with none available the Solo5 row is BLOCKED (and
+`frontend/test.sh` says it skipped Solo5). Shen/JIT works the same way (`FENRIR_SHEN_JIT`,
+`harness/jit.sh`).
+
 [common.shen](common.shen) holds what the programs share: turning a program
 (decoded JSON) into a model state as data, running the model, putting its
 observations in JSON shape, and comparing JSON values regardless of key order.
