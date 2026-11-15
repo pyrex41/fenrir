@@ -130,7 +130,7 @@ replay and catalog coverage.
 | --- | --- | --- |
 | Guest image build: generate programs, validate, lower to C data, compile | JavaScript (`tools/solo5/freerun-pure-call.mjs --build-only`) | The harness trusts this only to produce the two inputs it is given; a wrong batch shows up as a comparison failure or an identity mismatch |
 | Second implementation | JavaScript (`runtime/tc0/`) and C (`backends/solo5/pure-call/`) | Stays non-Shen on purpose: it has to be independent of the model |
-| Validator | JavaScript | Natural fit for Shen sequent rules; this is also Fenrir's type checker in the amendment |
+| Validator | JavaScript and Shen | The typing rules are Shen sequent rules now ([spec/tc1/TYPING.md](../spec/tc1/TYPING.md), `typing/`): structural checks, derivation search through `shen.typecheck`, and a small fixed checker that accepts or rejects each derivation; the frontend runs both and treats disagreement as a defect. `sh typing/run.sh` compares them on every family (one disagreement, the JavaScript side's, TYPING.md §11). The JavaScript validator stays as the independent second implementation. Claim: derivable under rule set R, soundness not yet proved |
 | Generators, enumerator, reducer | JavaScript | Plain list processing |
 | Solo5 host tooling of the earlier Docker profile | Python and Go | Superseded in part by the stock-tender lane |
 

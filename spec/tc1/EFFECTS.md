@@ -226,6 +226,16 @@ sh harness/run-solo5-pure-call.sh tc1   # model against the Solo5 guest
 - **Validation:** unit tests reject, for the stated reason, a resumption used
   zero times, twice, or on one path only; read as a value; captured by a
   closure; used by an inner clause; and resumed with the wrong type.
+- **Typing rules:** §3 and §7 are written as named inference rules in
+  [TYPING.md](TYPING.md), with the one-shot rule as a usage-counting judgment.
+  `sh typing/run.sh` finds a derivation, with Shen's sequent machinery, for
+  every valid program of the repository (the twenty fixtures, the 12,693
+  programs of the exhaustive handler grammar, and the TC0-A families) and has
+  the small fixed checker `typing/checker.shen` accept it; both validators
+  reject every invalid and ill-typed mutant. The claim is "derivable under rule
+  set R, soundness not yet proved". It found one place where the JavaScript
+  validator departs from this text: it rejects a datatype field of a function
+  type that names a declared effect (TYPING.md §11).
 - **TC0-A subset:** the JavaScript handler machine gives the same steps,
   outcome and closure descriptors as the TC0-A implementation on all 5,774
   TC0-A programs of the existing scopes, and the extended C machine still
@@ -237,7 +247,8 @@ fixtures behind it.
 
 Not done: generated or exhaustive handler programs, reduction, strict replay,
 catalog coverage, and any soundness proof of the typing rules in §3 or of the
-one-shot check in §7. The fixtures, all three machines and the harness share
+one-shot check in §7 (the rules are now stated, in TYPING.md, and checked as
+derivations; that they are sound is not proved). The fixtures, all three machines and the harness share
 one author lineage.
 
 ## 10 Answers to the earlier open questions

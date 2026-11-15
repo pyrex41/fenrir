@@ -8,14 +8,17 @@ proposal for the owner to confirm or change (§8 lists them). Nothing here is
 qualified, and nothing here adds to the language: the frontend translates text
 into an artifact of schema `tc1-handler-demo/2` (contract
 [EFFECTS.md](EFFECTS.md), slice TC1-H2). What a program means is decided by the
-Shen model; whether an artifact is well formed is decided by the validator
-`tools/tc0/pure-call-artifact.mjs`.
+Shen model; whether an artifact is well formed is decided by two validators that
+must agree: the JavaScript validator `tools/tc0/pure-call-artifact.mjs`, and the
+Shen one of `typing/`, which checks the structural rules and then accepts the
+artifact only when the fixed checker accepts a typing derivation for it under the
+rules of [TYPING.md](TYPING.md).
 
 ```sh
-sh frontend/fenrir.sh check FILE.fen           # elaborate and validate
+sh frontend/fenrir.sh check FILE.fen           # elaborate and validate (both validators)
 sh frontend/fenrir.sh run FILE.fen             # check, then run on the Shen model
 sh frontend/fenrir.sh emit FILE.fen OUT.json   # check, then write the artifact
-sh frontend/test.sh                            # the frontend's tests, about a minute
+sh frontend/test.sh                            # the frontend's tests, about 75 seconds
 ```
 
 `run` prints each emitted value in order, the outcome, where a trap arose, and
@@ -168,9 +171,17 @@ way that only a larger, non-least choice would type; such a program is
 rejected with a type mismatch, and `(type ...)` resolves it. While the sets
 are being computed, function types that differ only in effect set are joined;
 the pass that produces the artifact then checks every type exactly. There is
-no proof that this procedure agrees with the validator's rules. The validator
-runs on every artifact produced, and the frontend treats a disagreement as its
-own defect (exit status 3).
+no proof that this procedure agrees with the validators' rules. Both validators
+run on every artifact produced: the JavaScript one, and the Shen one, which
+searches for a derivation of the artifact under the rules of
+[TYPING.md](TYPING.md) (Shen's sequent machinery, `typing/search.shen`) and
+accepts only when the small fixed checker `typing/checker.shen` accepts that
+derivation. What the inference concludes is thereby justified to the checker,
+as the amendment (§3, "Programmable typing, fixed checking") requires: the
+claim for an accepted program is "derivable under rule set R, soundness not
+yet proved". The frontend treats a rejection of what it produced, and any
+disagreement between the two validators, as a defect (exit status 3). An
+exhausted search budget is UNKNOWN and is never acceptance.
 
 ## 4 Resumptions
 
@@ -207,7 +218,8 @@ every message):
 | Size | the validator's caps: 200 expression nodes, nesting depth 64, 256 octets in a bytes literal. This message has no position |
 
 Other exit statuses: 2 for usage or an unreadable file, 3 for a defect in the
-frontend (including a validator rejection of what the elaborator accepted), 4
+frontend (including a validator rejection of what the elaborator accepted, and
+the two validators disagreeing), 4
 when a run exhausts its step budget (`FENRIR_FUEL`, default 100000). A trap is
 an outcome, with status 0.
 
@@ -238,8 +250,13 @@ an outcome, with status 0.
 `sh frontend/test.sh`, development evidence only:
 
 - 12 accepted programs (8 under `examples/`, 4 under
-  `tests/frontend/programs/`) elaborate, pass the validator, run on the model
-  and give the outcome and emissions written in their headers.
+  `tests/frontend/programs/`) elaborate, pass both validators, run on the model
+  and give the outcome and emissions written in their headers. Every artifact a
+  test elaborates or runs is judged by both validators; the Shen side's typing
+  files are compiled once into a heap image under `build/typing/` (keyed by
+  their contents and the Shen/JIT build), which keeps the added cost to about
+  0.05 s a run: the suite took about 59 s before the Shen checker was wired in
+  and about 75 s after, Solo5 skipped in both.
 - 69 wrong programs under `tests/frontend/bad/` are each rejected with the
   stated message at the stated line and column. The positions were recorded
   from the elaborator's output after reading each one against its program;
@@ -255,10 +272,17 @@ an outcome, with status 0.
   sides stop at 200 steps, so `bytes`, `early-exit` and `list-sum` are compared
   over their first 200 steps only.
 
+- `sh typing/run.sh` elaborates the 39 programs above (examples, programs,
+  round trips) and finds that both validators accept every one, with a checked
+  derivation for each; `tests/typing/datatype-field-effect.fen` is a program the
+  contract allows that the JavaScript validator rejects, so `check` reports the
+  validators disagreeing ([TYPING.md](TYPING.md) §11).
+
 Not checked: any property of the inference beyond these programs; that the
-elaborator rejects everything the validator rejects (the driver catches the
-difference at run time instead); the reader on malformed UTF-8. The
-elaborator, its tests and this document have one author.
+elaborator rejects everything the validators reject (the driver catches the
+difference at run time instead); the reader on malformed UTF-8; the soundness
+of TYPING.md's rules. The elaborator, its tests and this document have one
+author.
 
 ## 8 For the owner to confirm
 
