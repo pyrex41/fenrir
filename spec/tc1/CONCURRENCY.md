@@ -242,6 +242,10 @@ undone (a received message stays consumed, core §9).
   with control Join.
 
 Requests are idempotent: repeated requests never repeat delivery or cleanup.
+Each request produces its `CancelRequest` event (task: the requester; the
+operation's for `cancel`, the scope owner's for a scope abort or a delivery at a
+Join, the failed child's for a scope failure), followed directly by the removal
+event when it removes a registration.
 
 **Delivery** (*provisional*: this replaces TC0-CANCEL's "on the target's next
 Run"). A Requested cancellation is delivered only at a scheduling-point step
