@@ -149,18 +149,19 @@ The target theorem is the one stated in the AArch64 lane's plan: for source P, i
 | Native process | Development adapter only | JS candidate |
 | Wasm | Later: portable components, sandboxed tenant or policy logic | Not started |
 
-**Solo5 state (12 November 2026).** Solo5 v0.9.3 at the pinned commit `38e0c348` builds from source on Linux x86-64 with the distribution compiler, without Docker and without the retained images whose loss blocked the native epoch. Two development checks run Fenrir programs as guests of the stock `spt` tender and compare every reference step with the Shen model and the JS candidate:
+**Solo5 state (12 November 2026).** Solo5 v0.9.3 at the pinned commit `38e0c348` builds from source on Linux x86-64 with the distribution compiler, without Docker and without the retained images whose loss blocked the native epoch. Development checks run Fenrir programs as guests of the stock `spt` tender and compare every reference step with the Shen model (and, for the free runs, the JS candidate):
 
 | Check | Guest machine | Programs | Steps | Result |
 | --- | --- | --- | --- | --- |
 | [tools/solo5/freerun.mjs](tools/solo5/freerun.mjs) | Existing arithmetic machine | 81 | 1,051 | Guest, Shen and JS agree |
 | [tools/solo5/freerun-pure-call.mjs](tools/solo5/freerun-pure-call.mjs) | New pure-call machine ([backends/solo5/pure-call/](backends/solo5/pure-call/)): calls, tail calls, closures, tuples, datatypes, match, bytes, `eq`, checked I64, emit | 5,774: 23 hand cases, 56 generated, and every program of the 5-node exhaustive grammar | 86,286 | Guest, Shen and JS agree |
+| [harness/run-solo5-control.sh](harness/run-solo5-control.sh) (15 November 2026) | The same machine, host-controlled ([control.c](backends/solo5/pure-call/control.c), protocol [v1](spec/solo5/pure-call-control-v1.md)) | 271: 23 hand cases (`/1`, `/2`), 20 TC1 handler fixtures, every 25th program of the 5-node grammar | 4,658 | Guest and Shen agree at every host-selected step; strict replay exact |
 
 The guest's injected defects are detected by the same comparison: reversed operand order on 4,019 programs and wrapping overflow on 238, the same counts the JS candidate's mutants give in the existing exhaustive check. This is *bounded exploration passed*, development grade: one author lineage wrote the guest machine and the JS candidate was visible while writing it.
 
 What "Solo5 up" still needs, in order:
 
-1. The host control channel, so the host selects steps instead of observing a free run, and with it strict replay. This is the patched tender of the earlier native host and reopens that dependency epoch with rebuilt, recorded identities.
+1. ~~The host control channel, so the host selects steps instead of observing a free run, and with it strict replay.~~ **Done in development, 15 November 2026, on the stock tender.** The patched tender was not needed: stock `spt` attaches a net device to an inherited descriptor (`--net:NAME=@N`), so the guest's requests and responses travel over two pipes the Shen host holds, and no dependency epoch is reopened (the Solo5 identity is still the flake's unmodified pinned commit). The host, in Shen, selects every step, compares it with the model as it goes and stops at the first divergence: 271 programs, 4,658 steps, no difference in normal mode; `reverse-operands` caught on 196 programs and `wrap-overflow` on 15, each at exactly the epoch where the free-run trace first differs from the model. 43 tapes (every hand and TC1 run) replay byte-identically on 3 cold boots each (one on 10), re-record byte-identically, and 16 kinds of tape drift, 25 hostile requests, 21 hostile guest outputs and 3 silent or dying peers are each rejected as specified ([backends/solo5/README.md](backends/solo5/README.md)). *Bounded exploration passed*, development grade. The default run samples the exhaustive grammar; with stride 1 it covers all of it (5,738 programs, 82,527 steps; defects caught on 3,979 and 238 programs).
 2. `hvt` under KVM. The development container used here has no `/dev/kvm`; `spt` is a seccomp-sandboxed process, not a virtual machine.
 3. AArch64, where the proved code lane (PR #8) and the earlier measured profile live.
 4. Entry inputs other than unit, bool and int, and IDs above 2^64, which the guest lowering refuses today.
@@ -216,7 +217,7 @@ Gate verdicts (PASS, FAIL, UNKNOWN, BLOCKED, DEFERRED) are unchanged. Claims add
 | Bounded exploration passed | No violation within the explored programs, schedules and bounds |
 | Observed history accepted | This recorded execution is consistent with the specification |
 
-Current standing under this vocabulary: TC0-A is *bounded exploration passed* (at `1db7471`, under waivers). The Solo5 free-run comparisons are *bounded exploration passed* against Shen and the JS candidate, development grade. The AArch64 lane is *implementation refinement proved* for a closed unary checked-I64 add/subtract/negate profile against a handwritten instruction model, and is still a draft PR. The service example is *model property proved*. Nothing in the repository is yet a refinement proof against real hardware semantics or a real database.
+Current standing under this vocabulary: TC0-A is *bounded exploration passed* (at `1db7471`, under waivers). The Solo5 free-run comparisons are *bounded exploration passed* against Shen and the JS candidate, development grade, and so is the host-controlled run with strict replay against Shen (stock `spt`, sampled exhaustive scope). The AArch64 lane is *implementation refinement proved* for a closed unary checked-I64 add/subtract/negate profile against a handwritten instruction model, and is still a draft PR. The service example is *model property proved*. Nothing in the repository is yet a refinement proof against real hardware semantics or a real database.
 
 ## 10 Build order
 
@@ -225,7 +226,7 @@ Current standing under this vocabulary: TC0-A is *bounded exploration passed* (a
 | Step | Build | Done when |
 | --- | --- | --- |
 | B0 | Merge the open branches in the order given in [campaigns/RECONCILIATION_2026-11.md](campaigns/RECONCILIATION_2026-11.md) | PRs #5, #6, #8 merged; #7 rewritten against §4 |
-| B1 | **Solo5 lane** (§7): Shen in the comparison (done), pure-call machine as guest (done, free-running), control channel (open) | A `/2` program with closures and data runs in Solo5 under host-selected steps and agrees with Shen |
+| B1 | **Solo5 lane** (§7): Shen in the comparison (done), pure-call machine as guest (done, free-running), control channel and strict replay (done in development 15 November 2026, stock `spt`: hand case `closure-in-datatype-field`, schema `/2`, runs 24 host-selected steps in agreement with Shen and replays exactly; `hvt` not attempted, no `/dev/kvm`) | A `/2` program with closures and data runs in Solo5 under host-selected steps and agrees with Shen |
 | B2 | **TC1 effects** (§4): contract text ([spec/tc1/EFFECTS.md](spec/tc1/EFFECTS.md), draft) and the tail-resumptive slice in the Shen model and a JavaScript implementation, with fixtures and mutants, then explicit one-shot resumption, in the model, the JavaScript implementation and the Solo5 guest (done 14 November 2026) | A handler program with agreeing traces; `double-resume` and `forgotten-resume` mutants caught |
 | B3 | **Frontend**, written in Shen: reader, elaboration to checked core artifacts, effect-row inference, typing rules as sequent rules | A program a person can write, read, run and check, executing in Solo5 |
 | B4 | **Tasks and channels** under the production scheduling contract (§14) | The commuting obligation checked on the exhaustive-small scope |

@@ -10,6 +10,7 @@ subprocess libraries.
 ```sh
 sh harness/run-solo5-pure-call.sh          # Solo5 guest against the model, full scope, ~5 s
 sh harness/run-solo5-pure-call.sh exact    # exact arithmetic: C guest against the model, ~4 s
+sh harness/run-solo5-control.sh            # Solo5 guest under host-selected steps, strict replay, ~20 s
 sh harness/run-model-vs-candidate.sh       # JavaScript implementation against the model, ~11 s
 ```
 
@@ -41,6 +42,42 @@ expected results are attached. The two sides are independent by construction:
 the guest uses the C compiler's checked 64-bit arithmetic, the model uses
 decimal digit lists. This replaces Python's exact integers as the independent
 side of the arithmetic ledger, as the owner agreed.
+
+**[solo5-control.shen](solo5-control.shen)** is the host side of
+[the control protocol](../spec/solo5/pure-call-control-v1.md): the guest takes a step
+only when this program asks for one. It launches the stock `solo5-spt` with the guest's
+two net devices on its own pipes (`--net:ctlin=@0 --net:ctlout=@2`; no helper process),
+frames and parses every byte itself, and fails closed. For each program it boots the
+guest, checks Hello and Init/Ready against the batch and against SHA-256s it computes
+itself over the artifact bytes it gives the model, then sends Run requests on a schedule
+it chooses, compares each returned step with the model's next step in this process,
+and at the first difference sends Terminate. It then:
+
+- runs every program in `normal`, `reverse-operands` and `wrap-overflow` mode, and checks
+  against the unchanged free-run guest over the same batch that each controlled run
+  stopped exactly at the first diverging step and reported what the free run did;
+- shows a stop mid-program and that the guest does not move without a request (silence
+  for 300 ms, unchanged digest and epoch, a half-sent request answered only when whole);
+- records a tape of each hand and TC1 run, replays each on 3 cold boots (one on 10) with
+  byte-identical frames required, re-records all and requires identical tapes, and
+  rejects 16 kinds of tape drift;
+- sends 25 hostile requests to the real guest and feeds 21 hostile guest outputs through
+  its own parser, plus three non-responding peers, which must be HarnessTimeout or a
+  protocol failure, never a pass; and checks the spec's byte vectors.
+
+| Scope | Programs | Steps compared | Result |
+| --- | --- | --- | --- |
+| Hand (`/1`, `/2`), TC1 fixtures, every 25th 5-node exhaustive program | 271 | 4,658 | No difference; `reverse-operands` caught on 196, `wrap-overflow` on 15, each at the exact first diverging step |
+| Replay | 43 tapes × 3 cold boots, one × 10 | — | Exact on every boot; re-recordings byte-identical |
+
+The negative tests and the rejection each must produce:
+
+| Group | Tests (expected) |
+| --- | --- |
+| Tape drift | wrong artifact hash, protocol version, machine profile, guest image (`Incompatible:*`); missing, extra, reordered record (`Structure:Sequence`), and each renumbered to look consistent (`Diverged` at the first differing frame); edited response (`Diverged`), edited without resealing (`TapeIntegrity:Digest`); terminal claimed and then run on (`Structure:AfterTerminal`), terminal claimed early but consistent (`Diverged`); truncated tape, missing footer (`TapeIntegrity`) |
+| Hostile host → guest (Error code, exit 3) | bad magic, wrong direction, unknown type, bad header, out-of-order and duplicate sequence, oversize, truncated header and payload, bad trailer, control byte, non-canonical number, reordered keys, kind/type mismatch, budget 0 and 65, Run before Init, second Init, wrong artifact, protocol, batch and mode, Run after completion, garbage after Terminate, hangup |
+| Hostile guest → host | bad magic, wrong direction, unknown type, bad header, truncated header and payload, duplicate and out-of-order sequence, oversize, bad trailer, control byte, not JSON, kind/type mismatch, wrong response type, more steps than requested, epoch gap, wrong Hello protocol, wrong Ready artifact, an Error frame (`GuestError`), garbage after Bye; and the unmodified output as a positive control |
+| Non-responding peer | `sleep` in place of the tender, and the real guest left without a request: `HarnessTimeout`; a peer dying mid-frame: `Protocol:Truncated` |
 
 **[model-vs-candidate.shen](model-vs-candidate.shen)** launches `node` on the
 existing batch runner for the JavaScript implementation and its three mutants,
@@ -165,7 +202,7 @@ campaigns for the two defects that show only through later values.
 
 | Piece | Now | Notes |
 | --- | --- | --- |
-| Guest image build: generate programs, validate, lower to C data, compile | JavaScript (`tools/solo5/freerun-pure-call.mjs --build-only`) | The harness trusts this only to produce the two inputs it is given; a wrong batch shows up as a comparison failure or an identity mismatch |
+| Guest image build: generate programs, validate, lower to C data, compile | JavaScript (`tools/solo5/freerun-pure-call.mjs --build-only`, `tools/solo5/control-pure-call-build.mjs`) | The harness trusts this only to produce the two inputs it is given; a wrong batch shows up as a comparison failure or an identity mismatch |
 | Second implementation | JavaScript (`runtime/tc0/`) and C (`backends/solo5/pure-call/`) | Stays non-Shen on purpose: it has to be independent of the model |
 | Validator | JavaScript | Natural fit for Shen sequent rules; this is also Fenrir's type checker in the amendment |
 | Generators, enumerator, reducer | JavaScript | Plain list processing |

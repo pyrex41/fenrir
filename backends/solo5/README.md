@@ -101,9 +101,83 @@ Shen/JIT integers are 62-bit. Earlier in
 this lane the same scope also agreed with the registered model on shen-scheme 0.26 and
 0.54 through a Python wrapper, which has been removed.
 
-Limits (both checks): development evidence only, `qualification: UNKNOWN`. The host
-observes a free run; it does not select steps, so this is not the control-channel profile
-and gives no replay. `spt` is a seccomp-sandboxed process, not a virtual machine. The
+Limits (both free-run checks): development evidence only, `qualification: UNKNOWN`. The
+host observes a free run; it does not select steps, so these are not the control-channel
+profile and give no replay; that is the next section. `spt` is a seccomp-sandboxed process, not a virtual machine. The
 toolchain, tender and host kernel are trusted as built, and the build is not
 reproducible-build pinned. The guest machine and the JS candidate share an author lineage.
 The pure-call guest takes unit, bool and int entry inputs and IDs up to 2^64 − 1 only.
+
+### Host-controlled guest and strict replay (protocol v1, 15 November 2026)
+
+```sh
+sh harness/run-solo5-control.sh        # build both images, then the Shen controller, ~20 s
+```
+
+**Transport, found by experiment: the stock tender is enough.** `spt` at `38e0c348be23`
+attaches a Solo5 net device to an already-open descriptor given as `--net:NAME=@N`
+(`tenders/common/tap_attach.c`), sets it non-blocking, puts it in its epoll set and allows
+`read`/`write` on it and nothing else (`tenders/spt/spt_module_net.c`); the guest's
+`solo5_net_read`/`_write` are plain `read`/`write` and `solo5_yield` waits on that epoll
+set. So the guest declares two net devices and the host launches
+
+```sh
+solo5-spt --mem=32 --net:ctlin=@0 --net:ctlout=@2 control.spt
+```
+
+with the tender's stdin and stderr as pipes held by the Shen process (stdout, the console,
+goes to a file and is never parsed). A throwaway echo guest (not kept) answered three
+requests in about 0.1 ms each and sent nothing before the first; the same exchange then
+ran from Shen/JIT's own subprocess library, and the check below is the standing evidence.
+No tender patch, no tap device, no root and no helper process are involved, so the
+earlier `overlays/control-stdin` route (a patched `spt_core.c`) is not needed and no
+dependency epoch is reopened: the Solo5 identity is still the flake's store path of the
+unmodified pinned commit. The other stock candidate, a block device as a mailbox, was not
+built: it has no readiness signal, so the guest would have to spin or read the clock.
+
+**Guest.** [pure-call/control.c](pure-call/control.c) is a second `main` for the same
+`machine.c` and `format.c`; `guest.c` (free run) is unchanged and still used by the gates.
+It speaks [fenrir.solo5.pure-call-control/1](../../spec/solo5/pure-call-control-v1.md):
+Hello (protocol, machine profile, batch hash, program count); Init (program index,
+artifact SHA-256, schema, protocol, defect mode, fuel), answered by Ready; Run *n* (1–64
+steps), answered by the step records, the epoch, the execution state and a state digest;
+Digest; Terminate, answered by Bye. It advances only inside Run and otherwise blocks in
+`solo5_yield` with no deadline. Any malformed, truncated, duplicated, out-of-order,
+over-limit or out-of-state request gets one Error frame and exit 3. The guest reads the
+monotonic clock only to pace a refused pipe write; no clock value enters a frame.
+
+**Host.** [harness/solo5-control.shen](../../harness/solo5-control.shen), in Shen; see
+[harness/README.md](../../harness/README.md). Building the images stays JavaScript
+(`tools/solo5/control-pure-call-build.mjs`), as for the free run.
+
+Recorded run (15 November 2026; tender `c1b82476…`, guest image `9d2f225c…`, batch
+`0637210c…`; 1,033 tender boots in about 14 s):
+
+| Check | Measured |
+| --- | --- |
+| Scope | 271 programs: 23 TC0-A hand cases (`/1` and `/2`, closures and data), 20 TC1 handler fixtures (both slices), and 228 of the 5,695 programs of the 5-node exhaustive grammar (every 25th) |
+| Normal mode | 271 of 271 agree with the Shen model at every step: 4,658 steps; hand and TC1 one step per request, the sample under the host schedule 1, 2, 5, 16, 64 |
+| `reverse-operands` | detected on 196 programs (23 hand, 16 TC1, 157 sample) |
+| `wrap-overflow` | detected on 15 programs (5 hand, 10 sample) |
+| Exact stop | in every mode and program the controlled run stopped at the epoch where the complete free-run trace first differs from the complete model trace, the guest was one step past it (Bye's epoch), and its records equal the free-run guest's |
+| Stop and no advance | hand case 0 stopped at epoch 3 of 84; no frame in 300 ms after Hello or after a Run; state digest and epoch unchanged across the wait; nothing on a half-sent request until it completes; two requests in one write answered in order |
+| Strict replay | 43 tapes (every hand and TC1 run), each replayed on 3 cold boots: 43 of 43 byte-identical every time; one tape on 10 cold boots and a run stopped mid-program (`reverse-operands`) on 3: all exact; all 43 re-recorded independently: byte-identical tapes |
+| Negative tests | 16 tape drifts, 25 hostile-host inputs, 21 hostile guest outputs, 3 non-responding peers and 16 byte vectors: each rejected (or accepted) exactly as expected |
+
+With stride 1 (`sh harness/run-solo5-control.sh 1`, about 2 minutes, 17,434 boots) the
+scope is the whole 5-node grammar: 5,738 programs, 82,527 steps, no difference in normal
+mode, `reverse-operands` caught on 3,979 (3,940 of them exhaustive) and `wrap-overflow` on
+238 (233 exhaustive), the counts the JS candidate's mutants give, again each at the exact
+first diverging step; replay and negative tests as above. The default stays the sample.
+
+The negative tests, with the rejection each must produce, are listed in the report
+(`build/solo5/control-pure-call/<run>/run/report.json`) and in
+[harness/README.md](../../harness/README.md).
+
+Limits: development evidence, `qualification: UNKNOWN`. This is `spt`, a
+seccomp-sandboxed process; `hvt` needs `/dev/kvm`, which this machine does not have, and
+is not attempted. The pipes are the trust boundary; the tender, toolchain and kernel are
+trusted as built. One program per boot; entry input fixed at `["int","0"]`; the exhaustive
+scope is sampled, not complete (the free-run checks cover all of it). Replay is exact at
+the protocol boundary for this image and tender; it claims nothing about machine-level
+determinism of the tender or kernel.
