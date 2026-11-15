@@ -126,9 +126,11 @@
 
 \\ ---------- the artifact ----------
 
-(define st.data? -> (element? (value st.*schema*) ["tc0-a-pure-call-demo/2" "tc1-handler-demo/1" "tc1-handler-demo/2"]))
-(define st.handlers? -> (element? (value st.*schema*) ["tc1-handler-demo/1" "tc1-handler-demo/2"]))
-(define st.resumptions? -> (= (value st.*schema*) "tc1-handler-demo/2"))
+(define st.data? -> (element? (value st.*schema*) ["tc0-a-pure-call-demo/2" "tc1-handler-demo/1" "tc1-handler-demo/2" "tc1-durable-demo/1" "tc1-task-demo/1"]))
+(define st.handlers? -> (element? (value st.*schema*) ["tc1-handler-demo/1" "tc1-handler-demo/2" "tc1-durable-demo/1" "tc1-task-demo/1"]))
+(define st.resumptions? -> (element? (value st.*schema*) ["tc1-handler-demo/2" "tc1-durable-demo/1" "tc1-task-demo/1"]))
+(define st.tasks? -> (= (value st.*schema*) "tc1-task-demo/1"))
+(define st.durable? -> (= (value st.*schema*) "tc1-durable-demo/1"))
 
 (define st.artifact
   A -> (let Reset (do (set st.*ids* []) (set st.*locations* []) (set st.*nodes* 0) (set st.*values* 0))
@@ -147,7 +149,8 @@
 (define st.identity
   A -> (let Schema (tc.f "schema_version" A)
             Expected (st.assoc-or Schema [["tc0-a-pure-call-demo/1" ["0.2" "TC0-A"]] ["tc0-a-pure-call-demo/2" ["0.2" "TC0-A"]]
-                                         ["tc1-handler-demo/1" ["tc1-draft-1" "TC1-H1"]] ["tc1-handler-demo/2" ["tc1-draft-1" "TC1-H2"]]])
+                                         ["tc1-handler-demo/1" ["tc1-draft-1" "TC1-H1"]] ["tc1-handler-demo/2" ["tc1-draft-1" "TC1-H2"]]
+                                         ["tc1-durable-demo/1" ["tc1-draft-1" "TC1-D1"]] ["tc1-task-demo/1" ["tc1-draft-1" "TC1-C1"]]])
          (if (= Expected [(tc.f "contract_version" A) (tc.f "slice" A)])
              (set st.*schema* Schema)
              (st.fail "S-Identity" "Identity"))))
@@ -190,8 +193,9 @@
 (define st.effects-in
   [] _ -> true
   [E | Es] Seen ->
-    (let Fields (st.object E ["name" "operations"])
+    (let Fields (st.object E (if (st.durable?) ["class" "name" "operations"] ["name" "operations"]))
          Name (st.identifier (tc.f "name" E))
+         Class (if (and (st.durable?) (not (element? (tc.f "class" E) ["ordinary" "durable"]))) (st.fail "S-Declarations" "Effect class") true)
          Unique (if (or (element? Name ["Emit" "Task" "Channel" "Time" "Resource"]) (element? Name Seen)) (st.fail "S-Declarations" "Effect name") true)
          Os (st.array (tc.f "operations" E))
          Count (if (or (= Os []) (> (length Os) 8)) (st.fail "S-Declarations" "Operation count") true)
@@ -228,6 +232,7 @@
   _ Depth -> (st.cap "L-Type-Depth" "Type depth") where (> Depth 16)
   ["Arrow" A B Ef] Depth -> (do (st.type-depth A (+ Depth 1)) (st.type-depth B (+ Depth 1)) (st.effect-set Ef))
   ["Tuple" | Ts] Depth -> (map (/. T (st.type-depth T (+ Depth 1))) Ts) where (st.data?)
+  [K T] Depth -> (st.type-depth T (+ Depth 1)) where (and (st.tasks?) (element? K ["Task" "Channel" "Outcome" "ReceiveResult"]))
   _ _ -> true)
 
 \\ ---------- expressions: S-Shape, S-Unique-IDs, L-Nodes, L-Depth ----------
@@ -275,6 +280,10 @@
   "handle" [Eff Clauses Body] D -> (do (st.text Eff) (st.expr Body D) (map (/. C (st.clause C D)) (st.array Clauses))) where (st.handlers?)
   "resume" [K E] D -> (do (st.unsigned K) (st.expr E D)) where (st.resumptions?)
   "discontinue" [K] _ -> (st.unsigned K) where (st.resumptions?)
+  Tag [E] D -> (st.expr E D) where (and (st.tasks?) (element? Tag ["scope" "spawn" "await" "cancel" "receive" "close"]))
+  "yield" [] _ -> true where (st.tasks?)
+  "channel" [T C] _ -> (do (st.type-depth T 0) (st.unsigned C)) where (st.tasks?)
+  "send" [E1 E2] D -> (st.exprs [E1 E2] D) where (st.tasks?)
   Tag X _ -> (st.fail "S-Shape" "Arity") where (element? Tag (st.tags))
   _ _ _ -> (st.fail "S-Shape" "Unsupported tag"))
 
@@ -283,7 +292,8 @@
   -> (append ["unit" "bool" "int" "var" "let" "if" "prim" "emit" "lambda" "apply" "call"]
              (if (st.data?) ["bytes" "tuple" "project" "construct" "match"] [])
              (if (st.handlers?) ["perform" "handle"] [])
-             (if (st.resumptions?) ["resume" "discontinue"] [])))
+             (if (st.resumptions?) ["resume" "discontinue"] [])
+             (if (st.tasks?) ["scope" "spawn" "await" "cancel" "yield" "channel" "send" "receive" "close"] [])))
 
 (define st.primitive
   Op Es -> (if (and (element? [Op (length Es)] [["add" 2] ["sub" 2] ["mul" 2] ["div" 2] ["neg" 1] ["lt" 2] ["le" 2] ["gt" 2] ["ge" 2] ["not" 1]

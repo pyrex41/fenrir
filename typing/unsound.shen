@@ -45,4 +45,19 @@
   _______________________________________________________
   ["perform" N Eff Op E] : (ts.j G T F K D);)
 
-(preclude [fenrir-unsound-anything fenrir-unsound-resume fenrir-unsound-perform])
+\\ A scope or a task result that need not be serializable: a handle or a closure may
+\\ leave its scope (CONCURRENCY.md §3 forgotten).
+(datatype fenrir-unsound-scope
+  if (ts.tasks?)
+  B : (ts.j G T F1 K1 D1);
+  ["ts.close" "T-Scope" G ["scope" N B] T [F1 ["Task"]] [K1] [D1]] : (ts.out F K D);
+  _______________________________________________________
+  ["scope" N B] : (ts.j G T F K D);
+
+  if (ts.tasks?)
+  E : (ts.j G ["Arrow" "Unit" T Ef] F1 K1 D1);
+  ["ts.close" "T-Spawn" G ["spawn" N E] ["Task" T] [F1 Ef ["Task"]] [K1] [D1]] : (ts.out F K D);
+  _______________________________________________________
+  ["spawn" N E] : (ts.j G ["Task" T] F K D);)
+
+(preclude [fenrir-unsound-anything fenrir-unsound-resume fenrir-unsound-perform fenrir-unsound-scope])

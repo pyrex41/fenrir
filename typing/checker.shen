@@ -74,7 +74,8 @@
     (and (tc.type? A Ta) (tc.type? A Tr) (tc.effects? A Ef) (tc.subset? F Ef))
 
   \\ Serializable and equality-compatible types (§5)
-  A "P-Base" ["plain" _ T] [] -> (element? T ["Unit" "Bool" "I64" "Bytes" "TrapCode"])
+  A "P-Base" ["plain" _ T] [] -> (element? T ["Unit" "Bool" "I64" "Bytes" "TrapCode" "SendResult"])
+  A "P-Result" ["plain" Ds [K T]] [["plain" Ds T]] -> (and (tc.tasks? A) (element? K ["Outcome" "ReceiveResult"]))
   A "P-Tuple" ["plain" Ds ["Tuple" | Ts]] Ps -> (= Ps (map (/. T ["plain" Ds T]) Ts))
   A "P-Data" ["plain" Ds ["Data" D]] Ps ->
     (and (tc.datatype? A D) (not (element? D Ds)) (= Ps (map (/. T ["plain" [D | Ds] T]) (tc.all-fields A D))))
@@ -129,6 +130,25 @@
     (and (tc.resumptions? A) (tc.binds? Kv ["Resumption" Tb T] G) (= K (append K1 [N])))
   A "T-Discontinue" ["expr" G ["discontinue" N Kv] "Unit" [] [N]] [] ->
     (and (tc.resumptions? A) (tc.binds-resumption? Kv G))
+
+  \\ Tasks and channels, schema tc1-task-demo/1 (§6.2)
+  A "T-Scope" ["expr" G ["scope" _ B] T F K] [["expr" G B T F1 K] ["plain" [] T]] ->
+    (and (tc.tasks? A) (= F (tc.union F1 ["Task"])))
+  A "T-Spawn" ["expr" G ["spawn" _ E] ["Task" T] F K] [["expr" G E ["Arrow" "Unit" T Ef] F1 K] ["plain" [] T]] ->
+    (and (tc.tasks? A) (= F (tc.union (tc.union F1 Ef) ["Task"])))
+  A "T-Await" ["expr" G ["await" _ E] ["Outcome" T] F K] [["expr" G E ["Task" T] F1 K]] ->
+    (and (tc.tasks? A) (= F (tc.union F1 ["Task"])))
+  A "T-Cancel" ["expr" G ["cancel" _ E] "Unit" F K] [["expr" G E ["Task" _] F1 K]] ->
+    (and (tc.tasks? A) (= F (tc.union F1 ["Task"])))
+  A "T-Yield" ["expr" _ ["yield" _] "Unit" ["Task"] []] [] -> (tc.tasks? A)
+  A "T-Channel" ["expr" _ ["channel" _ T C] ["Channel" T] ["Channel"] []] [["plain" [] T]] ->
+    (and (tc.tasks? A) (tc.type? A T) (element? C ["1" "2" "3" "4" "5" "6" "7" "8"]))
+  A "T-Send" ["expr" G ["send" _ E1 E2] "SendResult" F K] [["expr" G E1 ["Channel" T] F1 K1] ["expr" G E2 T F2 K2]] ->
+    (and (tc.tasks? A) (= F (tc.union (tc.union F1 F2) ["Channel"])) (= K (append K1 K2)))
+  A "T-Receive" ["expr" G ["receive" _ E] ["ReceiveResult" T] F K] [["expr" G E ["Channel" T] F1 K]] ->
+    (and (tc.tasks? A) (= F (tc.union F1 ["Channel"])))
+  A "T-Close" ["expr" G ["close" _ E] "Unit" F K] [["expr" G E ["Channel" _] F1 K]] ->
+    (and (tc.tasks? A) (= F (tc.union F1 ["Channel"])))
   _ _ _ _ -> false)
 
 \\ ---------- side conditions used by more than one rule ----------
@@ -246,13 +266,19 @@
   A -> (tc.f "schema_version" A))
 
 (define tc.data?
-  A -> (element? (tc.schema A) ["tc0-a-pure-call-demo/2" "tc1-handler-demo/1" "tc1-handler-demo/2"]))
+  A -> (element? (tc.schema A) ["tc0-a-pure-call-demo/2" "tc1-handler-demo/1" "tc1-handler-demo/2" "tc1-durable-demo/1" "tc1-task-demo/1"]))
 
 (define tc.handlers?
-  A -> (element? (tc.schema A) ["tc1-handler-demo/1" "tc1-handler-demo/2"]))
+  A -> (element? (tc.schema A) ["tc1-handler-demo/1" "tc1-handler-demo/2" "tc1-durable-demo/1" "tc1-task-demo/1"]))
 
 (define tc.resumptions?
-  A -> (= (tc.schema A) "tc1-handler-demo/2"))
+  A -> (element? (tc.schema A) ["tc1-handler-demo/2" "tc1-durable-demo/1" "tc1-task-demo/1"]))
+
+(define tc.tasks?
+  A -> (= (tc.schema A) "tc1-task-demo/1"))
+
+(define tc.durable?
+  A -> (= (tc.schema A) "tc1-durable-demo/1"))
 
 (define tc.function-named
   Name [F | Fs] -> (if (= (tc.f "name" F) Name) F (tc.function-named Name Fs))
@@ -265,7 +291,18 @@
 (define tc.constructors
   A "TrapCode" -> (map (/. C [C []]) ["Overflow" "DivZero" "Bounds" "InvalidDuration" "TaskLimit" "ChildFailed"])
   A ["Data" D] -> (tc.table D (tc.f "datatypes" A))
+  A "SendResult" -> [["Sent" []] ["Closed" []]] where (tc.tasks? A)
+  A ["Outcome" T] -> [["Ok" [T]] ["Cancelled" []] ["Failed" ["TrapCode"]]] where (tc.tasks? A)
+  A ["ReceiveResult" T] -> [["Item" [T]] ["End" []]] where (tc.tasks? A)
   _ _ -> [])
+
+\\ The type name a data value of type T carries.
+(define tc.data-name
+  _ "TrapCode" -> "TrapCode"
+  _ "SendResult" -> "SendResult"
+  _ ["Data" D] -> D
+  _ [K _] -> K
+  _ _ -> none)
 
 (define tc.table
   D [Decl | Decls] -> (if (= (tc.f "name" Decl) D)
@@ -322,15 +359,28 @@
 \\ The entry function exists, performs at most Emit, and takes the declared input.
 (define tc.entry?
   A none _ -> false
-  A F V -> (and (tc.subset? (tc.f "effects" F) ["Emit"])
+  A F V -> (and (tc.subset? (tc.f "effects" F) (tc.entry-row A))
                 (= (tc.f "input_schema" A) [object ["type" (tc.f "argument_type" F)]])
                 (tc.value? A V (tc.f "argument_type" F))))
+
+\\ What the entry may leave unhandled: Emit; in C1 also Task and Channel; in D1 also
+\\ the durable effects (the residual row, DURABLE.md §2).
+(define tc.entry-row
+  A -> (append ["Emit" | (tc.runtime-effects A)]
+               (if (tc.durable? A) (map (/. D (tc.f "name" D)) (tc.filter (/. D (= (tc.f "class" D) "durable")) (tc.f "effects" A))) [])))
+
+(define tc.filter
+  _ [] -> []
+  P [X | Xs] -> (if (P X) [X | (tc.filter P Xs)] (tc.filter P Xs))
+  _ _ -> (tc.malformed))
 
 \\ ---------- types, effect sets and values (§3) ----------
 
 (define tc.type?
   A T -> true where (element? T ["Unit" "Bool" "I64"])
   A T -> (tc.data? A) where (element? T ["Bytes" "TrapCode"])
+  A "SendResult" -> (tc.tasks? A)
+  A [K T] -> (and (tc.tasks? A) (tc.type? A T)) where (element? K ["Task" "Channel" "Outcome" "ReceiveResult"])
   A ["Arrow" Ta Tr Ef] -> (and (tc.type? A Ta) (tc.type? A Tr) (tc.effects? A Ef))
   A ["Tuple" | Ts] -> (and (tc.data? A) (tc.between? 1 8 (length Ts)) (tc.types? A Ts))
   A ["Data" D] -> (and (tc.data? A) (tc.datatype? A D))
@@ -345,7 +395,11 @@
 \\ byte order, no duplicates.
 (define tc.effects?
   A Ef -> (or (= Ef []) (= Ef ["Emit"])) where (not (tc.handlers? A))
-  A Ef -> (and (tc.ordered? Ef) (tc.names? Ef ["Emit" | (map (/. D (tc.f "name" D)) (tc.f "effects" A))])))
+  A Ef -> (and (tc.ordered? Ef) (tc.names? Ef (append ["Emit" | (tc.runtime-effects A)] (map (/. D (tc.f "name" D)) (tc.f "effects" A))))))
+
+\\ The runtime effects an effect set may name besides Emit: Task and Channel in C1.
+(define tc.runtime-effects
+  A -> (if (tc.tasks? A) ["Task" "Channel"] []))
 
 (define tc.names?
   [] _ -> true
@@ -365,8 +419,7 @@
   _ ["int" I] "I64" -> (tc.i64? I)
   A ["bytes" H] "Bytes" -> (and (tc.data? A) (tc.hex? H))
   A ["tuple" | Vs] ["Tuple" | Ts] -> (tc.values? A Vs Ts)
-  A ["data" "TrapCode" C] "TrapCode" -> (cons? (tc.lookup C (tc.constructors A "TrapCode")))
-  A ["data" D C | Vs] ["Data" D] -> (tc.values? A Vs (tc.fields A ["Data" D] C))
+  A ["data" N C | Vs] T -> (and (= N (tc.data-name A T)) (tc.values? A Vs (tc.fields A T C)))
   _ _ _ -> false)
 
 (define tc.values?

@@ -74,7 +74,13 @@
     (let Text (json.stringify Artifact [[byte-limit 16777216]])
          Path (cn (value fe.*work*) "artifact.json")
          Written (write-to-file Path Text)
-      (fe.judged Source Text (fe.validation Path) (fe.typing Text))))
+      (let Report (fe.validation Path)
+        (fe.judged Source Text Report (fe.typing Text (fe.input Report))))))
+
+\\ The entry input both validators judge the artifact with: the one validate.mjs chose
+\\ (0, or for a durable program the least value of main's argument type).
+(define fe.input
+  Report -> (let I (fh.member "input" Report) (if (= I []) ["int" "0"] I)))
 
 \\ The Shen side's verdict on Text. Its files are loaded only when an artifact
 \\ exists to judge, which a rejected program never gets to: compiling the search's
@@ -82,9 +88,9 @@
 (set fe.*typing-loaded* false)
 
 (define fe.typing
-  Text -> (do (if (value fe.*typing-loaded*) skip
+  Text Input -> (do (if (value fe.*typing-loaded*) skip
                   (do (load (cn (value fh.*root*) "typing/validate.shen")) (set fe.*typing-loaded* true)))
-              (tv.validate Text ["int" "0"] (value fe.*typing-budget*))))
+              (tv.validate Text Input (value fe.*typing-budget*))))
 
 \\ The Shen side's search budget, in inferences per proof. Running out is UNKNOWN,
 \\ which is never acceptance.
@@ -254,7 +260,7 @@
     (let Text (trap-error (read-file-as-string Path)
                           (/. E (fe.finish 2 (make-string "~A: error: the file cannot be read~%" Path))))
          Report (fe.validation Path)
-         Typing (fe.typing Text)
+         Typing (fe.typing Text (fe.input Report))
          Status (fh.member "status" Report)
       (if (and (= Status "valid") (= (hd Typing) valid))
           (fe.execute Text (fe.natural Fuel 0))

@@ -40,9 +40,11 @@ function input(bytes) {
     if(a?.schema_version==='tc1-durable-demo/1')return least(a.input_schema?.type,a.datatypes??[])??['int','0'];}catch{}
   return ['int','0'];
 }
+// The input is reported too, so the Shen-side validator judges the same (artifact, input).
+const given=input(bytes);
 let report;
 try {
-  const {artifact,node_count}=validatePureCallArtifact(bytes,input(bytes));
+  const {artifact,node_count}=validatePureCallArtifact(bytes,given);
   const canonical=encode(artifact);
   report={status:'valid',nodes:node_count,functions:String(artifact.functions.length),canonical:canonical.equals(bytes),
     sha256:createHash('sha256').update(canonical).digest('hex')};
@@ -51,4 +53,4 @@ try {
   else if(error instanceof InvalidPureCallArtifact||error instanceof EncodingError)report={status:'invalid',message:error.message};
   else throw error;
 }
-console.log(JSON.stringify(report));
+console.log(JSON.stringify({...report,input:given}));
