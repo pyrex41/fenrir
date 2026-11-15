@@ -187,7 +187,9 @@ handle(E, [op(x, k) => c]..., body)        resume(k, e)        discontinue(k)
 
 ## 8 What resumptions will have to respect (not implemented)
 
-Recorded now so that the concurrency slice is designed against it:
+Recorded now so that the concurrency slice is designed against it. The first
+concurrency slice, C1 (tasks and bounded channels), is specified in
+[CONCURRENCY.md](CONCURRENCY.md); its §11 says how C1 meets each point below.
 
 - A resumption carries the region support of the segment it suspends and cannot
   outlive those regions.

@@ -124,6 +124,68 @@ produces no event.
 Not done for TC1: generated or exhaustive handler programs, reduction, strict
 replay and catalog coverage.
 
+## TC1: structured tasks and bounded channels (slice C1)
+
+```sh
+sh harness/run-tc1-tasks.sh             # hand fixtures, model against the JavaScript implementation, ~3 s
+sh harness/run-tc1-task-explore.sh      # exhaustive-small: the commuting obligation, ~4 min
+```
+
+Contract: [spec/tc1/CONCURRENCY.md](../spec/tc1/CONCURRENCY.md), draft 1, for
+owner review (its §13 lists the provisional choices). Model
+`models/tc1/task-machine.shen` (new; every non-C1 step of a task is the handler
+machine's `tc1.step`, unchanged); independent implementation
+`runtime/tc1/task-machine.mjs` (each task a thread extending the JavaScript
+handler machine by import). The schedule is an explicit input of both: a list of
+task IDs, one per step. A policy (lowest, highest, seeded random, FIFO
+production, production random, or a script) is turned into such a list by
+`tools/tc1/task-schedule.mjs`; the model replays it and rejects any choice that
+is not Runnable in its own state.
+
+**[tc1-tasks.shen](tc1-tasks.shen)**: 18 hand fixtures
+(`fixtures/tc1/task-hand-cases.mjs`), expectations written from the contract
+before either machine existed, each under 8 or 9 schedules: 151 runs (54 of
+them production schedules), 7,167 model steps. Model and sandboxed
+implementation agree step for step on all 151 (step records include events,
+the scheduling-point flag and the Runnable set); 619 handwritten expectations
+hold; every schedule a production policy recorded is a production schedule by
+the model's own records. All nine injected defects are killed: stale waiter (6
+runs), waiter not woken (15, plus 2 crashes not counted), waiter woken twice
+(6), eager cancellation (19), LIFO channel (7), no sibling cancellation (14),
+capacity off by one (7), lost wakeup on close (8), lost wakeup on await (48).
+Each of the twelve kinds of expectation was confirmed to fail when its expected
+value is corrupted. One expectation was wrong when the machines first ran (it
+assumed task IDs independent of the schedule); the machines were right, and it
+is recorded in the fixture file's `CONTRADICTIONS`.
+
+**[tc1-task-explore.shen](tc1-task-explore.shen)**: grammar G
+(`tools/tc1/task-enumerate.mjs`), 3,600 programs of 2–3 tasks and one or two
+channels of capacity 1–2, the count also derived in Shen from the alphabets.
+For each program, ALL reference schedules and ALL production schedules are
+explored on the model, depth first, deduplicated on (full machine state,
+observation so far), with exact schedule counts:
+
+| | States | Edges | Schedules | Observation classes |
+| --- | --- | --- | --- | --- |
+| Reference | 6,418,123 | 16,445,093 | 3,696,932,815,483,313,948,689 | 15,808 |
+| Production | 2,669,664 | 3,346,356 | 11,937,126 | 15,808 |
+
+No bound hit (400 steps per schedule, 2,000,000 states per exploration; the
+largest exploration had 8,901 states). On all 3,600 programs the two
+observation sets are equal and the production set is contained in the reference
+set. Both broken variants fail the check: production not switching after
+`send` on 493 programs, cancellation delivered at any step (a pure step reading
+another task's request) on 373. The sandboxed implementation runs one witness
+schedule for every one of the 15,808 reference observation classes and agrees
+with the model step for step on all (777,583 steps). The defects run on the
+first witness of each program only, a sample, reported and not required: all
+but `stale_waiter` are killed there.
+
+Not done for C1: generated (random) programs beyond G, reduction, strict replay
+tapes, catalog coverage, the Solo5 guest, the frontend. Evidence is bounded
+exploration, development grade; the fixtures, both machines and the harness
+share one author lineage.
+
 ## What is still not Shen
 
 | Piece | Now | Notes |

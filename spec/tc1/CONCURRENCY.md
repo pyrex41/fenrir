@@ -452,9 +452,23 @@ sh harness/run-tc1-tasks.sh             # hand fixtures, model against the JavaS
 sh harness/run-tc1-task-explore.sh      # exhaustive-small: the obligation of section 9
 ```
 
-What the checks found is recorded in [harness/README.md](../../harness/README.md)
-with measured numbers. Evidence grade: development, bounded exploration; no
-gate verdict.
+- **Hand fixtures** (`fixtures/tc1/task-hand-cases.mjs`): eighteen programs,
+  expectations written from this text before either machine ran, each under 8
+  or 9 recorded schedules (151 runs, 54 of them production). Model and
+  implementation agree step for step on all; 619 expectations hold; nine
+  injected defects are each killed. One expectation was wrong (it assumed task
+  IDs independent of the schedule); the machines were right.
+- **Exhaustive-small** (grammar G of `tools/tc1/task-enumerate.mjs`, 3,600
+  programs): every reference and every production schedule explored; the
+  obligation of §9 holds on all 3,600 programs (equal observation sets,
+  production included in reference), with no bound hit. Two broken variants
+  fail it: no switch after `send` (493 programs) and cancellation delivered at
+  any step (373 programs). The implementation agrees with the model on one
+  witness schedule per reference observation class (15,808).
+
+The full numbers are in [harness/README.md](../../harness/README.md). Evidence
+grade: development, bounded exploration; no gate verdict. The obligation is
+checked on G only; it is not proved.
 
 ## 13 For the owner to confirm
 
