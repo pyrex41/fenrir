@@ -122,7 +122,9 @@
           Guest (fh.field "guest" Batch)
           Programs (json.parse (read-file-as-string (fh.field "programs" Batch)) [[byte-limit 268435456]])
           Count (length Programs)
-          Model (map (/. P (fh.run (fh.state P) 200 0 [])) Programs)
+          \\ The step bound the guest was built with; 200 unless the batch says otherwise.
+          Fuel (let F (fh.member "fuel" Batch) (if (= F []) 200 (tc0.i64.small F)))
+          Model (map (/. P (fh.run (fh.state P) Fuel 0 [])) Programs)
           Normal (fh.guest-all Tender Guest Sha "normal" 0 Count)
           Failures (fh.differing Model Normal 0 [])
           Reversed (length (fh.differing Model (fh.guest-all Tender Guest Sha "reverse-operands" 0 Count) 0 []))
@@ -136,6 +138,7 @@
                          ["model" "models/tc0/pure-call-machine.shen or, for TC1 programs, models/tc1/handler-machine.shen, chosen by each program's schema; with models/tc0/i64.shen, run in this process"]
                          ["batch_sha256" Sha]
                          ["programs" (str Count)]
+                         ["fuel" (str Fuel)]
                          ["model_steps" (str (fh.step-count Model 0))]
                          ["guest_steps" (str (fh.step-count Normal 0))]
                          ["programs_differing" (str (length Failures))]

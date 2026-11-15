@@ -94,35 +94,8 @@
   Bound -> (fh.h-sum (/. N (fh.h-plain N 0 0 0)) 1 Bound))
 
 \\ ---------- comparison ----------
-
-(define fh.first-divergence
-  [] [] _ -> "none"
-  [S | Ms] [S | Cs] I -> (fh.first-divergence Ms Cs (+ I 1))
-  _ _ I -> (str I))
-
-\\ [] when the model and the implementation agree on a program, else what differs.
-(define fh.disagreement
-  Name [Execution Steps] Candidate ->
-    (if (and (= Execution "Completed") (= (fh.field "execution" Candidate) "Completed"))
-        (let Ours (fh.canon Steps)
-             Theirs (fh.canon (fh.field "steps" Candidate))
-          (if (and (= Ours Theirs) (= (fh.canon (fh.model-outcome Steps)) (fh.canon (fh.field "outcome" Candidate))))
-              []
-              [object ["program" Name] ["first_divergent_epoch" (fh.first-divergence Ours Theirs 0)]
-                      ["model_outcome" (fh.model-outcome Steps)] ["implementation_outcome" (fh.field "outcome" Candidate)]]))
-        [object ["program" Name] ["model_execution" Execution] ["implementation_execution" (fh.field "execution" Candidate)]]))
-
-(define fh.outcome-key
-  ["Ok" _] -> "Ok"
-  ["Trap" Code] -> (cn "Trap:" Code))
-
-\\ One [Name Verdict] per defective run of a program.
-(define fh.verdicts
-  Runs Steps -> (map (/. Run [(hd Run) (fh.verdict Steps (hd (tl Run)))]) Runs))
-
-(define fh.tally-verdicts
-  [] Defects -> Defects
-  [[Name Verdict] | Verdicts] Defects -> (fh.tally-verdicts Verdicts (fh.tally-one Name Verdict Defects)))
+\\ fh.disagreement, fh.verdicts and the tallies are in tc1-defects.shen, shared with the
+\\ generated family (tc1-random.shen).
 
 \\ The first program that kills each defect. Programs come in order of size, so it is
 \\ one of the smallest: a reproduction that needs no reduction.
@@ -156,9 +129,6 @@
   I Chunks Tally ->
     (let View (buffer.from-string (read-file-as-string (cn (value fh.*out*) (cn "chunk-" (cn (str I) ".jsonl")))))
       (fh.compare-chunks (+ I 1) Chunks (fh.compare-rows (fh.json-lines View 0 (buffer.length View) []) Tally))))
-
-(define fh.counts
-  Pairs -> [object | (map (/. P [(hd P) (str (hd (tl P)))]) Pairs)])
 
 (define fh.main
   -> (let Bound (tc0.i64.small (value fh.*bound*))

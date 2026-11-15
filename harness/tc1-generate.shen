@@ -55,8 +55,9 @@
 \\ Every decision takes the next choice, reduced modulo the number of options open at
 \\ that point; an exhausted list gives 0. Option 0 is always the smallest one (a
 \\ literal, true, a tail-resumptive clause, resume(k, .), no spare nodes for a
-\\ subterm), so the all-zero list gives the program whose body is the literal 0. The
-\\ first choice is the node budget of main's body, 1 + (choice mod fh.g-max-nodes).
+\\ subterm that others follow), so the all-zero list gives the program whose body is the literal 0. The
+\\ first two choices give the node budget of main's body: 1 + the larger of the two,
+\\ each taken modulo fh.g-max-nodes, so budgets lean towards the large end.
 \\ A decision with one option takes no choice.
 
 (define fh.g-max-nodes -> 40)
@@ -129,30 +130,50 @@
 (define fh.g-table
   e [S V K] -> [[literal 1 true] [variable 1 (not (empty? V))] [tick 2 true] [perform 2 (not (empty? S))]
                 [neg 2 true] [deep 2 (element? "Ask" S)] [arith 3 true] [bind 3 true] [handle 3 true]
-                [perform 2 (not (empty? S))] [branch 4 true] [mark 4 true] [handle 3 true]]
+                [perform 2 (not (empty? S))] [branch 4 true] [mark 4 true] [handle 3 true]
+                [perform 2 (not (empty? S))] [bind 3 true] [handle 3 true] [arith 3 true] [perform 2 (not (empty? S))]]
   b [S V K] -> [[truth 1 true] [negate 2 true] [test 2 (element? "Mix" S)] [compare 3 true]]
   r [S V K] -> [[resume 2 true] [drop 3 true] [tick 3 true] [perform 3 (not (empty? S))] [neg 3 true]
                 [deep 3 (element? "Ask" S)] [arith-left 4 true] [arith-right 4 true] [let-left 4 true]
-                [let-right 4 true] [handle 4 true] [branch 6 true]])
+                [let-right 4 true] [handle 4 true] [branch 6 true]
+                [resume 2 true] [drop 3 true] [let-left 4 true] [arith-right 4 true] [branch 6 true]])
 
 (define fh.g-fitting
   [] _ -> []
   [[Form Min true] | Rows] Cap -> [Form | (fh.g-fitting Rows Cap)] where (<= Min Cap)
   [_ | Rows] Cap -> (fh.g-fitting Rows Cap))
 
+\\ The rows that are not leaves: with room to grow, a subterm is three times as likely
+\\ to take one of them, so a budget is mostly used.
+(define fh.g-composite
+  [] -> []
+  [[_ 1 _] | Rows] -> (fh.g-composite Rows)
+  [Row | Rows] -> [Row | (fh.g-composite Rows)])
+
+(define fh.g-forms
+  Kind Ctx Cap -> (let Table (fh.g-table Kind Ctx)
+                       Composite (fh.g-composite Table)
+                    (fh.g-fitting (append Table Composite Composite) Cap)))
+
 \\ An expression of Kind with at most Cap nodes; Cap is at least the kind's minimum.
 \\ End is the node count this subterm must not pass.
 (define fh.g-expr
   Kind Ctx Cap -> (let End (+ (value fh.*g-nodes*) Cap)
-                       Form (fh.g-choose (fh.g-fitting (fh.g-table Kind Ctx) Cap))
+                       Form (fh.g-choose (fh.g-forms Kind Ctx Cap))
                     (fh.g-build Form Kind Ctx End (fh.g-node))))
 
-\\ A subterm that is followed by others needing Rest nodes: a choice says how many of
-\\ the spare nodes it may take. What it leaves is passed on.
+\\ How many of Spare nodes a subterm may take beyond its minimum: a choice of eighths,
+\\ 0 for none and 7 for all. The choice does not depend on Spare, so a list keeps its
+\\ meaning when a budget above it shrinks.
+(define fh.g-share
+  0 -> 0
+  Spare -> (fh.g-div (* Spare (fh.g-pick 8)) 7))
+
+\\ A subterm that is followed by others needing Rest nodes. What it leaves is passed on.
 (define fh.g-sub
   Kind Ctx End Rest -> (let Min (fh.g-min Kind)
                             Spare (- (- (- End Rest) (value fh.*g-nodes*)) Min)
-                         (fh.g-expr Kind Ctx (+ Min (fh.g-pick (+ Spare 1))))))
+                         (fh.g-expr Kind Ctx (+ Min (fh.g-share Spare)))))
 
 \\ The last subterm takes whatever is left.
 (define fh.g-last
@@ -164,7 +185,7 @@
 (define fh.g-bind
   Id [S V K] -> [S [Id | V] K])
 
-(define fh.g-literals -> ["0" "1" "2" "3" "-1" "10" "9223372036854775807" "-9223372036854775808"])
+(define fh.g-literals -> ["0" "1" "2" "3" "-1" "10" "7" "-2" "5" "4" "6" "8" "-3" "9" "9223372036854775807" "-9223372036854775808"])
 
 \\ The effects in S, each once, in declaration order.
 (define fh.g-in-scope
@@ -263,9 +284,9 @@
          X (fh.g-id)
       (if Explicit
           (let K (fh.g-id)
-               Cap (+ 2 (fh.g-pick (- Room 1)))
+               Cap (+ 2 (fh.g-share (- Room 2)))
             [Op X K (fh.g-expr r [(hd Ctx) [X | (hd (tl Ctx))] [K Result]] Cap)])
-          [Op X (fh.g-expr Result (fh.g-bind X Ctx) (+ 1 (fh.g-pick Room)))])))
+          [Op X (fh.g-expr Result (fh.g-bind X Ctx) (+ 1 (fh.g-share (- Room 1))))])))
 
 \\ ---------- the artifact ----------
 
@@ -310,7 +331,7 @@
 (define fh.generate
   Name Choices ->
     (let Started (fh.g-start Choices)
-         Budget (+ 1 (fh.g-pick (fh.g-max-nodes)))
+         Budget (+ 1 (fh.g-max (fh.g-pick (fh.g-max-nodes)) (fh.g-pick (fh.g-max-nodes))))
          Main (fh.g-located)
          Parameter (fh.g-id)
          Body (fh.g-expr e [[] [] []] Budget)
@@ -346,8 +367,12 @@
 
 \\ ---------- shrinking, on the choice list ----------
 \\ A candidate is a list that is shorter than the current one, or as long and smaller
-\\ at the first place they differ: a chunk deleted, an entry set to 0, an entry
-\\ halved or decremented. Every candidate is regenerated, so it is a valid program.
+\\ at the first place they differ. A quick round proposes: a chunk deleted (sizes
+\\ halving from the whole list, at multiples of the size), an entry set to 0, an
+\\ entry halved, an entry decremented. When no quick candidate is kept, thorough
+\\ rounds follow: one to four entries deleted at every offset, and every entry
+\\ lowered to every smaller value. Every candidate is regenerated, so it is a valid
+\\ program.
 \\ Evaluate is given the candidates of one round and returns the choice list (in
 \\ normal form) of one for which the failure still holds, or [] when there is none;
 \\ the caller decides what "still holds" means. Each accepted list is smaller in
@@ -380,23 +405,42 @@
          New (F C)
       (if (< New C) [(append Before [New | After]) | Rest] Rest)))
 
+\\ The lists with Size consecutive entries removed, at every offset.
+(define fh.g-windows
+  Size Before After -> [] where (< (length After) Size)
+  Size Before [A | After] -> [(append Before (fh.g-drop Size [A | After])) | (fh.g-windows Size (append Before [A]) After)])
+
+\\ The lists with one entry lowered, to every smaller value.
+(define fh.g-lowerings
+  Before [] -> []
+  Before [C | After] -> (append (fh.g-values 0 C Before After) (fh.g-lowerings (append Before [C]) After)))
+
+(define fh.g-values
+  V C _ _ -> [] where (>= V C)
+  V C Before After -> [(append Before [V | After]) | (fh.g-values (+ V 1) C Before After)])
+
 (define fh.g-candidates
-  Cs -> (append (fh.g-all-deletions (length Cs) Cs)
-                (fh.g-replacements (/. C 0) [] Cs)
-                (fh.g-replacements (/. C (if (> C 1) (fh.g-half C) C)) [] Cs)
-                (fh.g-replacements (/. C (if (> C 2) (- C 1) C)) [] Cs)))
+  quick Cs -> (append (fh.g-all-deletions (length Cs) Cs)
+                      (fh.g-replacements (/. C 0) [] Cs)
+                      (fh.g-replacements (/. C (if (> C 1) (fh.g-half C) C)) [] Cs)
+                      (fh.g-replacements (/. C (if (> C 2) (- C 1) C)) [] Cs))
+  thorough Cs -> (append (fh.g-windows 4 [] Cs) (fh.g-windows 3 [] Cs) (fh.g-windows 2 [] Cs) (fh.g-windows 1 [] Cs)
+                         (fh.g-lowerings [] Cs)))
 
 (define fh.shrink
-  Choices Evaluate Rounds -> (fh.g-shrink Choices Evaluate Rounds 0 0))
+  Choices Evaluate Rounds -> (fh.g-shrink quick Choices Evaluate Rounds 0 0))
 
 (define fh.g-shrink
-  Choices _ Rounds Rounds Tried -> [Choices Rounds Tried]
-  Choices Evaluate Rounds Round Tried ->
-    (let Candidates (fh.g-candidates Choices)
+  _ Choices _ Rounds Rounds Tried -> [Choices Rounds Tried]
+  Level Choices Evaluate Rounds Round Tried ->
+    (let Candidates (fh.g-candidates Level Choices)
          Next (if (empty? Candidates) [] (Evaluate Candidates))
+         Total (+ Tried (length Candidates))
       (if (or (= Next []) (not (fh.g-smaller? Next Choices)))
-          [Choices Round (+ Tried (length Candidates))]
-          (fh.g-shrink Next Evaluate Rounds (+ Round 1) (+ Tried (length Candidates))))))
+          (if (= Level quick)
+              (fh.g-shrink thorough Choices Evaluate Rounds (+ Round 1) Total)
+              [Choices (+ Round 1) Total])
+          (fh.g-shrink Level Next Evaluate Rounds (+ Round 1) Total))))
 
 \\ Shorter, or as long and smaller at the first difference.
 (define fh.g-smaller?
@@ -425,3 +469,56 @@
   ["handle" _ _ Clauses Body] -> (+ 1 (fh.g-max (fh.g-handler-depth Body) (fh.g-depths (map (/. C (fh.last C)) Clauses))))
   [Tag _ | Rest] -> (fh.g-depths Rest) where (string? Tag)
   _ -> 0)
+
+\\ ---------- transport: programs out, implementation runs back ----------
+
+\\ The I-th fixed seed. Any I gives a seed in range.
+(define fh.g-seed
+  I -> (+ 20261115 (* 7919 I)))
+
+(define fh.g-div
+  A B -> (/ (- A (shen.mod A B)) B))
+
+\\ Count programs from Lehmer state X, named Prefix-0, Prefix-1, ...:
+\\ [Generated NextState], Generated a list of [Name Artifact Nodes Choices HelperNodes].
+(define fh.g-programs
+  Prefix I Count X Acc -> [(reverse Acc) X] where (>= I Count)
+  Prefix I Count X Acc ->
+    (let Drawn (fh.g-draw (fh.g-choices-per-program) X [])
+         Name (cn Prefix (str I))
+      (fh.g-programs Prefix (+ I 1) Count (hd (tl Drawn)) [[Name | (fh.generate Name (hd Drawn))] | Acc])))
+
+\\ One JSON line {name, program} per program, the format of the JavaScript peer
+\\ (tools/tc1/run-handler-generated.mjs) and of the guest builder's --programs.
+(define fh.g-write-lines
+  [] Stream -> (close Stream)
+  [[Name Artifact | _] | Rest] Stream ->
+    (do (pr (cn (json.stringify [object ["name" Name] ["program" Artifact]] [[byte-limit 4194304]]) "c#10;") Stream)
+        (fh.g-write-lines Rest Stream)))
+
+(define fh.g-write
+  Generated File -> (fh.g-write-lines Generated (open File out)))
+
+\\ Run the JavaScript peer on File in Mode, into the fresh directory Out (with a
+\\ trailing slash): its header, or an error when it did not complete.
+(define fh.g-implementation
+  File Out Fuel Mode Sandbox ->
+    (let Made (fh.exec "mkdir" ["-p" Out] 30)
+         R (process.run "node" (fh.node-arguments "tools/tc1/run-handler-generated.mjs" [File Out (str Fuel) Mode]
+                                                  ["runtime/tc1" "tools/tc1" File] Out Sandbox)
+                        (buffer.from-string "") [[timeout 600000]])
+      (if (and (= (hd R) ok) (process.success? (hd (tl R))))
+          (json.parse (read-file-as-string (cn Out "family.json")) [[byte-limit 1048576]])
+          (error "harness: the JavaScript batch did not complete for ~A" File))))
+
+(define fh.g-chunk
+  Out I -> (let View (buffer.from-string (read-file-as-string (cn Out (cn "chunk-" (cn (str I) ".jsonl")))))
+             (fh.json-lines View 0 (buffer.length View) [])))
+
+(define fh.g-all-chunks
+  Out I Chunks -> [] where (>= I Chunks)
+  Out I Chunks -> (append (fh.g-chunk Out I) (fh.g-all-chunks Out (+ I 1) Chunks)))
+
+\\ The rows the peer wrote, all chunks. For small batches only.
+(define fh.g-rows
+  Out Header -> (fh.g-all-chunks Out 0 (tc0.i64.small (fh.field "chunks" Header))))

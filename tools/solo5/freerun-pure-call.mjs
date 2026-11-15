@@ -28,14 +28,14 @@ const FUEL=200,CHUNK=250,INPUT=['int','0'];
 const MODES={normal:{},'reverse-operands':{reverseOperands:true},'wrap-overflow':{wrapOverflow:true}};
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 
-export function buildGuest(tools,header,dir) {
+export function buildGuest(tools,header,dir,fuel=FUEL) {
   mkdirSync(dir,{recursive:true});
   writeFileSync(resolve(dir,'data.h'),header);
   writeFileSync(resolve(dir,'manifest.json'),'{"type":"solo5.manifest","version":1,"devices":[]}\n');
   const source=resolve(root,'backends/solo5/pure-call');
   for(const file of ['guest.c','machine.c','machine.h','format.c'])copyFileSync(resolve(source,file),resolve(dir,file));
   for(const unit of ['guest','machine','format'])
-    must(tools.cc,['-std=c11','-O1','-Wall','-Wextra','-Werror',`-DPC_FUEL=${FUEL}`,'-I.','-c',unit+'.c','-o',unit+'.o'],{cwd:dir,timeout:600000});
+    must(tools.cc,['-std=c11','-O1','-Wall','-Wextra','-Werror',`-DPC_FUEL=${fuel}`,'-I.','-c',unit+'.c','-o',unit+'.o'],{cwd:dir,timeout:600000});
   must(tools.elftool,['gen-manifest','manifest.json','manifest.c'],{cwd:dir});
   must(tools.cc,['-c','manifest.c','-o','manifest.o'],{cwd:dir});
   must(tools.ld,['-z','solo5-abi='+tools.abi,'manifest.o','guest.o','machine.o','format.o','-o','guest.'+tools.abi],{cwd:dir});
@@ -96,10 +96,18 @@ function main() {
   // cases: H has no overflow, so the wrap-overflow defect needs them.
   const handlerBound=args.includes('--tc1-exhaustive-nodes')?Number(option('--tc1-exhaustive-nodes')):0;
   if(args.includes('--tc1-exhaustive-nodes')&&!(Number.isSafeInteger(handlerBound)&&handlerBound>=1&&handlerBound<=7))throw new Error('--tc1-exhaustive-nodes must be 1..7');
-  if([exact,args.includes('--tc1'),handlerBound>0].filter(Boolean).length>1)throw new Error('Choose one of --exact-arithmetic, --tc1 and --tc1-exhaustive-nodes');
-  // Either TC1 family runs on the handler machine.
-  const tc1=args.includes('--tc1')||handlerBound>0;
+  // --programs FILE: the TC1 programs of FILE, one JSON object {name, program} per line, as
+  // harness/tc1-random.shen writes them (generated in Shen by harness/tc1-generate.shen). They
+  // are the whole batch: the family has arithmetic of its own for the guest's two defects.
+  // --fuel N: the step bound compiled into the guest, recorded in batch.json (default 200).
+  const given=option('--programs',null);
+  const fuel=Number(option('--fuel',String(FUEL)));
+  if(!Number.isSafeInteger(fuel)||fuel<1||fuel>1000)throw new Error('--fuel must be 1..1000');
+  if([exact,args.includes('--tc1'),handlerBound>0,given!==null].filter(Boolean).length>1)throw new Error('Choose one of --exact-arithmetic, --tc1, --tc1-exhaustive-nodes and --programs');
+  // Every TC1 family runs on the handler machine.
+  const tc1=args.includes('--tc1')||handlerBound>0||given!==null;
   const families=exact?{'exact-arithmetic':exactArithmeticCases()}
+    :given!==null?{'tc1-generated':readFileSync(resolve(given),'utf8').split('\n').filter(Boolean).map(line=>JSON.parse(line))}
     :handlerBound?{[`tc1-exhaustive-${handlerBound}`]:enumerateHandlers(handlerBound).cases,hand:[...callHand,...dataHand]}
     :tc1?{'tc1-handlers':[...handlerCases,...resumptionCases],hand:[...callHand,...dataHand]}
     :{hand:[...callHand,...dataHand],'generated-pure-call':generatePureCalls(32).cases,'generated-pure-data':generatePureData(24).cases};
@@ -110,19 +118,19 @@ function main() {
   }
   const programs=Object.entries(families).flatMap(([family,cases])=>cases.map(c=>({family,name:c.name,program:c.program,input:INPUT})));
   const lowered=lowerBatch(programs);
-  const guest=buildGuest(tools,lowered.header,out);
+  const guest=buildGuest(tools,lowered.header,out,fuel);
   const checked=programs.map(p=>validatePureCallArtifact(encode(p.program),p.input));
   // --build-only: write the validated programs and the guest image for the Shen harness
   // (harness/solo5-pure-call.shen) and stop. No comparison happens in this process.
   if(args.includes('--build-only')) {
     writeFileSync(resolve(out,'programs.json'),JSON.stringify(checked.map(c=>c.artifact)));
-    writeFileSync(resolve(out,'batch.json'),JSON.stringify({guest,tender:tools.tender,abi:tools.abi,tender_sha256:tools.tender_sha256,solo5_commit:SOLO5_COMMIT,solo5_source:tools.solo5_source,solo5_path:tools.solo5_path,batch_sha256:lowered.batch_sha256,programs:resolve(out,'programs.json'),count:String(programs.length),
+    writeFileSync(resolve(out,'batch.json'),JSON.stringify({guest,tender:tools.tender,abi:tools.abi,tender_sha256:tools.tender_sha256,solo5_commit:SOLO5_COMMIT,solo5_source:tools.solo5_source,solo5_path:tools.solo5_path,batch_sha256:lowered.batch_sha256,programs:resolve(out,'programs.json'),count:String(programs.length),fuel:String(fuel),
       families:Object.fromEntries(Object.entries(families).map(([family,cases])=>[family,String(cases.length)]))})+'\n');
     console.log(out);return;
   }
   // The TC1 implementation has no operand-order or overflow defect switches, so under --tc1
   // only the normal run has a JavaScript reference; defective guest runs are still counted.
-  const reference=mode=>tc1&&mode!=='normal'?null:checked.map(c=>{const r=new (tc1?HandlerMachine:PureCallMachine)(c.artifact,c.input,tc1?{}:MODES[mode]).run(FUEL);return {execution:r.execution,steps:r.steps,outcome:r.outcome};});
+  const reference=mode=>tc1&&mode!=='normal'?null:checked.map(c=>{const r=new (tc1?HandlerMachine:PureCallMachine)(c.artifact,c.input,tc1?{}:MODES[mode]).run(fuel);return {execution:r.execution,steps:r.steps,outcome:r.outcome};});
   const guestRun=mode=>{const traces=[];for(let first=0;first<programs.length;first+=CHUNK)traces.push(...executeRange(tools,guest,lowered.batch_sha256,mode,first,Math.min(first+CHUNK,programs.length)));return traces;};
   const failures=[],outcomes={},perFamily={},mutants={};let steps=0;
   const normalCandidate=reference('normal');
@@ -146,7 +154,7 @@ function main() {
     qualification:'UNKNOWN',
     solo5_commit:SOLO5_COMMIT,solo5_source:tools.solo5_source,solo5_path:tools.solo5_path,tender_sha256:tools.tender_sha256,
     scope:'TC0-A pure-call demo schemas /1 and /2; stock '+tools.abi+' tender; observed free run compared with the JS pure-call machine; entry input ["int","0"]',
-    guest_sha256:sha(readFileSync(guest)),batch_sha256:lowered.batch_sha256,fuel:String(FUEL),
+    guest_sha256:sha(readFileSync(guest)),batch_sha256:lowered.batch_sha256,fuel:String(fuel),
     programs:String(programs.length),programs_by_family:perFamily,reference_steps_compared:String(steps),outcomes,mutants,
     failure_count:String(failures.length),failures:failures.slice(0,20)};
   writeFileSync(resolve(out,'report.json'),JSON.stringify(report,null,2)+'\n');

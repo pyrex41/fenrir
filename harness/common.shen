@@ -421,6 +421,12 @@
 (define fh.harness
   Script Args Seconds -> (fh.harness-in (value fh.*root*) Script Args Seconds))
 
+\\ Build a guest batch with the JavaScript builder: its directory, or blocked.
+(define fh.guest-build
+  BuilderArgs ->
+    (let Built (fh.exec "node" (append [(cn (value fh.*root*) "tools/solo5/freerun-pure-call.mjs")] (append BuilderArgs ["--build-only"])) 1800)
+      (if (= (hd Built) 0) (fh.trim (hd (tl Built))) blocked)))
+
 (define fh.subdir
   Name -> (let Dir (cn (value fh.*out*) Name)
                Made (fh.exec "mkdir" ["-p" Dir] 30)
