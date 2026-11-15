@@ -1,0 +1,3 @@
+\\ expect 3:17 yield takes no operands: it is written yield, without brackets
+(define main {I64 --> I64}
+  input -> (do (yield) 0))

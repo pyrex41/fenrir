@@ -1,0 +1,9 @@
+\\ Round trip: the TC1-C1 hand fixture await-child-outcome, in surface syntax.
+\\ frontend/test.sh compares this program's run (production FIFO schedule) with the run of the fixture's artifact.
+
+(define main {I64 --> I64}
+  input -> (let t (spawn (lambda (_ : Unit) (do (emit "child" 7) 7)))
+             (match (await t)
+               ((Ok a) -> (match (await t) ((Ok b) -> (+ a b)) (Cancelled -> 0) ((Failed code) -> 0)))
+               (Cancelled -> 0)
+               ((Failed code) -> 0))))

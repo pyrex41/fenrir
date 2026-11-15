@@ -1,0 +1,10 @@
+\\ Round trip: the TC1-C1 hand fixture two-tasks-one-channel, in surface syntax.
+\\ frontend/test.sh compares this program's run (production FIFO schedule) with the run of the fixture's artifact.
+
+(define main {I64 --> I64}
+  input -> (let c (channel I64 2)
+                p (spawn (lambda (_ : Unit) (do (send c 1) (send c 2) 0)))
+                q (spawn (lambda (_ : Unit) (do (match (receive c) ((Item x) -> (emit "got" x)) (End -> (emit "end" 0)))
+                                                (match (receive c) ((Item x) -> (emit "got" x)) (End -> (emit "end" 0)))
+                                                0)))
+             0))

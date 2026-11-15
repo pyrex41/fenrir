@@ -12,10 +12,15 @@
 #               of the same name rewritten in surface syntax: the model run of
 #               the elaborated artifact has the fixture's outcome and emissions,
 #               and the artifact is the fixture's program up to a renaming of IDs
+#   schedules   every program under tests/frontend/schedules/ is run under the schedule
+#               its header gives ("\\ schedule SPEC"; TC1-C1 tasks) and prints exactly
+#               the lines after "\\ > " (an error included), the schedule line aside
 #   stable      elaborating twice gives the same bytes
 #   Solo5       the examples, elaborated, run in the Solo5 guest and agree with
-#               the model step for step (harness/solo5-pure-call.shen). Skipped,
-#               and said so, when no Solo5 is available (harness/solo5.sh).
+#               the model step for step (harness/solo5-pure-call.shen); the task
+#               examples in the v3 guest (harness/run-solo5-tasks.sh, which also runs
+#               the hand fixtures and its other checks). Skipped, and said so, when
+#               no Solo5 is available (harness/solo5.sh).
 #
 # Development evidence only. Exit status 0 when nothing failed.
 set -u
@@ -87,6 +92,19 @@ for file in tests/frontend/roundtrip/*.fen; do
   fi
 done
 
+schedules=0
+for file in tests/frontend/schedules/*.fen; do
+  schedules=$((schedules + 1))
+  spec=$(sed -n 's/^\\\\ schedule //p' "$file")
+  sed -n 's/^\\\\ > //p' "$file" > "$work/expected"
+  status=0
+  sh "$fenrir" run "$file" "$spec" > "$work/out" 2>&1 || status=$?
+  grep -v -e '^steps: ' -e '^schedule: ' "$work/out" > "$work/observed"
+  if [ -z "$spec" ] || [ ! -s "$work/expected" ] || ! cmp -s "$work/expected" "$work/observed"; then
+    fail "$file" "status $status; expected:" "$(cat "$work/expected")" "got:" "$(cat "$work/out")"
+  fi
+done
+
 stable=0
 for file in examples/*.fen; do
   stable=$((stable + 1))
@@ -100,7 +118,11 @@ done
 # compared over their first 200 steps only.
 if [ -n "$FENRIR_SOLO5" ] && [ -x "$FENRIR_SOLO5/tenders/spt/solo5-spt" ]; then
   set --
-  for file in examples/*.fen; do set -- "$@" "$work/$(basename "$file" .fen).json"; done
+  tasks=
+  for file in examples/*.fen; do
+    json="$work/$(basename "$file" .fen).json"
+    if grep -q '"tc1-task-demo/1"' "$json"; then tasks="$tasks $json"; else set -- "$@" "$json"; fi
+  done
   guest=$#
   if batch=$(node tests/frontend/solo5-batch.mjs "$@" 2> "$work/err"); then
     report=$("$jit/bin/shen-jit" script "$root/harness/solo5-pure-call.shen" "$jit/lib" "$root" "$batch" 2>&1 < /dev/null | tail -n 1)
@@ -111,10 +133,20 @@ if [ -n "$FENRIR_SOLO5" ] && [ -x "$FENRIR_SOLO5/tenders/spt/solo5-spt" ]; then
   else
     solo5="FAILED"; fail "Solo5 guest build" "$(cat "$work/err")"
   fi
+  # Task examples: the v3 guest, the host naming every task and the guest's own FIFO.
+  if [ -n "$tasks" ] && count=$(node tests/frontend/task-programs.mjs "$work/task-examples.json" $tasks 2> "$work/err"); then
+    report=$(sh harness/run-solo5-tasks.sh --stride 3600 --programs "$work/task-examples.json" 2>&1 | tail -n 1)
+    case $report in
+      *'"status":"development-pass"'*'"frontend-examples":"'"$count"'"'*) solo5="$solo5; $count task examples agree with the task model in the v3 guest" ;;
+      *) solo5="$solo5; task examples FAILED"; fail "Solo5 v3 guest against the task model" "$(printf '%s' "$report" | cut -c1-2000)" ;;
+    esac
+  elif [ -n "$tasks" ]; then
+    solo5="$solo5; task examples FAILED"; fail "Solo5 task batch" "$(cat "$work/err")"
+  fi
 else
   solo5="skipped (no Solo5: build/vendor/solo5, FENRIR_SOLO5 or the flake solo5 output)"
 fi
 
-printf 'frontend tests: %s accepted programs, %s rejected programs, %s round trips, %s stable artifacts; Solo5: %s; failures: %s\n' \
-  "$accepted" "$rejected" "$roundtrips" "$stable" "$solo5" "$failures"
+printf 'frontend tests: %s accepted programs, %s rejected programs, %s round trips, %s schedule runs, %s stable artifacts; Solo5: %s; failures: %s\n' \
+  "$accepted" "$rejected" "$roundtrips" "$schedules" "$stable" "$solo5" "$failures"
 [ "$failures" -eq 0 ]

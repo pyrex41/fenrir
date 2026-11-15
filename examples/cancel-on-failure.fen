@@ -1,0 +1,31 @@
+\\ A failing task cancels its sibling (TC1-C1, spec/tc1/CONCURRENCY.md section 7).
+\\
+\\ The supervisor task opens a scope with two children: a waiter blocked on a
+\\ channel nobody sends to, and a worker that divides by zero. The worker's trap
+\\ latches into the scope and requests the waiter's cancellation, which removes it
+\\ from the channel and is delivered when it next runs; the supervisor's own body
+\\ carries on and emits. When the scope joins, its children are done and its latch
+\\ is set, so it exits ChildFailed, and so does the supervisor. main sees that
+\\ through await. Observing a failure does not acknowledge it: the supervisor's
+\\ trap is latched into main's own implicit scope, so main ends ChildFailed too.
+\\
+\\ Expected:
+\\ > emit "supervisor": 0 (task 1)
+\\ > emit "failed": ChildFailed (task 0)
+\\ > outcome: Trap ChildFailed
+\\ > schedule: policy fifo, a production schedule by the model's records
+
+(define main {I64 --> I64}
+  input -> (let ch (channel I64 1)
+                supervisor (spawn (lambda (_ : Unit)
+                             (scope
+                               (let waiter (spawn (lambda (_ : Unit)
+                                                    (match (receive ch)
+                                                      ((Item x) -> x)
+                                                      (End -> 0))))
+                                    worker (spawn (lambda (_ : Unit) (/ 1 0)))
+                                 (do (emit "supervisor" 0) 0)))))
+             (match (await supervisor)
+               ((Ok v) -> v)
+               (Cancelled -> -1)
+               ((Failed code) -> (do (emit "failed" code) -2)))))

@@ -1,0 +1,20 @@
+\\ A spawned task installs its own handler: the clause runs in the child, and main
+\\ sees only the child's result (TC1-C1).
+\\
+\\ Expected:
+\\ > emit "child": 22 (task 0)
+\\ > outcome: Ok 22
+\\ > schedule: policy fifo, a production schedule by the model's records
+
+(effect Count
+  (tick I64 --> I64))
+
+(define main {I64 --> I64}
+  input -> (let t (spawn (lambda (_ : Unit)
+                           (handle Count
+                             ((tick n) -> (* n 2))
+                             (+ (perform Count tick 5) (perform Count tick 6)))))
+             (match (await t)
+               ((Ok v) -> (do (emit "child" v) v))
+               (Cancelled -> 0)
+               ((Failed code) -> 0))))

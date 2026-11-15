@@ -1,0 +1,36 @@
+\\ Producer and consumer over a bounded channel (TC1-C1, spec/tc1/CONCURRENCY.md).
+\\
+\\ The producer sends 1, 2, 3 into a channel of capacity 2 and closes it; a send on
+\\ a full channel blocks until the consumer makes room. The consumer receives
+\\ until End, emitting each item, and returns their sum, which main awaits. The
+\\ channel is FIFO, so the items arrive in the order sent under every schedule;
+\\ `run` uses the production FIFO schedule. produce and consume take a channel
+\\ handle, which is not serializable: it never leaves the scope it was made in.
+\\
+\\ Expected:
+\\ > emit "got": 1 (task 2)
+\\ > emit "got": 2 (task 2)
+\\ > emit "got": 3 (task 2)
+\\ > outcome: Ok 6
+\\ > schedule: policy fifo, a production schedule by the model's records
+
+(define produce {(Tuple (Channel I64) I64) --> I64}
+  ch n -> (if (> n 3)
+              (do (close ch) 0)
+              (match (send ch n)
+                (Sent -> (produce ch (+ n 1)))
+                (Closed -> 0))))
+
+(define consume {(Channel I64) --> I64}
+  ch -> (match (receive ch)
+          ((Item x) -> (do (emit "got" x) (+ x (consume ch))))
+          (End -> 0)))
+
+(define main {I64 --> I64}
+  input -> (let ch (channel I64 2)
+                producer (spawn (lambda (_ : Unit) (produce ch 1)))
+                consumer (spawn (lambda (_ : Unit) (consume ch)))
+             (match (await consumer)
+               ((Ok total) -> total)
+               (Cancelled -> -1)
+               ((Failed code) -> -2))))

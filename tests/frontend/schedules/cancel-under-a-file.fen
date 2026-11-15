@@ -1,0 +1,8 @@
+\\ Run under a given schedule: a schedule file that chooses task 1 before main has spawned it: the model refuses the choice.
+\\ schedule tests/frontend/schedules/not-runnable.json
+\\ > tests/frontend/schedules/not-runnable.json: error: the schedule chooses task 1 at step 1, which is not Runnable there
+
+(define main {I64 --> I64}
+  input -> (let t (spawn (lambda (_ : Unit) (do (emit "a" 0) (emit "b" 0) yield (emit "c" 0) 0)))
+             (do (cancel t)
+                 (match (await t) ((Ok x) -> 0) (Cancelled -> 1) ((Failed code) -> 2)))))

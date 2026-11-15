@@ -9,7 +9,9 @@ qualified, and nothing here adds to the language: the frontend translates text
 into an artifact of schema `tc1-handler-demo/2` (contract
 [EFFECTS.md](EFFECTS.md), slice TC1-H2), or of schema `tc1-durable-demo/1`
 (contract [DURABLE.md](DURABLE.md), slice TC1-D1) when the program declares a
-durable effect. What a program means is decided by the
+durable effect, or of schema `tc1-task-demo/1` (contract
+[CONCURRENCY.md](CONCURRENCY.md), slice TC1-C1) when it uses tasks or channels
+(§2, "Tasks"). What a program means is decided by the
 Shen model; whether an artifact is well formed is decided by two validators that
 must agree: the JavaScript validator `tools/tc0/pure-call-artifact.mjs`, and the
 Shen one of `typing/`, which checks the structural rules and then accepts the
@@ -19,8 +21,9 @@ rules of [TYPING.md](TYPING.md).
 ```sh
 sh frontend/fenrir.sh check FILE.fen           # elaborate and validate (both validators)
 sh frontend/fenrir.sh run FILE.fen             # check, then run on the Shen model
+sh frontend/fenrir.sh run FILE.fen SCHEDULE    # a program with tasks, under another schedule
 sh frontend/fenrir.sh emit FILE.fen OUT.json   # check, then write the artifact
-sh frontend/test.sh                            # the frontend's tests, about 75 seconds
+sh frontend/test.sh                            # the frontend's tests, about 3 minutes with Solo5
 ```
 
 `run` prints each emitted value in order, the outcome, where a trap arose, and
@@ -47,6 +50,8 @@ form     ::= (datatype Name constructor...)            constructor ::= Name | (N
 
 type     ::= Unit | Bool | I64 | Bytes | TrapCode | Name      a declared datatype
            | (Tuple type...)                                  1 to 8 components
+           | (Task type) | (Channel type)                     handles (TC1-C1)
+           | (Outcome type) | SendResult | (ReceiveResult type)  results the runtime makes
            | (type --> type)                                  a function with no effects
            | (type --> type ! Effect...)                      a function with exactly these effects
 
@@ -70,6 +75,8 @@ e        ::= unit | true | false | 42 | -7 | #x68ff | "text"
            | (handle Effect clause... e)           clause ::= ((operation name) -> e)
                                                             | ((operation name k) -> e)
            | (resume k e) | (discontinue k)
+           | (scope e) | (spawn e) | (await e) | (cancel e) | yield
+           | (channel type capacity) | (send e e) | (receive e) | (close e)
 
 \\ starts a comment that runs to the end of the line.
 ```
@@ -105,6 +112,8 @@ them. There is no other meaning.
 | `(handle E clause... body)` | `handle(E, [clause]..., body)`, clauses in the order written |
 | `((op x) -> e)` | the tail-resumptive clause `op(x) => e` |
 | `((op x k) -> e)` | the clause `op(x, k) => e` with its one-shot resumption |
+| `(scope e)`, `(spawn f)`, `(await t)`, `(cancel t)`, `yield` | `scope`, `spawn`, `await`, `cancel`, `yield` |
+| `(channel T 2)`, `(send c v)`, `(receive c)`, `(close c)` | `channel` with element type `T` and capacity `"2"`, `send`, `receive`, `close` |
 
 Operands are written, and evaluated, left to right. Arithmetic is checked I64:
 a result out of range traps `Overflow`, division by zero traps `DivZero`, a bad
@@ -136,6 +145,46 @@ host supplies. `run` has no host: a run that reaches a host request prints it
 host's reply; run has no host)`; a `main` that takes a request is not run. The
 harnesses supply hosts (`harness/run-tc1-durable.sh`,
 `harness/run-service-fenrir.sh`).
+
+**Tasks** (CONCURRENCY.md). `(spawn f)` starts a task running `f`, a function from
+`Unit`, usually written `(lambda (_ : Unit) body)`; it gives a `(Task T)`.
+`(await t)` gives the task's `(Outcome T)`, matched with `((Ok v) -> ...)`,
+`(Cancelled -> ...)` and `((Failed code) -> ...)`. `(channel T c)` makes a
+`(Channel T)` of capacity `c`, a literal from 1 to 8; `(send c v)` gives a
+`SendResult` (`Sent`, `Closed`), `(receive c)` a `(ReceiveResult T)`
+(`(Item x)`, `End`). `(scope e)` runs `e` in a scope whose children are joined when
+it ends. Only the runtime makes the values of `Outcome`, `SendResult` and
+`ReceiveResult`: a program matches on them and cannot construct them. A match on
+one of these types resolves its arms against that type, so a datatype may still
+declare a constructor named `Ok` or `End`. The result of a `scope`, a spawned
+function's result and a channel's elements must be serializable (CONCURRENCY.md §3);
+handles are not. The runtime effects `Task` and `Channel` are inferred like any
+other effect (`spawn` adds `Task` and the effects of the function it starts; `scope`,
+`await`, `cancel` and `yield` add `Task`; the channel forms add `Channel`), may be
+written in function types (`(Unit --> I64 ! Channel)`), cannot be handled, and may
+remain in `main`'s effect set. A program that declares a durable effect cannot use
+tasks: no contract defines the two together (CONCURRENCY.md §13).
+
+`run` on a program with tasks runs the Shen task model under the **production FIFO
+schedule** by default (CONCURRENCY.md §9, `TC1-PROD-TASK/draft-1`) and says so.
+`run FILE.fen SCHEDULE` takes another: `lowest`, `highest`, `random:N`,
+`prandom:N`, `fifo`, or a file holding a JSON list of task IDs, one per step. A policy
+is turned into its choices by `frontend/schedule.mjs` (`tools/tc1/task-schedule.mjs`,
+the policies the harnesses use); the model replays them and refuses any choice that is
+not Runnable in its own state (status 1, naming the step). Each emit is printed with
+its task; the outcome is the root's, or `deadlock:` with what each task waits for; the
+schedule line says whether the model's own records make the schedule a production
+one:
+
+```text
+$ sh frontend/fenrir.sh run examples/producer-consumer.fen
+emit "got": 1 (task 2)
+emit "got": 2 (task 2)
+emit "got": 3 (task 2)
+outcome: Ok 6
+schedule: policy fifo, a production schedule by the model's records
+steps: 274
+```
 
 **Identity.** Every expression node and every function gets a decimal ID in
 source order and a source-map row with the file as named on the command line
@@ -229,6 +278,7 @@ every message):
 | Types | `WHAT has type FOUND, but EXPECTED is expected`, where WHAT is the role (the condition of if, operand 2 of +, the argument of f, field 1 of Some, the body of f, the else branch, this match arm, the clause for E.op, the value resumed with), followed where useful by where the expectation comes from |
 | Arity | operands of an operator, fields of a constructor, binders of a match arm, parameters against a tuple type, a call with no argument |
 | Data | `project` of a non-tuple or with an index out of range; `match` on a non-datatype; a match that is not exhaustive (naming the missing constructors), has two arms for one constructor, or an arm for a constructor of another type; `=` or `emit` on a value containing a function |
+| Tasks | `spawn` of something that is not a function from `Unit`; a task or scope result, or channel elements, that are not serializable; a capacity outside 1 to 8; `await`/`cancel` of a non-task, `send`/`receive`/`close` of a non-channel, a sent value of the wrong type; constructing `Ok`, `Cancelled`, `Failed`, `Sent`, `Closed`, `Item` or `End`; `(yield)` with brackets; a handler for `Task`, `Channel` or `Emit`; declaring a built-in type; `(Task A B)`; a durable effect together with tasks |
 | Effects | an ordinary effect that reaches `main` unhandled, at the perform, call or application it comes from; a handler with a clause missing or given twice; an effect in a lambda whose wanted type does not allow it (this is how a host round trip inside `atomic` is refused: `tests/frontend/bad/durable-perform-inside-atomic.fen`); an operation type that is not serializable; a word after the effect name that is not a class |
 | Resumptions | never used; used twice on a path (at the second use); branches that disagree; used as a value; used inside a lambda or another handler's clause; `resume` or `discontinue` of something that is not a resumption |
 | Entry | no `main`; `main` not taking `I64` (or, with durable effects, not taking a serializable request); `main` returning a function |
@@ -242,9 +292,10 @@ an outcome, with status 0.
 
 ## 6 Not supported
 
-- Anything outside schema `tc1-handler-demo/2`: tasks, scopes, channels, time,
-  resources, multi-shot resumption, polymorphism, effect-row polymorphism,
-  modules and imports.
+- Anything outside schemas `tc1-handler-demo/2`, `tc1-durable-demo/1` and
+  `tc1-task-demo/1`: time, resources, actors, multi-shot resumption,
+  polymorphism, effect-row polymorphism, modules and imports; durable effects and
+  tasks in one program.
 - Patterns beyond one constructor per arm: no wildcard arm, no nested
   patterns, no literal patterns, no tuple patterns (use `project`, or several
   parameters on a `define`).
@@ -266,7 +317,7 @@ an outcome, with status 0.
 
 `sh frontend/test.sh`, development evidence only:
 
-- 13 accepted programs (8 under `examples/`, 5 under
+- 18 accepted programs (11 under `examples/`, 7 under
   `tests/frontend/programs/`) elaborate, pass validation, run on the model
   and give the outcome and emissions written in their headers (for
   `durable-host-request.fen`, the host request and the wait). Every artifact a
@@ -275,32 +326,50 @@ an outcome, with status 0.
   their contents and the Shen/JIT build), which keeps the added cost to about
   0.05 s a run: the suite took about 59 s before the Shen checker was wired in
   and about 75 s after, Solo5 skipped in both.
-- 73 wrong programs under `tests/frontend/bad/` are each rejected with the
+- 95 wrong programs under `tests/frontend/bad/` are each rejected with the
   stated message at the stated line and column. The positions were recorded
   from the elaborator's output after reading each one against its program;
   they are regression expectations, not independent predictions (two were
   predicted by hand first, and one of those predictions was a miscount; of the
   four TC1-D1 ones, all four were predicted by hand and two columns were
   miscounts, corrected from the output).
-- 32 hand fixtures (17 of `fixtures/tc1` handler cases, 5 of the TC1-D1
+- 50 hand fixtures (17 of `fixtures/tc1` handler cases, 18 TC1-C1 task cases, 5 of the TC1-D1
   durable cases, 10 of `fixtures/tc0`) rewritten in surface syntax under
   `tests/frontend/roundtrip/`: the elaborated artifact
   has the fixture's outcome and emissions on the model, and is the fixture's
   program up to a renaming of IDs.
 - Elaborating each example twice gives the same bytes.
-- The 8 examples, elaborated, run in the Solo5 guest and agree with the model
+- The 8 examples without tasks, elaborated, run in the free-running Solo5 guest and agree with the model
   step for step; the guest's two injected defects are detected on them. Both
   sides stop at 200 steps, so `bytes`, `early-exit` and `list-sum` are compared
   over their first 200 steps only.
 
 - `sh typing/run.sh` elaborates the programs above and `examples/service/`
-  with its mutants (53 artifacts; `commit-inside-atomic.fen` is rejected by the
+  with its mutants (76 artifacts, 23 of them TC1-C1; `commit-inside-atomic.fen` is rejected by the
   elaborator, as intended) and finds that both validators accept every one,
   with a checked derivation for each. A durable program is judged by both
   validators with the same input, the least value of `main`'s argument type,
   which `frontend/validate.mjs` chooses and reports; `tests/typing/datatype-field-effect.fen` is a program the
   contract allows that the JavaScript validator used to reject; that defect is
   fixed and both validators accept it ([TYPING.md](TYPING.md) §11).
+
+- TC1-C1 (tasks), measured 15 November 2026: 3 task examples
+  (`producer-consumer`, `fan-out-fan-in`, `cancel-on-failure`) and 2 task programs
+  under `tests/frontend/programs/` run under the production FIFO schedule with the
+  emissions, outcome and schedule line written in their headers before they first
+  ran; 22 wrong task programs under `tests/frontend/bad/task-*.fen` are rejected with
+  the stated message at the stated position, every position predicted before the
+  elaborator ran (by a marker in the program text, so not miscounted by hand) and all
+  22 held; all 18 TC1-C1 hand fixtures are rewritten under
+  `tests/frontend/roundtrip/` and each gives the fixture's run (FIFO) and is the
+  fixture's program up to IDs; 3 runs under a given schedule (`highest`, `lowest`,
+  a file) under `tests/frontend/schedules/` print what the fixture's expectations
+  for those schedules say (the file's choice is refused as not Runnable). Both
+  validators accept every task artifact the elaborator produced; none disagreed.
+  The three task examples run in the v3 Solo5 guest
+  ([pure-call-control-v3.md](../solo5/pure-call-control-v3.md)) under four
+  schedules each and under the guest's own FIFO, and agree with the Shen task
+  model step for step.
 
 Not checked: any property of the inference beyond these programs; that the
 elaborator rejects everything the validators reject (the driver catches the
@@ -333,3 +402,19 @@ author.
     the name, `ordinary` the default and also writable (TC1-D1).
 15. With a durable effect declared, `main` may take any serializable request; `run`
     shows the first host request and stops, having no host.
+16. TC1-C1 forms named as the contract names them: `(scope e)`, `(spawn f)`,
+    `(await t)`, `(cancel t)`, `(channel T capacity)`, `(send c v)`,
+    `(receive c)`, `(close c)`; all nine words reserved.
+17. `yield` is a bare word, like `unit`, not `(yield)`.
+18. `spawn` takes a function from `Unit`, so a task is usually
+    `(spawn (lambda (_ : Unit) body))`; a shorter `(spawn body)` that wraps the
+    body would be sugar this draft does not add.
+19. Types `(Task T)`, `(Channel T)`, `(Outcome T)`, `SendResult`,
+    `(ReceiveResult T)`, the contract's names; none can be declared.
+20. The runtime's results are matched with their contract constructors (`Ok`,
+    `Cancelled`, `Failed`, `Sent`, `Closed`, `Item`, `End`), resolved against the
+    scrutinee's type, so they need not be unique among a program's constructors;
+    constructing one is an error.
+21. `run` on a task program defaults to the production FIFO schedule and prints
+    each emit with its task; `run FILE SCHEDULE` takes a policy or a file of
+    choices.

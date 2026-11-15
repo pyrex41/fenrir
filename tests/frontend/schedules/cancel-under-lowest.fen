@@ -1,0 +1,8 @@
+\\ Run under a given schedule: main cancels before the child first runs: TaskStart delivers it and no user code runs (fixture cancel-delivered-at-scheduling-point, schedule lowest).
+\\ schedule lowest
+\\ > outcome: Ok 1
+
+(define main {I64 --> I64}
+  input -> (let t (spawn (lambda (_ : Unit) (do (emit "a" 0) (emit "b" 0) yield (emit "c" 0) 0)))
+             (do (cancel t)
+                 (match (await t) ((Ok x) -> 0) (Cancelled -> 1) ((Failed code) -> 2)))))

@@ -1,0 +1,6 @@
+\\ Round trip: the TC1-C1 hand fixture body-trap-precedence, in surface syntax.
+\\ frontend/test.sh compares this program's run (production FIFO schedule) with the run of the fixture's artifact.
+
+(define main {I64 --> I64}
+  input -> (scope (let t (spawn (lambda (_ : Unit) (+ 9223372036854775807 1)))
+                    (do yield (/ 1 0)))))
