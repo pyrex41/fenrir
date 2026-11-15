@@ -456,7 +456,7 @@ property predicate holding on its states and edges (the model's own `svc.step` a
 are explored as choices. Verdicts: accepted, rejected (first inadmissible event),
 indeterminate. Evidence: *observed history accepted; bounded crash campaign*. The
 checker's negative tests ([tests/host/histories](../tests/host/histories), 18 fabricated
-histories: a response without a commit, a duplicated mutation on retry, a cross-tenant
+histories at stage A3, 31 files with A4's 13: a response without a commit, a duplicated mutation on retry, a cross-tenant
 effect, a job lost after acceptance and others, with accepted controls) are run by every
 check. Measured numbers: [04_DIRECTION_AMENDMENT.md](../04_DIRECTION_AMENDMENT.md) §8,
 stage A3.
@@ -464,7 +464,7 @@ stage A3.
 ## The proposed service gate
 
 ```sh
-sh harness/run-service-gate.sh          # the proposed service gate, about 5 min (4 min 43 s measured)
+sh harness/run-service-gate.sh          # the proposed service gate: about 5 min for the required rows (4 min 43 s measured), about 25 to 30 min with the optional rows
 ```
 
 [service-gate.shen](service-gate.shen), manifest
@@ -486,14 +486,44 @@ a fresh process). Fields the rows rely on are those the programs report; nothing
 added to them. Bounded exploration at the stated scope, development grade; the
 Shen-to-Rocq correspondence is by reading (ledger row `SERVICE-ACCEPTED-JOB`).
 
-One optional row, `a3-host-quick` (ledger row `SERVICE-A3-HOST`), runs stage A3,
+Five optional rows follow the required ones; none backs a claim, and an optional row's
+FAIL, BLOCKED or UNKNOWN does not change the aggregate (the aggregation rule counts
+required rows). Each decides on the fields its program reports and nothing was added to
+them.
+
+`a3-host-quick` (ledger row `SERVICE-A3-HOST`) runs the host,
 `sh host/service/check.sh quick` (Erlang/OTP and SQLite from `.#fenrir-a3-tools`, about
-2 to 5 min): PASS only on `development-pass` with all 10 campaigns' histories accepted
-(none rejected or indeterminate, audits clean), every host mutant but the documented
-`sync_off` caught, `sync_off` reported as not detectable by this campaign (power loss is
-not simulated), the equivalent control unflagged and the history checker's 18 negative
-tests as expected; BLOCKED without the A3 tools or Solo5; UNKNOWN on a timeout or no
-report; FAIL otherwise.
+6.5 min measured). It was pinned to stage A3's report (10 campaigns, 8 host mutants, 18
+negative tests); stage A4 extended the same check, and the row now pins stages A3 and A4
+together, as one row because it is one run: PASS only on `development-pass` with the unit
+tests passing and all 15 campaigns' histories accepted (the 10 of A3 and `upgrade_cas`,
+`upgrade_crash`, `upgrade_load`, `upgrade_manifest`, `upgrade_stale`; none rejected or
+indeterminate, audits clean, scenario checks ok), the normal stack flagging nothing, every
+one of the 18 host mutants but the documented `sync_off` caught (by `caught_by_history_checker`,
+`caught_by_scenario_checks` or `caught_by_sqlite_audit`), `sync_off` reported as not
+detectable by this campaign (power loss is not simulated), both equivalent controls
+(`equivalent_control`, `equivalent_control_a4`) unflagged, and each of the history
+checker's 31 negative tests (18 of A3, 13 of A4) `as_expected`; BLOCKED without the tools
+or Solo5; UNKNOWN on a timeout or no report; FAIL otherwise.
+
+Four optional rows cover stage A4 (ledger row `SERVICE-A4-UPGRADE`; the A4 history
+negatives and host families are in `a3-host-quick`), at the A4 scope of
+`harness/run-service-upgrade.sh` (2 tenants, 1 key, 2 digests; 2 submits, 2 deliveries, 1
+response, 1 crash, 1 dispatch, 4 upgrade steps; cap 1,500,000), pinned by the evaluator:
+
+| Row | Runs | PASS needs |
+| --- | --- | --- |
+| `a4-model` | `service-upgrade.shen` (about 6.5 min, about 4.3 GB) | `status` development-pass; `hand_traces.all_agree`; `model` complete, not truncated, 545,360 product states, 64,676 system states, 3,511,584 edges, no violation; `a1_subscope.agree` with both sub-scope models complete; each of the 12 mutants has `pass` and `caught_by`, `equivalent-control` caught by nothing; no entry in `properties_never_failing_on_a_mutant`, and in `checks_never_failing_on_a_mutant` only `recovery.obligations` and `progress.terminal-stable`, which A1's mutants cover. Truncation, another scope, graph or mutant set, a crash or no report is UNKNOWN |
+| `a4-fenrir-refinement` | the frontend on the v1 and v2 handlers, the migration and the mutants of `examples/service/mutants-a4`, then `service-upgrade-fenrir.shen` sandboxed (about 6.5 min) | `refinement.refines`, `same_graph_as_a4_model`, `steps_differing` 0 of 8,652,088, `compare_and_swap_checks` 84 with `compare_and_swap_failures` 0, no violation, `javascript_sample` ran sandboxed and agrees on every one of 189 runs, 6 Fenrir mutants caught and both equivalent controls unflagged. Same UNKNOWN conditions |
+| `a4-solo5-agreement` | `solo5-durable.shen` quick on the sample of the row above | the guest driven on as many `programs` as the sample has runs, all `programs_agreeing_with_model`; BLOCKED without Solo5 or when the guest cannot be built |
+| `a4-retained-replay` | `replay` of each of the 43 files of `spec/service/counterexamples-a4` and 16 of `counterexamples-a4-fenrir`, each in a fresh process | every file reports `reproduced`; another count, no report or no elaboration in the run is UNKNOWN |
+
+The proposed gate's full run, with these rows, takes about 25 to 30 minutes; it runs the heavy
+programs strictly one after another (the A1 exploration peaks near 7.6 GB, A4 near 4.3
+GB). The limits of the A4 rows are the ledger row's gaps: bounded scope (1 key, 2
+submits), one author lineage, the choices of UPGRADE.md section 11 unconfirmed by the
+owner, no rollback after migrate, the fencing of a stale v1 submit resting on a
+column-count accident (as the A4 author reported), and fsync honesty untested.
 
 ## Service example A4: a versioned upgrade that preserves pending work
 
