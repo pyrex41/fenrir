@@ -476,9 +476,44 @@ sh harness/run-tc1-task-explore.sh      # exhaustive-small: the obligation of se
   any step (373 programs). The implementation agrees with the model on one
   witness schedule per reference observation class (15,808).
 
+```sh
+sh harness/run-solo5-tasks.sh           # the Solo5 guest over control protocol v3, ~20 s
+sh harness/run-tc1-task-loop.sh         # generated family, catalog coverage, campaigns, replay, ~2 min
+sh frontend/test.sh                     # surface syntax, includes the task programs
+```
+
+- **Solo5 guest** (`backends/solo5/pure-call/tasks.c`, protocol
+  [pure-call-control-v3.md](../solo5/pure-call-control-v3.md), where the schedule is an
+  input exactly as the model takes it): the 151 recorded (fixture, schedule) runs
+  with the host naming every task, 248 exploration witnesses for 72 programs of G
+  (every 50th), and all 90 programs under the guest's own FIFO policy agree with the
+  Shen model step for step (22,725 steps); every guest FIFO schedule is a production
+  schedule by the model's records and equals the declared FIFO schedule. Four
+  injected guest defects are detected (`cancel-off-point` 18 runs, `lost-wakeup` 48,
+  `capacity-off-by-one` 7, `fifo-reversed` 18 of 18, the last only by the FIFO
+  comparison: those schedules are still production ones); 169 tapes replay exactly on
+  cold boots; 18 tape, 15 hostile-host and 5 hostile-guest negatives and 10 byte
+  vectors hold. The free-running guest refuses task programs.
+- **Frontend** ([SURFACE.md](SURFACE.md) §2, "Tasks"): three task examples, two
+  more accepted programs, 22 rejected programs at predicted positions, round trips of
+  all 18 hand fixtures, three runs under given schedules; `run` uses the production
+  FIFO schedule. Both validators accepted every task artifact the elaborator produced.
+- **Loop closure**: a generated family of 200 programs beyond G under five policies
+  (1,000 runs, model and implementation agree on all, all nine defects killed there);
+  catalog coverage over hand, all of G and generated traces against the pinned
+  [task-catalog.json](task-catalog.json): 53 of 53 transitions exercised, no step
+  outside it, no control, depth or scheduling-point mismatch, and the queue invariant
+  of §4 after every model step of the hand and generated runs; reduction campaigns for
+  `lifo_channel`, `lost_wakeup_await`, `no_sibling_cancel` and `capacity_off_by_one`
+  (62→23, 78→10, 61→11 and 67→19 nodes), the original and minimized (program,
+  schedule) pairs retained in `fixtures/tc1/task-retained-failures.json`; strict
+  tapes that bind the schedule for all 151 hand runs and the 8 retained failures
+  (each diverging at exactly its retained epoch with its defect, admitted without).
+
 The full numbers are in [harness/README.md](../../harness/README.md). Evidence
 grade: development, bounded exploration; no gate verdict. The obligation is
-checked on G only; it is not proved.
+checked on G only; it is not proved. The fixtures, the three machines (Shen,
+JavaScript, C) and the harnesses share one author lineage.
 
 ## 13 For the owner to confirm
 

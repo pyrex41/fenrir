@@ -11,6 +11,8 @@ subprocess libraries.
 sh harness/run-solo5-pure-call.sh          # Solo5 guest against the model, full scope, ~5 s
 sh harness/run-solo5-pure-call.sh exact    # exact arithmetic: C guest against the model, ~4 s
 sh harness/run-solo5-control.sh            # Solo5 guest under host-selected steps, strict replay, ~20 s
+sh harness/run-solo5-tasks.sh              # TC1-C1 tasks in the guest, host-selected schedules and guest FIFO, ~20 s
+sh harness/run-tc1-task-loop.sh            # TC1-C1 generated family, coverage, campaigns, replay, ~2 min
 sh harness/run-model-vs-candidate.sh       # JavaScript implementation against the model, ~11 s
 ```
 
