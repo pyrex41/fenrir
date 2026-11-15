@@ -22,7 +22,7 @@
 %% Reply type, so a busy store cannot be told to the program).
 -module(fenrir_worker).
 -behaviour(gen_server).
--export([start_link/2, run/2, run/3, check_image/1]).
+-export([start_link/2, run/2, run/3, check_image/1, run_migration/2, image_version/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -define(FRAME_TIMEOUT, 10000).
@@ -31,19 +31,46 @@
 start_link(Name, Opts) -> gen_server:start_link({local, Name}, ?MODULE, Opts, []).
 
 %% run(Worker, Request) -> {ok, ResultValue, Stats} | {refused, Why} | {Outcome, Why, Stats}
-%%   Outcome: busy | aborted (nothing committed) | indeterminate (a commit may have
-%%   happened and no response exists) | failed (no commit was attempted)
+%%   Outcome: busy | stale (the commit's version is not in force: nothing applied) |
+%%   aborted (nothing committed) | indeterminate (a commit may have happened and no
+%%   response exists) | failed (no commit was attempted)
 run(Worker, Request) -> run(Worker, Request, 120000).
 run(Worker, Request, Timeout) -> gen_server:call(Worker, {run, Request}, Timeout).
 
+%% A4 (UPGRADE.md section 4.3, 10): a worker started by the supervisor (resolve => true)
+%% takes the image of the version in force from the durable upgrade state: the
+%% configured v1 image in v1 and prepared, none while migrated (it then refuses every
+%% request: unavailable), the v2 image named in meta in v2. It refuses to start with an
+%% image whose contract version is not the one in force. Without resolve the image is
+%% the one given (unit tests).
 init(Opts) ->
     process_flag(trap_exit, true),
-    case check_image(maps:get(image, Opts)) of
-        {ok, Image} -> {ok, Opts#{image_info => Image, boots => 0}};
-        {error, E} -> {stop, E}
+    case image_for(Opts) of
+        none -> {ok, Opts#{image_info => none, boots => 0}};
+        {Path, Want} ->
+            case check_image(Path) of
+                {ok, Image} ->
+                    case Want =:= any orelse image_version(Image) =:= Want of
+                        true -> {ok, Opts#{image_info => Image, boots => 0}};
+                        false -> {stop, {image_version_not_in_force, image_version(Image), Want}}
+                    end;
+                {error, E} -> {stop, E}
+            end
     end.
 
-%% The image descriptor, the image and tender identities, and the capability manifest.
+image_for(Opts = #{resolve := true}) ->
+    #{upgrade := U, v2_image := V2} = fenrir_store:upgrade_state(),
+    case fenrir_store:in_force(U) of
+        1 -> {maps:get(image, Opts), 1};
+        none -> none;
+        2 -> {binary_to_list(V2), 2}
+    end;
+image_for(Opts) -> {maps:get(image, Opts), any}.
+
+image_version(I) -> maps:get(contract, I).
+
+%% The image descriptor, the image and tender identities, and the capability manifest;
+%% the image's contract version is recorded in the result as `contract`.
 check_image(ImageJson) ->
     try
         I = json:decode(element(2, {ok, _} = file:read_file(ImageJson))),
@@ -54,12 +81,28 @@ check_image(ImageJson) ->
         Artifact = filename:join(maps:get(<<"batch_dir">>, I), "artifacts/0.json"),
         ok = same_sha(Artifact, maps:get(<<"artifact_sha256">>, I), artifact),
         case fenrir_manifest:check(Artifact, I) of
-            ok -> {ok, I};
+            {ok, V} -> {ok, I#{contract => V}};
             {refused, Why} -> {error, {capability_manifest_refused, Why}}
         end
     catch
         throw:{identity, What} -> {error, {image_identity, What}};
         C:E -> {error, {bad_image_descriptor, C, E}}
+    end.
+
+%% A4: one boot of the migration image (UPGRADE.md section 5) in the calling process:
+%% {ok, ResultValue, Stats} | {refused, Why} | {Outcome, Why, Stats}.
+run_migration(ImageJson, Opts) ->
+    case check_image(ImageJson) of
+        {ok, I} ->
+            case image_version(I) of
+                migration ->
+                    case find([<<"migrate">>], I) of
+                        {ok, Program} -> session(Program, Opts#{image_info => I});
+                        R -> R
+                    end;
+                V -> {refused, {not_a_migration_image, V}}
+            end;
+        {error, E} -> {refused, E}
     end.
 
 same_sha(File, Want, What) ->
@@ -72,7 +115,27 @@ same_sha(File, Want, What) ->
         _ -> throw({identity, {missing, What}})
     end.
 
-handle_call({run, Request}, _From, S = #{image_info := I}) ->
+%% A supervised worker re-reads the version in force before each run: if it is no
+%% longer its image's (a cut-over, or a crash after the cut-over committed and before the
+%% workers were replaced), it does not run the request and stops, and its supervisor
+%% restarts it with the image of the version now in force. The store's fencing is the
+%% guarantee; this keeps the service available after a cut-over whose reply was lost.
+%% (stale_workers mutant: no re-read.)
+handle_call({run, Request}, From, S = #{resolve := true}) when map_get(mutant, S) =/= stale_workers ->
+    Want = try fenrir_store:in_force(maps:get(upgrade, fenrir_store:upgrade_state()))
+           catch exit:_ -> unknown
+           end,
+    Have = case maps:get(image_info, S) of none -> none; I -> image_version(I) end,
+    if
+        Want =:= unknown -> {reply, {failed, store_unavailable, #{}}, S};
+        Want =:= Have -> run_request(Request, From, S);
+        true -> {stop, {shutdown, {version_in_force_changed, Have, Want}}, {failed, version_in_force_changed, #{}}, S}
+    end;
+handle_call({run, Request}, From, S) -> run_request(Request, From, S).
+
+run_request(_Request, _From, S = #{image_info := none}) ->
+    {reply, {refused, no_version_in_force}, S};
+run_request(Request, _From, S = #{image_info := I}) ->
     case entry(Request, I) of
         {ok, Program} ->
             T0 = erlang:monotonic_time(microsecond),
@@ -133,7 +196,8 @@ init_payload(Program, I) ->
 %% A failed session's outcome, from what the store did in it.
 outcome(Kind, Why, St) ->
     O = case {Kind, maps:get(commit, St)} of
-            {busy, _} -> busy;
+            {busy, none} -> busy;
+            {stale, none} -> stale;
             {aborted, none} -> aborted;
             {aborted, _} -> indeterminate;
             {indeterminate, _} -> indeterminate;
@@ -162,38 +226,58 @@ drive(St, I) ->
         Other -> throw({fail, failed, {execution, Other}, St3})
     end.
 
+%% A host request: Store.commit (a handler) or Migration.read/stage/install (the
+%% migration program, UPGRADE.md section 5). Anything else fails closed.
 host_request(Record, St, I) ->
     Seq = maps:get(requests, St),
-    Value = case [E || E <- maps:get(<<"events">>, Record), maps:get(<<"kind">>, E) =:= <<"HostRequest">>] of
-                [#{<<"seq">> := SeqB, <<"effect">> := <<"Store">>, <<"operation">> := <<"commit">>, <<"value">> := V}] ->
-                    SeqB =:= integer_to_binary(Seq) orelse throw({fail, failed, {'BadSteps', request_seq}, St}),
-                    try fenrir_value:from_json(V) catch _:_ -> throw({fail, failed, {'BadSteps', request_value}, St}) end;
-                _ -> throw({fail, failed, {'BadSteps', host_request}, St})
-            end,
-    fenrir_faults:hit(w2_request_before_commit, maps:get(ctx, St)),
+    {Effect, Op, Value} =
+        case [E || E <- maps:get(<<"events">>, Record), maps:get(<<"kind">>, E) =:= <<"HostRequest">>] of
+            [#{<<"seq">> := SeqB, <<"effect">> := Ef, <<"operation">> := O, <<"value">> := V}] ->
+                SeqB =:= integer_to_binary(Seq) orelse throw({fail, failed, {'BadSteps', request_seq}, St}),
+                {Ef, O, try fenrir_value:from_json(V) catch _:_ -> throw({fail, failed, {'BadSteps', request_value}, St}) end};
+            _ -> throw({fail, failed, {'BadSteps', host_request}, St})
+        end,
+    Kind = case {Effect, Op} of
+               {<<"Store">>, <<"commit">>} -> store;
+               {<<"Migration">>, M} when M =:= <<"read">>; M =:= <<"stage">>; M =:= <<"install">> -> migration;
+               _ -> throw({fail, failed, {'BadSteps', {host_request, Effect, Op}}, St})
+           end,
+    case Kind of
+        store -> fenrir_faults:hit(w2_request_before_commit, maps:get(ctx, St));
+        migration ->
+            fenrir_faults:hit(m1_before_request, maps:get(ctx, St)),
+            Op =:= <<"install">> andalso fenrir_faults:hit(m2_before_install, maps:get(ctx, St))
+    end,
     %% A guest that is already gone gets no commit made on its behalf.
     Port = maps:get(port, St),
     receive {Port, {exit_status, N}} -> throw({fail, failed, {tender_exit, N}, St})
     after 0 -> ok
     end,
-    St1 = St#{commit := sent},
-    case fenrir_store:commit(Value) of
+    Writes = Kind =:= store orelse Op =:= <<"install">>,
+    St1 = case Writes of true -> St#{commit := sent}; false -> St end,
+    Answer = case Kind of
+                 store -> fenrir_store:commit(Value);
+                 migration -> fenrir_store:migration(binary_to_atom(Op), Value)
+             end,
+    case Answer of
         {reply, Reply} ->
-            St2 = St1#{commit := committed, replies := maps:get(replies, St1) ++ [fenrir_value:encode(Reply)]},
-            fenrir_faults:hit(w3_commit_before_reply, maps:get(ctx, St2)),
+            St2 = St1#{commit := case Writes of true -> committed; false -> maps:get(commit, St1) end,
+                       replies := maps:get(replies, St1) ++ [fenrir_value:encode(Reply)]},
+            Kind =:= store andalso fenrir_faults:hit(w3_commit_before_reply, maps:get(ctx, St2)),
             {J, St3} = request(St2, $A, fenrir_proto:reply_payload(Seq, Reply), $S),
             {Records, St4} = records(J, St3, 1),
             Echo = [V || #{<<"events">> := Es} <- Records, #{<<"kind">> := <<"HostReply">>, <<"value">> := V} <- Es],
             Echo =:= [json:decode(fenrir_value:encode(Reply))] orelse throw({fail, failed, {'BadSteps', reply_echo}, St4}),
-            fenrir_faults:hit(w4_reply_before_response, maps:get(ctx, St4)),
+            Kind =:= store andalso fenrir_faults:hit(w4_reply_before_response, maps:get(ctx, St4)),
             St5 = St4#{requests := Seq + 1},
             case maps:get(<<"execution">>, J) of
                 <<"Running">> -> drive(St5, I);
                 <<"Completed">> -> completed(Records, St5);
                 X -> throw({fail, failed, {execution, X}, St5})
             end;
-        busy -> throw({fail, busy, store_busy, St1#{commit := none}});
-        {aborted, Why} -> throw({fail, aborted, Why, St1#{commit := none}});
+        busy -> throw({fail, busy, store_busy, St1#{commit := maps:get(commit, St)}});
+        {stale, Why} -> throw({fail, stale, Why, St1#{commit := maps:get(commit, St)}});
+        {aborted, Why} -> throw({fail, aborted, Why, St1#{commit := maps:get(commit, St)}});
         {indeterminate, Why} -> throw({fail, indeterminate, Why, St1})
     end.
 

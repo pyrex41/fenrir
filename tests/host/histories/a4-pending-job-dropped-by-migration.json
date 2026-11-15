@@ -1,0 +1,1 @@
+{"schema":"fenrir.service.history/2","tenants":2,"scenario":"a4-pending-job-dropped-by-migration","expect":"rejected","note":"after migrate the pending job is gone","events":[["submit",0,0,0,["accepted",[0,0,0,0,0]]],["upgrade","begin","good",["ok"]],["upgrade","migrate",["ok"]],["observe",[[[[0,0]],[],[[0,0,[0,0,0,0,0]]],1],[[],[],[],0]],["migrated","good"]]],"expect_index":3}

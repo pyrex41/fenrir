@@ -64,6 +64,21 @@ command({arm_port, Kind, N}, _) -> fenrir_store:arm_port(Kind, N);
 command(fired, _) -> fenrir_faults:fired();
 command(pids, _) -> #{beam => list_to_integer(os:getpid()), sqlite_port => fenrir_store:port_os_pid()};
 command({concurrent, Requests}, _) -> concurrent(Requests);
+%% A4: the upgrade orchestration API (fenrir_upgrade), and requests started now and
+%% awaited later (a run held at a paused fault point across an upgrade step).
+command({begin_upgrade, V2Image, MigImage}, _) -> fenrir_upgrade:begin_upgrade(V2Image, MigImage);
+command(abort_upgrade, _) -> fenrir_upgrade:abort_upgrade();
+command(migrate, _) -> fenrir_upgrade:migrate();
+command(cut_over, _) -> fenrir_upgrade:cut_over();
+command(upgrade_state, _) -> fenrir_upgrade:state();
+command({async, Req}, _) ->
+    async_table(),
+    T = erlang:unique_integer([positive]),
+    spawn(fun() -> R = try one(Req) catch C:E -> {error, {C, E}} end, ets:insert(fenrir_async, {T, R}) end),
+    {ticket, T};
+command({await, T}, _) -> await(T, 6000);
+command({release, Point}, _) -> fenrir_faults:release(Point);
+command({paused, Point}, _) -> wait_paused(Point, 500);
 command(ping, _) -> pong;
 command(diag, _) ->
     Sup = whereis(fenrir_worker_sup),
@@ -71,6 +86,39 @@ command(diag, _) ->
       worker_sup => catch erlang:process_info(Sup, [current_stacktrace, message_queue_len, status]),
       w1 => whereis(w1)};
 command(stop, _) -> ok.
+
+one({submit, T, K, D, P}) -> fenrir_front:submit(T, K, D, P);
+one({complete, T, J, Ok}) -> fenrir_front:complete(T, J, Ok);
+one(migrate) -> fenrir_upgrade:migrate();
+%% A worker the supervisor does not know (a stale v1 worker left behind by an
+%% upgrade): it keeps the image it was started with, so only the store can fence it.
+one({detached, Req}) ->
+    Name = list_to_atom("detached" ++ integer_to_list(erlang:unique_integer([positive]))),
+    Opts = #{image => persistent_term:get(fenrir_v1_image), launcher => persistent_term:get(fenrir_launcher),
+             console_dir => persistent_term:get(fenrir_console_dir), name => Name},
+    {ok, W} = gen_server:start({local, Name}, fenrir_worker, Opts, []),
+    try fenrir_front:request_on(Name, Req) after gen_server:stop(W) end.
+
+async_table() ->
+    case ets:info(fenrir_async) of
+        undefined -> ets:new(fenrir_async, [named_table, public, set]), ok;
+        _ -> ok
+    end.
+
+await(_, 0) -> {error, await_timeout};
+await(T, N) ->
+    case ets:lookup(fenrir_async, T) of
+        [{T, R}] -> ets:delete(fenrir_async, T), {done, R};
+        [] -> timer:sleep(20), await(T, N - 1)
+    end.
+
+%% true once a process is held at Point (at most N x 20 ms).
+wait_paused(_, 0) -> false;
+wait_paused(Point, N) ->
+    case fenrir_faults:paused(Point) of
+        true -> true;
+        false -> timer:sleep(20), wait_paused(Point, N - 1)
+    end.
 
 %% Run requests at once, one caller process each (the workers are picked round-robin).
 concurrent(Requests) ->

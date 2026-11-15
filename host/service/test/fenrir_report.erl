@@ -18,7 +18,7 @@ main([ConfigFile, HistExit]) ->
     Families = lists:usort([maps:get(family, R) || R <- Normal]),
     FamilyJson = maps:from_list([{atom_to_binary(F), family(F, [R || R <- Normal, maps:get(family, R) =:= F])} || F <- Families]),
     NormalOk = Normal =/= [] andalso lists:all(fun(R) -> not maps:get(flagged, R) end, Normal),
-    Mutants = [mutant(M, [R || R <- Rows, maps:get(mutant, R) =:= M]) || M <- maps:get(mutants, C)],
+    Mutants = [mutant(M, [R || R <- Rows, maps:get(mutant, R) =:= M]) || M <- maps:get(mutants, C) ++ maps:get(a4_mutants, C, [])],
     MutantsOk = lists:all(fun(M) -> maps:get(<<"as_expected">>, M) end, Mutants),
     Neg = [negative(N) || N <- Negatives],
     NegOk = Neg =/= [] andalso lists:all(fun(N) -> maps:get(<<"as_expected">>, N) end, Neg),
@@ -34,8 +34,9 @@ main([ConfigFile, HistExit]) ->
           <<"status">> => case Pass of true -> <<"development-pass">>; false -> <<"development-fail">> end,
           <<"evidence">> => <<"observed history accepted; bounded crash campaign">>,
           <<"qualification">> => <<"UNKNOWN">>,
-          <<"stage">> => <<"A3 (04_DIRECTION_AMENDMENT.md section 8)">>,
-          <<"contract">> => [<<"spec/service/ACCEPTED_JOB.md">>, <<"spec/service/HANDLER.md">>, <<"host/service/CONTRACT.md">>],
+          <<"stage">> => <<"A3 and A4 (04_DIRECTION_AMENDMENT.md section 8)">>,
+          <<"contract">> => [<<"spec/service/ACCEPTED_JOB.md">>, <<"spec/service/HANDLER.md">>, <<"spec/service/UPGRADE.md">>,
+                             <<"host/service/CONTRACT.md">>],
           <<"mode">> => atom_to_binary(maps:get(mode, C)),
           <<"artifact_source">> => list_to_binary(maps:get(artifact_source, C)),
           <<"identities">> => identities(C, I),
@@ -57,7 +58,8 @@ main([ConfigFile, HistExit]) ->
           <<"not_covered">> => [<<"power loss and fsync honesty: kill -9 of a process cannot drop the OS page cache, so synchronous=OFF is NOT DETECTED by this campaign">>,
                                 <<"disk corruption, torn sectors, a lying disk">>, <<"SQLite itself">>, <<"OTP itself">>,
                                 <<"isolation between several workers on one store beyond the observed serialized runs (one adapter process serializes commits)">>,
-                                <<"performance">>, <<"requests outside the image's request domain (protocol v2 lowers entry inputs into the image)">>]},
+                                <<"performance">>, <<"requests outside the image's request domain (protocol v2 lowers entry inputs into the image)">>,
+                                <<"A4: replacing a running guest; schema histories longer than v1 to v2; rollback between migrate and cut-over and after cut-over (not supported); several nodes or adapters on one file">>]},
     ok = file:write_file(filename:join(Out, "report.json"), json:encode(Report)),
     halt(0).
 
@@ -108,7 +110,8 @@ flag_json(R) ->
 mutant(M, Rs) ->
     Flagged = [R || R <- Rs, maps:get(flagged, R)],
     By = fun(Reason) -> [list_to_binary(maps:get(name, R)) || R <- Flagged, lists:member(Reason, maps:get(reasons, R))] end,
-    Expect = case M of equivalent_control -> not_flagged; sync_off -> not_detectable_here; _ -> caught end,
+    Expect = case M of equivalent_control -> not_flagged; equivalent_control_a4 -> not_flagged;
+                 sync_off -> not_detectable_here; _ -> caught end,
     Caught = Flagged =/= [],
     AsExpected = case Expect of caught -> Caught; not_flagged -> not Caught; not_detectable_here -> true end,
     #{<<"mutant">> => atom_to_binary(M), <<"expected">> => atom_to_binary(Expect),

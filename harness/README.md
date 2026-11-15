@@ -477,6 +477,89 @@ a fresh process). Fields the rows rely on are those the programs report; nothing
 added to them. Bounded exploration at the stated scope, development grade; the
 Shen-to-Rocq correspondence is by reading (ledger row `SERVICE-ACCEPTED-JOB`).
 
+## Service example A4: a versioned upgrade that preserves pending work
+
+```sh
+sh harness/run-service-upgrade.sh                    # the A4 model, ~7 min, ~4.3 GB
+sh harness/run-service-upgrade.sh 2 1 2 1 1 1 1 1 3 200000   # a small scope, ~10 s
+sh harness/run-service-upgrade.sh replay-retained    # the 43 retained counterexamples, ~10 s
+sh harness/run-service-upgrade-fenrir.sh             # Fenrir handlers + migration, JS, Solo5, ~7 min
+sh harness/run-service-upgrade-fenrir.sh replay-retained   # the 16 retained counterexamples
+```
+
+Contract [spec/service/UPGRADE.md](../spec/service/UPGRADE.md) (draft 1, version-pinned
+runs, every job migrated by one atomic transition, fencing in the commit); model
+[models/service-a4/upgrade.shen](../models/service-a4/upgrade.shen) on A1's own transaction
+for v1, properties [upgrade-properties.shen](../models/service-a4/upgrade-properties.shen)
+(A1's, carried across the upgrade on the v1 view of a state, and pending, receipts,
+version and manifest checks: 18 checks in 10 properties). [service-upgrade.shen](service-upgrade.shen)
+loads the A1 explorer as a library and explores the A4 model breadth first over
+[State Monitor Budget], with six budgets (submits, deliveries, responses, crashes,
+dispatches, upgrade steps). Evidence: *bounded exploration passed*, development grade.
+
+Default scope: 2 tenants, 1 key, 2 digests; at most 2 submits, 2 deliveries, 1 response,
+1 crash, 1 dispatched run, 4 upgrade steps. Measured on 15 November 2026:
+
+| What | Result |
+| --- | --- |
+| Hand traces ([spec/service/upgrade-hand-traces.json](../spec/service/upgrade-hand-traces.json), written after the model and before anything ran) | 12 of 12 agree on the first run; no contradiction to record |
+| A4 model | 545,360 product states (517,760 without the monitor), 64,676 system states (8,385 in each of `v1`, `prepared`, `migrated`; 39,521 in `v2`), 3,511,584 edges, depth 12, no violation, not truncated, no disabled alphabet step; 30 s |
+| A1 sub-scope | the A4 model with no dispatch and no upgrade step gives A1's graph exactly at the same parameters (1,578 product states, 565 system states, 6,887 edges) |
+| Fenrir machine ([service-upgrade-fenrir.shen](service-upgrade-fenrir.shen)) | v1 handler (A2's, unchanged), [accepted-job-v2.fen](../examples/service/accepted-job-v2.fen) and [migrate-v1-v2.fen](../examples/service/migrate-v1-v2.fen) on the Shen TC1-D1 model, with the A4 host contracts ([store-contract-v2.shen](../models/service-a4/store-contract-v2.shen)): the A4 model's graph exactly; 8,652,088 steps compared with the model's, none differ; 84 compare-and-swap checks (a v1 commit between the migration's snapshot and its install: `Changed`, nothing applied, then the migration of the new state), none fail |
+| Runs | 1,048 run prefixes, 189 distinct completed runs (24 v1, 32 v2, 133 migration) |
+| JavaScript | the sandboxed TC1-D1 implementation agrees on all 189 runs, 48,332 steps |
+| Solo5 guest | protocol v2, all 189 runs agree at every step (48,332 steps, 1,962 replies, 97,609 frames), fuel 5000 (the batch's `fuel`, new optional member) |
+
+Model mutants ([service-upgrade-mutants.shen](service-upgrade-mutants.shen)), predictions
+in [spec/service/upgrade-mutant-predictions.json](../spec/service/upgrade-mutant-predictions.json)
+written before they ran; the shortest counterexample per property (aim in bold) and, for
+receipts, the retry check. Every predicted length was right at the default scope.
+
+| Mutant | Caught by (length) |
+| --- | --- |
+| migration-drops-pending | **pending 3** (`pending.preserved`), atomicity 3, response 3, progress 4 |
+| migration-not-atomic | **version 3** (`version.transitions`, `version.readable`), pending 3, progress 4 |
+| cutover-before-migration | **version 2** (`version.transitions`; `version.readable` 3), pending 3, progress 4 |
+| stale-v1-commit (no fencing) | **version 4** (`version.readable`), pending 4, progress 5 |
+| keys-not-migrated | **receipts 3** (`receipts.immutable`; `receipts.retry-stable` 5: the retry re-applies), atomicity 3, response 3 |
+| receipt-rewritten | **receipts 3** (`receipts.immutable`; `receipts.retry-stable` 5: the retry returns another receipt), response 3 |
+| deliver-to-v1 | **version 5** (`version.readable`: a finished job with no attempt counted) |
+| no-manifest-check | **manifest 1** |
+| volatile-upgrade-state | **recovery 2** (`recovery.crash-frame`), version 2, pending 4 and progress 5 (not predicted: after the crash v1 is in force on a migrated store) |
+| v2-shared-counter | **authority 4** |
+| v2-duplicate-delivery-counted | **retry 5** (`retry.delivery`), version 6 |
+| v2-retry-reapplies | **retry 5** (`retry.replay`), receipts 5, atomicity 5, response 5 |
+| equivalent-control | nothing; the model's graph |
+
+The last three were added after the first (small-scope) run showed authority and retry
+never failing on an upgrade mutant; they were predicted before they ran. A1's
+`recovery.obligations` and `progress.terminal-stable` fail on no A4 mutant (A1's mutants
+cover them). Fenrir mutants ([examples/service/mutants-a4](../examples/service/mutants-a4),
+predictions [upgrade-fenrir-mutant-predictions.json](../spec/service/upgrade-fenrir-mutant-predictions.json)):
+v2-forgot-count-attempt (**version 5**), v2-stage-attempt-one (**version 4**),
+migrate-drops-pending (**pending 3**, atomicity 3, response 3, progress 4),
+migrate-rewrites-receipts (**receipts 3**, retry-stable 5, response 3), migrate-drops-keys
+(**receipts 3**, retry-stable 5, atomicity 3, response 3), migrate-wrong-attempts
+(**version 4**), all at the predicted lengths; v2-equivalent-control and
+migrate-equivalent-control give the model's graph. Retained counterexamples:
+[spec/service/counterexamples-a4](../spec/service/counterexamples-a4) (43, one per violated
+check) and [counterexamples-a4-fenrir](../spec/service/counterexamples-a4-fenrir) (16); all
+replay.
+
+Two findings on the way. The migration was first written with one `snapshot` reply
+holding every row: it ran in the Shen model and the JavaScript implementation but not in
+the Solo5 guest, because control protocol v2 limits a host reply to 512 bytes
+(`GuestError Oversize`); it now reads one row per request (UPGRADE.md §5). The Solo5
+durable batch fixed fuel at 200, too few for a migration; `control-durable-build.mjs`
+now takes an optional `fuel` from the programs file (default unchanged).
+
+The real stack: [host/service/README.md](../host/service/README.md) ("Stage A4") and
+[CONTRACT.md](../host/service/CONTRACT.md) §7; histories of schema `/2` are checked
+against the A4 model by [service-history-upgrade.shen](service-history-upgrade.shen),
+loaded by [service-history.shen](service-history.shen) (13 new negative and positive tests
+in [tests/host/histories](../tests/host/histories), `a4-*.json`; `/1` histories are checked
+as before).
+
 ## What is still not Shen
 
 | Piece | Now | Notes |

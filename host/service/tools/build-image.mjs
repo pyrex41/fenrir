@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 // Stage A3: build the Solo5 guest image of the accepted-job handler for the OTP host.
 //
-//   node host/service/tools/build-image.mjs ARTIFACT.json OUTDIR TENANTS KEYS DIGESTS JOBS
+//   node host/service/tools/build-image.mjs ARTIFACT.json OUTDIR TENANTS KEYS DIGESTS JOBS [CONTRACT]
+//
+// CONTRACT (A4, spec/service/UPGRADE.md section 2) is the storage-contract version the image
+// claims, 1 (default) or 2; the host refuses a descriptor whose claim differs from the
+// contract its manifest matches (host/service/src/fenrir_manifest.erl).
 //
 // Control protocol v2 lowers each entry input INTO the image (spec/solo5/pure-call-control-v2.md
 // section 3: one image entry is one (artifact, input) pair; Init selects an entry by index).
@@ -23,7 +27,10 @@ import {encode} from '../../../tools/tc0/canonical.mjs';
 
 const root=resolve(import.meta.dirname,'../../..');
 const sha=b=>createHash('sha256').update(b).digest('hex');
-const [artifactPath,outDir,...nums]=process.argv.slice(2);
+const [artifactPath,outDir,...rest]=process.argv.slice(2);
+const nums=rest.slice(0,4);
+const contract=rest.length>4?Number(rest[4]):1;
+if(contract!==1&&contract!==2)throw new Error('CONTRACT is 1 or 2');
 const [tenants,keys,digests,jobs]=nums.map(Number);
 if(!artifactPath||!outDir||![tenants,keys,digests,jobs].every(n=>Number.isSafeInteger(n)&&n>=1&&n<=64))
   throw new Error('usage: build-image.mjs ARTIFACT OUTDIR TENANTS KEYS DIGESTS JOBS (each 1..64)');
@@ -50,7 +57,7 @@ const batch=JSON.parse(readFileSync(resolve(batchDir,'batch.json'),'utf8'));
 const artifactSha=sha(encode(checked.artifact));
 if(!batch.programs.every(p=>p.artifact_sha256===artifactSha))throw new Error('artifact identity drift');
 writeFileSync(resolve(outDir,'image.json'),JSON.stringify({
-  schema:'fenrir.host.service-image/1',
+  schema:'fenrir.host.service-image/1',contract_version:contract,
   image:batch.control,image_sha256:batch.control_sha256,tender:batch.tender,tender_sha256:batch.tender_sha256,
   solo5_identity:batch.solo5_identity,batch_sha256:batch.batch_sha256,batch_dir:batchDir,
   protocol:'fenrir.solo5.pure-call-control/2',machine_profile:'fenrir.solo5.pure-call-machine/2',

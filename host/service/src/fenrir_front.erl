@@ -16,9 +16,12 @@
 %%   indeterminate   a commit may have happened and no response exists; retry with the
 %%                   same key returns the recorded receipt (never reported as rollback)
 %%   {refused, Why}  the request is outside the image's domain; nothing ran
+%%   unavailable     A4: no version is in force (between migrate and cut-over) or the
+%%                   run's commit was fenced (its version is no longer in force);
+%%                   nothing applied; retry
 -module(fenrir_front).
 -behaviour(gen_server).
--export([start_link/1, submit/4, complete/3, respond/1, outbox/0]).
+-export([start_link/1, submit/4, complete/3, respond/1, outbox/0, request_on/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 start_link(Workers) -> gen_server:start_link({local, ?MODULE}, ?MODULE, Workers, []).
@@ -28,10 +31,17 @@ complete(T, J, Ok) -> request({complete, T, J, Ok}).
 respond(Event) -> gen_server:call(?MODULE, {respond, Event}).
 outbox() -> gen_server:call(?MODULE, outbox).
 
-request(Req) ->
-    Worker = gen_server:call(?MODULE, pick),
+request(Req) -> request_on(gen_server:call(?MODULE, pick), Req).
+
+%% A4: a request on a given worker (the campaigns' detached stale worker).
+request_on(Worker, Req) ->
     Outcome = try fenrir_worker:run(Worker, Req) of
                   {ok, V, St} -> {response(V), St};
+                  %% A4 (UPGRADE.md sections 3, 4.3): no version in force (migrated), or
+                  %% the commit's version is not in force (a stale run): nothing applied.
+                  {refused, no_version_in_force} -> {unavailable, #{why => no_version_in_force}};
+                  {stale, Why, St} -> {unavailable, St#{why => {stale, Why}}};
+                  {failed, version_in_force_changed, St} -> {unavailable, St#{why => version_in_force_changed}};
                   {refused, Why} -> {{refused, Why}, #{}};
                   {failed, Why, St} -> {aborted, St#{why => Why}};
                   {O, Why, St} -> {O, St#{why => Why}}
@@ -50,6 +60,9 @@ request(Req) ->
 
 response({data, <<"Response">>, <<"Accepted">>, [{data, <<"Receipt">>, <<"Receipt">>, Fs}]}) ->
     {accepted, [N || {int, N} <- Fs]};
+%% A4: a receipt made under contract 2 carries its version (UPGRADE.md section 2.1).
+response({data, <<"Response">>, <<"Accepted">>, [{data, <<"Receipt">>, <<"Receipt2">>, Fs}]}) ->
+    {accepted, [N || {int, N} <- Fs] ++ [2]};
 response({data, <<"Response">>, <<"Conflict">>, [{int, T}, {int, K}]}) -> {conflict, T, K};
 response({data, <<"Response">>, <<"Delivered">>, []}) -> delivered;
 response(V) -> {response, V}.

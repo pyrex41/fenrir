@@ -1,0 +1,15 @@
+{
+  "schema": "fenrir.service.mutant-predictions/1",
+  "contract": "spec/service/UPGRADE.md",
+  "provenance": "Hand-derived from the one-line changes of examples/service/mutants-a4/*.fen before harness/service-upgrade-fenrir.shen was run. Each mutant is explored as the A4 Fenrir machine with that one program replaced (v2-* replace the v2 handler, migrate-* the migration program). Format as spec/service/upgrade-mutant-predictions.json; lengths at the default A4 scope (harness/run-service-upgrade.sh).",
+  "mutants": {
+    "v2-forgot-count-attempt":    {"expected": {"version": 5}, "also": {}, "clean": ["authority", "atomicity", "response", "retry", "recovery", "progress", "pending", "receipts", "manifest"]},
+    "v2-stage-attempt-one":       {"expected": {"version": 4}, "also": {}, "clean": ["authority", "atomicity", "response", "retry", "recovery", "progress", "pending", "receipts", "manifest"]},
+    "v2-equivalent-control":      {"expected": {}, "also": {}, "clean": ["authority", "atomicity", "response", "retry", "recovery", "progress", "pending", "receipts", "version", "manifest"], "same_graph_as_model": true},
+    "migrate-drops-pending":      {"expected": {"pending": 3}, "also": {"atomicity": 3, "response": 3, "progress": 4}, "clean": ["authority", "retry", "receipts", "version", "manifest"]},
+    "migrate-rewrites-receipts":  {"expected": {"receipts": 3}, "also": {"response": 3}, "clean": ["authority", "atomicity", "retry", "recovery", "pending", "version", "manifest"]},
+    "migrate-drops-keys":         {"expected": {"receipts": 3}, "also": {"atomicity": 3, "response": 3}, "clean": ["authority", "retry", "recovery", "pending", "version", "manifest"]},
+    "migrate-wrong-attempts":     {"expected": {"version": 4}, "also": {}, "clean": ["authority", "atomicity", "response", "retry", "recovery", "progress", "pending", "receipts", "manifest"]},
+    "migrate-equivalent-control": {"expected": {}, "also": {}, "clean": ["authority", "atomicity", "response", "retry", "recovery", "progress", "pending", "receipts", "version", "manifest"], "same_graph_as_model": true}
+  }
+}

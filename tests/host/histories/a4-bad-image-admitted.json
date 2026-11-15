@@ -1,0 +1,1 @@
+{"schema":"fenrir.service.history/2","tenants":2,"scenario":"a4-bad-image-admitted","expect":"rejected","note":"begin-upgrade with an image whose manifest the host cannot discharge reported ok","events":[["upgrade","begin","bad",["ok"]]],"expect_index":0}
