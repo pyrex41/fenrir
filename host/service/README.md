@@ -16,8 +16,8 @@ history says that this recorded execution is consistent with the contract, nothi
 executions that were not run.
 
 ```
-sh host/service/check.sh          # quick, about 3 minutes here
-sh host/service/check.sh full     # every campaign repeated 5 times, about 7 minutes
+sh host/service/check.sh          # quick, about 5 minutes here (A3 and A4)
+sh host/service/check.sh full     # every campaign repeated 5 times, about 10 minutes
 ```
 
 It builds everything through nix (`nix build .#fenrir-a3-tools`: Erlang/OTP 28.5,
@@ -147,6 +147,22 @@ cut-over transactions, inside the install, in the migration guest, after migrate
 migrate and cut-over, after the cut-over committed), `upgrade_stale` (5 variants),
 `upgrade_cas`, `upgrade_manifest`, and 10 A4 host mutants (CONTRACT.md §7). The report's
 `campaigns` and `host_mutants` members have the counts.
+
+Measured 15 November 2026 (development container, no KVM). `check.sh quick` (about 5
+min): development-pass, 469 scenarios; the A4 families 48 scenarios (40 crash points
+once, 5 stale variants, load, cas, manifest), 540 requests, 18 node crashes, every
+history accepted, every audit clean; 78 unit tests; 31 checker tests as expected.
+`check.sh full` (581 s): development-pass, 792 normal scenarios (A3's families 556, all accepted as
+before, plus 236 A4: 200 crash scenarios, 25 stale, 5 load, 5 cas, 1
+manifest), 4,634 requests, 282 node crashes, every history accepted. A4 host mutants (7
+or 8 scenarios each): no_fencing, migration_drops_pending, migration_two_transactions,
+keys_not_migrated, receipt_rewritten, cutover_before_migration, stale_workers,
+no_manifest_check and volatile_upgrade_state caught; equivalent_control_a4 not flagged.
+`no_fencing` is caught only through a v1 delivery (a v1 submit's positional INSERT into
+the v2 table fails on its own, so a stale v1 submit is refused by accident of the schema,
+not by fencing); `cutover_before_migration` and `migration_two_transactions` are caught
+by the audit and by the node's refusal to reopen the inconsistent file, not by a history
+(the scenario ends with the refused restart).
 
 ## Artifact
 

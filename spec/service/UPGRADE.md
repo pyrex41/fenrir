@@ -349,6 +349,9 @@ Kept outside the model (harness/service-upgrade-mutants.shen), each one change:
 | `deliver-to-v1` | after cut-over, deliveries still run v1's statements (a v2 job finished with no attempt counted) | version (interpretation) |
 | `no-manifest-check` | `begin-upgrade` admits any image | manifest |
 | `volatile-upgrade-state` | `U` is held in memory: a crash puts it back to `[v1]` | recovery, version |
+| `v2-shared-counter` | v2 allocates ids from one counter for all tenants | authority (added after the first run, see §12) |
+| `v2-duplicate-delivery-counted` | v2 counts the attempt outside the `Pending` guard | retry (delivery) |
+| `v2-retry-reapplies` | v2 runs the mutation again for a recorded key with the same digest | retry |
 | `equivalent-control` | migration and v2 delivery written differently with the same meaning | must not be flagged; same graph |
 
 ## 9 Fenrir handlers and the refinement check
@@ -415,8 +418,39 @@ The mapping, stated as named assumptions in
 11. The migration program retries at most three times on `Changed` (§5).
 12. `begin-upgrade` checks the migration program's manifest too, against a host
     contract named `Migration` (§4.1, §5).
+13. The migration protocol reads and stages one row per host request, with the
+    snapshot held by the host's migration session (§5), because of control protocol
+    v2's 512-byte reply limit; an alternative is a larger reply limit in a protocol v3.
+14. In the model, a dispatched run is bound to the version in force when it is
+    dispatched and its commit is the one its version's handler computes from the
+    request alone; the Fenrir machine runs the program at the landing (a run is a
+    function of its input and replies, DURABLE.md §6, so the two are the same).
+15. In the real stack a worker re-reads the version in force before every run and is
+    replaced when it changed (host/service/CONTRACT.md §7, U-VERSION). The model has no
+    workers: a run of the version in force is what a correct supervisor provides.
 
-## 12 What this does not cover
+## 12 Measured (15 November 2026)
+
+Model, harness/run-service-upgrade.sh, default scope (2 tenants, 1 key, 2 digests; 2
+submits, 2 deliveries, 1 response, 1 crash, 1 dispatch, 4 upgrade steps): 545,360
+product states, 3,511,584 edges, no violation of the 18 checks; the 12 hand traces
+([upgrade-hand-traces.json](upgrade-hand-traces.json)) agree with the model on its first
+run (no contradiction); without dispatches and upgrade steps the A4 model gives A1's graph
+exactly. The 12 mutants of §8 (and three added for A1's authority and retry properties
+across the upgrade) are caught at the lengths predicted in
+[upgrade-mutant-predictions.json](upgrade-mutant-predictions.json); the equivalent control
+gives the model's graph. Details and per-mutant lengths:
+[harness/README.md](../../harness/README.md) ("Service example A4").
+
+Fenrir: the v1 handler, the v2 handler and the migration program give the model's graph
+exactly (8,652,088 steps compared, none differ; 84 compare-and-swap checks pass); the 189
+distinct runs agree in the JavaScript implementation and in the Solo5 guest; six Fenrir
+mutants caught at the predicted lengths, two controls not flagged.
+
+Real stack: [host/service/README.md](../../host/service/README.md) ("Stage A4") and
+04_DIRECTION_AMENDMENT.md §8, row A4.
+
+## 13 What this does not cover
 
 Hot swap of running frames (no in-flight run is ever migrated); schema histories longer
 than v1 → v2 (v1 → v2 → v3); rollback after cut-over; rollback between migrate and
