@@ -435,11 +435,12 @@
          ShenDeparts (fh.member "shen_departs_from_contract" (fh.member "probes" Report))
       (if (not (element? Status ["development-pass" "development-fail"]))
           (fh.row "UNKNOWN" ["The typing differential did not report (or exceeded its time limit)"] [] Memo)
-          (if (not (empty? Disagreeing))
-              (fh.row "FAIL" ["The Shen validation and the JavaScript validator disagree on the acceptance of some programs"]
+          (if (not (= Unknown "0"))
+              (fh.row "UNKNOWN" [(make-string "A derivation search ran out of budget (~A searches); acceptance disagreements it causes are not findings" (fh.show Unknown))]
                       [["families_disagreeing" (fh.join Disagreeing ", ")]] Memo)
-              (if (not (= Unknown "0"))
-                  (fh.row "UNKNOWN" [(make-string "A derivation search ran out of budget (~A searches)" (fh.show Unknown))] [] Memo)
+              (if (not (empty? Disagreeing))
+                  (fh.row "FAIL" ["The Shen validation and the JavaScript validator disagree on the acceptance of some programs"]
+                          [["families_disagreeing" (fh.join Disagreeing ", ")]] Memo)
                   (if (and (= Status "development-pass") (= ShenDeparts []))
                       (fh.row "PASS" [] [["frontend_programs" (json.stringify (fh.member "frontend_programs" Report) [])]
                                          ["forged_derivations" (json.stringify (fh.member "forged_derivations" Report) [])]

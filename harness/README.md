@@ -170,7 +170,7 @@ sh harness/run-tc1-exhaustive.sh        # grammar H up to 7 nodes, ~30 s
 sh harness/run-tc1-generated.sh         # generated family G, ~11 s
 sh harness/run-tc1-reduction.sh DEFECT  # one discovery-reduction-replay campaign, 8-25 s
 sh harness/run-tc1-strict-replay.sh     # ~9 s
-sh harness/run-tc1-gate.sh              # the proposed TC1 gate, about 9 min (runs the TC0-A gate and the three optional rows too)
+sh harness/run-tc1-gate.sh              # the proposed TC1 gate, about 15 min (15 min 21 s measured; runs the TC0-A gate and the seven optional rows too)
 ```
 
 | Program | What it checks | Measured |
@@ -195,7 +195,7 @@ The proposed TC1 gate ([tc1-gate.shen](tc1-gate.shen), manifest
 `guest-exhaustive-small` are BLOCKED where Solo5 is not built, so the verdict
 there is BLOCKED. Authority UNREGISTERED, qualification UNKNOWN.
 
-Three optional rows (`required: false`; no claim and no required row relies on
+Seven optional rows (`required: false`; no claim and no required row relies on
 them, so the verdict is that of the 21 required rows) run after the required
 ones. Each reads its harness program's own report, and none can pass without
 that report: `task-hand-fixtures` (`tc1-tasks.shen`: PASS on `development-pass`,
@@ -209,7 +209,7 @@ stride 25, about 20 s: PASS on `development-pass`, FAIL on `development-fail`,
 BLOCKED where Solo5 or the guest build is unavailable, UNKNOWN on a timeout or no
 report).
 
-Four more optional rows cover the durable and typing work, each reading its
+The last four cover the durable and typing work, each reading its
 program's own report (none can pass without it; no claim relies on them):
 `durable-hand-fixtures` (`tc1-durable.shen`: PASS on `development-pass`, FAIL on
 `development-fail`, UNKNOWN without a report or on a timeout), `durable-guest`
@@ -227,6 +227,14 @@ Shen side departs from the contract; a derivation search out of budget, no repor
 timeout is UNKNOWN; FAIL otherwise). The validator differential is still meaningful
 after the later effect-name fix (b4f4af2): run against the pre-D1 validator with the
 current one, all verdicts are identical, so that fix changes no verdict on these corpora.
+
+Each of the four was shown non-PASS on the real failing condition, reverted afterwards:
+an expectation of the D1 fixtures changed (FAIL), `FENRIR_SOLO5=/nonexistent` (BLOCKED)
+and an edited protocol vector (FAIL) for the guest, the validator changed so the input
+schema check is gone (FAIL, 24,153 verdicts differ), and for typing the effect-set order
+check removed from the JavaScript validator (FAIL), a derivation budget of 50 (UNKNOWN)
+and a 5 s limit (UNKNOWN). The typing differential does not notice the removed input
+schema check: its families do not exercise it.
 
 The accepted-job contract (A1) and its Fenrir handler (A2) are not part of slice TC1
 and are not rows of this gate; they have their own proposed gate, below.
@@ -383,7 +391,7 @@ not SQLite (that is A3); one author lineage for handler, contract, machines and 
 ## The proposed service gate
 
 ```sh
-sh harness/run-service-gate.sh          # the proposed service gate, SERVICE_TIME
+sh harness/run-service-gate.sh          # the proposed service gate, about 5 min (4 min 43 s measured)
 ```
 
 [service-gate.shen](service-gate.shen), manifest
