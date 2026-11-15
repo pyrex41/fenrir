@@ -1,0 +1,10 @@
+\\ Round trip: the TC1-C1 hand fixture copied-handler-in-child, in surface syntax.
+\\ frontend/test.sh compares this program's run (production FIFO schedule) with the run of the fixture's artifact.
+
+(effect Ask (ask I64 --> I64))
+
+(define main {I64 --> I64}
+  input -> (handle Ask
+             ((ask x) -> (+ x 100))
+             (let t (spawn (lambda (_ : Unit) (perform Ask ask 1)))
+               (match (await t) ((Ok r) -> r) (Cancelled -> 0) ((Failed code) -> 0)))))

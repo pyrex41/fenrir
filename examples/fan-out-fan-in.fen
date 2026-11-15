@@ -1,0 +1,27 @@
+\\ Fan-out and fan-in with await (TC1-C1, spec/tc1/CONCURRENCY.md).
+\\
+\\ main spawns three tasks, each squaring a number, then awaits each and adds the
+\\ results. await returns the task's Outcome: Ok with its value, Cancelled, or
+\\ Failed with its trap code; awaiting a task that has not finished blocks the
+\\ caller until it terminates. The sum does not depend on the schedule.
+\\
+\\ Expected:
+\\ > emit "sum": 50 (task 0)
+\\ > outcome: Ok 50
+\\ > schedule: policy fifo, a production schedule by the model's records
+
+(define square {I64 --> I64}
+  n -> (* n n))
+
+(define value-of {(Outcome I64) --> I64}
+  o -> (match o
+         ((Ok v) -> v)
+         (Cancelled -> 0)
+         ((Failed code) -> 0)))
+
+(define main {I64 --> I64}
+  input -> (let a (spawn (lambda (_ : Unit) (square 3)))
+                b (spawn (lambda (_ : Unit) (square 4)))
+                c (spawn (lambda (_ : Unit) (square 5)))
+                sum (+ (value-of (await a)) (+ (value-of (await b)) (value-of (await c))))
+             (do (emit "sum" sum) sum)))

@@ -31,6 +31,7 @@
 (load (cn (value fh.*root*) "frontend/reader.shen"))
 (load (cn (value fh.*root*) "frontend/elaborate.shen"))
 (load (cn (value fh.*root*) "harness/tc1-durable-common.shen"))
+(load (cn (value fh.*root*) "harness/tc1-task-common.shen"))
 
 (define fe.finish
   Status Text -> (do (write-to-file (cn (value fe.*work*) "result") Text)
@@ -224,12 +225,94 @@
                       "")
                   (fe.requests Es)))
 
+\\ ---------- TC1-C1: a task program runs under a schedule ----------
+
+\\ The schedule is an input of the model (CONCURRENCY.md section 9). By default it is
+\\ the production FIFO schedule; a policy (lowest, highest, random:N, prandom:N, fifo) or
+\\ a file holding a JSON list of task IDs may be given instead. A policy is turned into
+\\ choices by frontend/schedule.mjs; the model replays them, refusing any choice that is
+\\ not Runnable in its own state, and the run says which schedule it used and whether
+\\ the model's own records make it a production schedule.
+(define fe.policy?
+  S -> (or (element? S ["fifo" "lowest" "highest"]) (fh.starts? "random:" S) (fh.starts? "prandom:" S)))
+
+(define fe.choices
+  Path Schedule Fuel ->
+    (if (fe.policy? Schedule)
+        (let R (fh.exec "node" [(cn (value fh.*root*) "frontend/schedule.mjs") Path Schedule (str Fuel)] 120)
+             J (fh.last-report (hd (tl R)))
+          (if (and (= (hd R) 0) (cons? J)) (fh.field "choices" J)
+              (fe.finish 2 (make-string "the schedule policy ~A could not be applied: ~A~%" Schedule (hd (tl (tl R)))))))
+        (let Text (trap-error (read-file-as-string Schedule)
+                              (/. E (fe.finish 2 (make-string "~A: error: the schedule file cannot be read (a schedule is fifo, lowest, highest, random:N, prandom:N or a file with a JSON list of task IDs)~%" Schedule))))
+             J (trap-error (json.parse Text [[byte-limit 16777216]]) (/. E (fe.finish 2 (make-string "~A: error: the schedule file is not JSON~%" Schedule))))
+          (if (and (or (= J []) (cons? J)) (fe.all? (/. X (and (string? X) (fe.decimal-id? X))) J)) J
+              (fe.finish 2 (make-string "~A: error: a schedule file holds a JSON list of task IDs, such as [c#34;0c#34;,c#34;1c#34;]~%" Schedule))))))
+
+(define fe.decimal-id?
+  "" -> false
+  S -> (fe.all? (/. C (fe.digit? (string->n C))) (explode S)))
+
+(define fe.task-emissions
+  [] -> ""
+  [Step | Steps] -> (cn (fe.task-emit-lines (fh.field "events" Step)) (fe.task-emissions Steps)))
+
+(define fe.task-emit-lines
+  [] -> ""
+  [E | Es] -> (cn (if (= (fh.field "kind" E) "Emit")
+                      (make-string "emit ~S: ~A (task ~A)~%" (fh.field "label" E) (fe.show-value (fh.field "value" E)) (fh.field "task" E))
+                      "")
+                  (fe.task-emit-lines Es)))
+
+(define fe.show-task-outcome
+  ["Cancelled"] -> "Cancelled"
+  O -> (fe.show-outcome O))
+
+(define fe.wait-text
+  [object ["await" X] ["task" T]] -> (make-string "task ~A awaits task ~A" T X)
+  [object ["receive" X] ["task" T]] -> (make-string "task ~A receives on channel ~A" T X)
+  [object ["send" X] ["task" T]] -> (make-string "task ~A sends on channel ~A" T X)
+  [object ["join" X] ["task" T]] -> (make-string "task ~A joins scope ~A" T X)
+  [object ["running" _] ["task" T]] -> (make-string "task ~A is running" T))
+
+(define fe.waits
+  [W] -> (fe.wait-text (fh.canon W))
+  [W | Ws] -> (cn (fe.wait-text (fh.canon W)) (cn ", " (fe.waits Ws))))
+
+(define fe.execute-tasks
+  Text Fuel Schedule ->
+    (let Path (cn (value fe.*work*) "run-artifact.json")
+         Written (write-to-file Path Text)
+         Choices (fe.choices Path Schedule Fuel)
+         Program (fh.task-program (json.parse Text [[byte-limit 16777216]]))
+         Run (fh.task-run (hd Program) (hd (tl Program)) Choices Fuel)
+         Steps (nth 3 Run)
+         Production (fh.production? Steps)
+         Kind (if (fe.policy? Schedule) (cn "policy " Schedule) (cn "file " Schedule))
+         Said (make-string "schedule: ~A, ~A~%" Kind
+                           (if Production "a production schedule by the model's records" "a reference schedule, not a production one"))
+         Defect (if (and (not Production) (or (= Schedule "fifo") (fh.starts? "prandom:" Schedule)))
+                    (fe.finish 3 (make-string "internal error: the production policy ~A gave a schedule the model's records do not make a production schedule~%" Schedule))
+                    true)
+         Body (fe.task-emissions Steps)
+      (cond ((= (hd Run) "Completed")
+              (fe.finish 0 (cn Body (make-string "outcome: ~A~%~Asteps: ~A~%" (fe.show-task-outcome (nth 2 Run)) Said (length Steps)))))
+            ((= (hd Run) "Deadlock")
+              (fe.finish 0 (cn Body (make-string "outcome: deadlock: ~A~%~Asteps: ~A~%" (fe.waits (nth 2 Run)) Said (length Steps)))))
+            ((= (hd Run) "ScheduleDiverged")
+              (fe.finish 1 (cn Body (make-string "~A: error: the schedule chooses task ~A at step ~A, which is not Runnable there~%" Schedule (nth (+ 1 (length Steps)) Choices) (length Steps)))))
+            ((= (hd Run) "ScheduleIncomplete")
+              (fe.finish 0 (cn Body (make-string "outcome: none (the schedule ended after ~A choices before the run did)~%~Asteps: ~A~%" (length Steps) Said (length Steps)))))
+            (true (fe.finish 4 (cn Body (make-string "outcome: none (stopped after the budget of ~A steps; set FENRIR_FUEL to raise it)~%" Fuel)))))))
+
 \\ Run the artifact decoded from Text and report emissions in order, the outcome
 \\ and the number of model steps. Entry input is the harness's fixed 0.
 (define fe.execute
-  Text Fuel -> (fe.execute-durable (json.parse Text [[byte-limit 16777216]]) Fuel)
+  Text Fuel Schedule -> (fe.execute-tasks Text Fuel Schedule)
+    where (= "tc1-task-demo/1" (fh.field "schema_version" (json.parse Text [[byte-limit 16777216]])))
+  Text Fuel _ -> (fe.execute-durable (json.parse Text [[byte-limit 16777216]]) Fuel)
     where (fh.starts? "tc1-durable-demo/1" (fh.field "schema_version" (json.parse Text [[byte-limit 16777216]])))
-  Text Fuel ->
+  Text Fuel _ ->
     (let Artifact (json.parse Text [[byte-limit 16777216]])
          Run (fh.run (fh.state Artifact) Fuel 0 [])
          Steps (hd (tl Run))
@@ -246,9 +329,10 @@
   ["check" Source Module] ->
     (let Checked (fe.checked Source (fe.artifact Source Module))
       (fe.finish 0 (make-string "ok: ~A: ~A, typing derivation of ~A rule instances~%" Source (fe.summary (hd (tl Checked))) (nth 3 Checked))))
-  ["run" Source Module Fuel] ->
+  ["run" Source Module Fuel] -> (fe.command ["run" Source Module Fuel "fifo"])
+  ["run" Source Module Fuel Schedule] ->
     (let Checked (fe.checked Source (fe.artifact Source Module))
-      (fe.execute (hd Checked) (fe.natural Fuel 0)))
+      (fe.execute (hd Checked) (fe.natural Fuel 0) Schedule))
   ["emit" Source Module Out] ->
     (let Checked (fe.checked Source (fe.artifact Source Module))
          Written (trap-error (write-to-file Out (hd Checked))
@@ -256,14 +340,15 @@
       (fe.finish 0 (make-string "wrote ~A: ~A~%" Out (fe.summary (hd (tl Checked))))))
   \\ An existing artifact, such as a hand fixture: validated, then run, and reported
   \\ as run reports. This is how the tests compare a surface program with a fixture.
-  ["run-artifact" Path Fuel] ->
+  ["run-artifact" Path Fuel] -> (fe.command ["run-artifact" Path Fuel "fifo"])
+  ["run-artifact" Path Fuel Schedule] ->
     (let Text (trap-error (read-file-as-string Path)
                           (/. E (fe.finish 2 (make-string "~A: error: the file cannot be read~%" Path))))
          Report (fe.validation Path)
          Typing (fe.typing Text (fe.input Report))
          Status (fh.member "status" Report)
       (if (and (= Status "valid") (= (hd Typing) valid))
-          (fe.execute Text (fe.natural Fuel 0))
+          (fe.execute Text (fe.natural Fuel 0) Schedule)
           (if (or (= Status "valid") (= (hd Typing) valid) (= (hd Typing) unknown))
               (fe.finish 3 (fe.disagreement Path Report Typing))
               (fe.finish 1 (make-string "~A: error: not a valid artifact (~A)~%" Path (fh.member "message" Report))))))

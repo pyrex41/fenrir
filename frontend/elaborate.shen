@@ -133,7 +133,8 @@
 (define fe.reserved?
   Name -> (element? Name ["define" "datatype" "effect" "let" "if" "do" "tuple" "project" "match" "lambda" "type"
                           "emit" "perform" "handle" "resume" "discontinue" "unit" "true" "false"
-                          "not" "neg" "bytes-length" "bytes-index" "bytes-concat" "_"]))
+                          "not" "neg" "bytes-length" "bytes-index" "bytes-concat" "_"
+                          "scope" "spawn" "await" "cancel" "yield" "channel" "send" "receive" "close"]))
 
 \\ Functions and variables: lowercase, and may contain hyphens. Variables never
 \\ reach the artifact (they become binder IDs); function names are free text there.
@@ -160,10 +161,16 @@
   "TrapCode" -> "TrapCode"
   Name -> ["Data" Name])
 
-\\ The constructor table of a type, or none when it is not a datatype.
+\\ The constructor table of a type, or none when it is not a datatype. TC1-C1: the
+\\ results the runtime makes (CONCURRENCY.md section 2) are matched like datatypes; a
+\\ match resolves its arms against the scrutinee's type, so these constructor names
+\\ never clash with those of a declared datatype.
 (define fe.constructors-of
   "TrapCode" -> (fe.lookup "TrapCode" (value fe.*datatypes*))
   ["Data" Name] -> (fe.lookup Name (value fe.*datatypes*))
+  ["Outcome" T] -> [["Ok" [T]] ["Cancelled" []] ["Failed" ["TrapCode"]]]
+  "SendResult" -> [["Sent" []] ["Closed" []]]
+  ["ReceiveResult" T] -> [["Item" [T]] ["End" []]]
   _ -> none)
 
 \\ [TypeName Fields] for a constructor name, or [].
@@ -176,6 +183,10 @@
 \\ anywhere inside. Visiting holds the datatypes being traversed (recursive types).
 (define fe.plain?
   ["Arrow" | _] _ -> false
+  ["Task" _] _ -> false
+  ["Channel" _] _ -> false
+  ["Outcome" T] Visiting -> (fe.plain? T Visiting)
+  ["ReceiveResult" T] Visiting -> (fe.plain? T Visiting)
   ["Tuple" | Ts] Visiting -> (fe.all? (/. T (fe.plain? T Visiting)) Ts)
   ["Data" Name] Visiting -> true where (element? Name Visiting)
   ["Data" Name] Visiting -> (fe.all? (/. Constructor (fe.all? (/. T (fe.plain? T [Name | Visiting])) (hd (tl Constructor))))
@@ -188,17 +199,29 @@
   ["Tuple" | Ts] -> (cn "(Tuple" (cn (fe.spaced (map (/. T (fe.show-type T)) Ts)) ")"))
   ["Arrow" A B []] -> (make-string "(~A --> ~A)" (fe.show-type A) (fe.show-type B))
   ["Arrow" A B Es] -> (make-string "(~A --> ~A !~A)" (fe.show-type A) (fe.show-type B) (fe.spaced Es))
+  [K T] -> (make-string "(~A ~A)" K (fe.show-type T)) where (element? K ["Task" "Channel" "Outcome" "ReceiveResult"])
   T -> T)
 
 (define fe.effect-name
   [sym _ _ "Emit"] -> "Emit"
+  [sym _ _ "Task"] -> (do (fe.uses-tasks) "Task")
+  [sym _ _ "Channel"] -> (do (fe.uses-tasks) "Channel")
   [sym L C Name] -> (if (= (fe.lookup Name (value fe.*effects*)) none)
                         (fe.fail L C (make-string "unknown effect ~A" Name))
                         Name)
   D -> (fe.reject D "an effect name is expected here"))
 
+\\ TC1-C1: a program that uses a task form or a task type is an artifact of schema
+\\ tc1-task-demo/1 (CONCURRENCY.md); fe.*tasks* records that it does.
+(set fe.*tasks* false)
+(define fe.uses-tasks
+  -> (set fe.*tasks* true))
+
 (define fe.type
   [sym _ _ T] -> T where (element? T ["Unit" "Bool" "I64" "Bytes" "TrapCode"])
+  [sym _ _ "SendResult"] -> (do (fe.uses-tasks) "SendResult")
+  [list L C [[sym _ _ K] T]] -> (do (fe.uses-tasks) [K (fe.type T)]) where (element? K ["Task" "Channel" "Outcome" "ReceiveResult"])
+  [list L C [[sym _ _ K] | _]] -> (fe.fail L C (make-string "~A takes one type: write (~A T)" K K)) where (element? K ["Task" "Channel" "Outcome" "ReceiveResult"])
   [sym _ _ T] -> ["Data" T] where (element? T (value fe.*datatype-names*))
   [sym L C T] -> (fe.fail L C (make-string "unknown type ~A" T))
   [list L C [[sym _ _ "Tuple"] | Ts]] ->
@@ -208,7 +231,7 @@
   [list _ _ [A [sym _ _ "-->"] B]] -> ["Arrow" (fe.type A) (fe.type B) []]
   [list _ _ [A [sym _ _ "-->"] B [sym _ _ "!"] E | Es]] ->
     ["Arrow" (fe.type A) (fe.type B) (fe.sort-names (map (/. X (fe.effect-name X)) [E | Es]))]
-  D -> (fe.reject D "a type is a type name, (Tuple T ...), (A --> B) or (A --> B ! Effect ...)"))
+  D -> (fe.reject D "a type is a type name, (Tuple T ...), (Task T), (Channel T), (Outcome T), (ReceiveResult T), (A --> B) or (A --> B ! Effect ...)"))
 
 \\ ---------- expected types ----------
 
@@ -365,7 +388,8 @@
   _ -> none)
 
 (define fe.form?
-  K -> (element? K ["let" "if" "do" "tuple" "project" "match" "lambda" "type" "emit" "perform" "handle" "resume" "discontinue" "="]))
+  K -> (element? K ["let" "if" "do" "tuple" "project" "match" "lambda" "type" "emit" "perform" "handle" "resume" "discontinue" "="
+                    "scope" "spawn" "await" "cancel" "channel" "send" "receive" "close"]))
 
 (define fe.expr
   [int L C N] _ Want -> (fe.done L C ["int" (fe.node L C) N] "I64" [] [] Want)
@@ -374,6 +398,7 @@
   [sym L C "unit"] _ Want -> (fe.done L C ["unit" (fe.node L C)] "Unit" [] [] Want)
   [sym L C "true"] _ Want -> (fe.done L C ["bool" (fe.node L C) true] "Bool" [] [] Want)
   [sym L C "false"] _ Want -> (fe.done L C ["bool" (fe.node L C) false] "Bool" [] [] Want)
+  [sym L C "yield"] _ Want -> (do (fe.uses-tasks) (fe.done L C ["yield" (fe.node L C)] "Unit" [["Task" L C "this yield"]] [] Want))
   [sym L C Name] Env Want -> (fe.name L C Name (fe.binding Name Env) Want)
   [brace L C _] _ _ -> (fe.fail L C "{ } only encloses the signature of a define")
   [list L C []] _ _ -> (fe.fail L C "() is not an expression; the unit value is written unit")
@@ -389,7 +414,16 @@
     (fe.fail L C (make-string "~A is a resumption, not a value: it can only be used as (resume ~A e) or (discontinue ~A)" Name Name Name))
   L C Name none Want -> (fe.global L C Name (fe.find-constructor Name (value fe.*datatypes*)) Want))
 
+\\ TC1-C1: the constructors of Outcome, SendResult and ReceiveResult that no declared
+\\ datatype has. Only the runtime makes them (CONCURRENCY.md section 2); a program
+\\ matches on them.
+(define fe.runtime-constructor?
+  Name -> (and (element? Name ["Ok" "Cancelled" "Failed" "Sent" "Closed" "Item" "End"])
+               (= (fe.find-constructor Name (value fe.*datatypes*)) [])))
+
 (define fe.global
+  L C Name _ _ -> (fe.fail L C (make-string "~A is made only by the runtime, as a result of await, send or receive: a program can match on it but not construct it" Name))
+    where (fe.runtime-constructor? Name)
   L C Name [Type []] Want -> (fe.done L C ["construct" (fe.node L C) Type Name] (fe.data-type Type) [] [] Want)
   L C Name [Type Fields] _ ->
     (fe.fail L C (make-string "constructor ~A of ~A takes ~A: write (~A ...)" Name Type (fe.plural (length Fields) "field") Name))
@@ -410,6 +444,9 @@
     (fe.global-headed L C HL HC Name (fe.find-constructor Name (value fe.*datatypes*)) (fe.lookup Name (value fe.*functions*)) Args Env Want))
 
 (define fe.global-headed
+  _ _ HL HC "yield" _ _ _ _ _ -> (fe.fail HL HC "yield takes no operands: it is written yield, without brackets")
+  _ _ HL HC Name [] none _ _ _ -> (fe.fail HL HC (make-string "~A is made only by the runtime, as a result of await, send or receive: a program can match on it but not construct it" Name))
+    where (fe.runtime-constructor? Name)
   L C _ _ Name [Type Fields] _ Args Env Want ->
     (if (= (length Args) (length Fields))
         (let Node (fe.node L C)
@@ -524,7 +561,87 @@
       (fe.done L C ["discontinue" (fe.node L C) (hd Binding)] "Unit" [] [[(hd Binding) K 1 L C]] Want))
   "discontinue" L C _ _ _ -> (fe.fail L C "discontinue is written (discontinue k), k the resumption a handler clause names")
   "=" L C [A B] Env Want -> (fe.equal L C (fe.node L C) (fe.expr A Env any) A B Env Want)
-  "=" L C _ _ _ -> (fe.fail L C "= takes 2 operands"))
+  "=" L C _ _ _ -> (fe.fail L C "= takes 2 operands")
+  K L C Args Env Want -> (do (fe.uses-tasks) (fe.task-form K L C Args Env Want)))
+
+\\ ---------- tasks and channels (TC1-C1, CONCURRENCY.md sections 2 and 3) ----------
+
+\\ For the serializability messages: a program that uses tasks also has handles, which
+\\ are not serializable either.
+(define fe.or-handle
+  _ -> " or a task or channel handle" where (value fe.*tasks*)
+  _ -> "")
+
+\\ The runtime effect a task form adds, with its place: [Name Line Column Cause].
+(define fe.runtime-effect
+  Name L C Form -> [Name L C (make-string "this ~A" Form)])
+
+(define fe.task-form
+  "scope" L C [Body] Env Want ->
+    (let Node (fe.node L C)
+         Row (fe.expr Body Env Want)
+      (if (fe.plain? (fe.row-type Row) [])
+          [["scope" Node (fe.row-node Row)] (fe.row-type Row) (fe.union (fe.row-effects Row) [(fe.runtime-effect "Task" L C "scope")]) (fe.row-uses Row)]
+          (fe.reject Body (make-string "the result of a scope must be serializable, so that nothing made inside it outlives it, but this has type ~A" (fe.show-type (fe.row-type Row))))))
+  "scope" L C _ _ _ -> (fe.fail L C "scope is written (scope body)")
+  "spawn" L C [F] Env Want ->
+    (let Node (fe.node L C)
+         Row (fe.expr F Env any)
+      (fe.spawn L C Node F Row (fe.row-type Row) Want))
+  "spawn" L C _ _ _ -> (fe.fail L C "spawn is written (spawn f), f a function from Unit, usually (lambda (_ : Unit) body)")
+  "await" L C [T] Env Want -> (fe.on-handle L C "await" "Task" T Env Want)
+  "await" L C _ _ _ -> (fe.fail L C "await is written (await task)")
+  "cancel" L C [T] Env Want -> (fe.on-handle L C "cancel" "Task" T Env Want)
+  "cancel" L C _ _ _ -> (fe.fail L C "cancel is written (cancel task)")
+  "channel" L C [T [int IL IC N]] Env Want ->
+    (let Type (fe.type T)
+         Node (fe.node L C)
+         Plain (if (fe.plain? Type []) true
+                   (fe.reject T (make-string "the elements of a channel must be serializable, but ~A contains a function or a handle" (fe.show-type Type))))
+         Capacity (if (element? N ["1" "2" "3" "4" "5" "6" "7" "8"]) true
+                      (fe.fail IL IC (make-string "a channel's capacity is 1 to 8, but this is ~A" N)))
+      (fe.done L C ["channel" Node Type N] ["Channel" Type] [(fe.runtime-effect "Channel" L C "channel")] [] Want))
+  "channel" L C _ _ _ -> (fe.fail L C "channel is written (channel ElementType capacity), the capacity a literal from 1 to 8")
+  "send" L C [Ch V] Env Want ->
+    (let Node (fe.node L C)
+         Row (fe.expr Ch Env any)
+         T (fe.handle-type Ch "Channel" "send" (fe.row-type Row))
+         Value (fe.expr V Env [want T "the value sent" (make-string " (the element type of ~A)" (fe.show-type (fe.row-type Row)))])
+      (fe.done L C ["send" Node (fe.row-node Row) (fe.row-node Value)] "SendResult"
+               (fe.union (fe.union-rows [Row Value]) [(fe.runtime-effect "Channel" L C "send")]) (fe.sum-rows [Row Value]) Want))
+  "send" L C _ _ _ -> (fe.fail L C "send is written (send channel value)")
+  "receive" L C [Ch] Env Want -> (fe.on-handle L C "receive" "Channel" Ch Env Want)
+  "receive" L C _ _ _ -> (fe.fail L C "receive is written (receive channel)")
+  "close" L C [Ch] Env Want -> (fe.on-handle L C "close" "Channel" Ch Env Want)
+  "close" L C _ _ _ -> (fe.fail L C "close is written (close channel)"))
+
+(define fe.spawn
+  L C Node F Row ["Arrow" "Unit" T Es] Want ->
+    (if (fe.plain? T [])
+        (fe.done L C ["spawn" Node (fe.row-node Row)] ["Task" T]
+                 (fe.union (fe.union (fe.row-effects Row) (map (/. E [E L C "the task this spawn starts"]) Es)) [(fe.runtime-effect "Task" L C "spawn")])
+                 (fe.row-uses Row) Want)
+        (fe.reject F (make-string "the result of a task must be serializable, so that nothing made inside it outlives it, but this function returns ~A" (fe.show-type T))))
+  _ _ _ F _ Type _ -> (fe.reject F (make-string "spawn needs a function from Unit, (Unit --> T), but this has type ~A" (fe.show-type Type))))
+
+\\ The element type of a handle of Kind (Task or Channel), or a message at D.
+(define fe.handle-type
+  _ Kind _ [Kind T] -> T
+  D Kind Form Type -> (fe.reject D (make-string "~A needs a ~A, (~A T), but this has type ~A" Form (if (= Kind "Task") "task" "channel") Kind (fe.show-type Type))))
+
+\\ await, cancel, receive and close: one handle operand.
+(define fe.on-handle
+  L C Form Kind E Env Want ->
+    (let Node (fe.node L C)
+         Row (fe.expr E Env any)
+         T (fe.handle-type E Kind Form (fe.row-type Row))
+      (fe.done L C [Form Node (fe.row-node Row)] (fe.handle-result Form T)
+               (fe.union (fe.row-effects Row) [(fe.runtime-effect Kind L C Form)]) (fe.row-uses Row) Want)))
+
+(define fe.handle-result
+  "await" T -> ["Outcome" T]
+  "receive" T -> ["ReceiveResult" T]
+  _ _ -> "Unit")
 
 \\ Items are name value ... body. L C place the let node for the first binding;
 \\ each later binding's node is placed at its name.
@@ -581,7 +698,7 @@
       (if (fe.plain? (fe.row-type Left) [])
           (fe.done L C ["prim" Node "eq" (fe.row-node Left) (fe.row-node Right)] "Bool"
                    (fe.union-rows [Left Right]) (fe.sum-rows [Left Right]) Want)
-          (fe.reject A (make-string "= compares serializable values only, but this operand has type ~A, which contains a function" (fe.show-type (fe.row-type Left)))))))
+          (fe.reject A (make-string "= compares serializable values only, but this operand has type ~A, which contains a function~A" (fe.show-type (fe.row-type Left)) (fe.or-handle (fe.row-type Left)))))))
 
 \\ Emit labels are restricted to printable ASCII here: a label is copied into the
 \\ artifact as text, and the reader keeps strings as octets.
@@ -595,7 +712,7 @@
     (let Row (fe.expr E Env any)
       (if (fe.plain? (fe.row-type Row) [])
           (fe.done L C ["emit" Node Label (fe.row-node Row)] "Unit" (fe.union (fe.row-effects Row) [["Emit" L C "this emit"]]) (fe.row-uses Row) Want)
-          (fe.reject E (make-string "emit needs a serializable value, but this has type ~A, which contains a function" (fe.show-type (fe.row-type Row)))))))
+          (fe.reject E (make-string "emit needs a serializable value, but this has type ~A, which contains a function~A" (fe.show-type (fe.row-type Row)) (fe.or-handle (fe.row-type Row)))))))
 
 \\ ---------- match ----------
 
@@ -765,6 +882,8 @@
   L C Effect Op K KId [Other | Rest] -> [Other | (fe.one-shot L C Effect Op K KId Rest)])
 
 (define fe.handle
+  _ _ [sym EL EC Effect] _ _ _ -> (fe.fail EL EC (make-string "~A is a runtime effect: the runtime discharges it, and no handler can" Effect))
+    where (element? Effect ["Emit" "Task" "Channel"])
   L C [sym EL EC Effect] Items Env Want ->
     (let Ops (fe.lookup Effect (value fe.*effects*))
          Known (if (= Ops none) (fe.fail EL EC (make-string "unknown effect ~A" Effect)) true)
@@ -802,7 +921,7 @@
 
 (define fe.datatype-name
   [sym L C Name] -> (fe.fail L C (make-string "~A is a built-in type and cannot be declared" Name))
-    where (element? Name ["Unit" "Bool" "I64" "Bytes" "TrapCode"])
+    where (element? Name ["Unit" "Bool" "I64" "Bytes" "TrapCode" "Task" "Channel" "Outcome" "SendResult" "ReceiveResult"])
   D -> (fe.check-capital "datatype" D))
 
 (define fe.user-effect-name
@@ -880,6 +999,10 @@
   [] -> false
   [[_ _ "durable"] | _] -> true
   [_ | Es] -> (fe.durable-program? Es))
+
+(define fe.first-durable
+  [[list L C [E N [sym SL SC "durable"] | Rest]] | _] -> [list L C [E N [sym SL SC "durable"] | Rest]]
+  [_ | Fs] -> (fe.first-durable Fs))
 
 (define fe.durable-effect?
   Name -> (= (nth 3 (fe.effect-entry Name (value fe.*effects*))) "durable"))
@@ -1004,6 +1127,8 @@
 (define fe.check-handled
   [] -> true
   [["Emit" | _] | Rest] -> (fe.check-handled Rest)
+  [["Task" | _] | Rest] -> (fe.check-handled Rest)
+  [["Channel" | _] | Rest] -> (fe.check-handled Rest)
   [[Name | _] | Rest] -> (fe.check-handled Rest) where (fe.durable-effect? Name)
   [[Name L C Cause] | _] ->
     (fe.fail L C (make-string "effect ~A is not handled: it comes from ~A, and no (handle ~A ...) encloses that on the way from the entry function main" Name Cause Name)))
@@ -1040,6 +1165,7 @@
          Limits [(fe.limit DatatypeForms "datatypes" 16) (fe.limit EffectForms "effects" 8) (fe.limit FunctionForms "functions" 32)]
          \\ Names first, so that declarations may refer to each other in any order.
          Reset (set fe.*datatypes* [["TrapCode" (map (/. K [K []]) ["Overflow" "DivZero" "Bounds" "InvalidDuration" "TaskLimit" "ChildFailed"])]])
+         NoTasks (set fe.*tasks* false)
          Names (set fe.*datatype-names* (fe.declared "datatype" (/. D (fe.datatype-name D)) DatatypeForms []))
          EffectNames (set fe.*effects* (map (/. N [N []]) (fe.declared "effect" (/. D (fe.user-effect-name D)) EffectForms [])))
          Datatypes (fe.datatypes DatatypeForms (value fe.*datatypes*))
@@ -1056,6 +1182,10 @@
          Results (fe.pass Functions)
          Entry (fe.check-entry Functions Results)
          Durable (fe.durable-program? Effects)
+         Tasks (value fe.*tasks*)
+         Separate (if (and Durable Tasks)
+                      (fe.reject (fe.first-durable EffectForms) "this program declares a durable effect and uses tasks: no contract defines the two together yet (CONCURRENCY.md section 13), so a program has one or the other")
+                      true)
       [object ["contract_version" "tc1-draft-1"]
               ["datatypes" (map (/. D (fe.datatype-object D)) (tl Datatypes))]
               ["effects" (map (/. E (fe.effect-object E Durable)) Effects)]
@@ -1063,6 +1193,6 @@
               ["functions" (map (/. R (hd R)) Results)]
               ["input_schema" [object ["type" (fe.main-argument Functions)]]]
               ["module" Module]
-              ["schema_version" (if Durable "tc1-durable-demo/1" "tc1-handler-demo/2")]
-              ["slice" (if Durable "TC1-D1" "TC1-H2")]
+              ["schema_version" (cond (Durable "tc1-durable-demo/1") (Tasks "tc1-task-demo/1") (true "tc1-handler-demo/2"))]
+              ["slice" (cond (Durable "TC1-D1") (Tasks "TC1-C1") (true "TC1-H2"))]
               ["source_map" (fe.source-map File (value fe.*locations*) [])]]))

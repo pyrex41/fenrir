@@ -3,9 +3,13 @@
 # (spec/tc1/SURFACE.md, a draft).
 #
 #   sh frontend/fenrir.sh check FILE.fen           elaborate and validate
-#   sh frontend/fenrir.sh run FILE.fen             check, then run on the Shen model
+#   sh frontend/fenrir.sh run FILE.fen [SCHEDULE]  check, then run on the Shen model
 #   sh frontend/fenrir.sh emit FILE.fen OUT.json   check, then write the artifact
-#   sh frontend/fenrir.sh run-artifact FILE.json   validate and run an existing artifact
+#   sh frontend/fenrir.sh run-artifact FILE.json [SCHEDULE]
+#                                                  validate and run an existing artifact
+# SCHEDULE, for a program with tasks: fifo (the default, the production FIFO
+# schedule), lowest, highest, random:N, prandom:N, or a file holding a JSON list of
+# task IDs, one per step.
 #
 # The entry point is the function main, run with input 0. FENRIR_FUEL bounds the
 # model steps of a run (default 100000). Shen/JIT: see harness/jit.sh.
@@ -14,7 +18,7 @@
 # budget ran out.
 set -eu
 usage() {
-  sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//' >&2
+  sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 [ $# -ge 2 ] || usage
@@ -25,9 +29,9 @@ fuel=${FENRIR_FUEL:-100000}
 case $fuel in ''|*[!0-9]*) echo "FENRIR_FUEL must be a number of steps" >&2; exit 2 ;; esac
 case $command in
   check) [ $# -eq 2 ] || usage; set -- check "$file" "$module" ;;
-  run) [ $# -eq 2 ] || usage; set -- run "$file" "$module" "$fuel" ;;
+  run) [ $# -eq 2 ] || [ $# -eq 3 ] || usage; set -- run "$file" "$module" "$fuel" ${3:+"$3"} ;;
   emit) [ $# -eq 3 ] || usage; set -- emit "$file" "$module" "$3" ;;
-  run-artifact) [ $# -eq 2 ] || usage; set -- run-artifact "$file" "$fuel" ;;
+  run-artifact) [ $# -eq 2 ] || [ $# -eq 3 ] || usage; set -- run-artifact "$file" "$fuel" ${3:+"$3"} ;;
   *) usage ;;
 esac
 . "$(dirname "$0")/../harness/jit.sh"

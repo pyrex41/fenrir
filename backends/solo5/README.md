@@ -181,3 +181,29 @@ trusted as built. One program per boot; entry input fixed at `["int","0"]`; the 
 scope is sampled, not complete (the free-run checks cover all of it). Replay is exact at
 the protocol boundary for this image and tender; it claims nothing about machine-level
 determinism of the tender or kernel.
+
+### TC1-C1 tasks in the guest (protocol v3, 15 November 2026)
+
+```sh
+sh harness/run-solo5-tasks.sh          # build the v3 image, then the Shen host, ~20 s
+```
+
+[pure-call/tasks.c](pure-call/tasks.c) is the task layer of slice C1
+([spec/tc1/CONCURRENCY.md](../../spec/tc1/CONCURRENCY.md)): a task table, scopes,
+channels and pending awaits, one local handler machine per task (`machine.c` is included
+unchanged; its enums gain values at their ends only, so v1 and v2 images and their data
+headers are as before), the scheduling-point steps, the step records of §10 and the FIFO
+production policy of §9. `control.c` built with `-DFGC_V3` and linked with `tasks.c`
+speaks [fenrir.solo5.pure-call-control/3](../../spec/solo5/pure-call-control-v3.md): Init
+names a scheduler, `reference` (every Run names the task that steps; a task that is not
+Runnable is `NotRunnable`) or `fifo` (the guest chooses and each record names its
+choice). Four injected defects are Init modes: `fifo-reversed`, `cancel-off-point`,
+`lost-wakeup`, `capacity-off-by-one`. Limits: 16 tasks, 64 scopes, 16 channels, capacity
+8, 96 events per step (`GuestLimit` beyond). The free-running guest refuses task
+programs (the lowering rejects them for it).
+
+Recorded run: 90 programs (18 hand fixtures, 72 of grammar G), 1,338 tender boots; 151
+recorded reference runs, 248 exploration witnesses and 90 guest-FIFO runs agree with the
+Shen task model step for step (22,725 steps); each defect detected; 169 tapes replay
+exactly on 2 cold boots each. Details in [harness/README.md](../../harness/README.md).
+Development evidence, `qualification: UNKNOWN`; `spt` only.

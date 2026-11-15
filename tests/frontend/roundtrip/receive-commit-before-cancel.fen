@@ -1,0 +1,12 @@
+\\ Round trip: the TC1-C1 hand fixture receive-commit-before-cancel, in surface syntax.
+\\ frontend/test.sh compares this program's run (production FIFO schedule) with the run of the fixture's artifact.
+
+(define main {I64 --> I64}
+  input -> (let c (channel I64 1)
+                t (spawn (lambda (_ : Unit) (match (receive c) ((Item x) -> (do (emit "got" x) x)) (End -> 0))))
+             (do (send c 5)
+                 (cancel t)
+                 (let r (await t)
+                   (do (close c)
+                       (match (receive c) ((Item x) -> (emit "left" x)) (End -> (emit "empty" 0)))
+                       (match r ((Ok y) -> y) (Cancelled -> 100) ((Failed f) -> 200)))))))

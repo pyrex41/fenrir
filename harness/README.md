@@ -11,6 +11,8 @@ subprocess libraries.
 sh harness/run-solo5-pure-call.sh          # Solo5 guest against the model, full scope, ~5 s
 sh harness/run-solo5-pure-call.sh exact    # exact arithmetic: C guest against the model, ~4 s
 sh harness/run-solo5-control.sh            # Solo5 guest under host-selected steps, strict replay, ~20 s
+sh harness/run-solo5-tasks.sh              # TC1-C1 tasks in the guest, host-selected schedules and guest FIFO, ~20 s
+sh harness/run-tc1-task-loop.sh            # TC1-C1 generated family, coverage, campaigns, replay, ~2 min
 sh harness/run-model-vs-candidate.sh       # JavaScript implementation against the model, ~11 s
 ```
 
@@ -275,10 +277,48 @@ The two programs are optional rows of the proposed TC1 gate (`task-hand-fixtures
 `task-commuting-obligation`), with ledger row `TC1-C-TASKS`; the contract is a
 draft, so no claim relies on them.
 
-Not done for C1: generated (random) programs beyond G, reduction, strict replay
-tapes, catalog coverage, the Solo5 guest, the frontend. Evidence is bounded
-exploration, development grade; the fixtures, both machines and the harness
-share one author lineage.
+**[solo5-tasks.shen](solo5-tasks.shen)** (`sh harness/run-solo5-tasks.sh`, about
+20 s, 1,338 tender boots): the same slice in the Solo5 guest
+(`backends/solo5/pure-call/tasks.c` over the unchanged handler machine), over control
+protocol v3 ([spec/solo5/pure-call-control-v3.md](../spec/solo5/pure-call-control-v3.md)),
+where the scheduler choice is an input. Batch: the 18 hand fixtures and every 50th
+program of G (72). Measured 15 November 2026:
+
+| Check | Measured |
+| --- | --- |
+| Reference, recorded schedules | the 151 (fixture, schedule) runs of `tc1-tasks.shen` (54 of production policies), the host naming every task: 151 of 151 agree with the model step for step, 7,167 steps; every production policy's schedule is a production schedule by the model's records |
+| Reference, exploration witnesses | the G sample under one witness schedule per reference observation class, found in-process by the exploration of `tc1-task-explore.shen` (loaded as a library): 248 witnesses, 248 agree, 11,507 steps, no bound hit; consecutive steps of one task go in one Run |
+| FIFO, guest's own scheduler | all 90 programs: the guest chooses, the host replays each choice on the model: 90 of 90 agree (4,051 steps), every guest schedule is a production schedule by the model's records and equals the FIFO schedule the batch declares |
+| Guest defects | `cancel-off-point` killed on 18 runs, `lost-wakeup` on 48, `capacity-off-by-one` on 7, `fifo-reversed` on 18 of 18 FIFO runs (each of the 18 still agrees with the model and is a production schedule: only the comparison with the declared FIFO schedule catches it); no crash |
+| Strict replay | 169 tapes (151 reference, 18 FIFO), each on 2 cold boots: all byte-identical; the 18 FIFO runs re-recorded: byte-identical tapes. The Run frames name the chosen tasks, so a tape binds its schedule |
+| Negatives | 18 tape drifts (v1's 16, an edited schedule choice, a header naming the other scheduler), 15 hostile-host inputs (Run without a task under `reference`, with one under `fifo`, an unallocated task, non-canonical task, reordered keys, over budget, a v2 Reply frame, the v1 Init template, unknown scheduler and mode, the v2 protocol, Run after a deadlock, ...), 5 hostile guest outputs (Deadlock without a wait graph, a wait graph while Running, a record of another task, an unknown execution) and 10 v3 byte vectors: each as expected |
+
+Free run: task programs are refused (the lowering rejects them for the free-running
+image, which has no scheduler input); `guest.c` never sees one.
+
+**[tc1-task-loop.shen](tc1-task-loop.shen)** (`sh harness/run-tc1-task-loop.sh`,
+about 2 minutes; `stride N` samples G for coverage): the loop closed for C1 as the
+handler slice closed it. Measured 15 November 2026:
+
+| Part | Measured |
+| --- | --- |
+| Generated family | `tools/tc1/task-generate.mjs`, seed 1, 200 programs beyond G (3 or 4 tasks, nested scopes, a handler inside a task, a scope abandoned by `discontinue`, traps, one or two channels of capacity 1–2, close, cancel, await, channels made inside tasks), each under five policies: 1,000 runs (400 production), 84,452 model steps; model and sandboxed implementation agree on all 1,000; every production policy's schedule is a production schedule by the model's records; 736 complete, 264 deadlock. All nine defects killed there (stale waiter 4, waiter not woken 84, woken twice 43, eager cancel 254, LIFO 13, no sibling cancel 234, capacity 42, lost wakeup on close 29, on await 184; 2 crashes not counted) |
+| Catalog coverage | [spec/tc1/task-catalog.json](../spec/tc1/task-catalog.json) (`tc1-task-catalog/1`, 53 transitions, pinned by SHA-256 in the harness): every C1 step of 151 hand traces, 15,808 exhaustive witnesses (all 3,600 programs of G, 777,583 steps) and 1,000 generated traces maps to a transition; 383,708 C1 steps classified, 485,494 handler steps inherited; 0 outside the catalog, 0 control, 0 depth and 0 scheduling-point mismatches, and every pure step is not a scheduling point; 53 of 53 transitions exercised; the channel queue invariant (§4) held after every model step of the hand and generated runs |
+| Campaigns | four of the nine defects, each discovered on the first generated (program, schedule) showing its class, then reduced by typed, schedule-aware proposals (`tools/tc1/task-reduce.mjs`; every proposal revalidated, its schedule re-derived for it, accepted only when fresh model and implementation runs show the same class; 0 crashes, 0 proposals where model and implementation disagree): `lifo_channel` (received-other-value) 62 → 23 nodes, 138 → 52 schedule steps; `lost_wakeup_await` (termination-without-awaited) 78 → 10 nodes, 168 → 22 steps; `no_sibling_cancel` (failure-without-sibling-cancel) 61 → 11 nodes, 47 → 31 steps; `capacity_off_by_one` (send-admitted-over-capacity) 67 → 19 nodes, 110 → 40 steps. The 8 (program, schedule) pairs are retained in `fixtures/tc1/task-retained-failures.json` and the run must find exactly them |
+| Strict replay | `tools/tc1/task-replay.mjs`, tapes that bind the schedule (its hash in the header, each step's task): 151 hand tapes replay exactly and are admitted; each retained failure's tape diverges at exactly its retained epoch with its defect and is admitted without (16 tapes); tapes with an edited choice, an edited step, another schedule, another program or another catalog are refused |
+
+Every new check was shown able to fail: an edited catalog with the old pin
+(`catalog_pin_holds` false), a wrong depth change for `scope/enter` with the pin
+updated (depth mismatches), a wrong scheduling-point flag for `yield` (point
+mismatches), a queue check made too strict (violations), and an edited retained
+epoch (retained replay and matching fail) each turned the run into
+`development-fail`.
+
+Evidence is bounded exploration, development grade; the fixtures, the machines (Shen,
+JavaScript, C) and the harness share one author lineage. Discovery takes the first
+policy that shows the class (all four took `lowest` or `highest`); the reducer's
+schedule-only proposals (another policy with fewer switches) were offered but none was
+accepted in these campaigns.
 
 ## TC1: durable effects (slice D1)
 

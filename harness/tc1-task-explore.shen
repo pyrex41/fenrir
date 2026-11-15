@@ -25,14 +25,20 @@
 \\ OUTDIR must exist and be empty. `limit N` explores only the first N programs, for
 \\ development; the scope is then incomplete and the run cannot pass.
 
-(set fh.*lib* (cn (hd (tl (value *argv*))) "/"))
-(set fh.*root* (cn (hd (tl (tl (value *argv*)))) "/"))
-(set fh.*out* (cn (hd (tl (tl (tl (value *argv*))))) "/"))
-(set fh.*options* (tl (tl (tl (tl (value *argv*))))))
-(set fh.*sandbox* (element? "sandbox" (value fh.*options*)))
-(load (cn (value fh.*root*) "harness/common.shen"))
-(load (cn (value fh.*root*) "harness/tc1-task-common.shen"))
-(load (cn (value fh.*root*) "harness/tc1-defects.shen"))
+\\ harness/solo5-tasks.shen loads this file for its exploration (fh.explore), with
+\\ fh.*explore-as-library* true, fh.*options* set and common.shen and tc1-task-common.shen
+\\ already loaded; then nothing below reads the command line and fh.main does not run.
+(set fh.*explore-library* (trap-error (value fh.*explore-as-library*) (/. E false)))
+(if (value fh.*explore-library*)
+    skip
+    (do (set fh.*lib* (cn (hd (tl (value *argv*))) "/"))
+        (set fh.*root* (cn (hd (tl (tl (value *argv*)))) "/"))
+        (set fh.*out* (cn (hd (tl (tl (tl (value *argv*))))) "/"))
+        (set fh.*options* (tl (tl (tl (tl (value *argv*))))))
+        (set fh.*sandbox* (element? "sandbox" (value fh.*options*)))
+        (load (cn (value fh.*root*) "harness/common.shen"))
+        (load (cn (value fh.*root*) "harness/tc1-task-common.shen"))
+        (load (cn (value fh.*root*) "harness/tc1-defects.shen"))))
 
 (define fh.option-limit
   ["limit" N | _] -> (tc0.i64.small N)
@@ -490,4 +496,4 @@
        (do (output "~A~%" (json.stringify Report [[byte-limit 4194304]]))
            (shen-jit.exit (if Pass 0 1)))))
 
-(fh.main)
+(if (value fh.*explore-library*) skip (fh.main))

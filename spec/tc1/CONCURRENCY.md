@@ -476,9 +476,44 @@ sh harness/run-tc1-task-explore.sh      # exhaustive-small: the obligation of se
   any step (373 programs). The implementation agrees with the model on one
   witness schedule per reference observation class (15,808).
 
+```sh
+sh harness/run-solo5-tasks.sh           # the Solo5 guest over control protocol v3, ~20 s
+sh harness/run-tc1-task-loop.sh         # generated family, catalog coverage, campaigns, replay, ~2 min
+sh frontend/test.sh                     # surface syntax, includes the task programs
+```
+
+- **Solo5 guest** (`backends/solo5/pure-call/tasks.c`, protocol
+  [pure-call-control-v3.md](../solo5/pure-call-control-v3.md), where the schedule is an
+  input exactly as the model takes it): the 151 recorded (fixture, schedule) runs
+  with the host naming every task, 248 exploration witnesses for 72 programs of G
+  (every 50th), and all 90 programs under the guest's own FIFO policy agree with the
+  Shen model step for step (22,725 steps); every guest FIFO schedule is a production
+  schedule by the model's records and equals the declared FIFO schedule. Four
+  injected guest defects are detected (`cancel-off-point` 18 runs, `lost-wakeup` 48,
+  `capacity-off-by-one` 7, `fifo-reversed` 18 of 18, the last only by the FIFO
+  comparison: those schedules are still production ones); 169 tapes replay exactly on
+  cold boots; 18 tape, 15 hostile-host and 5 hostile-guest negatives and 10 byte
+  vectors hold. The free-running guest refuses task programs.
+- **Frontend** ([SURFACE.md](SURFACE.md) §2, "Tasks"): three task examples, two
+  more accepted programs, 22 rejected programs at predicted positions, round trips of
+  all 18 hand fixtures, three runs under given schedules; `run` uses the production
+  FIFO schedule. Both validators accepted every task artifact the elaborator produced.
+- **Loop closure**: a generated family of 200 programs beyond G under five policies
+  (1,000 runs, model and implementation agree on all, all nine defects killed there);
+  catalog coverage over hand, all of G and generated traces against the pinned
+  [task-catalog.json](task-catalog.json): 53 of 53 transitions exercised, no step
+  outside it, no control, depth or scheduling-point mismatch, and the queue invariant
+  of §4 after every model step of the hand and generated runs; reduction campaigns for
+  `lifo_channel`, `lost_wakeup_await`, `no_sibling_cancel` and `capacity_off_by_one`
+  (62→23, 78→10, 61→11 and 67→19 nodes), the original and minimized (program,
+  schedule) pairs retained in `fixtures/tc1/task-retained-failures.json`; strict
+  tapes that bind the schedule for all 151 hand runs and the 8 retained failures
+  (each diverging at exactly its retained epoch with its defect, admitted without).
+
 The full numbers are in [harness/README.md](../../harness/README.md). Evidence
 grade: development, bounded exploration; no gate verdict. The obligation is
-checked on G only; it is not proved.
+checked on G only; it is not proved. The fixtures, the three machines (Shen,
+JavaScript, C) and the harnesses share one author lineage.
 
 ## 13 For the owner to confirm
 
@@ -515,11 +550,94 @@ Provisional choices this draft makes:
 10. **Join is a scheduling point and `ScopeClose` is not** (§7); the TC0 staging
     of a normal scope exit (close, then join) is kept as two steps.
 
+**Durable effects with tasks: questions for the owner.** Neither this contract nor
+[DURABLE.md](DURABLE.md) defines a program that has both: a D1 artifact has no task
+forms (DURABLE.md §11, §13 item 13), a C1 artifact no durable effects (§1), and the
+frontend rejects a program that declares a durable effect and uses tasks. What the
+two contracts do say: a durable operation is a scheduling point (amendment §14), a
+host request is an observation and the replies are inputs (DURABLE.md §6), D1 has at
+most one outstanding request because the whole machine stops in `HostWait`
+(DURABLE.md §4, v2 §6), and cancellation is delivered only at a scheduling point
+(§6 here). A combined slice has to answer the following; each comes with the smallest
+program (surface syntax, `(effect Store durable (put I64 --> I64))` declared) whose
+observations differ between the answers. No combined schema is built until they are
+answered.
+
+- **D×C 1. What does `HostWait` stop: the requesting task, or the image?**
+  ```
+  (let t (spawn (lambda (_ : Unit) (perform Store put 1)))
+    (do (emit "root" 0) (match (await t) ((Ok v) -> v) (Cancelled -> 0) ((Failed c) -> 0))))
+  ```
+  If only the task blocks (it is Blocked, other tasks Runnable), some schedule
+  emits `root` after t's `HostRequest` and before its `HostReply`; if the image
+  stops (D1's rule), no schedule does. The first makes the reply a wake-up like a
+  channel commit (§5 Wake) and the host's timing a scheduling input.
+- **D×C 2. Can a reply reach a task that was cancelled while waiting** (amendment
+  §14 open point)**, and what does it observe?**
+  ```
+  (let t (spawn (lambda (_ : Unit) (do (perform Store put 1) (emit "after" 0) 1)))
+    (do yield (cancel t) (match (await t) ((Ok v) -> v) (Cancelled -> 2) ((Failed c) -> 3))))
+  ```
+  under a schedule that runs t to its request first. (a) As a committed channel
+  receive: the request stays outstanding, the reply is taken, and the cancellation
+  is delivered at the Wake step that follows: no `after`, outcome 2, the host saw a
+  request whose reply nobody used. (b) The request is withdrawn: the host must be
+  told (a new guest→host frame, and the amendment's "cancelling a durable obligation
+  is itself a durable transition"), outcome 2, and a reply that arrives later is a
+  protocol violation. (c) Cancellation waits for the reply: t is not Runnable until
+  the host answers, so the cancel is delivered at the reply's Wake, as in (a), but
+  root's `await` cannot complete without the host. (a) and (c) differ only when the
+  host never replies (D×C 5).
+- **D×C 3. Several outstanding requests: which reply comes first?**
+  ```
+  (let a (spawn (lambda (_ : Unit) (perform Store put 1)))
+       b (spawn (lambda (_ : Unit) (perform Store put 2)))
+    (do (emit "first" (match (await a) ((Ok v) -> v) (Cancelled -> 0) ((Failed c) -> 0))) 0))
+  ```
+  With both requests outstanding, the order of the two replies is either the
+  host's choice (an input like the schedule, recorded on the tape) or fixed by
+  request `seq`. The amendment preserves "the order of operations on one durable
+  store"; whether that is request order or reply order decides whether the host may
+  answer b before a. DURABLE.md §6's "each reply right after its request" cannot
+  hold for both.
+- **D×C 4. Whose request is it?** DURABLE.md §7 fixes `"task":"0"` in `HostRequest`
+  and `HostReply`; with tasks the event must name the requesting task, and the
+  observation (§9 here) must say whether a host request belongs to its task's
+  sequence, to a per-store sequence, or both. Same program as D×C 3.
+- **D×C 5. Deadlock against "awaiting the host".**
+  ```
+  (let t (spawn (lambda (_ : Unit) (perform Store put 1)))
+    (match (await t) ((Ok v) -> v) (Cancelled -> 0) ((Failed c) -> 0)))
+  ```
+  Once t has made its request, no task is Runnable. §10 calls that `Deadlock`;
+  DURABLE.md §7 calls a stopped machine with a pending request `AwaitingHost`. A
+  combined footer needs a rule (proposed: `AwaitingHost` whenever a request is
+  outstanding, `Deadlock` only when none is).
+- **D×C 6. Scope failure while a sibling waits on the host.**
+  ```
+  (scope (let a (spawn (lambda (_ : Unit) (perform Store put 1)))
+              b (spawn (lambda (_ : Unit) (/ 1 0)))
+           0))
+  ```
+  b's trap requests a's cancellation (§7) while a is in `HostWait`; the scope's join
+  then waits for a. Under D×C 2 (a) or (c) the scope cannot exit before the host
+  replies; under (b) it can, with a withdrawn request.
+- **D×C 7. A durable handler copied into a child.** Handlers are copied into a
+  spawned task (§5), so a `(handle Store ...)` that reinterprets the durable effect
+  in the parent also answers the child's perform, which is then not a host request.
+  Is that intended for durable reinterpretation handlers, which may carry a storage
+  contract? (Same answer as item 5 above, unless the owner wants durable handlers
+  excluded.)
+
+The `atomic` exclusion rule needs nothing new: D1's `atomic` body already has an
+empty effect set (DURABLE.md §8), which excludes `Task` and `Channel`.
+
 ## 14 Not decided here
 
 - Time, resources, durable effects and actors (§1).
 - The actor mailbox overflow policy and whether a durable reply can reach a
   cancelled task (amendment §14, second and third open points): there are no
-  actors or durable effects in C1.
+  actors or durable effects in C1. The durable questions are written out, with a
+  distinguishing program each, at the end of §13 (D×C 1–7).
 - A multi-core image profile.
 - Fairness beyond FIFO's weak fairness; any progress property.
