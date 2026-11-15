@@ -170,7 +170,7 @@ sh harness/run-tc1-exhaustive.sh        # grammar H up to 7 nodes, ~30 s
 sh harness/run-tc1-generated.sh         # generated family G, ~11 s
 sh harness/run-tc1-reduction.sh DEFECT  # one discovery-reduction-replay campaign, 8-25 s
 sh harness/run-tc1-strict-replay.sh     # ~9 s
-sh harness/run-tc1-gate.sh              # the proposed TC1 gate, TBD (runs the TC0-A gate and the three optional rows too)
+sh harness/run-tc1-gate.sh              # the proposed TC1 gate, about 9 min (runs the TC0-A gate and the three optional rows too)
 ```
 
 | Program | What it checks | Measured |
