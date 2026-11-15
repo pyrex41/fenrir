@@ -152,3 +152,66 @@ replay and catalog coverage.
 - Entry input is fixed at `["int","0"]`.
 - Shen/JIT is pinned in the flake (`nix build .#shen-jit`). The runner scripts
   use that output when nix is available; see [jit.sh](jit.sh).
+
+## Service example A1: accepted-job exploration
+
+```sh
+sh harness/run-service-explore.sh                 # default scope below, ~2.5 min
+sh harness/run-service-explore.sh 2 2 2 3 2 2 1 2000000 sandbox   # same, JS side sandboxed
+sh harness/run-service-explore.sh replay spec/service/counterexamples/volatile-mailbox--recovery.json
+sh harness/run-service-explore.sh replay-retained # every retained counterexample, ~6 s
+```
+
+**Evidence status: bounded exploration passed, development grade.** Not a
+gate verdict (`qualification: UNKNOWN`), not a proof, not a refinement claim.
+
+[service-explore.shen](service-explore.shen) explores the accepted-job contract
+([spec/service/ACCEPTED_JOB.md](../spec/service/ACCEPTED_JOB.md); model
+[models/service/accepted-job.shen](../models/service/accepted-job.shen)) breadth
+first over product states (system state, property monitor, remaining budgets),
+so identical system states with different monitor obligations never merge.
+Every state predicate is checked on every reachable state and every edge
+predicate on every explored edge. A step cut off by a budget is a counted bound
+hit; exceeding the state cap is truncation, which fails the run. The first
+violation of each check is a shortest schedule; one per violated property is
+retained as JSON with a replay command that re-executes it in a fresh process.
+Mutants are in [service-mutants.shen](service-mutants.shen), outside the model.
+
+Scope (default): 2 tenants, 2 keys, 2 payload digests; per schedule at most 3
+submits, 2 deliveries, 2 responses, 1 crash (a mutant's internal steps take no
+budget). Measured on 15 November 2026 with Shen/JIT 0.7:
+
+| What | Result |
+| --- | --- |
+| Hand traces ([spec/service/hand-traces.json](../spec/service/hand-traces.json), derived before the model ran) | 11 of 11 agree |
+| Model | 251,374 product states (239,830 without the monitor, 122,801 system states), 1,093,203 edges, depth 8, not truncated, no violation of any of 12 checks; bound hits: 1,875,584 submit, 1,516,312 delivery, 273,752 response, 208,419 crash |
+| Monitor split | 11,544 product states exist only because the monitor differs; witness: `submit(0,0,0) submit(0,0,0) crash` against `submit(0,0,0) submit(0,0,1) crash` |
+| JavaScript implementation ([runtime/service/accepted-job.mjs](../runtime/service/accepted-job.mjs)), explored by its own driver | 629,165 of 629,165 distinct runtime edges identical (state, label, next state, response), none on one side only; same 239,830 states and 122,801 system states; 73,823,742 schedules within the budgets |
+
+Mutants, shortest counterexample length per property that catches it
+(aim in bold):
+
+| Mutant | Caught by |
+| --- | --- |
+| volatile-mailbox | **recovery 3** (`submit, respond, crash`), atomicity 1, response 1, progress 3 |
+| respond-before-commit | **response 1**, retry 2 (not predicted), progress 2 |
+| non-atomic-write | **atomicity 1**, response 2, progress 3 (predicted 3 and 4) |
+| retry-reapplies | **retry 2**, atomicity 2, response 2 |
+| key-reuse-accepted | **retry 2** only |
+| cross-tenant-counter | **authority 1** only |
+| undeduplicated-delivery | **retry 2**, **progress 3** |
+| volatile-status | **recovery 3**, **progress 3**, authority 3 (not predicted: a crash carries no tenant) |
+| failure-not-terminal | **progress 2**, retry 2 |
+| equivalent-control | nothing; same 251,374 states and 1,093,203 edges as the model |
+
+Every property and every one of the 12 checks fails on at least one mutant;
+all 22 retained counterexamples
+([spec/service/counterexamples](../spec/service/counterexamples)) replay. The
+last two mutants were added, with predictions, after the first run showed
+`recovery.crash-frame` and `progress.delivery-terminates` failing on no mutant.
+Shen time: model 17 s, differential 20 s (JavaScript side 12 s), mutants
+100 s.
+
+Limits: only the stated scope; the model and harness share one Shen process;
+the Shen-to-Rocq correspondence is by reading; progress holds only under the
+stated delivery-fairness and availability assumptions.

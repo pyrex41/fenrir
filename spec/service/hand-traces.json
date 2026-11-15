@@ -1,0 +1,94 @@
+{
+  "schema": "fenrir.service.hand-traces/1",
+  "contract": "spec/service/ACCEPTED_JOB.md",
+  "provenance": "Derived by hand from the contract text before the Shen model or the JavaScript implementation was run on them (committed before either file existed). Encoding: ACCEPTED_JOB.md section 3.",
+  "tenants": 2,
+  "traces": [
+    {
+      "name": "submit-then-respond",
+      "schedule": [["submit", 0, 0, 0], ["respond", ["accepted", [0, 0, 0, 0, 0]]]],
+      "responses": [["accepted", [0, 0, 0, 0, 0]], ["accepted", [0, 0, 0, 0, 0]]],
+      "final": [[[[[0, 0]], [[0, 0, "pending"]], [[0, 0, [0, 0, 0, 0, 0]]], 1], [[], [], [], 0]],
+                [["accepted", [0, 0, 0, 0, 0]]],
+                [["accepted", [0, 0, 0, 0, 0]]]]
+    },
+    {
+      "name": "retry-same-request-is-replayed",
+      "schedule": [["submit", 0, 0, 1], ["submit", 0, 0, 1]],
+      "responses": [["accepted", [0, 0, 1, 0, 0]], ["accepted", [0, 0, 1, 0, 0]]],
+      "final": [[[[[0, 1]], [[0, 0, "pending"]], [[0, 1, [0, 0, 1, 0, 0]]], 1], [[], [], [], 0]],
+                [["accepted", [0, 0, 1, 0, 0]]],
+                []]
+    },
+    {
+      "name": "reused-key-other-payload-is-refused",
+      "schedule": [["submit", 0, 1, 0], ["submit", 0, 1, 1]],
+      "responses": [["accepted", [0, 1, 0, 0, 0]], ["conflict", 0, 1]],
+      "final": [[[[[0, 0]], [[0, 0, "pending"]], [[1, 0, [0, 1, 0, 0, 0]]], 1], [[], [], [], 0]],
+                [["accepted", [0, 1, 0, 0, 0]], ["conflict", 0, 1]],
+                []]
+    },
+    {
+      "name": "lost-response-then-retry",
+      "schedule": [["submit", 1, 0, 0], ["crash"], ["submit", 1, 0, 0], ["respond", ["accepted", [1, 0, 0, 0, 0]]]],
+      "responses": [["accepted", [1, 0, 0, 0, 0]], null, ["accepted", [1, 0, 0, 0, 0]], ["accepted", [1, 0, 0, 0, 0]]],
+      "final": [[[[], [], [], 0], [[[0, 0]], [[0, 0, "pending"]], [[0, 0, [1, 0, 0, 0, 0]]], 1]],
+                [["accepted", [1, 0, 0, 0, 0]]],
+                [["accepted", [1, 0, 0, 0, 0]]]]
+    },
+    {
+      "name": "tenants-have-separate-key-tables",
+      "schedule": [["submit", 0, 0, 0], ["submit", 1, 0, 1]],
+      "responses": [["accepted", [0, 0, 0, 0, 0]], ["accepted", [1, 0, 1, 0, 0]]],
+      "final": [[[[[0, 0]], [[0, 0, "pending"]], [[0, 0, [0, 0, 0, 0, 0]]], 1],
+                 [[[0, 1]], [[0, 0, "pending"]], [[0, 1, [1, 0, 1, 0, 0]]], 1]],
+                [["accepted", [0, 0, 0, 0, 0]], ["accepted", [1, 0, 1, 0, 0]]],
+                []]
+    },
+    {
+      "name": "duplicate-delivery-is-absorbed",
+      "schedule": [["submit", 0, 0, 0], ["complete", 0, 0, true], ["complete", 0, 0, false]],
+      "responses": [["accepted", [0, 0, 0, 0, 0]], null, null],
+      "final": [[[[[0, 0]], [[0, 0, "done"]], [[0, 0, [0, 0, 0, 0, 0]]], 1], [[], [], [], 0]],
+                [["accepted", [0, 0, 0, 0, 0]]],
+                []]
+    },
+    {
+      "name": "two-keys-two-ids",
+      "schedule": [["submit", 0, 0, 0], ["submit", 0, 1, 0], ["complete", 0, 1, false]],
+      "responses": [["accepted", [0, 0, 0, 0, 0]], ["accepted", [0, 1, 0, 1, 1]], null],
+      "final": [[[[[0, 0], [1, 0]], [[0, 0, "pending"], [1, 1, "failed"]],
+                  [[0, 0, [0, 0, 0, 0, 0]], [1, 0, [0, 1, 0, 1, 1]]], 2],
+                 [[], [], [], 0]],
+                [["accepted", [0, 0, 0, 0, 0]], ["accepted", [0, 1, 0, 1, 1]]],
+                []]
+    },
+    {
+      "name": "crash-keeps-durable-state-and-trace",
+      "schedule": [["submit", 0, 0, 0], ["respond", ["accepted", [0, 0, 0, 0, 0]]], ["crash"]],
+      "responses": [["accepted", [0, 0, 0, 0, 0]], ["accepted", [0, 0, 0, 0, 0]], null],
+      "final": [[[[[0, 0]], [[0, 0, "pending"]], [[0, 0, [0, 0, 0, 0, 0]]], 1], [[], [], [], 0]],
+                [],
+                [["accepted", [0, 0, 0, 0, 0]]]]
+    },
+    {
+      "name": "no-response-after-crash-without-retry",
+      "schedule": [["submit", 0, 0, 0], ["crash"], ["respond", ["accepted", [0, 0, 0, 0, 0]]]],
+      "disabled_at": 2
+    },
+    {
+      "name": "delivery-of-unknown-job-changes-nothing",
+      "schedule": [["complete", 1, 0, true]],
+      "responses": [null],
+      "final": [[[[], [], [], 0], [[], [], [], 0]], [], []]
+    },
+    {
+      "name": "a-response-can-be-delivered-twice",
+      "schedule": [["submit", 0, 0, 0], ["submit", 0, 0, 1], ["respond", ["conflict", 0, 0]], ["respond", ["conflict", 0, 0]]],
+      "responses": [["accepted", [0, 0, 0, 0, 0]], ["conflict", 0, 0], ["conflict", 0, 0], ["conflict", 0, 0]],
+      "final": [[[[[0, 0]], [[0, 0, "pending"]], [[0, 0, [0, 0, 0, 0, 0]]], 1], [[], [], [], 0]],
+                [["accepted", [0, 0, 0, 0, 0]], ["conflict", 0, 0]],
+                [["conflict", 0, 0], ["conflict", 0, 0]]]
+    }
+  ]
+}

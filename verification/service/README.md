@@ -85,3 +85,23 @@ is a scoped model). Have Gleipnir explore submit/complete/respond/crash
 schedules against it, with the volatile-mailbox variant kept as a mutant that
 must be caught. The real store is SQLite under an OTP supervisor (amendment
 §8); its single-writer transactions match assumption 1 above.
+
+## Stage A1: the executable Shen model (pointer)
+
+Stage A1 now exists. The contract's authoritative statement is the Shen model
+[models/service/accepted-job.shen](../../models/service/accepted-job.shen),
+with its properties as checkable predicates in
+[models/service/accepted-job-properties.shen](../../models/service/accepted-job-properties.shen)
+and the contract text in
+[spec/service/ACCEPTED_JOB.md](../../spec/service/ACCEPTED_JOB.md), which names,
+for each property, the theorem of this file it was written to match.
+Gleipnir's bounded exploration of it, with the volatile-mailbox design and
+other mutants, is [harness/service-explore.shen](../../harness/service-explore.shen)
+(`sh harness/run-service-explore.sh`; results in
+[harness/README.md](../../harness/README.md)).
+
+The status of this file is unchanged (model property proved, for this Rocq
+system). The Shen model's status is *bounded exploration passed*, development
+grade. **The correspondence between the two models is by reading, not
+proved:** no theorem here is known to hold of the Shen model, and nothing the
+explorer finds is a statement about this file.
