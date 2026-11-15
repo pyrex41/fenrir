@@ -285,6 +285,8 @@
 (define fh.solo5-control
   Memo ->
     (let Built (fh.exec "node" [(cn (value fh.*root*) "tools/solo5/control-pure-call-build.mjs") "--stride" (fh.solo5-control-stride)] 1800)
+      (if (= (hd Built) -1)
+          (fh.row "UNKNOWN" ["The Solo5 control batch build did not complete within its time limit"] [] Memo)
       (if (not (= (hd Built) 0))
           (fh.row "BLOCKED" ["The Solo5 control batch or guests could not be built (is Solo5 available at the pinned commit?)"] [] Memo)
           (let Batch (fh.last-line-of (hd (tl Built)))
@@ -299,7 +301,7 @@
                                        ["total_boots" (fh.member "total_boots" Report)]] Memo)
                     (if (= Status "development-fail")
                         (fh.row "FAIL" ["The Solo5 control check failed: a divergence between the guest and the model, a tape that did not replay exactly, or an unexpected hostile-peer result"] [] Memo)
-                        (fh.row "UNKNOWN" ["The Solo5 control harness did not report (or exceeded its time limit)"] [] Memo))))))))
+                        (fh.row "UNKNOWN" ["The Solo5 control harness did not report (or exceeded its time limit)"] [] Memo)))))))))
 
 (define fh.last-line-of
   Text -> (let Lines (fh.lines Text)
