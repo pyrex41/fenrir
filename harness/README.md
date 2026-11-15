@@ -464,7 +464,7 @@ stage A3.
 ## The proposed service gate
 
 ```sh
-sh harness/run-service-gate.sh          # the proposed service gate, about 5 min (4 min 43 s measured)
+sh harness/run-service-gate.sh          # the proposed service gate: about 5 min for the required rows (4 min 43 s measured), about 25 to 30 min with the optional rows
 ```
 
 [service-gate.shen](service-gate.shen), manifest
@@ -518,7 +518,7 @@ response, 1 crash, 1 dispatch, 4 upgrade steps; cap 1,500,000), pinned by the ev
 | `a4-solo5-agreement` | `solo5-durable.shen` quick on the sample of the row above | the guest driven on as many `programs` as the sample has runs, all `programs_agreeing_with_model`; BLOCKED without Solo5 or when the guest cannot be built |
 | `a4-retained-replay` | `replay` of each of the 43 files of `spec/service/counterexamples-a4` and 16 of `counterexamples-a4-fenrir`, each in a fresh process | every file reports `reproduced`; another count, no report or no elaboration in the run is UNKNOWN |
 
-The proposed gate's full run, with these rows, takes about 30 minutes; it runs the heavy
+The proposed gate's full run, with these rows, takes about 25 to 30 minutes; it runs the heavy
 programs strictly one after another (the A1 exploration peaks near 7.6 GB, A4 near 4.3
 GB). The limits of the A4 rows are the ledger row's gaps: bounded scope (1 key, 2
 submits), one author lineage, the choices of UPGRADE.md section 11 unconfirmed by the

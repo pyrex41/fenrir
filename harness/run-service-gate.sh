@@ -1,6 +1,6 @@
 #!/bin/sh
 # Run the proposed service gate (accepted-job contract A1, handler A2). Usage: sh harness/run-service-gate.sh
-# Allow about 30 minutes with the optional A3/A4 rows (the A1 exploration, the A2 and A4 refinement checks and the A4 model dominate).
+# Allow about 25 to 30 minutes with the optional A3/A4 rows (the A1 exploration, the A2 and A4 refinement checks and the A4 model dominate).
 # Exit status: 0 verdict PASS, 1 FAIL, 2 anything else (BLOCKED, UNKNOWN).
 # Run by the workflow controller (FENRIR_CHECK_NONCE set), it prints only the
 # controller's check record on standard output.
