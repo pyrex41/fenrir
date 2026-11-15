@@ -6,6 +6,8 @@ Version 0.3 • Architecture amendment with owner decisions recorded and confirm
 
 **Status (12 November 2026, master `4898e7b`):** The owner ruled on the ten decisions of version 0.1 on 12 November 2026; §12 records each ruling and this version is rewritten to match. It changes no TC0 0.2 semantics, profile identity, gate, ledger or recorded evidence. Where it conflicts with [01_FULL_VISION.md](01_FULL_VISION.md) or [03_PHASED_EXECUTION_PLAN.md](03_PHASED_EXECUTION_PLAN.md) on direction and ordering, this document is the newer statement; [02_TINY_LANGUAGE_CORE.md](02_TINY_LANGUAGE_CORE.md) remains the TC0 0.2 contract.
 
+**Status update (15 November 2026).** The rulings are unchanged. The state columns in §3, §4, §7, §8 and §10 were brought up to date on 15 November; everything they report is development grade on the development branch `claude/keen-ptolemy-w9d7ve`, not on `master`, and none of it is a qualification. B0 (merging the open branches) has not been done; that is the owner's. The TC0-A / G1 qualification is UNKNOWN on current source: the only receipt is the historical PASS at `1db7471`, and no controller receipt exists for the Shen gate. The TC1 and service gates are proposed and not registered. The independent implementations share one author lineage. Several contract texts are drafts with open owner choices (EFFECTS §11, SURFACE §8, CONCURRENCY §13, ACCEPTED_JOB §6, HANDLER §6, DURABLE §12, UPGRADE §11, host CONTRACT.md).
+
 ## 1 Summary
 
 Fenrir stays the language we are building, in this repository, under this identity. Four things change:
@@ -71,7 +73,7 @@ So Fenrir does not get its own Rocq core:
 
 ### Programmable typing, fixed checking
 
-Today's validator ([tools/tc0/pure-call-artifact.mjs](tools/tc0/pure-call-artifact.mjs)) is a direct monomorphic checker. Shen's sequent machinery is not Fenrir's type system yet. Making it so is new work, with one rule that fixes its place:
+As written on 12 November, the validator ([tools/tc0/pure-call-artifact.mjs](tools/tc0/pure-call-artifact.mjs)) was a direct monomorphic checker and Shen's sequent machinery was not Fenrir's type system. Since then the TC1 typing rules exist as Shen sequent rules with a small fixed checker ([spec/tc1/TYPING.md](spec/tc1/TYPING.md), `typing/`), covering the handler, durable and task schemas, with a differential against the JavaScript validator (derivable under the rule set; soundness of the rule set is not proved, and the TC0-A schemas keep the JavaScript validator as authority until a decision says otherwise). The rule that fixes the place of this machinery:
 
 > The surface elaborator and the logic engine produce explicit typed core terms or derivations. A small fixed checker accepts or rejects them. Extensions make proofs easier to find; they cannot change what counts as a proof.
 
@@ -82,7 +84,7 @@ Today's validator ([tools/tc0/pure-call-artifact.mjs](tools/tc0/pure-call-artifa
 
 ## 4 Effects: the successor contract
 
-TC0 §5 specifies handlers with no user-visible resumption: a clause returns normally and the suspended segment resumes once with that value. Functions declare finite effect sets. The implemented validator accepts only the built-in `Emit` effect and rejects user effect declarations. Almost no general handler machinery exists to disrupt, so this is the time to choose.
+TC0 §5 specifies handlers with no user-visible resumption: a clause returns normally and the suspended segment resumes once with that value. Functions declare finite effect sets. As written on 12 November, the implemented validator accepted only the built-in `Emit` effect and rejected user effect declarations, so little handler machinery existed to disrupt. The TC1 handler schemas now accept user effects (see [spec/tc1/EFFECTS.md](spec/tc1/EFFECTS.md), draft); the TC0-A schemas still do not.
 
 The owner accepted these (ruling 3: one-shot by default is exactly right). They are written down as the TC1 effect contract before B-slice machine work:
 
@@ -167,7 +169,7 @@ What "Solo5 up" still needs, in order:
 2. `hvt` under KVM. The development container used here has no `/dev/kvm`; `spt` is a seccomp-sandboxed process, not a virtual machine.
 3. AArch64, where the proved code lane (PR #8) and the earlier measured profile live.
 4. Entry inputs other than unit, bool and int, and IDs above 2^64, which the guest lowering refuses today.
-5. Registration of these checks with the workflow controller, and a pinned build of Solo5 in the flake (done: `nix build .#solo5`, 15 November 2026).
+5. Registration of these checks with the workflow controller (not done: the TC1 gate and the service gate exist as proposals, unregistered; only `tc0-a-qualification` is registered), and a pinned build of Solo5 in the flake (done: `nix build .#solo5`, 15 November 2026).
 
 Supervision restarts computation; it does not make state or messages durable. Durability comes from a persistence and acknowledgment protocol with a contract (§8).
 
@@ -227,15 +229,15 @@ Current standing under this vocabulary: TC0-A is *bounded exploration passed* (a
 
 | Step | Build | Done when |
 | --- | --- | --- |
-| B0 | Merge the open branches in the order given in [campaigns/RECONCILIATION_2026-11.md](campaigns/RECONCILIATION_2026-11.md) | PRs #5, #6, #8 merged; #7 rewritten against §4 |
+| B0 | Merge the open branches in the order given in [campaigns/RECONCILIATION_2026-11.md](campaigns/RECONCILIATION_2026-11.md) | PRs #5, #6, #8 merged; #7 rewritten against §4. **State: not done; the owner's step.** The AArch64 branch's content is on the development branch by a merge; the pull requests themselves are untouched |
 | B1 | **Solo5 lane** (§7): Shen in the comparison (done), pure-call machine as guest (done, free-running), control channel and strict replay (done in development 15 November 2026, stock `spt`: hand case `closure-in-datatype-field`, schema `/2`, runs 24 host-selected steps in agreement with Shen and replays exactly; `hvt` not attempted, no `/dev/kvm`) | A `/2` program with closures and data runs in Solo5 under host-selected steps and agrees with Shen |
 | B2 | **TC1 effects** (§4): contract text ([spec/tc1/EFFECTS.md](spec/tc1/EFFECTS.md), draft) and the tail-resumptive slice in the Shen model and a JavaScript implementation, with fixtures and mutants, then explicit one-shot resumption, in the model, the JavaScript implementation and the Solo5 guest (done 14 November 2026) | A handler program with agreeing traces; `double-resume` and `forgotten-resume` mutants caught |
-| B3 | **Frontend**, written in Shen: reader, elaboration to checked core artifacts, effect-row inference, typing rules as sequent rules | A program a person can write, read, run and check, executing in Solo5 |
+| B3 | **Frontend**, written in Shen: reader, elaboration to checked core artifacts, effect-row inference, typing rules as sequent rules | A program a person can write, read, run and check, executing in Solo5. **State (15 November 2026, development):** reader, elaboration and typing in Shen ([frontend/](frontend/), [typing/](typing/), [spec/tc1/SURFACE.md](spec/tc1/SURFACE.md), [TYPING.md](spec/tc1/TYPING.md)); effect sets of definitions are inferred, effect-row polymorphism is not supported, and durable effects and tasks cannot share a program (SURFACE §6); examples run in the Solo5 guest; surface syntax choices are open for the owner (SURFACE §8); soundness of the typing rules not proved |
 | B4 | **Tasks and channels** under the production scheduling contract (§14). Slice C1 ([spec/tc1/CONCURRENCY.md](spec/tc1/CONCURRENCY.md), draft) through the stack in development, 15 November 2026: Shen model, JavaScript implementation, the obligation on all 3,600 programs of grammar G; the Solo5 guest over control protocol v3 with host-selected schedules and its own FIFO (90 programs, 489 runs, 22,725 steps in agreement with the Shen model; four guest defects detected; 169 tapes exact); surface syntax and frontend (`tc1-task-demo/1`, examples running in the guest); a generated family, catalog coverage (53 of 53 transitions), four reduction campaigns and strict replay of retained failures. The combined durable × task questions are open for the owner (CONCURRENCY.md §13) | The commuting obligation checked on the exhaustive-small scope |
 | B5 | **Service example** A1 → A3 (§8) on BEAM, SQLite and a Solo5 worker | Crash and duplicate-delivery campaigns accepted against the contract |
 | B6 | **Proved native code** growing from the AArch64 lane: branches, calls, closures, data (branches, comparisons, Bool, `let` and stack slots done in development 15 November 2026: profile `fenrir-aarch64-checked-expr/1`, Rocq 9.3, `compile_correct` closed, 70 programs proved for their exact bytes and run in QEMU, Shen differential 3,280 cases agree; first-order calls, recursion and tail calls in constant stack added the same day as `fenrir-aarch64-checked-call/1` (14 programs proved for their exact bytes, 436 QEMU comparisons, Shen differential 3,760 cases); closures and data not started. The done-when holds at development grade against the handwritten instruction model only; ARM-03 is open) | Proved code for a program that is not only arithmetic |
 
-B1 and B2 do not depend on each other. B3 needs B2's contract text, not its implementation. The first universal-claim test of §3 (one TC0-A property through Búri's checker) runs alongside B1.
+B1 and B2 do not depend on each other. B3 needs B2's contract text, not its implementation. The first universal-claim test of §3 (one TC0-A property through Búri's checker) ran alongside B1; its outcome is open (§3).
 
 Advanced machinery (Datalog, a λProlog-style elaboration engine, query compilation, arenas, Perceus-style reuse, interaction nets, tracing compilation) enters when a program in B3–B5 needs it.
 

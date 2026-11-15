@@ -1,6 +1,6 @@
 # TC1 effect contract
 
-Draft 2 • 14 November 2026 • For owner review
+Draft 2 • 14 November 2026 • For owner review (§6 aligned with the model and catalog, 15 November 2026)
 
 **Status.** Written together with its implementation, at the owner's request,
 so the text and the behaviour can be reviewed side by side. Both slices are
@@ -138,7 +138,7 @@ compiled code.
 | Ready `resume` | the resume node | Value (at the perform site) | resume-return frame pushed unless in tail position, then the segment |
 | `ResumeReturn` | the resume node | Value | resume-return frame popped; the value is the resume's |
 | Ready `discontinue` | the discontinue node | Abandon | discontinue-return frame pushed, then the segment |
-| `AbandonFrame` | the frame's node | Abandon | one frame discarded per step |
+| `AbandonFrame` | the frame's node | Abandon | one frame discarded per step; a clause frame is instead replaced by the segment it holds, which is abandoned next (as for `UnwindFrame` below) |
 | `DiscontinueReturn` | the discontinue node | Value (unit) | discontinue-return frame popped |
 | `HandleReturn` | the handle node | Value | handler frame popped |
 | `UnwindFrame` at a clause frame | the perform node | Unwind | clause frame replaced by the segment, which unwinds next, one frame per step |
@@ -149,6 +149,31 @@ frame counts as that one frame; a segment held in a resumption counts as none.
 A clause `op(x,k)` that traps before using `k` drops the segment without
 steps. With no resources in TC1 this cannot be observed. When resources exist,
 the segment's releases must happen at that point.
+
+**Draft-text alignment, 15 November 2026.** The table above was written before
+the machines. The Shen model (`models/tc1/handler-machine.shen`, the authority
+here) takes the steps below as well, and
+[handler-catalog.json](handler-catalog.json) lists these and the rows above as
+29 transitions (a row naming two cases counts as two, and `AbandonFrame` is one
+transition per kind of frame). The text is changed to say what the model does;
+no behaviour is changed or decided by this edit.
+
+| Step | Site | After | Frames |
+| --- | --- | --- | --- |
+| Dispatch `discontinue` | that node | Ready | none: it has no operand |
+| `CollectReturn` of `perform` or `resume` | that node | Ready | collect frame popped, the argument stored |
+| `UnwindFrame` at a handler frame | the handle node | Unwind | one handler frame discarded |
+| `UnwindFrame` at a collect or clause-exit frame of a `perform` | the perform node | Unwind | one frame discarded |
+| `UnwindFrame` at a collect or resume-return frame of a `resume` | the resume node | Unwind | one frame discarded |
+| `AbandonFrame` at a frame other than a clause frame: `let`, `if`, `match`, a strict form's collect frame, a call or apply frame, a handler frame, a `perform` frame, a `resume` frame | the frame's node | Abandon | one frame discarded; the catalog has one transition per kind |
+
+Also, `Dispatch handle` enters the body in tail position (§4), and `Ready
+resume` and `Ready discontinue` push the segment of s >= 1 frames, so their
+depth change is a bound, not a constant: the catalog records it per
+transition. Where two kinds of frame can sit at one node (a collect frame and
+a clause-exit frame, say) the step record does not say which one a step
+discards; the catalog keeps them as one transition. Whether the record should
+say is open (§11).
 
 ## 7 Slice H2: explicit one-shot resumption
 
@@ -344,3 +369,10 @@ Open:
    sets here.
 3. Whether a clause that traps before using its resumption should be a
    validation error instead of an implicit abort.
+4. Whether abandoning a clause frame should expose the segment it holds, as
+   the model does and §6 now says (by analogy with unwinding), or discard it as
+   one frame; and whether step records should distinguish the frames that
+   share a node (§6). Reference-machine detail only; neither changes an
+   observation.
+5. When resources exist: the order and timing of the releases of a segment
+   dropped by a clause that traps before using `k` (§6).
