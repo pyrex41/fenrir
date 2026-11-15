@@ -10,6 +10,8 @@
     "key-reuse-accepted":      {"expected": {"retry": 2},     "also": {}, "clean": ["authority", "atomicity", "response", "recovery", "progress"]},
     "cross-tenant-counter":    {"expected": {"authority": 1}, "also": {}, "clean": ["atomicity", "response", "retry", "recovery", "progress"]},
     "undeduplicated-delivery": {"expected": {"retry": 2, "progress": 3}, "also": {}, "clean": ["authority", "atomicity", "response", "recovery"]},
-    "equivalent-control":      {"expected": {}, "also": {}, "clean": ["authority", "atomicity", "response", "retry", "recovery", "progress"], "same_graph_as_model": true}
+    "volatile-status":         {"expected": {"recovery": 3, "progress": 3}, "also": {}, "clean": ["authority", "atomicity", "response", "retry"], "added": "after the first exploration showed recovery.crash-frame never failing on a mutant; predicted before it ran"},
+    "failure-not-terminal":    {"expected": {"progress": 2}, "also": {"retry": 2}, "clean": ["authority", "atomicity", "response", "recovery"], "added": "after the first exploration showed progress.delivery-terminates never failing on a mutant; predicted before it ran"},
+    "equivalent-control":     {"expected": {}, "also": {}, "clean": ["authority", "atomicity", "response", "retry", "recovery", "progress"], "same_graph_as_model": true}
   }
 }

@@ -229,6 +229,8 @@ predictions, written before exploration ran, are in
 | `key-reuse-accepted` | A known key with another digest is answered with the recorded receipt | retry safety |
 | `cross-tenant-counter` | A new key advances every tenant's id counter (a shared counter: a write into other tenants' stores) | authority |
 | `undeduplicated-delivery` | A delivery changes a matching job's status whatever it is | retry safety (delivery), progress (terminal stability) |
+| `volatile-status` | Job status changes are held in memory: a crash puts every terminal job back to `pending` (added after the first run showed no mutant failing `recovery.crash-frame`) | recovery (crash frame), progress (terminal stability) |
+| `failure-not-terminal` | A failed delivery leaves the job `pending` (added after the first run showed no mutant failing `progress.delivery-terminates`) | progress |
 | `equivalent-control` | Lookup and delivery rewritten (filter instead of search, explicit recursion instead of map) with the same meaning | must not be flagged; same graph as the model |
 
 ## 8 Hand-derived traces
