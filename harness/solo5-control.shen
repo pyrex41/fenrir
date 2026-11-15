@@ -1225,4 +1225,6 @@
   [I | Is] [T | Ts] -> (if (>= (length (hd (tl (fc.read-tape T)))) 17) T (fc.long-base Is Ts))
   _ _ -> (error "harness: no taped program has six steps"))
 
-(fc.main)
+\\ harness/solo5-durable.shen (protocol v2) loads this file for its definitions and sets
+\\ fc.*as-library* first; run on its own, this is the v1 check.
+(if (trap-error (value fc.*as-library*) (/. E false)) skip (fc.main))

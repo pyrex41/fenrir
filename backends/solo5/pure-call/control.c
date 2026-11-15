@@ -16,7 +16,14 @@
  * Determinism: frames depend only on the image (programs as data), the host's
  * requests and the machine. The monotonic clock is read in one place only, to pace
  * write retries under back-pressure; its value never enters a frame or the state.
- * Development evidence only. */
+ * Development evidence only.
+ *
+ * Built with -DFGC_V2 the same source is the guest of protocol
+ * fenrir.solo5.pure-call-control/2 (spec/solo5/pure-call-control-v2.md): TC1-D1 durable
+ * effects. A Run stops at a host request (execution HostWait); the host answers it with a
+ * Reply frame (type A), which the guest checks against the operation's result type before
+ * the program sees it (BadReply otherwise) and answers with the HostReply step. Without
+ * the flag nothing of v2 is compiled in and the guest is the v1 guest. */
 #include <solo5.h>
 #include "machine.h"
 #include "data.h"
@@ -28,8 +35,13 @@
 #define FGC_RECORD_MAX 16384u
 #define FGC_RUN_MAX 64u
 #define FGC_FUEL_MAX 100000u
+#ifdef FGC_V2
+#define FGC_PROTOCOL "fenrir.solo5.pure-call-control/2"
+#define FGC_PROFILE "fenrir.solo5.pure-call-machine/2"
+#else
 #define FGC_PROTOCOL "fenrir.solo5.pure-call-control/1"
 #define FGC_PROFILE "fenrir.solo5.pure-call-machine/1"
+#endif
 
 void *memset(void *dest,int value,size_t count) {
     volatile unsigned char *p=dest;
@@ -126,7 +138,11 @@ static void receive(uint64_t seq,struct request *r) {
     const uint8_t *h=in;
     if(h[0]!='F' || h[1]!='G' || h[2]!='C' || h[3]!='1' || h[4]!=' ')fail(seq,"BadMagic");
     if(h[5]!='H')fail(seq,"BadDirection");
+#ifdef FGC_V2
+    if(h[6]!='I' && h[6]!='R' && h[6]!='D' && h[6]!='X' && h[6]!='A')fail(seq,"UnknownType");
+#else
     if(h[6]!='I' && h[6]!='R' && h[6]!='D' && h[6]!='X')fail(seq,"UnknownType");
+#endif
     if(h[7]!=' ' || h[16]!=' ' || h[25]!='\n')fail(seq,"BadHeader");
     for(int i=0;i<8;i++)if(!digit(h[8+i]) || !digit(h[17+i]))fail(seq,"BadHeader");
     if(fixed(h+8)!=seq)fail(seq,"BadSequence");
@@ -226,6 +242,10 @@ static void state_digest(char *hex) {
     const struct pc_machine *m=&machine;
     mix(&d,m->epoch);mix(&d,(uint64_t)m->control);mix(&d,(uint64_t)(int64_t)m->node);mix(&d,(uint64_t)m->tail);
     mix(&d,(uint64_t)m->trap);mix(&d,m->depth);
+#ifdef FGC_V2
+    mix(&d,m->requests);
+    if(m->control==PC_HOSTWAIT)mix_value(&d,m->value);
+#endif
     if(m->control==PC_VALUE || m->control==PC_JOIN || m->control==PC_TERMINATE || m->control==PC_TERMINAL)mix_value(&d,m->trap?0:m->value);
     if(m->control==PC_READY){unsigned c=m->program->nodes[m->node].child_count;mix(&d,c);for(unsigned i=0;i<c;i++)mix_value(&d,m->ready[i]);}
     mix_env(&d,m->env);
@@ -241,6 +261,9 @@ static uint64_t fuel;
 static int initialized;
 static const char *execution(void) {
     if(machine.control==PC_TERMINAL)return "Completed";
+#ifdef FGC_V2
+    if(machine.control==PC_HOSTWAIT)return "HostWait";
+#endif
     if(machine.epoch>=fuel)return "BudgetExhausted";
     return "Running";
 }
@@ -318,6 +341,26 @@ int solo5_app_main(const struct solo5_start_info *info) {
             state_fields(&t,"Steps");put(&t,",\"steps\":[");put_span(&t,steps,st.used);put(&t,"]}");
             if(t.bad)fail(seq,"GuestLimit");
             frame('S',seq,payload,t.used);
+#ifdef FGC_V2
+        } else if(r.type=='A'){
+            /* {"kind":"Reply","request":R,"value":V}: V a canonical value, checked by the
+             * machine against the pending operation's result type. */
+            uint64_t request;
+            const char *s=lit(r.body,"{\"kind\":\"Reply\",\"request\":\"");
+            s=lit(s?decimal(s,&request):0,"\",\"value\":");
+            if(!s || r.n<1 || r.body[r.n-1]!='}' || s>r.body+r.n-1)fail(seq,"BadPayload");
+            if(!initialized || !pc_host_wait(&machine))fail(seq,"BadState");
+            if(request+1!=machine.requests)fail(seq,"BadReply");
+            struct pc_sample sample;
+            int got=pc_reply(&machine,s,(size_t)(r.body+r.n-1-s),&sample);
+            if(got==0)fail(seq,"BadReply");
+            if(got!=1)fail(seq,"GuestLimit");
+            size_t k=pc_format_sample(&sample,record,sizeof record);
+            if(!k)fail(seq,"GuestLimit");
+            state_fields(&t,"Steps");put(&t,",\"steps\":[");put_span(&t,record,k);put(&t,"]}");
+            if(t.bad)fail(seq,"GuestLimit");
+            frame('S',seq,payload,t.used);
+#endif
         } else if(r.type=='D'){
             if(!same(r.body,"{\"kind\":\"Digest\"}"))fail(seq,"BadPayload");
             if(!initialized)fail(seq,"BadState");

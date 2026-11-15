@@ -55,14 +55,134 @@ static int equal(const struct pc_value *a,const struct pc_value *b) {
     default:return 0;
     }
 }
+/* ---------- TC1-D1: canonical JSON values, checked against a type descriptor ----------
+ * The value encoding of the artifact, in its one canonical spelling (no white space;
+ * I64 a canonical decimal in range; bytes lowercase hex). Type-directed: a datatype
+ * value must name the datatype of its descriptor and one of its constructors with
+ * exactly that constructor's fields. Used for the entry input and for host replies. */
+struct reader { const char *at,*end; const struct pc_program *program; unsigned depth; };
+static int expect(struct reader *r,const char *s) {
+    const char *p=r->at;
+    while(*s){if(p>=r->end || *p!=*s)return 0;p++;s++;}
+    r->at=p;return 1;
+}
+static int hex_digit(char c) {return (c>='0'&&c<='9')||(c>='a'&&c<='f');}
+static int quoted(struct reader *r,const char *want) {
+    return expect(r,"\"") && expect(r,want) && expect(r,"\"");
+}
+static int read_i64(struct reader *r,int64_t *out) {
+    const char *p=r->at;int negative=0;uint64_t n=0;unsigned digits=0;
+    if(p<r->end && *p=='-'){negative=1;p++;}
+    if(p>=r->end || *p<'0' || *p>'9')return 0;
+    if(*p=='0' && (negative || (p+1<r->end && p[1]>='0' && p[1]<='9')))return 0; /* -0, leading zero */
+    while(p<r->end && *p>='0' && *p<='9'){
+        if(++digits>19)return 0;
+        uint64_t d=(uint64_t)(*p-'0');
+        if(n>(UINT64_MAX-d)/10)return 0;
+        n=n*10+d;p++;
+    }
+    if(negative?n>((uint64_t)1<<63):n>((uint64_t)1<<63)-1)return 0;
+    *out=negative?(n==((uint64_t)1<<63)?INT64_MIN:-(int64_t)n):(int64_t)n;
+    r->at=p;return 1;
+}
+static const char *const trap_names[]={"Overflow","DivZero","Bounds","InvalidDuration","TaskLimit","ChildFailed"};
+static const struct pc_value *read_value(struct reader *r,const char **type) {
+    const char *t=*type;
+    if(++r->depth>64 || !*t)return 0;
+    const struct pc_value *result=0;
+    switch(*t){
+    case 'U':*type=t+1;if(expect(r,"[\"unit\"]"))result=scalar(PV_UNIT,0);break;
+    case 'B':*type=t+1;
+        if(expect(r,"[\"bool\",true]"))result=scalar(PV_BOOL,1);
+        else if(expect(r,"[\"bool\",false]"))result=scalar(PV_BOOL,0);
+        break;
+    case 'I': {
+        int64_t n;*type=t+1;
+        if(expect(r,"[\"int\",\"") && read_i64(r,&n) && expect(r,"\"]"))result=scalar(PV_INT,n);
+        break; }
+    case 'Y': {
+        *type=t+1;
+        if(!expect(r,"[\"bytes\",\""))break;
+        const char *start=r->at;unsigned count=0;
+        while(r->at<r->end && hex_digit(*r->at)){r->at++;count++;}
+        if(count%2 || !expect(r,"\"]"))break;
+        struct pc_value *b=fresh(PV_BYTES);char *text=take(count?count:1);if(!b || !text)break;
+        for(unsigned i=0;i<count;i++)text[i]=start[i];
+        b->text=text;b->count=count;result=b;break; }
+    case 'K': {
+        *type=t+1;
+        if(!expect(r,"[\"data\",\"TrapCode\",\""))break;
+        for(unsigned i=0;i<6 && !result;i++){
+            struct reader saved=*r;
+            if(expect(r,trap_names[i]) && expect(r,"\"]")){
+                struct pc_value *d=(struct pc_value *)aggregate(PV_DATA,0,0);
+                if(d){d->text="TrapCode";d->constructor=trap_names[i];}
+                result=d;
+            } else *r=saved;
+        }
+        break; }
+    case 'T': {
+        unsigned n=(unsigned)(t[1]-'0');*type=t+2;
+        if(n<1 || n>8 || !expect(r,"[\"tuple\""))break;
+        const struct pc_value *fields[8];unsigned k=0;
+        for(;k<n;k++){if(!expect(r,",") || !(fields[k]=read_value(r,type)))break;}
+        if(k==n && expect(r,"]"))result=aggregate(PV_TUPLE,fields,n);
+        break; }
+    case 'D': {
+        unsigned index=0;t++;
+        while(*t>='0' && *t<='9')index=index*10+(unsigned)(*t++-'0');
+        if(*t!=';')break;
+        *type=t+1;
+        const struct pc_program *p=r->program;
+        if(index>=p->datatype_count)break;
+        const struct pc_datatype *d=&p->datatypes[index];
+        if(!expect(r,"[\"data\",") || !quoted(r,d->name) || !expect(r,",\""))break;
+        const struct pc_constructor *c=0;
+        for(unsigned i=0;i<d->constructor_count && !c;i++){
+            struct reader saved=*r;
+            if(expect(r,d->constructors[i].name) && expect(r,"\""))c=&d->constructors[i];
+            else *r=saved;
+        }
+        if(!c || c->field_count>PC_MAX_OPERANDS)break;
+        const struct pc_value *fields[PC_MAX_OPERANDS];unsigned k=0;
+        for(;k<c->field_count;k++){
+            const char *ft=c->fields[k];
+            if(!expect(r,",") || !(fields[k]=read_value(r,&ft)) || *ft)break;
+        }
+        if(k!=c->field_count || !expect(r,"]"))break;
+        struct pc_value *v=(struct pc_value *)aggregate(PV_DATA,fields,k);
+        if(v){v->text=d->name;v->constructor=c->name;}
+        result=v;break; }
+    default:break;
+    }
+    r->depth--;
+    return result;
+}
+/* The whole of text[0..n) as one value of the descriptor's type, or 0. */
+static const struct pc_value *parse_value(const struct pc_program *p,const char *text,size_t n,const char *type) {
+    struct reader r={text,text+n,p,0};const char *t=type;
+    if(!type)return 0;
+    const struct pc_value *v=read_value(&r,&t);
+    return v && !*t && r.at==r.end?v:0;
+}
+int pc_host_wait(const struct pc_machine *m) {return m && m->control==PC_HOSTWAIT;}
 int pc_init(struct pc_machine *m,const struct pc_program *p,int reverse,int wrap) {
     if(!m || !p || !p->node_count || p->entry>=p->function_count)return -1;
     arena_used=0;
     const struct pc_function *entry=&p->functions[p->entry];
     if(entry->body<0 || (unsigned)entry->body>=p->node_count)return -1;
-    if(p->input_tag!=PV_UNIT && p->input_tag!=PV_BOOL && p->input_tag!=PV_INT)return -1;
-    const struct pc_value *input=scalar(p->input_tag,p->input_integer);if(!input)return -1;
-    m->program=p;m->control=PC_EVAL;m->node=entry->body;m->tail=1;m->trap=PC_NO_TRAP;
+    const struct pc_value *input=0;
+    if(p->input_tag==PC_INPUT_VALUE){
+        unsigned n=0;
+        if(!p->input_value)return -1;
+        while(p->input_value[n])n++;
+        input=parse_value(p,p->input_value,n,p->input_type);
+    } else {
+        if(p->input_tag!=PV_UNIT && p->input_tag!=PV_BOOL && p->input_tag!=PV_INT)return -1;
+        input=scalar(p->input_tag,p->input_integer);
+    }
+    if(!input)return -1;
+    m->program=p;m->control=PC_EVAL;m->node=entry->body;m->tail=1;m->trap=PC_NO_TRAP;m->requests=0;
     m->reverse_operands=reverse;m->wrap_overflow=wrap;m->value=0;m->depth=0;m->epoch=0;
     m->env=bind(entry->parameter,input,0);
     return m->env?1:-1;
@@ -108,10 +228,16 @@ static int restore(struct pc_machine *m,const struct pc_segment *seg) {
     return 1;
 }
 /* TC1: select the innermost active handler for the effect and enter its clause. */
-static int perform(struct pc_machine *m,const struct pc_node *n,const struct pc_value *argument) {
+static int perform(struct pc_machine *m,const struct pc_node *n,const struct pc_value *argument,struct pc_sample *s) {
     const struct pc_program *p=m->program;int at=-1;
     for(int i=(int)m->depth-1;i>=0 && at<0;i--)
         if(m->frames[i].kind==PF_HANDLE && same(p->nodes[m->frames[i].node].text,n->text))at=i;
+    if(at<0 && n->integer==1){
+        /* TC1-D1: a durable effect with no active handler is a host request. The machine
+         * stops in HostWait with everything else unchanged; the argument stays live. */
+        s->events[0]=(struct pc_event){PE_HOST_REQUEST,n->id,n->text,argument,0,n->text2,m->requests};
+        s->event_count=1;m->requests++;m->value=argument;m->control=PC_HOSTWAIT;return 1;
+    }
     if(at<0)return -1; /* an unhandled effect in a validated program is a defect, not a trap */
     const struct pc_node *handler=&p->nodes[m->frames[at].node];const struct pc_env *definition=m->frames[at].env;
     const struct pc_arm *clause=0;
@@ -178,7 +304,7 @@ static int ready(struct pc_machine *m,struct pc_sample *s) {
         m->env=bind(parameter,argument,captures);if(!m->env)return -1;
         enter(m,body,1);return 1;
     }
-    if(n->tag==PC_PERFORM)return perform(m,n,v[0]);
+    if(n->tag==PC_PERFORM)return perform(m,n,v[0],s);
     if(n->tag==PC_RESUME || n->tag==PC_DISCONTINUE){
         const struct pc_value *k=lookup(m->env,n->binding);
         if(!k || k->tag!=PV_RESUMPTION)return -1;
@@ -195,9 +321,9 @@ static int ready(struct pc_machine *m,struct pc_sample *s) {
     switch(n->tag){
     case PC_EMIT: {
         const struct pc_value *unit=scalar(PV_UNIT,0);if(!unit)return -1;
-        s->events[0]=(struct pc_event){PE_INVOKE,n->id,n->text,v[0],0};
-        s->events[1]=(struct pc_event){PE_EMIT,n->id,n->text,v[0],0};
-        s->events[2]=(struct pc_event){PE_COMMIT,n->id,n->text,unit,0};
+        s->events[0]=(struct pc_event){PE_INVOKE,n->id,n->text,v[0],0,0,0};
+        s->events[1]=(struct pc_event){PE_EMIT,n->id,n->text,v[0],0,0,0};
+        s->events[2]=(struct pc_event){PE_COMMIT,n->id,n->text,unit,0,0,0};
         s->event_count=3;produce(m,unit);return 1; }
     case PC_TUPLE:r=aggregate(PV_TUPLE,v,n->child_count);break;
     case PC_CONSTRUCT: {
@@ -235,7 +361,7 @@ static int ready(struct pc_machine *m,struct pc_sample *s) {
     produce(m,r);return 1;
 }
 int pc_step(struct pc_machine *m,struct pc_sample *s) {
-    if(!m || !s || m->control==PC_TERMINAL)return -1;
+    if(!m || !s || m->control==PC_TERMINAL || m->control==PC_HOSTWAIT)return -1;
     const struct pc_program *p=m->program;
     s->epoch=m->epoch;s->event_count=0;site(m,s);
     if(m->control==PC_EVAL){
@@ -324,12 +450,24 @@ int pc_step(struct pc_machine *m,struct pc_sample *s) {
             produce(m,unit);
         }
     } else if(m->control==PC_JOIN){
-        s->events[0]=(struct pc_event){PE_SCOPE_EXIT,0,0,m->trap?0:m->value,m->trap};
+        s->events[0]=(struct pc_event){PE_SCOPE_EXIT,0,0,m->trap?0:m->value,m->trap,0,0};
         s->event_count=1;m->control=PC_TERMINATE;
     } else {
-        s->events[0]=(struct pc_event){PE_TASK_TERMINATION,0,0,m->trap?0:m->value,m->trap};
+        s->events[0]=(struct pc_event){PE_TASK_TERMINATION,0,0,m->trap?0:m->value,m->trap,0,0};
         s->event_count=1;m->control=PC_TERMINAL;
     }
+    s->after=m->control;s->depth=m->depth;m->epoch++;
+    return 1;
+}
+/* TC1-D1: the host's reply to the pending request (DURABLE.md section 4). */
+int pc_reply(struct pc_machine *m,const char *text,size_t n,struct pc_sample *s) {
+    if(!m || !s || m->control!=PC_HOSTWAIT)return -1;
+    const struct pc_node *node=&m->program->nodes[m->node];
+    const struct pc_value *v=parse_value(m->program,text,n,node->type);
+    if(!v)return 0;
+    s->epoch=m->epoch;s->machine_site=-1;s->node=node->id;s->rule=PR_HOST_REPLY;
+    s->events[0]=(struct pc_event){PE_HOST_REPLY,node->id,0,v,0,0,m->requests-1};
+    s->event_count=1;produce(m,v);
     s->after=m->control;s->depth=m->depth;m->epoch++;
     return 1;
 }
