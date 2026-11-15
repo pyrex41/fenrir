@@ -11,7 +11,7 @@ Linux process execution, Solo5, or the complete Fenrir language. These are
 explicit missing theorems, not axioms introduced into the proofs.
 
 Status under the amendment's vocabulary (§9): *implementation refinement proved*
-for two closed profiles against that model; the source side is related to the
+for two closed profiles against that model (three since 15 November: unary, expr, call); the source side is related to the
 Shen model by test only (below).
 
 ## Run
@@ -31,21 +31,25 @@ timeout:
 2. `node tools/aarch64/check.mjs` — profile `fenrir-aarch64-checked-unary/1` as
    published in PR #8 (only its tool names now go through `toolchain.mjs`);
 3. `node tools/aarch64/check-expr.mjs` — profile `fenrir-aarch64-checked-expr/1`;
-4. `sh harness/run-aarch64-differential.sh` — the source semantics against the
-   Shen model.
+4. `node tools/aarch64/check-call.mjs` — profile `fenrir-aarch64-checked-call/1`;
+5. `sh harness/run-aarch64-differential.sh` — the source semantics of all three
+   profiles against the Shen model.
 
 It writes `summary.json` with links to each report. Status is
 `development-pass`, never a qualification receipt.
 
-Recorded run, 15 November 2026 ([validation-2026-11-15.json](validation-2026-11-15.json)),
-3 min 40 s on Linux x86-64:
+Latest recorded run, 15 November 2026, with the call profile
+([validation-2026-11-15-call.json](validation-2026-11-15-call.json)), 6 min 21 s
+on Linux x86-64 (the earlier record without it is
+[validation-2026-11-15.json](validation-2026-11-15.json)):
 
 | Part | Result |
 | --- | --- |
-| Unit tests | 9 passed, 0 failed |
+| Unit tests | 12 passed, 0 failed |
 | Unary profile | Core.v plus 12 exact-image theorems closed under the global context; rocqchk replay passed; 12 GNU-as byte agreements; 564 QEMU comparisons agree with `PureCallMachine`; 3 mutated binaries rejected by proof and by execution |
 | Expr profile | 6 modules compiled; `compile_correct` and `compile_correct_typed` closed under the global context; 70 programs (30 hand, 40 generated) each with an exact-image theorem closed under the global context; 70 GNU-as byte agreements; 2,520 QEMU comparisons (70 × 36 inputs: 1,335 Ok I64, 535 Ok Bool, 573 Overflow, 77 DivZero) agree with `PureCallMachine`; 10 single-instruction mutants each rejected by its byte-identity proof and diverging under QEMU; rocqchk replayed all 76 modules |
-| Shen differential | 82 programs (12 unary, 70 expr) × 40 inputs = 3,280 cases; the Shen model completed every case (1,920 Ok I64, 593 Ok Bool, 682 Overflow, 85 DivZero); Rocq proved `failures = []`; the control file with three falsified expectations was refuted at exactly those three cases |
+| Call profile | 7 modules compiled; `call_correct`, `tail_calls_constant_stack`, `tail_program_correct` closed under the global context; 14 programs (12 hand on 36 boundary inputs, plus deep recursion at 60,000 frames and a 200,000-iteration tail loop on 2 inputs each), each with `exact_image_correct` closed, and the 5 tail-only ones also with `exact_image_tail_correct` (constant stack) closed; 14 GNU-as byte agreements; 436 QEMU comparisons (345 Ok I64, 36 Ok Bool, 54 Overflow, 1 DivZero) agree with `PureCallMachine`, the launcher checking `sp` after every call; 8 frame mutants (saved link register, link reload slot, trap-path SP restore, frame-base restore, call target, callee status test, tail frame release, tail target) each rejected by its byte-identity proof and diverging under QEMU (6 crash or fail the SP check, 2 give different results); rocqchk replayed 21 modules |
+| Shen differential | 94 programs (12 unary, 70 expr, 12 call) × 40 inputs = 3,760 cases (480 call cases); the Shen model completed every case (2,293 Ok I64, 633 Ok Bool, 748 Overflow, 86 DivZero); Rocq proved `failures = []`; the control file with four falsified expectations (one per profile kind) was refuted at exactly those four cases |
 
 Not run here: physical ARM hardware, Sail/Islaris, Solo5 on AArch64, a second
 Shen port, and this repository's GitHub Actions workflow (configured, its
@@ -94,6 +98,49 @@ before `sdiv`; `cmp` then `csinc` for comparisons; `cbz`/`b` for `if`. Nothing
 is reordered: `(x + 1) - 1` traps at maximum I64, an operand's trap is the
 expression's trap, and a branch not taken is never evaluated.
 
+### `fenrir-aarch64-checked-call/1` (new)
+
+A table of first-order functions, each with one I64 or Bool parameter and an
+I64 or Bool result (the entry takes an I64). A body is a statement over the
+expr profile's call-free expressions: an expression, `let x = e in s`,
+`if c then s else s`, `let x = call g a in s`, or `call g a` in tail position.
+Calls anywhere else (inside arithmetic, as an argument, as an `if` condition)
+are rejected by the projection, not rewritten. Recursion and mutual recursion
+are allowed. The convention is pinned as `fenrir-aarch64-call-abi/1` in
+[ABI.md](ABI.md): every function saves the return address in its frame, the
+caller reloads it after each `bl` and recomputes its frame base, a callee's
+trap is returned to the caller in `x1` and passed on, and a tail call releases
+the frame and branches.
+
+**Machine.** The expr machine (`Machine.step`) ends at `RET`; it is kept, with
+its theorems, for the earlier profiles. `CallCompile.step_c` is the same
+machine except that `RET` jumps to `X[n]`, and a run ends when the PC reaches
+the entry link address (outside the image). Because both agree on every step
+that is not a `RET` (`sim_step`), the expression fragment theorem
+`Compile.comp_correct` is reused unchanged through a simulation lemma rather
+than re-proved; only `RET` and `BL` steps are reasoned about anew. This was the
+smaller of the two options: re-proving the expr profile on the new machine
+would have repeated its whole fragment proof.
+
+**Source.** `CallCompile.sexec`/`fcall`/`ceval` transcribe the model: the
+argument is evaluated first (`tc0.pc.collect`, Tail false), then
+`tc0.pc.enter` runs the named function's body in the environment `[[Id Arg]]`
+with no captures; an unwinding trap passes every frame, so a callee's trap is
+the caller's; and a call in tail position (the body is entered by
+`[evaluate Body true]`, `let` bodies and `if` branches keep `Tail`) enters the
+callee with no `return` frame — the first clause of `tc0.pc.enter`. The
+semantics is indexed by fuel (calls allowed) and also returns the stack slots
+the evaluation needs.
+
+**Termination and stack hypotheses, exactly.** `call_correct` assumes
+`fcall fuel prog main (VInt x) = Some (r, n)` for some fuel — the source
+terminates with result `r` — and `lo ≤ sp − 16·n`. `n` is the number of
+16-byte slots used below the entry `sp`: within one activation, 2 (parameter,
+saved link register) plus `let` slots plus expression temporaries
+(`d + depth e` at each point); across a non-tail call, the slots in use at the
+call site plus the callee's `n`; across a tail call, the callee's `n` alone.
+Stack overflow is outside the theorem; nontermination too.
+
 ## What is proved
 
 [Expr.v](Expr.v) (source), [Machine.v](Machine.v) (instruction model),
@@ -111,11 +158,17 @@ expression's trap, and a branch not taken is never evaluated.
 | `Encode.image_decodes` | For every list of such instructions, its little-endian byte image decodes back to the list |
 | `Compile.compile_correct` | For every source `e`, input `x` and machine state `s` with in-range registers, PC 0, `x0 = x`, 16-byte-aligned `sp` and 16·(1 + depth e) bytes of stack below it: if `eval_main e x = Some r` then there is a final state `f` such that for every fuel ≥ the code length the interpreter returns `f` (it reaches `ret` within that many steps); `f`'s PC is the entry `x30`, `sp` is restored, every register other than x0–x3 and x9 and all memory at or above the entry `sp` are unchanged, and `x1 = 0 ∧ x0 = repr v` when `r = Ok v`, `x1 = trap_code t` when `r` is trap `t` |
 | `Compile.compile_correct_typed` | The same for every `e` with `typeof [TInt] e = Some t` and every in-range `x`, with `eval_main e x` shown to exist and have type `t` |
+| `CallCompile.sim_steps` | Every execution of the expr machine without a RET step is an execution of the call machine |
+| `CallCompile.call_correct` | For every function table `prog` whose image fits (`4·length ≤ 2^63−1`), every entry `main`, input `x`, machine state `s` with in-range registers, PC at `main`'s first instruction, `x0 = x`, 16-byte-aligned `sp`, `x30 = exit` outside the image: if `fcall fuel prog main (VInt x) = Some (r, n)` and `lo ≤ sp − 16·n`, then for every fuel ≥ some k the run returns a state `f` with PC = `exit`, `x30 = exit`, `sp` restored, all registers but x0–x3, x9, x30 and all memory at or above the entry `sp` unchanged, and `x1`/`x0` encoding `r` |
+| `CallCompile.tail_calls_constant_stack` | If no body contains a non-tail call, every `fcall fuel prog g v = Some (r, n)` has `n ≤ table_need prog`, for every fuel, i.e. for any number of iterations |
+| `CallCompile.tail_program_correct` | For such a table, `call_correct` holds with the constant hypothesis `lo ≤ sp − 16·table_need prog` instead of `n` |
 | Generated `image_identity` | The exact emitted bytes equal `image_of (compile_fn source)` (kernel `vm_compute`) |
 | Generated `exact_image_correct` | Any code the exact bytes decode to satisfies `compile_correct_typed` for `source` |
 
-`Print Assumptions` for `compile_correct`, `compile_correct_typed` and every
-`exact_image_correct`: *Closed under the global context*. No `Admitted`, no
+`Print Assumptions` for `compile_correct`, `compile_correct_typed`,
+`call_correct`, `tail_calls_constant_stack`, `tail_program_correct` and every
+generated `exact_image_correct`/`exact_image_tail_correct`: *Closed under the
+global context*. No `Admitted`, no
 axioms. The trap behaviour and left-to-right order are part of `eval`, hence
 of every statement.
 
@@ -134,13 +187,14 @@ of every statement.
   image's words), not an address. Memory is a map from addresses to
   doublewords: no bytes, no overlapping accesses, permissions, faults or other
   agents.
-- **No ISA correspondence, no loader, no ABI beyond [ABI.md](ABI.md).** RET
-  ends the modelled execution; the caller and the image's placement are not
-  modelled.
+- **No ISA correspondence, no loader, no ABI beyond [ABI.md](ABI.md).** In the
+  expr machine RET ends the modelled execution; in the call machine the run
+  ends at the external link address. The external caller, the image's
+  placement and stack overflow are not modelled.
 
 ## Source semantics and the Shen model
 
-The lane's source semantics is **local to the lane**: `Core.eval_expr` and
+The lane's source semantics is **local to the lane**: `Core.eval_expr`, `CallCompile.ceval` and
 `Expr.eval_main` are Rocq definitions written by hand, each rule citing the
 function of [models/tc0/pure-call-machine.shen](../../models/tc0/pure-call-machine.shen)
 or [models/tc0/i64.shen](../../models/tc0/i64.shen) it transcribes. There is no
@@ -149,7 +203,7 @@ through Búri's KLambda semantics. What exists is a test:
 [harness/aarch64-differential.shen](../../harness/aarch64-differential.shen)
 runs the model on every program the lane proves and runs, over the I64 boundary
 inputs, and Rocq checks the lane's definitions against the model's outcomes
-(3,280 cases agree; table above). Outside those cases agreement is unknown.
+(3,760 cases agree, 480 of them call-profile cases; table above). Outside those cases agreement is unknown.
 
 ## Trust and evidence boundaries
 

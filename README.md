@@ -66,7 +66,9 @@ subsets of existing TC0-A artifacts to actual instruction bytes, proves the
 compilation in Rocq 9.3, and checks execution against the existing candidate with
 QEMU. Two profiles are proved: the unary checked-I64 chain of PR #8, and
 `fenrir-aarch64-checked-expr/1` with binary arithmetic between subexpressions
-(intermediate traps kept), comparisons and Bool, `if` and `let`. The proofs use a
+(intermediate traps kept), comparisons and Bool, `if` and `let`; and
+`fenrir-aarch64-checked-call/1` with first-order functions, recursion and tail calls
+in constant stack (relative to termination and a stated stack bound). The proofs use a
 **handwritten instruction model**; authoritative ARM refinement, the JSON
 projection, loading and whole-image execution remain open, and the lane's source
 semantics agrees with the Shen model by test only. One entry point runs it all:

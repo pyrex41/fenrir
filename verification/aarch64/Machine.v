@@ -148,6 +148,8 @@ Inductive instr :=
 | LdrUoff (rt imm12 : Z)
 | Bcond (cond imm19 : Z)
 | Bimm (imm26 : Z)
+(* BL: X[30] = PC + 4, then a PC-relative branch (used by profile checked-call/1). *)
+| Bl (imm26 : Z)
 | Cbz (nonzero : bool) (rt imm19 : Z)
 | Ret (rn : Z).
 
@@ -204,6 +206,7 @@ Definition exec (i : instr) (s : mstate) : option outcome :=
   | Bcond c imm19 =>
       Some (Next (set_pc s (if condition_holds c (nzcv s) then pc s + imm19 * 4 else pc s + 4)))
   | Bimm imm26 => Some (Next (set_pc s (pc s + imm26 * 4)))
+  | Bl imm26 => Some (Next (set_pc (wr_zr s 30 (signed (pc s + 4))) (pc s + imm26 * 4)))
   | Cbz nz rt imm19 =>
       let zero := rd_zr s rt =? 0 in
       Some (Next (set_pc s (if xorb zero nz then pc s + imm19 * 4 else pc s + 4)))

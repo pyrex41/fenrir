@@ -31,6 +31,7 @@ Definition encode (i : instr) : Z :=
   | LdrUoff rt imm12 => 0xF94003E0 + imm12 * 1024 + rt
   | Bcond c imm19 => 0x54000000 + (imm19 mod 524288) * 32 + c
   | Bimm imm26 => 0x14000000 + imm26 mod 67108864
+  | Bl imm26 => 0x94000000 + imm26 mod 67108864
   | Cbz nz rt imm19 => (if nz then 0xB5000000 else 0xB4000000) + (imm19 mod 524288) * 32 + rt
   | Ret rn => 0xD65F0000 + rn * 32
   end.
@@ -50,7 +51,7 @@ Definition encodable (i : instr) : bool :=
   | StrPre rt imm9 | LdrPost rt imm9 => r5 rt && srange imm9 9
   | LdrUoff rt imm12 => r5 rt && urange imm12 12
   | Bcond c imm19 => urange c 4 && srange imm19 19
-  | Bimm imm26 => srange imm26 26
+  | Bimm imm26 | Bl imm26 => srange imm26 26
   | Cbz _ rt imm19 => r5 rt && srange imm19 19
   | Ret rn => r5 rn
   end.
@@ -65,6 +66,7 @@ Definition decode (w : Z) : option instr :=
   let rn := field w 5 5 in
   let rm := field w 16 5 in
   if field w 26 6 =? 5 then Some (Bimm (sext 26 (field w 0 26))) else
+  if field w 26 6 =? 37 then Some (Bl (sext 26 (field w 0 26))) else
   if (top =? 0x91) || (top =? 0xD1) || (top =? 0xB1) || (top =? 0xF1) then
     if field w 22 2 =? 0
     then Some (AddSubImm (field w 30 1 =? 1) (field w 29 1 =? 1) rd rn (field w 10 12))

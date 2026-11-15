@@ -23,31 +23,34 @@ const LO = -(1n << 63n), HI = (1n << 63n) - 1n, M64 = 1n << 64n;
 const BINOPS = {add: 'OAdd', sub: 'OSub', mul: 'OMul', div: 'ODiv'};
 const CMPOPS = {lt: 'CLt', le: 'CLe', gt: 'CGt', ge: 'CGe', eq: 'CEq'};
 
+// A call-free expression; scope: binding IDs, innermost first; a variable is
+// its index (de Bruijn).
+export function projectExpr(e, scope) {
+  const project = projectExpr;
+  const [tag] = e;
+  if (tag === 'int') return {k: 'int', n: BigInt(e[2])};
+  if (tag === 'bool') return {k: 'bool', b: e[2]};
+  if (tag === 'var') { const i = scope.indexOf(e[2]); if (i < 0) reject('Unbound variable'); return {k: 'var', i}; }
+  if (tag === 'let') return {k: 'let', init: project(e[3], scope), body: project(e[4], [e[2], ...scope])};
+  if (tag === 'if') return {k: 'if', c: project(e[2], scope), t: project(e[3], scope), f: project(e[4], scope)};
+  if (tag === 'prim') {
+    const op = e[2], args = e.slice(3).map(x => project(x, scope));
+    if (op === 'neg') return {k: 'neg', a: args[0]};
+    if (op === 'not') return {k: 'not', a: args[0]};
+    if (op in BINOPS) return {k: 'bin', op, a: args[0], b: args[1]};
+    if (op in CMPOPS) return {k: 'cmp', op, a: args[0], b: args[1]};
+    reject(`Unsupported primitive ${op}`);
+  }
+  reject(`Unsupported expression ${tag}`);
+}
+
 export function projectArtifact(bytes) {
   const {artifact: a} = validatePureCallArtifact(bytes, ['int', '0']);
   if (a.functions.length !== 1 || a.datatypes.length || a.effects.length) reject('One function, no declarations');
   const f = a.functions[0];
   if (f.name !== a.entry || f.argument_type !== 'I64' || !['I64', 'Bool'].includes(f.result_type) || f.effects.length)
     reject('Pure I64 -> I64/Bool entry required');
-  // Scope: binding IDs, innermost first; a variable is its index (de Bruijn).
-  function project(e, scope) {
-    const [tag] = e;
-    if (tag === 'int') return {k: 'int', n: BigInt(e[2])};
-    if (tag === 'bool') return {k: 'bool', b: e[2]};
-    if (tag === 'var') { const i = scope.indexOf(e[2]); if (i < 0) reject('Unbound variable'); return {k: 'var', i}; }
-    if (tag === 'let') return {k: 'let', init: project(e[3], scope), body: project(e[4], [e[2], ...scope])};
-    if (tag === 'if') return {k: 'if', c: project(e[2], scope), t: project(e[3], scope), f: project(e[4], scope)};
-    if (tag === 'prim') {
-      const op = e[2], args = e.slice(3).map(x => project(x, scope));
-      if (op === 'neg') return {k: 'neg', a: args[0]};
-      if (op === 'not') return {k: 'not', a: args[0]};
-      if (op in BINOPS) return {k: 'bin', op, a: args[0], b: args[1]};
-      if (op in CMPOPS) return {k: 'cmp', op, a: args[0], b: args[1]};
-      reject(`Unsupported primitive ${op}`);
-    }
-    reject(`Unsupported expression ${tag}`);
-  }
-  return {artifact: a, source: project(f.body, [f.parameter_id]), resultType: f.result_type};
+  return {artifact: a, source: projectExpr(f.body, [f.parameter_id]), resultType: f.result_type};
 }
 
 // ---------- instructions, as in Machine.v ----------
@@ -65,6 +68,7 @@ const I = {
   ldrUoff: (rt, imm) => ({op: 'LdrUoff', rt, imm}),
   bcond: (c, imm) => ({op: 'Bcond', c, imm}),
   b: imm => ({op: 'Bimm', imm}),
+  bl: imm => ({op: 'Bl', imm}),
   cbz: (nz, rt, imm) => ({op: 'Cbz', nz, rt, imm}),
   ret: rn => ({op: 'Ret', rn}),
 };
@@ -83,6 +87,7 @@ function binopCode(op) {
   return [I.cbz(true, 0, 4), ...trapSeq(2), I.addSubImm(false, true, 31, 0, 1), I.bcond(NE, 6),
     I.addSubReg(true, true, 31, 31, 1, 'LSL', 0), I.bcond(VC, 4), ...trapSeq(1), I.sdiv(0, 1, 0)];
 }
+export {I, trapSeq, push0, pop1};
 export function comp(ctx, d, e) {
   switch (e.k) {
     case 'int': return loadImm(e.n);
@@ -132,6 +137,7 @@ export function encodeInstr(i) {
     case 'LdrUoff': return 0xF94003E0 + i.imm * 1024 + i.rt;
     case 'Bcond': return 0x54000000 + mod(i.imm, 524288) * 32 + i.c;
     case 'Bimm': return 0x14000000 + mod(i.imm, 67108864);
+    case 'Bl': return 0x94000000 + mod(i.imm, 67108864);
     case 'Cbz': return (i.nz ? 0xB5000000 : 0xB4000000) + mod(i.imm, 524288) * 32 + i.rt;
     case 'Ret': return 0xD65F0000 + i.rn * 32;
   }
@@ -150,7 +156,7 @@ export function encodable(i) {
     case 'StrPre': case 'LdrPost': return r5(i.rt) && s(i.imm, 9);
     case 'LdrUoff': return r5(i.rt) && u(i.imm, 12);
     case 'Bcond': return u(i.c, 4) && s(i.imm, 19);
-    case 'Bimm': return s(i.imm, 26);
+    case 'Bimm': case 'Bl': return s(i.imm, 26);
     case 'Cbz': return r5(i.rt) && s(i.imm, 19);
     case 'Ret': return r5(i.rn);
   }
@@ -175,6 +181,7 @@ export function assembly(i) {
     case 'LdrUoff': return `ldr ${x(i.rt)}, [sp, #${i.imm * 8}]`;
     case 'Bcond': return `b.${COND[i.c]} .+${i.imm * 4}`;
     case 'Bimm': return `b .+${i.imm * 4}`;
+    case 'Bl': return `bl .+${i.imm * 4}`;
     case 'Cbz': return `${i.nz ? 'cbnz' : 'cbz'} ${x(i.rt)}, .+${i.imm * 4}`;
     case 'Ret': return `ret ${x(i.rn)}`;
   }
