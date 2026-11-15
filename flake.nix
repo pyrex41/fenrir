@@ -6,7 +6,9 @@
   #                       S41.2 kernel precompiled with nixpkgs' shen-sbcl 41.2
   #   yggdrasil a40d8c5   tree-shaker for the eval-free oracle
   #   sbcl, nodejs_22, python3, go 1.27 from the pinned nixpkgs release
-  # The native-host epoch (Solo5 images, C toolchain) is separate and not opened here.
+  #   solo5 38e0c348      v0.9.3 built from source: spt and hvt tenders, elftool and
+  #                       guest toolchain wrappers (use with FENRIR_SOLO5)
+  # The control-channel native host (patched tender) is separate and not opened here.
   description = "Fenrir / Gleipnir TC0 development toolchain epoch";
 
   inputs = {
@@ -16,9 +18,11 @@
     yggdrasil-src = { url = "git+https://github.com/pyrex41/yggdrasil?rev=a40d8c5b6ed1eb2b5d7a4511e61d0304ce9a2e3d"; flake = false; };
     # Shen/JIT v0.7: host of the Shen harness (harness/) and of the model it runs.
     shen-jit-src = { url = "git+https://github.com/tizoc/shen-jit?rev=2f4b48bf9aabc2b93379d15f1818e4209137eb60"; flake = false; };
+    # Solo5 v0.9.3, the commit tools/solo5/freerun.mjs pins as SOLO5_COMMIT.
+    solo5-src = { url = "git+https://github.com/Solo5/solo5?ref=refs/tags/v0.9.3&rev=38e0c348be231a2a3c59510a5caabf562792679f"; flake = false; };
   };
 
-  outputs = { self, nixpkgs, shen-cl-src, yggdrasil-src, shen-jit-src }:
+  outputs = { self, nixpkgs, shen-cl-src, yggdrasil-src, shen-jit-src, solo5-src }:
     let
       system = "x86_64-linux"; # shen-scheme v0.26 ships a Linux x86-64 binary only
       pkgs = nixpkgs.legacyPackages.${system};
@@ -69,6 +73,131 @@
         dontStrip = true;
         dontPatchELF = true;
         dontFixup = true;
+      };
+
+      # Solo5 at the pinned commit, built from source and installed with its own
+      # `make install`: bin/ holds solo5-spt, solo5-hvt, solo5-elftool and the
+      # x86_64-solo5-none-static-{cc,ld,objcopy} wrappers, which find include/ and
+      # lib/ relative to themselves. The wrappers call the target compiler by name,
+      # so it is configured as store paths: the unwrapped gcc with the unwrapped
+      # binutils, because a guest is freestanding and must not pick up the nixpkgs
+      # wrapper's hardening flags or glibc search paths. SOLO5_COMMIT is what
+      # tools/solo5/freerun.mjs checks in place of a git HEAD.
+      # nixpkgs carries solo5 0.10.1, not this commit, so it is not used.
+      solo5-target-cc = pkgs.writeShellScript "solo5-target-cc" ''
+        exec ${pkgs.stdenv.cc.cc}/bin/gcc -B${pkgs.binutils-unwrapped}/bin/ "$@"
+      '';
+      solo5 = pkgs.stdenv.mkDerivation {
+        pname = "solo5";
+        version = "0.9.3";
+        src = solo5-src;
+        nativeBuildInputs = [ pkgs.pkg-config ];
+        buildInputs = [ pkgs.libseccomp ];
+        # Host tools as position-independent executables, as the distribution
+        # compilers build them; otherwise configure.sh pins the spt tender at 1 GB.
+        env.NIX_CFLAGS_COMPILE = "-fPIE -Wno-error=address"; # hvt_main.c:114 under this gcc
+        env.NIX_CFLAGS_LINK = "-pie";
+        configurePhase = ''
+          # No .git in the fetched source; this is what a release tarball carries.
+          printf '#define SOLO5_VERSION "v0.9.3"\n' > include/version.h.distrib
+          TARGET_CC=${solo5-target-cc} \
+          TARGET_LD=${pkgs.binutils-unwrapped}/bin/ld \
+          TARGET_OBJCOPY=${pkgs.binutils-unwrapped}/bin/objcopy \
+            sh configure.sh --prefix=$out
+        '';
+        buildPhase = "make";
+        installPhase = ''
+          make install
+          for w in $out/bin/*-solo5-none-static-*; do
+            sed -i '2i PATH=${pkgs.coreutils}/bin:${pkgs.findutils}/bin:$PATH' $w
+          done
+          printf '%s\n' ${solo5-src.rev} > $out/SOLO5_COMMIT
+        '';
+        dontStrip = true; # the guest bindings in lib/ are linked into every image
+      };
+
+      # Guest batches for the hvt check, built here so the VM needs neither node nor
+      # a compiler: the TC1 handler fixtures with the TC0-A hand cases (43 programs),
+      # and the hand, generated and 4-node exhaustive TC0-A programs (798), each
+      # linked once for spt and once for hvt from the same lowered data.
+      fs = pkgs.lib.fileset;
+      solo5-batches = pkgs.stdenv.mkDerivation {
+        name = "fenrir-solo5-batches";
+        src = fs.toSource {
+          root = ./.;
+          fileset = fs.unions [ ./package.json ./tools ./runtime ./fixtures ./backends/solo5/pure-call ];
+        };
+        nativeBuildInputs = [ pkgs.nodejs_22 ];
+        FENRIR_SOLO5 = "${solo5}";
+        buildPhase = ''
+          for abi in spt hvt; do
+            node tools/solo5/freerun-pure-call.mjs --tc1 --build-only --abi $abi --out $out/tc1-$abi
+            node tools/solo5/freerun-pure-call.mjs --exhaustive-nodes 4 --build-only --abi $abi --out $out/tc0-$abi
+          done
+          for b in tc1 tc0; do
+            node -p 'JSON.parse(fs.readFileSync(process.argv[1])).count' $out/$b-spt/batch.json > $out/$b.count
+            cmp $out/$b-spt/programs.json $out/$b-hvt/programs.json
+          done
+        '';
+        dontInstall = true;
+        dontFixup = true;
+      };
+
+      # Runs each batch under solo5-spt and solo5-hvt (needs /dev/kvm). Two checks:
+      # the Shen harness compares each tender's guest with the Shen model, and the
+      # frame streams of the two tenders are compared byte for byte in all three
+      # guest modes. Tender banners are not frames and are dropped.
+      harness-src = fs.toSource {
+        root = ./.;
+        fileset = fs.unions [ ./harness/common.shen ./harness/solo5-pure-call.shen ./models ];
+      };
+      hvt-compare = pkgs.writeShellApplication {
+        name = "fenrir-hvt-compare";
+        runtimeInputs = [ pkgs.coreutils pkgs.gawk pkgs.diffutils ];
+        text = ''
+          test -r /dev/kvm -a -w /dev/kvm || { echo "fenrir-hvt-compare: /dev/kvm is not usable"; exit 2; }
+          b=${solo5-batches}
+          frames() { awk '/^FGRUN\/1 /{print; if ((getline line) > 0) print line}'; }
+          work=$(mktemp -d)
+          for batch in tc1 tc0; do
+            for abi in spt hvt; do
+              echo "== $batch under $abi against the Shen model"
+              ${shen-jit}/bin/shen-jit script ${harness-src}/harness/solo5-pure-call.shen \
+                ${shen-jit}/lib ${harness-src} $b/$batch-$abi < /dev/null | tail -n 1
+            done
+            count=$(cat $b/$batch.count)
+            for mode in normal reverse-operands wrap-overflow; do
+              first=0
+              while [ "$first" -lt "$count" ]; do
+                end=$((first + 250)); [ "$end" -le "$count" ] || end=$count
+                ${solo5}/bin/solo5-spt --mem=32 $b/$batch-spt/guest.spt "$mode $first $end" | frames > "$work/spt"
+                ${solo5}/bin/solo5-hvt --mem=32 $b/$batch-hvt/guest.hvt "$mode $first $end" | frames > "$work/hvt"
+                test -s "$work/spt"
+                cmp "$work/spt" "$work/hvt"
+                first=$end
+              done
+            done
+            echo "== $batch: $count programs, spt and hvt frames identical in normal, reverse-operands and wrap-overflow"
+          done
+          rm -rf "$work"
+        '';
+      };
+
+      # NixOS VM with KVM passed through (-cpu host), so the hvt tender can run in it.
+      # Needs KVM on the machine that builds the check; it cannot run under plain TCG.
+      hvt-vm-test = pkgs.testers.runNixOSTest {
+        name = "fenrir-hvt-vs-spt";
+        nodes.machine = {
+          virtualisation.memorySize = 2048;
+          virtualisation.qemu.options = [ "-cpu host" ];
+          boot.kernelModules = [ "kvm-intel" "kvm-amd" ];
+          environment.systemPackages = [ hvt-compare ];
+        };
+        testScript = ''
+          machine.wait_for_unit("multi-user.target")
+          machine.succeed("test -c /dev/kvm")
+          print(machine.succeed("fenrir-hvt-compare 2>&1"))
+        '';
       };
 
       shen-kernel = pkgs.fetchurl {
@@ -128,8 +257,12 @@
         echo "yggdrasil: ${yggdrasil}/bin/yggdrasil"
       '';
     in {
-      packages.${system} = { inherit shen-scheme shen-cl shen-jit yggdrasil link-toolchain; default = link-toolchain; };
-      apps.${system}.default = { type = "app"; program = "${link-toolchain}/bin/fenrir-link-toolchain"; };
+      packages.${system} = { inherit shen-scheme shen-cl shen-jit solo5 solo5-batches hvt-compare yggdrasil link-toolchain; default = link-toolchain; };
+      checks.${system}.hvt = hvt-vm-test;
+      apps.${system} = {
+        default = { type = "app"; program = "${link-toolchain}/bin/fenrir-link-toolchain"; };
+        hvt-compare = { type = "app"; program = "${hvt-compare}/bin/fenrir-hvt-compare"; };
+      };
       devShells.${system}.default = pkgs.mkShell {
         packages = [ pkgs.nodejs_22 pkgs.python3 pkgs.sbcl pkgs.go_1_27 shen-scheme yggdrasil ];
         FENRIR_SHEN_CL = "${shen-cl}";

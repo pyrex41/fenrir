@@ -166,6 +166,8 @@ What "Solo5 up" still needs, in order:
 4. Entry inputs other than unit, bool and int, and IDs above 2^64, which the guest lowering refuses today.
 5. Registration of these checks with the workflow controller, and a pinned build of Solo5 in the flake.
 
+**Update (15 November 2026).** The flake now pins Solo5 at that commit as its `solo5` output, built from source with the spt and hvt tenders; with it in place of the manual checkout (`FENRIR_SOLO5`) the Shen comparisons reproduce the same program and step counts. An hvt check exists (`nix run .#hvt-compare`, the NixOS VM test `checks.x86_64-linux.hvt` and [.github/workflows/hvt.yml](.github/workflows/hvt.yml)) that runs 841 programs under `solo5-hvt` against the Shen model and against the spt frame output, but it has **not been executed**: only the hvt guest link and the spt half were run, for lack of `/dev/kvm`. Item 2 therefore stays open, and of item 5 only the registration remains. See [backends/solo5/README.md](backends/solo5/README.md).
+
 Supervision restarts computation; it does not make state or messages durable. Durability comes from a persistence and acknowledgment protocol with a contract (§8).
 
 ## 8 The first application example

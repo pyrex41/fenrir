@@ -8,7 +8,7 @@
 import {createHash} from 'node:crypto';
 import {copyFileSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {resolve} from 'node:path';
-import {toolchain, frames, run, must, firstDivergence, SOLO5_COMMIT} from './freerun.mjs';
+import {toolchain, defaultSolo5, frames, run, must, firstDivergence, SOLO5_COMMIT} from './freerun.mjs';
 import {lowerBatch} from './pure-call/lower.mjs';
 import {validatePureCallArtifact} from '../tc0/pure-call-artifact.mjs';
 import {encode} from '../tc0/canonical.mjs';
@@ -38,8 +38,8 @@ export function buildGuest(tools,header,dir) {
     must(tools.cc,['-std=c11','-O1','-Wall','-Wextra','-Werror',`-DPC_FUEL=${FUEL}`,'-I.','-c',unit+'.c','-o',unit+'.o'],{cwd:dir,timeout:600000});
   must(tools.elftool,['gen-manifest','manifest.json','manifest.c'],{cwd:dir});
   must(tools.cc,['-c','manifest.c','-o','manifest.o'],{cwd:dir});
-  must(tools.ld,['-z','solo5-abi=spt','manifest.o','guest.o','machine.o','format.o','-o','guest.spt'],{cwd:dir});
-  return resolve(dir,'guest.spt');
+  must(tools.ld,['-z','solo5-abi='+tools.abi,'manifest.o','guest.o','machine.o','format.o','-o','guest.'+tools.abi],{cwd:dir});
+  return resolve(dir,'guest.'+tools.abi);
 }
 
 // Returns traces for programs [first,end): [{execution, steps}].
@@ -81,11 +81,13 @@ export function exactArithmeticCases() {
 function main() {
   const args=process.argv.slice(2);
   const option=(name,fallback)=>{const i=args.indexOf(name);return i<0?fallback:args[i+1];};
-  const solo5=resolve(option('--solo5',resolve(root,'build/vendor/solo5')));
+  const solo5=resolve(option('--solo5',defaultSolo5()));
   const bound=Number(option('--exhaustive-nodes','4'));
   if(!Number.isSafeInteger(bound)||bound<0||bound>5)throw new Error('--exhaustive-nodes must be 0..5');
-  const tools=toolchain(solo5);
-  const out=resolve(root,'build/solo5/freerun-pure-call',`${Date.now()}-${process.pid}`);
+  // --abi hvt links the guest for, and runs it under, the hvt tender (needs /dev/kvm).
+  const tools=toolchain(solo5,option('--abi','spt'));
+  // --out DIR: where the batch is written, instead of a fresh directory under build/.
+  const out=resolve(option('--out',resolve(root,'build/solo5/freerun-pure-call',`${Date.now()}-${process.pid}`)));
   const exact=args.includes('--exact-arithmetic');
   // --tc1: the TC1 handler fixtures (both slices), with the TC0-A hand cases alongside so
   // the guest's two injected defects still have programs that expose them.
@@ -114,7 +116,7 @@ function main() {
   // (harness/solo5-pure-call.shen) and stop. No comparison happens in this process.
   if(args.includes('--build-only')) {
     writeFileSync(resolve(out,'programs.json'),JSON.stringify(checked.map(c=>c.artifact)));
-    writeFileSync(resolve(out,'batch.json'),JSON.stringify({guest,tender:tools.tender,batch_sha256:lowered.batch_sha256,programs:resolve(out,'programs.json'),count:String(programs.length),
+    writeFileSync(resolve(out,'batch.json'),JSON.stringify({guest,tender:tools.tender,abi:tools.abi,tender_sha256:tools.tender_sha256,solo5_commit:SOLO5_COMMIT,solo5_source:tools.solo5_source,solo5_path:tools.solo5_path,batch_sha256:lowered.batch_sha256,programs:resolve(out,'programs.json'),count:String(programs.length),
       families:Object.fromEntries(Object.entries(families).map(([family,cases])=>[family,String(cases.length)]))})+'\n');
     console.log(out);return;
   }
@@ -142,7 +144,8 @@ function main() {
   const noKill=Object.values(mutants).some(m=>m.killed==='0');
   const report={schema:'fenrir.solo5.freerun-pure-call-development/1',status:failures.length||noKill?'development-fail':'development-pass',
     qualification:'UNKNOWN',
-    scope:'TC0-A pure-call demo schemas /1 and /2; stock spt tender; observed free run compared with the JS pure-call machine; entry input ["int","0"]',
+    solo5_commit:SOLO5_COMMIT,solo5_source:tools.solo5_source,solo5_path:tools.solo5_path,tender_sha256:tools.tender_sha256,
+    scope:'TC0-A pure-call demo schemas /1 and /2; stock '+tools.abi+' tender; observed free run compared with the JS pure-call machine; entry input ["int","0"]',
     guest_sha256:sha(readFileSync(guest)),batch_sha256:lowered.batch_sha256,fuel:String(FUEL),
     programs:String(programs.length),programs_by_family:perFamily,reference_steps_compared:String(steps),outcomes,mutants,
     failure_count:String(failures.length),failures:failures.slice(0,20)};

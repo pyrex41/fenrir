@@ -18,6 +18,7 @@
         "nixpkgs": "nixpkgs",
         "shen-cl-src": "shen-cl-src",
         "shen-jit-src": "shen-jit-src",
+        "solo5-src": "solo5-src",
         "yggdrasil-src": "yggdrasil-src"
       }
     },
@@ -53,6 +54,24 @@
         "rev": "2f4b48bf9aabc2b93379d15f1818e4209137eb60",
         "type": "git",
         "url": "https://github.com/tizoc/shen-jit"
+      }
+    },
+    "solo5-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1758626085,
+        "narHash": "sha256-RiRiPx9EZ/o/49ySFxA6seiUqbLFza7dgqZ5VlxZ14c=",
+        "ref": "refs/tags/v0.9.3",
+        "rev": "38e0c348be231a2a3c59510a5caabf562792679f",
+        "revCount": 1195,
+        "type": "git",
+        "url": "https://github.com/Solo5/solo5"
+      },
+      "original": {
+        "ref": "refs/tags/v0.9.3",
+        "rev": "38e0c348be231a2a3c59510a5caabf562792679f",
+        "type": "git",
+        "url": "https://github.com/Solo5/solo5"
       }
     },
     "yggdrasil-src": {

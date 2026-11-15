@@ -48,6 +48,40 @@ steps; guest, Shen model and JS candidate agree on every step; 41 DivZero traps 
 results; the reverse-operand defect detected on all 81. Report:
 `build/solo5/freerun/<run>/report.json`.
 
+### Solo5 from the flake, and the hvt check
+
+`nix build .#solo5` builds Solo5 at the same pinned commit from source and installs
+`bin/solo5-spt`, `bin/solo5-hvt`, `bin/solo5-elftool` and the
+`x86_64-solo5-none-static-{cc,ld,objcopy}` wrappers, with a `SOLO5_COMMIT` file. The
+wrappers call the unwrapped nixpkgs gcc and binutils by store path, so guests compile and
+link from outside the build tree. Either of these uses it instead of the checkout:
+
+```sh
+export FENRIR_SOLO5=$(nix build --no-link --print-out-paths .#solo5)
+sh harness/run-solo5-pure-call.sh                       # likewise exact, tc1, tc1-exhaustive
+node tools/solo5/freerun-pure-call.mjs --solo5 "$FENRIR_SOLO5" --tc1
+```
+
+A directory with `SOLO5_COMMIT` is checked against the pinned commit by that file; one
+without it is still treated as a git checkout and checked by `git rev-parse HEAD` and a
+clean status. Reports and `batch.json` record `solo5_source` (`installed` or
+`checkout`), `solo5_path` and `tender_sha256`. With the flake build (November 2026)
+the four Shen comparisons give the same counts as with the checkout: 5,774 programs /
+86,286 steps; 8,745 exact-arithmetic programs; 20 TC1 fixtures (625 steps) and 12,693
+exhaustive TC1 programs (263,222 steps), each with the 23 hand cases (839 steps) alongside.
+
+`--abi hvt` on `freerun-pure-call.mjs` links the guest with `-z solo5-abi=hvt` and names
+`solo5-hvt` as the tender; `--out DIR` chooses the batch directory. The hvt check is
+`nix run .#hvt-compare` on a host with `/dev/kvm`, or the same inside a NixOS VM as
+`nix build .#checks.x86_64-linux.hvt`; [.github/workflows/hvt.yml](../../.github/workflows/hvt.yml)
+runs both. It takes two prebuilt batches (the TC1 fixtures with the hand cases, 43
+programs; hand, generated and 4-node exhaustive TC0-A programs, 798), runs the Shen
+harness against each tender's guest, and compares the spt and hvt frame streams byte for
+byte in all three guest modes. The JS candidate is not part of it. **It has not been
+executed:** the container this was written in has no `/dev/kvm`. What was done there:
+the hvt guests link and `solo5-elftool query-abi` reports hvt, the spt half passes, and
+the VM test driver builds.
+
 ### Pure-call guest (calls, closures, data, bytes)
 
 ```sh
