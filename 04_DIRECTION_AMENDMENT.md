@@ -312,6 +312,8 @@ The second half holds by construction. The first is the commuting argument; it i
 
 **Time.** Unchanged from plan §11: virtual idle-advance time under Gleipnir, and elapsed time as an effect handler in production.
 
+**Between images: remote perform.** The actor level now has a draft contract, [spec/tc1/EFFECTS.md](spec/tc1/EFFECTS.md) §12, and an executable Shen model of it, [models/tc1/remote-system.shen](models/tc1/remote-system.shen). A perform that crosses an image boundary returns `reply v`, `peer-down` or `timed-out`; the suspended computation stays in the caller image; `peer-down` is reported only for a request never handed to the peer, and anything after hand-over is `timed-out`, so peers must be idempotent per request id; the topology is a static manifest that the supervisor enforces. Evidence level: **bounded exploration passed, for the model only** (`sh harness/run-tc1-remote.sh`: six small systems, 633,517 states, eight injected defects caught, a negative control). No implementation exists: no OTP supervisor and no multi-image Solo5 run. It is in no gate, and the choices that go beyond the owner's decisions are listed as open questions in §12.10.
+
 **Open points.**
 
 - Whether `spawn` itself is a scheduling point or only the child's first step.

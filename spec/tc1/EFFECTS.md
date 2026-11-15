@@ -1,6 +1,6 @@
 # TC1 effect contract
 
-Draft 3 • 15 November 2026 • For owner review
+Draft 4 • 15 November 2026 • For owner review
 
 **Status.** Written together with its implementation, at the owner's request,
 so the text and the behaviour can be reviewed side by side. Both slices are
@@ -10,6 +10,8 @@ tail-resumptive handlers, and H2, explicit one-shot resumption. Nothing in this
 document is qualified. It supersedes §5 of
 [02_TINY_LANGUAGE_CORE.md](../../02_TINY_LANGUAGE_CORE.md) for TC1 and answers
 the open questions of the earlier handler task packet (PR #7); §10 lists them.
+Draft 4 adds §12, remote perform between images. That section is a contract
+and a Shen model checked by bounded exploration; it has no implementation.
 
 Owner decisions of 14 November 2026 are folded in: a clause may continue after
 `resume` returns (§7); performs of user effects are not observations (§5);
@@ -296,3 +298,245 @@ Open:
    sets here.
 3. Whether a clause that traps before using its resumption should be a
    validation error instead of an implicit abort.
+
+## 12 Remote perform (model only)
+
+**Status.** A contract and an executable Shen model of it
+(`models/tc1/remote-system.shen`), explored exhaustively on small systems
+(§12.8). No supervisor and no multi-image runtime exist; nothing here has been
+run against Erlang/OTP or a Solo5 guest. The owner's decisions of 15 November
+2026 are taken as fixed: three outcomes and failure as data; no continuation
+crosses an image boundary; a static, declared topology. Where this section had
+to choose beyond them, the choice is listed in §12.10.
+
+### 12.1 Systems
+
+A *system* is a fixed set of *members*, one image each (amendment §14), a
+*supervisor* that carries every message between them, and a *manifest*: a set
+of directed connections (caller, peer). Members are never created or removed.
+A member is *up* or *down*, and has
+
+- a *volatile* state: its program's position, the remote perform it is
+  suspended in (at most one: an image is single-threaded), and the requests
+  handed to it and not yet acted on;
+- a *durable* store, held on the host side (amendment §8), which survives a
+  crash.
+
+### 12.2 The operation
+
+A remote operation is an operation of an effect that the image's build binds
+to a peer. It is a runtime effect (§8): no user handler discharges it, and it
+is not replaceable by one. For `op : A -> B` on the peer, the caller writes
+
+```text
+perform(E, op, (key, a))        key : I64, a : A        result : RemoteResult B
+RemoteResult B ::= reply(B) | peer_down | timed_out
+```
+
+- A and B are serializable (§1), so `RemoteResult B` is.
+- The perform always returns, with exactly one of the three. A failure is a
+  value. It is never a trap and never a resumption that does not happen.
+- **No continuation crosses the boundary.** The suspended segment stays in the
+  caller image. The supervisor's part is that of a tail-resumptive clause
+  (§4): it produces one value, and the perform continues with it, in the image
+  that performed. The peer receives the key and `a`, nothing else.
+- A remote perform is a scheduling point (amendment §14). It is an observation
+  (§5), together with its outcome.
+
+### 12.3 Request ids
+
+The *request id* is (caller, key). The key is chosen by the caller program.
+One execution of a perform is an *attempt*; the supervisor gives each attempt
+a tag that is never used again. Performing again with the same key is a new
+attempt for the same request id; that is what a retry is.
+
+- **Caller obligation.** A key stands for one operation and one argument. What
+  a peer does with a key reused for a different argument is not specified.
+- **Peer obligation: idempotent per request id.** Acting on a request is one
+  atomic durable step: either the request id has a reply record, and the peer
+  sends that value again and changes nothing; or it applies the request,
+  records the reply, and sends it. The record is durable, so this holds across
+  the peer's restarts. The obligation covers every way a request can arrive
+  twice: a copy duplicated by the supervisor, a retry after `timed_out`, and a
+  caller that restarted and performs again.
+
+### 12.4 Outcomes
+
+| Outcome | May be produced | What the caller may conclude |
+| --- | --- | --- |
+| `reply(v)` | Only by giving the caller a reply message the peer produced by acting on this request id, while the caller is still suspended in the attempt whose tag the message carries | The peer applied the request, once, and `v` is the value in its durable record for the request id. It may have been applied for an earlier attempt |
+| `peer_down` | (a) While the peer is down and no copy of any attempt of this request id was ever handed to the peer, in any of its incarnations. The supervisor destroys every copy of the request id it still holds. (b) At once, when the connection is not in the manifest (§12.6) | The peer has not acted on the request id, and will not, until this caller performs it again. Nothing about whether the peer is down afterwards |
+| `timed_out` | At any time while the caller waits | Nothing. The peer may have acted, may not have, and may still act later: copies can remain in flight |
+
+- **`peer_down` is not "the peer died".** Once a copy has been handed to the
+  peer, the supervisor cannot know whether the peer acted before it died. From
+  then on the only failure outcome for that request id is `timed_out`, for
+  this attempt and every later one. `timed_out` is the indeterminate case that
+  [verification/service/README.md](../../verification/service/README.md)
+  assumption 4 leaves out.
+- **At most one outcome per attempt.** A reply that arrives when the caller is
+  no longer suspended in that attempt (after `timed_out`, or in a later
+  incarnation) is discarded and is not shown to the program.
+- A caller that crashes while waiting gets no outcome: the attempt belonged to
+  the image that was lost.
+
+### 12.5 The supervisor
+
+May: deliver messages in any order; delay a message without bound; drop any
+message; duplicate any message; report `timed_out` at any time; restart a
+member that is down.
+
+May not:
+
+- carry a request along a connection the manifest does not declare;
+- create a reply, or change a request or a reply;
+- give a reply to an attempt other than the one whose tag it carries;
+- report `peer_down` for a request id of which it has handed over a copy;
+- after `peer_down`, hand over a copy issued before that report;
+- on a member's crash or restart, change another member, that member's
+  durable store, or the messages in flight.
+
+Duplicates are allowed so that an implementation which redelivers after a
+restart is inside the contract. §12.3 covers them.
+
+### 12.6 The manifest and refusal
+
+The supervisor checks every request against the manifest when it accepts it
+from the caller, whatever the image claims about itself. An undeclared
+connection carries nothing: no message is put in flight, the supervisor
+records a refusal, and the perform returns `peer_down`. A reply travels only
+back along the connection of its request.
+
+This is an authority property: which member can cause which other member to
+act. It is not confidentiality (§12.9).
+
+### 12.7 Crash and restart
+
+Any member that is up may crash at any time. The crash loses its volatile
+state. A restart brings the member up with its durable store as the crash left
+it and the volatile state of a fresh image: the program starts from its
+beginning, no perform is pending, and the inbox is empty. Messages in flight
+stay with the supervisor, which may still deliver or drop them.
+
+So a restarted caller performs its requests again with the same keys, and the
+peer answers from its records. A caller that must not start over keeps its
+progress in its durable store; that is the durable workflow level of amendment
+§14 and is not modelled here.
+
+### 12.8 Events, and what is checked today
+
+The program observes only its outcomes. The supervisor's record has, per
+step: issued, refused, handed, acted (applied or replayed, with the value),
+outcome, stale-reply, dropped, duplicated, crashed, restarted. As in amendment
+§14, one member's events are ordered; events of different members are not.
+
+```sh
+sh harness/run-tc1-remote.sh       # explores the model, its mutants, and a negative control
+```
+
+`harness/tc1-remote.shen` explores the whole reachable state graph of six
+small systems, breadth first, and checks every state and every step. A system
+is bounded by its scripts, their retries, and a budget of crash and duplicate
+steps; drops, timeouts, restarts and reordering are not bounded.
+
+| System | Crashes, duplicates | States | Transitions | Schedules |
+| --- | --- | --- | --- | --- |
+| Caller, peer; one request, one retry | 1, 1 | 32,171 | 147,134 | 8,025,082,041,873 |
+| The same | 2, 0 | 261,140 | 1,250,008 | 49,484,158,988,752,448 |
+| Caller, peer; two requests, one retry on the first | 1, 0 | 221,847 | 1,086,275 | 11,992,843,538,162,608 |
+| Caller, two peers; one connection undeclared | 2, 1 | 37,689 | 157,327 | 258,248,093,937 |
+| Two callers using the same key, one peer | 1, 1 | 33,065 | 144,944 | 287,911,634,530 |
+| Caller is a tc1 handler-machine program with one retry; peer | 1, 1 | 47,605 | 225,864 | 97,146,742,095,094 |
+
+A schedule is a maximal path; the longest has 34 steps. In all 633,517 states
+and 3,011,552 transitions, no property below fails.
+
+| Property | Statement |
+| --- | --- |
+| single-outcome | No attempt has two outcomes |
+| resolved-at-termination | When no step is enabled, every attempt has exactly one outcome, except those whose caller crashed while waiting, which have none |
+| reply-implies-acted | An observed `reply(v)` has `v` in the peer's durable record for that request id |
+| peer-down-not-handed | Other than as a refusal, `peer_down` is reported only while the peer is down, for a request id never handed to it and absent from its record |
+| peer-down-sealed | From `peer_down` until the caller issues the request id again: no copy in flight, none handed over, no record |
+| applied-at-most-once | No request id is applied twice; acting on a recorded request id leaves the durable store unchanged |
+| declared-edges-only | Everything in a member's inbox or record came along a declared connection |
+| crash-isolation | A crash or restart changes no other member, not the member's durable store, and nothing in flight |
+
+Eight defects, each a switch on the model, are each caught on the property
+they are aimed at. The schedule shown is a shortest one.
+
+| Defect | Caught by | Shortest schedule |
+| --- | --- | --- |
+| `peer_down` reported after hand-over | peer-down-not-handed | issue, hand over, crash peer, peer-down |
+| Supervisor answers for a dead peer | reply-implies-acted | crash peer, issue, forged reply |
+| Peer applies a recorded request id again | applied-at-most-once | issue, duplicate, hand over, act, hand over, act |
+| Supervisor carries an undeclared connection | declared-edges-only | issue, timeout, issue to the undeclared peer, hand over |
+| Caller takes a reply after `timed_out` | single-outcome | issue, hand over, act, timeout, deliver reply |
+| A crash resets the callers waiting on it | crash-isolation | issue, crash peer |
+| `peer_down` destroys only its own attempt's copies | peer-down-sealed | issue, timeout, crash peer, issue, peer-down |
+| The timeout never fires | resolved-at-termination | issue, hand over, crash peer, restart peer |
+
+A defective run that raises an error would be reported as crashed and not as
+caught; none does. Eight hand-written schedules, with expectations taken from
+this text, pass. As a negative control, the same checker run with the
+non-idempotent peer in place of the model reports failure and exits with
+status 1; the runner requires that.
+
+The model's members are abstract: a caller is a script of requests, a peer
+adds one to a counter and replies with it. One system uses a real tc1 program
+as the caller (`models/tc1/remote-tc1-caller.shen`): the handler machine runs
+to a perform of a bound effect that no frame handles, keeps its frames, and is
+given the outcome as the value of that perform.
+
+This is in no gate.
+
+### 12.9 Not covered
+
+- **Liveness.** Nothing says a request is ever handed over, a reply ever
+  delivered, or a member ever restarted. Every perform returns only because
+  `timed_out` is always possible.
+- **Confidentiality.** The manifest limits who can make whom act. It does not
+  limit what a member can learn.
+- **Dynamic topology.** No member is spawned; no connection is added.
+- **Continuation or closure transfer.** Only serializable values cross.
+- **Order.** Between different peers, and between two requests to one peer:
+  the supervisor may reorder.
+- **A supervisor that fails.** The supervisor's record of what it handed over
+  is assumed never lost, and its messages are assumed uncorrupted.
+- **A peer that breaks its obligation.** Idempotence is assumed of peers, not
+  enforced on them; the non-idempotent defect shows what then fails.
+- **External effects of a peer's action.** Applied once means one durable
+  application; an email sent by it needs its own receiver-side contract.
+- **Time.** A timeout has no clock here; it may fire at once.
+- **Several tasks in one image** performing concurrently, bounded mailboxes
+  and overload.
+- **Peers written in tc1,** typing of remote effects (§3 still says the entry
+  function's set may contain only `Emit`), and the surface syntax for a key.
+- Systems larger than those listed; any proof. The contract, the model, the
+  defects and the checker share one author lineage, and the checker reads
+  history variables that the model's own steps maintain.
+
+### 12.10 Open questions for the owner
+
+1. **Refusal.** An undeclared connection returns `peer_down` here, because the
+   guarantee is the same and the outcomes stay three. Alternatives: reject the
+   program at build time and fault the image if it tries; or a fourth outcome.
+2. **Who chooses the key.** Here the program does, as part of the argument, so
+   that a retry and a restarted caller name the same request. The alternative,
+   ids assigned by the supervisor, cannot survive the caller's restart.
+3. **May the supervisor duplicate?** Allowed here, to be safe. If the OTP
+   supervisor never redelivers, the clause can go; retries still need §12.3.
+4. **`peer_down` only while the peer is down.** The supervisor could also
+   report it for a request it dropped before hand-over while the peer is up.
+   That would be sound, but the name would mislead. Not allowed here.
+5. **Supervisor state.** `peer_down` relies on the supervisor remembering every
+   hand-over. If that record can be lost, everything issued before the loss
+   has to count as handed over.
+6. **A restarted caller starts from the beginning** (§12.7). Confirm that this
+   is the actor level's meaning of "the supervisor restarts computation".
+7. **A peer with no durable store** can be idempotent only within one
+   incarnation. Allowed, and with what guarantee for `reply`?
+8. **A key reused with a different argument:** refuse, as the service example
+   does with `Conflict`, or unspecified?
+9. **Naming and class.** Is a remote operation a runtime effect with a reserved
+   name, or a fourth class beside ordinary, runtime and durable (§8)?

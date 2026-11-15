@@ -64,6 +64,7 @@
 \\   late-reply-accepted        the caller takes a reply for a perform that timed out
 \\   linked-crash               a crash resets the callers waiting on the crashed member
 \\   purge-by-attempt           peer-down discards only its own attempt's copies
+\\   no-timeout                 the timeout never fires
 
 \\ ---------- a total order on terms, for canonical sets ----------
 
@@ -401,12 +402,13 @@
 
 (define remote.waiting
   Config S [Name up _ [_ [Tag Peer Rid] _]] ->
-    (remote.concat [(remote.timeout S Name Tag) (remote.peer-down Config S Name Tag Peer Rid) (remote.forge Config S Name Tag Peer)])
+    (remote.concat [(remote.timeout Config S Name Tag) (remote.peer-down Config S Name Tag Peer Rid) (remote.forge Config S Name Tag Peer)])
   _ _ _ -> [])
 
 \\ May fire whenever the image is waiting. It says nothing about the peer.
 (define remote.timeout
-  S Name Tag -> [[[timeout Tag] [[outcome Tag [timed-out]]] (remote.observe Name Tag [timed-out] S)]])
+  Config S Name Tag -> [] where (remote.mutant? Config no-timeout)
+  Config S Name Tag -> [[[timeout Tag] [[outcome Tag [timed-out]]] (remote.observe Name Tag [timed-out] S)]])
 
 (define remote.request-for?
   Caller Peer Rid [req _ Caller Peer Rid _] -> true
