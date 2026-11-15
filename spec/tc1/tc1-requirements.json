@@ -3,6 +3,8 @@
  "status": "proposed",
  "slice": "TC1",
  "contract": "spec/tc1/EFFECTS.md (tc1-draft-1: slices H1 and H2)",
+ "catalog": "spec/tc1/handler-catalog.json",
+ "catalog_sha256": "018dee318b47c91ca6fa8b7a8d291a5ab27867a9ffdf0e676bd7329e89276a19",
  "ledger": "spec/tc0/requirement-ledger-a.json",
  "evaluator": "harness/tc1-gate.shen",
  "aggregation": "As the TC0-A gate (TC0-GATE, 02 \u00a714): any required row FAIL -> FAIL; else any BLOCKED -> BLOCKED; else any UNKNOWN -> UNKNOWN; else PASS. A defect killed on no program is FAIL; a crash is never a kill. An evaluator error or a check that does not report is UNKNOWN. Every row's reasons are reported whatever the aggregate. Optional rows never satisfy a required row.",
@@ -118,6 +120,65 @@
    "acceptance": "The injected defect shallow_resume (a resumed segment that comes back without its handler) is killed (completed, trace differs from the model's) on at least one exhaustive program; crashes are never kills. No exhaustive report in this run: UNKNOWN."
   },
   {
+   "id": "generated-agreement",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "check": "tc1-generated",
+   "acceptance": "harness/tc1-generated.shen: every program of the generated handler family G (tools/tc1/handler-generate.mjs: seeded, finite, NOT exhaustive), 2,048 programs, agrees with the model run in the harness (every step, the outcome, and every closure descriptor), with the implementation sandboxed; every handler behaviour the harness lists (multi-operation effects, nested and sequential handlers, same-effect forwarding, a closure made under one handler performing under another, a clause continuing after resume, discontinue, traps in clauses and in handled bodies, emissions around a perform) is exercised by some agreeing model trace; and each of the six injected defects is killed on some program. A batch that is not the whole family, or a program count other than 2,048 (the number the evaluator holds), is UNKNOWN."
+  },
+  {
+   "id": "discovery-reduction-replay-forgotten-resume",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS",
+    "TC0-DISCOVERY-REDUCTION"
+   ],
+   "check": "tc1-reduction:forgotten_resume",
+   "acceptance": "harness/tc1-reduction.shen with the injected defect forgotten_resume: the first program of the generated family (in index order, within its first 256) on which the defective implementation shows the class clause-return-drops-segment while the model and the defect-free implementation agree is discovered; it is reduced by typed proposals (tools/tc1/handler-reduce.mjs, each revalidated incl. effect sets and the one-shot rule) accepted only on fresh model and implementation observations showing the same class; the minimized failure is smaller; and both strictly replay, diverging at the classified epoch with the defect and admitted without it. Crashed defective runs are never kills. A campaign whose original or minimized case differs from the committed one in fixtures/tc1/handler-retained-failures.json is UNKNOWN (the retained cases are stale)."
+  },
+  {
+   "id": "discovery-reduction-replay-double-resume",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS",
+    "TC0-DISCOVERY-REDUCTION"
+   ],
+   "check": "tc1-reduction:double_resume",
+   "acceptance": "harness/tc1-reduction.shen with the injected defect double_resume: the first program of the generated family (in index order, within its first 256) on which the defective implementation shows the class clause-return-duplicates-segment while the model and the defect-free implementation agree is discovered; it is reduced by typed proposals (tools/tc1/handler-reduce.mjs, each revalidated incl. effect sets and the one-shot rule) accepted only on fresh model and implementation observations showing the same class; the minimized failure is smaller; and both strictly replay, diverging at the classified epoch with the defect and admitted without it. Crashed defective runs are never kills. A campaign whose original or minimized case differs from the committed one in fixtures/tc1/handler-retained-failures.json is UNKNOWN (the retained cases are stale)."
+  },
+  {
+   "id": "discovery-reduction-replay-outermost-handler",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS",
+    "TC0-DISCOVERY-REDUCTION"
+   ],
+   "check": "tc1-reduction:outermost_handler",
+   "acceptance": "harness/tc1-reduction.shen with the injected defect outermost_handler: the first program of the generated family (in index order, within its first 256) on which the defective implementation shows the class selected-other-handler while the model and the defect-free implementation agree is discovered; it is reduced by typed proposals (tools/tc1/handler-reduce.mjs, each revalidated incl. effect sets and the one-shot rule) accepted only on fresh model and implementation observations showing the same class; the minimized failure is smaller; and both strictly replay, diverging at the classified epoch with the defect and admitted without it. Crashed defective runs are never kills. A campaign whose original or minimized case differs from the committed one in fixtures/tc1/handler-retained-failures.json is UNKNOWN (the retained cases are stale)."
+  },
+  {
+   "id": "discovery-reduction-replay-shallow-resume",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS",
+    "TC0-DISCOVERY-REDUCTION"
+   ],
+   "check": "tc1-reduction:shallow_resume",
+   "acceptance": "harness/tc1-reduction.shen with the injected defect shallow_resume: the first program of the generated family (in index order, within its first 256) on which the defective implementation shows the class resume-drops-handler while the model and the defect-free implementation agree is discovered; it is reduced by typed proposals (tools/tc1/handler-reduce.mjs, each revalidated incl. effect sets and the one-shot rule) accepted only on fresh model and implementation observations showing the same class; the minimized failure is smaller; and both strictly replay, diverging at the classified epoch with the defect and admitted without it. Crashed defective runs are never kills. A campaign whose original or minimized case differs from the committed one in fixtures/tc1/handler-retained-failures.json is UNKNOWN (the retained cases are stale)."
+  },
+  {
+   "id": "strict-replay",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS",
+    "TC0-REPLAY"
+   ],
+   "check": "tc1-strict-replay",
+   "acceptance": "harness/tc1-strict-replay.shen: for every TC1 hand fixture, after agreement with the model and the handwritten expectations, a tape of the sandboxed implementation recorded against the model's trace replays exactly and is admitted; for every retained failure in fixtures/tc1/handler-retained-failures.json the defect-free tape is admitted and the tape with its defect diverges at exactly the retained epoch. The retained cases must include an original and a minimized failure for each defect of the discovery-reduction-replay rows, and the tapes must bind the catalog the evaluator pins. Anything less is UNKNOWN; a failed replay is FAIL."
+  },
+  {
    "id": "guest-hand-fixtures",
    "required": true,
    "ledger": [
@@ -136,13 +197,14 @@
    "acceptance": "harness/solo5-pure-call.shen on every program of grammar H with at most 7 nodes, with the TC0-A hand cases. The Solo5 guest agrees with the model on every step and both guest defects are detected. A batch whose handler family does not hold 12,693 programs, or a comparison that did not cover the whole batch, is UNKNOWN. Solo5 not built: BLOCKED."
   },
   {
-   "id": "handler-step-coverage",
-   "required": false,
+   "id": "catalog-coverage",
+   "required": true,
    "ledger": [
-    "TC0-B-HANDLERS"
+    "TC0-B-HANDLERS",
+    "TC0-REF-STEP"
    ],
-   "check": "tc1-step-coverage",
-   "acceptance": "Optional. harness/tc1-coverage.shen: every reference step kind of spec/tc1/EFFECTS.md section 6 (fifteen kinds from its thirteen rows) is exercised by this run's agreeing hand or exhaustive traces. An uncovered kind is UNKNOWN and is listed; a step classified under a kind the table does not have is FAIL. A measure of the traces, not of compiled code."
+   "check": "tc1-catalog-coverage",
+   "acceptance": "harness/tc1-coverage.shen: every transition of the versioned handler catalog spec/tc1/handler-catalog.json (tc1-handler-catalog/1, 29 transitions, derived from EFFECTS.md section 6 and the TC0-A catalog; its file digest is pinned by the evaluator and stated in catalog_sha256 here) is exercised by this run's agreeing hand, exhaustive or generated model traces. A catalog whose digest differs from the pin is UNKNOWN; an uncovered transition is UNKNOWN and is listed; a handler step with no transition, or whose depth change contradicts its transition, is FAIL. A measure of the traces, not of compiled code."
   }
  ],
  "claims": {
@@ -172,6 +234,24 @@
   "tc0-a-preserved": [
    "unit-suite",
    "tc0-a-gate"
+  ],
+  "handler-generated-agreement": [
+   "toolchain-pinned",
+   "generated-agreement"
+  ],
+  "handler-failures-reduced-and-replayed": [
+   "generated-agreement",
+   "discovery-reduction-replay-forgotten-resume",
+   "discovery-reduction-replay-double-resume",
+   "discovery-reduction-replay-outermost-handler",
+   "discovery-reduction-replay-shallow-resume",
+   "strict-replay"
+  ],
+  "handler-catalog-covered": [
+   "hand-fixtures",
+   "exhaustive-small",
+   "generated-agreement",
+   "catalog-coverage"
   ]
  },
  "claim_prerequisites": [
@@ -180,5 +260,5 @@
  ],
  "review": "None. This manifest is PROPOSED: it is not owner-accepted and the evaluator is not registered in .pi/fenrir-workflow.json, so every report says authority UNREGISTERED and qualification UNKNOWN. Registration is the owner's decision.",
  "model": "models/tc1/handler-machine.shen with models/tc0/i64.shen, run in-process by the Shen harness on the flake-pinned Shen/JIT",
- "not_covered": "Generated (non-exhaustive) handler programs, a discovery-and-reduction campaign, strict replay, a versioned and hashed transition catalog for the handler steps (the optional coverage row measures against the table in EFFECTS.md section 6), and any soundness proof of the typing or one-shot rules. Grammar H has one-operation effects with I64 operation types only, no closures, and programs of at most 7 nodes."
+ "not_covered": "Exhaustive exploration beyond grammar H (at most 7 nodes; one-operation effects with I64 operation types, no closures): the generated family G is sampled, not exhaustive. The reduction campaigns cover four of the six injected defects (dynamic_clause_environment and resume_returns_argument show their first difference only through later values, for which no discrepancy class is defined). Steps the step record does not tell apart (which of two frames at one node an AbandonFrame or UnwindFrame step discards) are one catalog transition each. Multi-shot resumption, runtime and durable effects, and any soundness proof of the typing or one-shot rules."
 }

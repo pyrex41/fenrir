@@ -25,6 +25,19 @@
 (define fh.tc1-bound -> "7")
 (define fh.tc1-programs -> "12693")
 
+\\ The generated family G (tools/tc1/handler-generate.mjs): the number of programs a
+\\ complete batch holds, which is also the family's size.
+(define fh.tc1-generated-programs -> "2048")
+
+\\ The defects with a discovery-reduction-replay campaign, each with its own row.
+(define fh.tc1-campaign-defects -> ["forgotten_resume" "double_resume" "outermost_handler" "shallow_resume"])
+
+\\ The handler transition catalog and the digest of the file this gate measures against.
+\\ An edited catalog is not measured against until this pin (and the manifest's
+\\ catalog_sha256) is changed with it.
+(define fh.tc1-catalog -> "spec/tc1/handler-catalog.json")
+(define fh.tc1-catalog-sha256 -> "018dee318b47c91ca6fa8b7a8d291a5ab27867a9ffdf0e676bd7329e89276a19")
+
 \\ ---------- TC1 rows ----------
 
 \\ The ids of the required rows of a gate report that did not pass, with their statuses.
@@ -111,21 +124,99 @@
                 (fh.row "UNKNOWN" [(make-string "The guest batch or its comparison is incomplete: ~A handler programs built, ~A required; ~A of ~A programs compared"
                                                 Family (fh.tc1-programs) (fh.member "programs" Report) (fh.member "count" Batch))] [] Memo))))))
 
-\\ Coverage is measured over the traces this run established as agreeing.
-(define fh.tc1-step-coverage
+\\ The generated family: agreement, the handler behaviours its traces exercised and the
+\\ defects it kills, all decided by the harness; this row checks the scope.
+(define fh.tc1-generated
   Memo ->
-    (if (or (= (fh.member-in "tc1-hand" Memo) []) (= (fh.member-in "tc1-exhaustive" Memo) [])
+    (let Report (fh.harness "tc1-generated.shen" [(fh.tc1-generated-programs) (fh.subdir "tc1-generated") "sandbox"] 1800)
+         Programs (fh.member "programs" Report)
+         Agreeing (fh.member "agreeing" Report)
+         Status (fh.member "status" Report)
+      (if (= Report [])
+          (fh.row "UNKNOWN" ["The generated handler harness did not report"] [] Memo)
+          (if (or (not (= (fh.member "scope_complete" Report) true)) (not (= Programs (fh.tc1-generated-programs))))
+              (fh.row "UNKNOWN" [(make-string "The generated family was truncated or incomplete: ~A programs, ~A required" Programs (fh.tc1-generated-programs))] [] Memo)
+              (if (not (= Agreeing Programs))
+                  (fh.row "FAIL" [(make-string "~A of ~A generated programs agree with the model" Agreeing Programs)]
+                          [["disagreements" (json.stringify (fh.member "disagreements" Report) [])]] Memo)
+                  (if (= Status "development-pass")
+                      (fh.row "PASS" [] [["programs" Programs] ["steps" (fh.member "model_steps" Report)]
+                                         ["outcomes" (json.stringify (fh.member "outcomes" Report) [])]
+                                         ["features" (json.stringify (fh.member "features" Report) [])]
+                                         ["defects" (json.stringify (fh.member "defects" Report) [])]]
+                              [["tc1-generated" Report] | Memo])
+                      (fh.row "FAIL" ["A listed handler behaviour was never exercised, or an injected defect survived every generated program"]
+                              [["features_unexercised" (json.stringify (fh.member "features_unexercised" Report) [])]
+                               ["defects_undetected" (json.stringify (fh.member "defects_undetected" Report) [])]] Memo)))))))
+
+\\ One discovery-reduction-replay campaign. Its retained cases must be the committed ones,
+\\ which the strict-replay row replays.
+(define fh.tc1-reduction
+  Defect Memo ->
+    (let Report (fh.harness "tc1-reduction.shen" [(fh.subdir (cn "tc1-reduction-" Defect)) Defect "sandbox"] 1800)
+         Status (fh.member "status" Report)
+         Detail [["case" (make-string "~A (index ~A), ~A attempts (~A accepted), nodes ~A->~A, divergence epochs ~A and ~A"
+                                       (fh.member "discovered_program" Report) (fh.member "discovered_index" Report)
+                                       (fh.member "attempts" Report) (fh.member "accepted" Report)
+                                       (fh.member "original_nodes" Report) (fh.member "minimized_nodes" Report)
+                                       (fh.member "original_divergence_epoch" Report) (fh.member "minimized_divergence_epoch" Report))]
+                 ["discrepancy" (fh.member "discrepancy" Report)]]
+      (if (= Status "development-pass")
+          (if (= (fh.member "matches_retained" Report) true)
+              (fh.row "PASS" [] Detail [[(cn "tc1-campaign:" Defect) Report] | Memo])
+              (fh.row "UNKNOWN" [(cn "The campaign's original or minimized failure differs from the committed retained case for " Defect)] Detail Memo))
+          (if (= Status "development-fail")
+              (fh.row "FAIL" [(cn "Campaign failed: " (fh.member "reason" Report))] [] Memo)
+              (fh.row "UNKNOWN" [(if (= Report []) "The reduction campaign did not report" (cn "Campaign error: " (fh.member "reason" Report)))] [] Memo)))))
+
+(define fh.tc1-missing
+  [] _ -> []
+  [X | Xs] Ys -> (if (element? X Ys) (fh.tc1-missing Xs Ys) [X | (fh.tc1-missing Xs Ys)]))
+
+(define fh.tc1-strict-replay
+  Memo ->
+    (let Report (fh.harness "tc1-strict-replay.shen" [(fh.subdir "tc1-strict-replay") "sandbox"] 900)
+         Status (fh.member "status" Report)
+         Missing (fh.tc1-missing (fh.tc1-campaign-defects) (fh.member "retained_defects" Report))
+         Detail [["hand_admitted" (make-string "~A/~A" (fh.member "hand_admitted" Report) (fh.member "hand_cases" Report))]
+                 ["retained" (make-string "~A cases; ~A admitted without the defect, ~A diverged at the retained epoch with it"
+                                         (fh.member "retained_cases" Report) (fh.member "retained_fixed_admitted" Report)
+                                         (fh.member "retained_diverged_at_epoch" Report))]]
+      (if (= Status "development-fail")
+          (fh.row "FAIL" ["A hand fixture disagreed, a tape was not admitted, or a retained failure did not diverge at its epoch"]
+                  [["hand_failures" (json.stringify (fh.member "hand_failures" Report) [])]
+                   ["not_admitted" (json.stringify (append (fh.member "hand_not_admitted" Report) (fh.member "retained_fixed_not_admitted" Report)) [])]
+                   ["not_diverged" (json.stringify (fh.member "retained_not_diverged" Report) [])]] Memo)
+          (if (not (= Status "development-pass"))
+              (fh.row "UNKNOWN" ["The strict replay harness did not report"] [] Memo)
+              (if (not (empty? Missing))
+                  (fh.row "UNKNOWN" [(cn "No retained original and minimized failure for " (fh.join Missing ", "))] Detail Memo)
+                  (if (not (= (fh.member "catalog_hash" Report) (fh.tc1-catalog-sha256)))
+                      (fh.row "UNKNOWN" ["The tapes bind another handler catalog than the one this gate pins"] Detail Memo)
+                      (fh.row "PASS" [] Detail Memo)))))))
+
+\\ Coverage is measured over the traces this run established as agreeing.
+(define fh.tc1-catalog-coverage
+  Memo ->
+    (if (or (= (fh.member-in "tc1-hand" Memo) []) (= (fh.member-in "tc1-exhaustive" Memo) []) (= (fh.member-in "tc1-generated" Memo) [])
             (not (= (fh.member "agreeing" (fh.member-in "tc1-exhaustive" Memo)) (fh.member "programs" (fh.member-in "tc1-exhaustive" Memo)))))
-        (fh.row "UNKNOWN" ["Needs this run's agreeing hand and exhaustive handler results"] [] Memo)
-        (let Report (fh.harness "tc1-coverage.shen" [(cn (value fh.*out*) "tc1-handlers/handlers.jsonl") (cn (value fh.*out*) "tc1-exhaustive")] 900)
+        (fh.row "UNKNOWN" ["Needs this run's agreeing hand, exhaustive and generated handler results"] [] Memo)
+        (let Report (fh.harness "tc1-coverage.shen" [(cn (value fh.*root*) (fh.tc1-catalog)) (fh.tc1-catalog-sha256)
+                                                     (cn (value fh.*out*) "tc1-handlers/handlers.jsonl")
+                                                     (cn (value fh.*out*) "tc1-exhaustive") (cn (value fh.*out*) "tc1-generated")] 1800)
              Status (fh.member "status" Report)
-          (if (= Status "outside-table")
-              (fh.row "FAIL" ["Steps classified outside the table of EFFECTS.md section 6"] [["unknown_observed" (json.stringify (fh.member "unknown_observed" Report) [])]] Memo)
-              (if (= Status "incomplete")
-                  (fh.row "UNKNOWN" ["Handler step kinds uncovered"] [["missing" (json.stringify (fh.member "missing" Report) [])]] Memo)
-                  (if (= Status "complete")
-                      (fh.row "PASS" [] [["covered" (make-string "~A/~A" (fh.member "covered" Report) (fh.member "kinds" Report))]] Memo)
-                      (fh.row "UNKNOWN" ["The handler coverage harness did not report"] [] Memo)))))))
+          (if (= Status "outside-catalog")
+              (fh.row "FAIL" ["Handler steps with no catalog transition, or contradicting their transition's depth change"]
+                      [["outside_catalog" (json.stringify (fh.member "outside_catalog" Report) [])]
+                       ["depth_violations" (json.stringify (fh.member "depth_violations" Report) [])]] Memo)
+              (if (= Status "catalog-mismatch")
+                  (fh.row "UNKNOWN" [(make-string "The catalog's digest ~A is not the pinned ~A" (fh.member "catalog_sha256" Report) (fh.tc1-catalog-sha256))] [] Memo)
+                  (if (= Status "incomplete")
+                      (fh.row "UNKNOWN" ["Catalog transitions uncovered"] [["missing" (json.stringify (fh.member "missing" Report) [])]] Memo)
+                      (if (= Status "complete")
+                          (fh.row "PASS" [] [["covered" (make-string "~A/~A" (fh.member "covered" Report) (fh.member "transitions" Report))]
+                                             ["catalog" (make-string "~A ~A" (fh.member "catalog_version" Report) (fh.member "catalog_sha256" Report))]] Memo)
+                          (fh.row "UNKNOWN" ["The handler coverage harness did not report"] [] Memo))))))))
 
 (define fh.check
   "source-identity" Memo -> (fh.source-identity Memo)
@@ -140,9 +231,15 @@
   "tc1-defect:dynamic_clause_environment" Memo -> (fh.tc1-defect "dynamic_clause_environment" Memo)
   "tc1-defect:resume_returns_argument" Memo -> (fh.tc1-defect "resume_returns_argument" Memo)
   "tc1-defect:shallow_resume" Memo -> (fh.tc1-defect "shallow_resume" Memo)
+  "tc1-generated" Memo -> (fh.tc1-generated Memo)
+  "tc1-reduction:forgotten_resume" Memo -> (fh.tc1-reduction "forgotten_resume" Memo)
+  "tc1-reduction:double_resume" Memo -> (fh.tc1-reduction "double_resume" Memo)
+  "tc1-reduction:outermost_handler" Memo -> (fh.tc1-reduction "outermost_handler" Memo)
+  "tc1-reduction:shallow_resume" Memo -> (fh.tc1-reduction "shallow_resume" Memo)
+  "tc1-strict-replay" Memo -> (fh.tc1-strict-replay Memo)
   "tc1-guest-hand" Memo -> (fh.guest-row (fh.guest-batch ["--tc1"]) Memo)
   "tc1-guest-exhaustive" Memo -> (fh.tc1-guest-exhaustive Memo)
-  "tc1-step-coverage" Memo -> (fh.tc1-step-coverage Memo)
+  "tc1-catalog-coverage" Memo -> (fh.tc1-catalog-coverage Memo)
   Name Memo -> (fh.row "UNKNOWN" [(cn "The evaluator has no check named " Name)] [] Memo))
 
 \\ Registered: the manifest is owner-accepted and the workflow has a tc1-qualification
