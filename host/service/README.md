@@ -98,7 +98,7 @@ told present in the file) after every crash and at the end. Families: `hand_trac
 (spec/service/hand-traces.json), `a2_runs` (the 68 distinct runs of the A2 refinement,
 [tests/host/a2-runs.json](../../tests/host/a2-runs.json), each set up so that the store
 gives that run's replies), `random_schedules`, `retries`, `duplicates`, `crash_points`
-(15 points × actions × {submit, delivery}), `sqlite_kills`, `lost_ack`, `busy`,
+(9 fault points × the kills that apply × {submit, delivery}: 60 combinations), `sqlite_kills`, `lost_ack`, `busy`,
 `two_workers`, and the host mutants. The report's `campaigns` member has the exact counts.
 
 ## Artifact
