@@ -317,6 +317,18 @@ entry is one (artifact, input) pair. Older schemas keep input `["int","0"]`.
 
 ## 13 What is checked
 
+**Typing.** §1–§2 and §10 are stated as rules in
+[TYPING.md](TYPING.md) §6.1 (the Program rule's residual entry row, the class
+as a structural check), and both artifact validators judge every durable
+artifact: the JavaScript one, and the Shen one (structure, derivation search,
+fixed checker). `sh typing/run.sh` finds both accept all 16 hand fixtures with
+their inputs, the frontend's durable programs and `examples/service/accepted-job.fen`
+with its mutants, and agree on every program `tests/tc1/durable-artifact.test.mjs`
+validates, on 244 single-point mutants and on 17 boundary probes whose verdicts
+were written from this text first. The claim is "derivable under rule set R,
+soundness not yet proved".
+
+
 See [harness/README.md](../../harness/README.md) ("TC1-D1: durable effects" and
 "Service example A2"). In short: hand fixtures with expectations written from
 this text before any machine ran; the Shen model, the sandboxed JavaScript

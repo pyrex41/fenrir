@@ -293,9 +293,12 @@ an outcome, with status 0.
   sides stop at 200 steps, so `bytes`, `early-exit` and `list-sum` are compared
   over their first 200 steps only.
 
-- `sh typing/run.sh` elaborates the 39 programs above (examples, programs,
-  round trips) and finds that both validators accept every one, with a checked
-  derivation for each; `tests/typing/datatype-field-effect.fen` is a program the
+- `sh typing/run.sh` elaborates the programs above and `examples/service/`
+  with its mutants (53 artifacts; `commit-inside-atomic.fen` is rejected by the
+  elaborator, as intended) and finds that both validators accept every one,
+  with a checked derivation for each. A durable program is judged by both
+  validators with the same input, the least value of `main`'s argument type,
+  which `frontend/validate.mjs` chooses and reports; `tests/typing/datatype-field-effect.fen` is a program the
   contract allows that the JavaScript validator used to reject; that defect is
   fixed and both validators accept it ([TYPING.md](TYPING.md) §11).
 

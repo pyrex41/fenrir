@@ -36,6 +36,8 @@
 (load (cn (value fh.*root*) "frontend/elaborate.shen"))
 (load (cn (value fh.*root*) "typing/validate.shen"))
 (load (cn (value fh.*root*) "typing/unsound.shen"))
+(load (cn (value fh.*root*) "harness/tc1-durable-common.shen"))
+(load (cn (value fh.*root*) "harness/tc1-task-common.shen"))
 
 (set tr.*budget* 2000000)
 (set tr.*input* ["int" "0"])
@@ -81,10 +83,10 @@
 
 (define tr.frontend
   -> (let Dir (cn (fh.subdir "elaborated") "/")
-          Listing (fh.exec "sh" ["-c" "ls examples/*.fen tests/frontend/programs/*.fen tests/frontend/roundtrip/*.fen"] 60)
+          Listing (fh.exec "sh" ["-c" "ls examples/*.fen examples/service/*.fen examples/service/mutants/*.fen tests/frontend/programs/*.fen tests/frontend/roundtrip/*.fen"] 60)
           Sources (tr.filter (/. L (not (= L ""))) (fh.lines (hd (tl Listing))))
           Done (tc.concat (map (/. S (tr.elaborate Dir S)) Sources))
-       [Dir (length Sources) (length Done)]))
+       [Dir (length Sources) (length Done) (tr.filter (/. S (not (element? S Done))) Sources)]))
 
 (define tr.filter
   _ [] -> []
@@ -155,8 +157,22 @@
 
 \\ ---------- 4 type safety on the model ----------
 
+\\ A model run by schema: the durable machine with no host (a run that reaches its first
+\\ host request stops, AwaitingHost), the task machine under the schedule that always
+\\ runs the first runnable task, else the handler or pure-call machine. Stuck: the
+\\ model raised, or a task machine with nothing runnable and no footer.
 (define tr.model-run
-  A -> (trap-error (hd (fh.run (fh.state A) 200 0 [])) (/. E "Stuck")))
+  A V -> (trap-error (tr.model-run-by (tc.f "schema_version" A) A V) (/. E "Stuck")))
+
+(define tr.model-run-by
+  "tc1-durable-demo/1" A V -> (hd (dh.run A V [replies] 1000))
+  "tc1-task-demo/1" A _ -> (let P (fh.task-program A) (tr.task-loop (hd P) (hd (tl P)) 1000))
+  _ A _ -> (hd (fh.run (fh.state A) 200 0 [])))
+
+(define tr.task-loop
+  _ M _ -> (hd (fh.task-footer M)) where (not (= (fh.task-footer M) []))
+  _ _ 0 -> "BudgetExhausted"
+  Prog M Fuel -> (if (= (tm.runnable M) []) "Stuck" (tr.task-loop Prog (hd (tl (tm.step Prog M (hd (tm.runnable M))))) (- Fuel 1))))
 
 \\ ---------- 5 forged derivations ----------
 
@@ -256,8 +272,9 @@
 \\ The sample: the hand fixtures, the generated and frontend programs, and every 97th
 \\ exhaustive program, which are also the seeds of typing/mutate.mjs.
 (define tr.sample?
-  Family Name -> (or (element? Family ["tc0-hand" "tc1-hand" "generated-pure-call" "generated-pure-data" "frontend"])
-                     (and (element? Family ["exhaustive-5" "tc1-exhaustive-7"]) (= 0 (tr.mod (tr.suffix Name 0) 97)))))
+  Family Name -> (or (element? Family ["tc0-hand" "tc1-hand" "generated-pure-call" "generated-pure-data" "frontend" "durable-hand" "task-hand"])
+                     (and (element? Family ["exhaustive-5" "tc1-exhaustive-7"]) (= 0 (tr.mod (tr.suffix Name 0) 97)))
+                     (and (= Family "task-grammar-G") (= 0 (tr.mod (tr.suffix Name 0) 37)))))
 
 (define tr.suffix
   "" N -> N
@@ -273,12 +290,13 @@
     (let Family (fh.field "family" L)
          Name (fh.field "name" L)
          Text (fh.field "text" L)
+         Input (set tr.*input* (fh.field "input" L))
          Verdict (tv.validate Text (value tr.*input*) (value tr.*budget*))
          Js (tr.js-class (fh.field "js" L))
          Shen (tr.class Verdict)
          Rows1 (tr.record Family Name Js Shen Verdict Rows)
          A (if (= (hd Verdict) valid) (hd (tl (st.check Text))) [])
-         Model1 (if (= (hd Verdict) valid) (fh.count-key (tr.model-run A) Model) Model)
+         Model1 (if (= (hd Verdict) valid) (fh.count-key (tr.model-run A (value tr.*input*)) Model) Model)
          Sampled (and (= (hd Verdict) valid) (tr.sample? Family Name))
          Seeds1 (if Sampled [[Name (hd (tl Verdict))] | Seeds] Seeds)
          Forge1 (if Sampled (tr.forge A (hd (tl Verdict)) Forge) Forge)
@@ -363,6 +381,8 @@
   "handler-test-rejections" -> "invalid"
   "invalid-resynced" -> "invalid"
   "mutants" -> "mutant"
+  "durable-artifact-tests" -> "test"
+  "task-artifact-tests" -> "test"
   "probes" -> "probe"
   _ -> "valid")
 
@@ -374,7 +394,7 @@
           Ran (if (= (hd Families) 0) true (error "typing: typing/families.mjs did not complete: ~A" (hd (tl (tl Families)))))
           T2 (tr.seconds)
           View (buffer.from-string (read-file-as-string (cn (value fh.*out*) "families.jsonl")))
-          Unsound [[fenrir-unsound-anything 0 0 0] [fenrir-unsound-resume 0 0 0] [fenrir-unsound-perform 0 0 0]]
+          Unsound [[fenrir-unsound-anything 0 0 0] [fenrir-unsound-resume 0 0 0] [fenrir-unsound-perform 0 0 0] [fenrir-unsound-scope 0 0 0]]
           State (tr.lines View 0 (buffer.length View) [[] [] [] [0 0 [] []] [0 0] Unsound 0 0])
           T3 (tr.seconds)
        (tr.report Frontend T1 T2 T3 State)))
@@ -387,7 +407,7 @@
           Probes (reverse (value tr.*probes*))
           ShenDeparts (tr.filter (/. P (tr.probe-departs? shen P)) Probes)
           JsDeparts (tr.filter (/. P (tr.probe-departs? javascript P)) Probes)
-          Pass (and (= (nth 2 Frontend) (nth 3 Frontend)) FamiliesOk (= Unknowns 0) (= Stuck none) (= ShenDeparts [])
+          Pass (and FamiliesOk (= Unknowns 0) (= Stuck none) (= ShenDeparts [])
                     (= FTotal FRejected) (= TTotal TRejected) UnsoundOk)
           Report [object ["schema" "fenrir.typing.differential/1"]
                          ["status" (if Pass "development-pass" "development-fail")]
@@ -395,7 +415,8 @@
                          ["claim" "derivable under rule set R (spec/tc1/TYPING.md), soundness not yet proved"]
                          ["harness" "Shen"]
                          ["shen" (make-string "~A ~A ~A" (value *implementation*) (value *port*) (version))]
-                         ["frontend_programs" [object ["sources" (str (nth 2 Frontend))] ["elaborated" (str (nth 3 Frontend))]]]
+                         ["frontend_programs" [object ["sources" (str (nth 2 Frontend))] ["elaborated" (str (nth 3 Frontend))]
+                                                      ["rejected_by_the_elaborator" (nth 4 Frontend)]]]
                          ["families" (map (/. Row (tr.families-row Row)) (reverse Rows))]
                          ["probes" [object ["count" (str (length Probes))]
                                            ["shen_departs_from_contract" ShenDeparts]

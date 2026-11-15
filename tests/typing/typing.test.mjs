@@ -14,6 +14,8 @@ import {probes} from '../../typing/probes.mjs';
 import {cases as callHand} from '../../fixtures/tc0/pure-call-hand-cases.mjs';
 import {cases as dataHand} from '../../fixtures/tc0/pure-data-hand-cases.mjs';
 import {cases as handlerCases,resumptionCases} from '../../fixtures/tc1/handler-hand-cases.mjs';
+import {cases as durableHand} from '../../fixtures/tc1/durable-hand-cases.mjs';
+import {cases as taskHand} from '../../fixtures/tc1/task-hand-cases.mjs';
 
 const root=resolve(import.meta.dirname,'../..');
 const bytes=c=>c.text!==undefined?Buffer.from(c.text,'utf8'):encode(c.program);
@@ -26,7 +28,7 @@ test('every message the validator can give is mapped to a check or rule of TYPIN
 });
 
 test('the boundary probes: the validator agrees with the contract text on every probe', () => {
-  const departs=probes().filter(p=>jsVerdict(bytes(p)).status!==p.contract).map(p=>p.name);
+  const departs=probes().filter(p=>jsVerdict(bytes(p),p.input).status!==p.contract).map(p=>p.name);
   assert.deepEqual(departs,[]);
 });
 
@@ -93,8 +95,8 @@ test('the fixed checker accepts a derivation written by hand, and rejects forger
 });
 
 test('search finds a derivation for every hand fixture, and it survives a JSON round trip', {skip:!haveShen&&'Shen/JIT not found'}, () => {
-  const all=[...callHand,...dataHand,...handlerCases,...resumptionCases];
-  const r=runCases(all.map(c=>({name:c.name,text:textOf(c.program),expect:'accept'})));
+  const all=[...callHand,...dataHand,...handlerCases,...resumptionCases,...durableHand,...taskHand];
+  const r=runCases(all.map(c=>({name:c.name,text:textOf(c.program),expect:'accept',...c.input?{input:c.input}:{}})));
   assert.deepEqual(r.failures,[]);
   assert.equal(r.cases,String(all.length));
 });
@@ -104,4 +106,20 @@ test('both validators accept an effectful datatype field (the validator defect o
     {encoding:'utf8',env:{...process.env,FENRIR_SHEN_JIT:jit}});
   assert.equal(r.status,0,r.stdout+r.stderr);
   assert.match(r.stdout,/^ok: /);
+});
+
+test('durable and task rules: forged derivations of new rules are rejected', {skip:!haveShen&&'Shen/JIT not found'}, () => {
+  // main : I64 -> I64 ! [Task] with body scope(1)
+  const p={...program,schema_version:'tc1-task-demo/1',slice:'TC1-C1',contract_version:'tc1-draft-1',module:'task',
+    functions:[{...program.functions[0],effects:['Task'],body:['scope','2',['int','3','1']]}],source_map:['0','2','3'].map(id=>({id,file:'hand',line:'0',column:'0'}))};
+  const G=[['1','I64']];
+  const scope=(F,plain=true)=>['T-Scope',['expr',G,['scope','2',['int','3','1']],'I64',F,[]],
+    [['T-Int',['expr',G,['int','3','1'],'I64',[],[]],[]],...plain?[['P-Base',['plain',[],'I64'],[]]]:[]]];
+  const r=runCases([
+    {name:'scope by hand',text:textOf(p),derivation:derivation(p,()=>scope(['Task'])),expect:'accept'},
+    {name:'scope without its Task effect',text:textOf(p),derivation:derivation(p,()=>scope([])),expect:'reject'},
+    {name:'scope without its serializability premise',text:textOf(p),derivation:derivation(p,()=>scope(['Task'],false)),expect:'reject'},
+    {name:'T-Scope under schema tc1-handler-demo/2',text:textOf({...p,schema_version:'tc1-handler-demo/2',slice:'TC1-H2'}),
+      derivation:derivation({...p,schema_version:'tc1-handler-demo/2',slice:'TC1-H2'},()=>scope(['Task'])),expect:'reject'}]);
+  assert.deepEqual(r.failures,[]);
 });

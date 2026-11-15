@@ -6,7 +6,8 @@
 // which side departs from the contract.
 const SCHEMAS={
   'tc0-1':['0.2','tc0-a-pure-call-demo/1','TC0-A'],'tc0-2':['0.2','tc0-a-pure-call-demo/2','TC0-A'],
-  'h1':['tc1-draft-1','tc1-handler-demo/1','TC1-H1'],'h2':['tc1-draft-1','tc1-handler-demo/2','TC1-H2']};
+  'h1':['tc1-draft-1','tc1-handler-demo/1','TC1-H1'],'h2':['tc1-draft-1','tc1-handler-demo/2','TC1-H2'],
+  'd1':['tc1-draft-1','tc1-durable-demo/1','TC1-D1'],'c1':['tc1-draft-1','tc1-task-demo/1','TC1-C1']};
 // A program whose IDs and source map are allocated mechanically, as the fixtures do.
 function program(name,schema,{datatypes=[],effects=[],functions,inputType}) {
   let next=0n;const locations=[],fresh=()=>String(next++);
@@ -28,7 +29,7 @@ const nest=(depth,t)=>depth===0?t:['Tuple',nest(depth-1,t)];
 const resuming=(clause)=>({node,fresh})=>{const x=fresh(),k=fresh();return node('handle','Ask',[['ask',x,k,clause({node,fresh,x,k})]],node('perform','Ask','ask',int(node,1)));};
 
 export function probes() {
-  const P=[];const add=(name,contract,why,p)=>P.push({name,contract,why,program:p});
+  const P=[];const add=(name,contract,why,p,input)=>P.push({name,contract,why,program:p,...input?{input}:{}});
   const raw=(name,contract,why,text)=>P.push({name,contract,why,text});
   // ---------- effect sets in declared types ----------
   add('datatype-field-arrow-with-user-effect','valid','EFFECTS.md §3: an effect set names Emit or declared effects, in any type; a datatype field is a type',
@@ -134,5 +135,81 @@ export function probes() {
   raw('transport-unknown-field','invalid','fields are closed',text.replace('{"contract_version"','{"extra":"1","contract_version"'));
   raw('transport-object-for-array','invalid','datatypes is an array',text.replace('"datatypes":[]','"datatypes":{}'));
   raw('transport-bad-key','invalid','keys match [A-Za-z_][A-Za-z0-9_]*',text.replace('{"contract_version"','{"1x":"1","contract_version"'));
+  // ---------- durable effects (DURABLE.md, schema tc1-durable-demo/1) ----------
+  const Store={name:'Store',class:'durable',operations:[{name:'put',argument_type:'I64',result_type:'I64'}]};
+  const AskO={name:'Ask',class:'ordinary',operations:[{name:'ask',argument_type:'I64',result_type:'I64'}]};
+  const put=(node,n)=>node('perform','Store','put',int(node,n));
+  add('durable-residual-at-entry','valid','§2: the entry set may contain durable effects',program('p','d1',{effects:[Store],functions:[main('I64',['Store'],({node})=>put(node,1))]}));
+  add('durable-ordinary-at-entry','invalid','§2: no ordinary effect at the entry',program('p','d1',{effects:[AskO],functions:[main('I64',['Ask'],({node})=>node('perform','Ask','ask',int(node,1)))]}));
+  add('durable-handled-in-program','valid','§3: a user handler may enclose a durable effect',program('p','d1',{effects:[Store],functions:[main('I64',[],({node,fresh})=>{const x=fresh();
+    return node('handle','Store',[['put',x,node('var',x)]],put(node,1));})]}));
+  add('durable-forwarded-from-clause-to-host','valid','§3: a perform of E in a clause of a handler for E goes out, to the host',program('p','d1',{effects:[Store],functions:[main('I64',['Store'],({node,fresh})=>{const x=fresh();
+    return node('handle','Store',[['put',x,node('perform','Store','put',node('var',x))]],put(node,1));})]}));
+  add('durable-declared-not-performed','valid','EFFECTS.md §3: a declared set may be larger than the body performs',program('p','d1',{effects:[Store],functions:[main('I64',['Emit','Store'],({node})=>int(node,0))]}));
+  add('durable-entry-set-order','invalid','EFFECTS.md §3: byte order, Emit before Store',program('p','d1',{effects:[Store],functions:[main('I64',['Store','Emit'],({node})=>int(node,0))]}));
+  add('durable-residual-through-call','valid','§2: the callee leaves Store to the entry, which leaves it to the host',program('p','d1',{effects:[Store],
+    functions:[main('I64',['Store'],({node})=>node('call','f',int(node,1))),['f','I64','I64',['Store'],({node,p})=>node('perform','Store','put',node('var',p))]]}));
+  add('durable-class-missing','invalid','§1: every declaration of this schema has the class field',program('p','d1',{effects:[{name:'Store',operations:Store.operations}],functions:[main('I64',['Store'],({node})=>put(node,1))]}));
+  add('durable-class-runtime','invalid','§1: only ordinary and durable are declarable',program('p','d1',{effects:[{...Store,class:'runtime'}],functions:[main('I64',['Store'],({node})=>put(node,1))]}));
+  add('durable-class-under-h2','invalid','§1: older schemas have no class field',program('p','h2',{effects:[{...Store}],functions:[main('I64',[],({node,fresh})=>{const x=fresh();
+    return node('handle','Store',[['put',x,node('var',x)]],put(node,1));})]}));
+  add('durable-reserved-name','invalid','§1: the runtime names stay reserved',program('p','d1',{effects:[{...Store,name:'Time'}],functions:[main('I64',[],({node})=>int(node,0))]}));
+  add('durable-operation-arrow','invalid','§1: operation types stay serializable',program('p','d1',{effects:[{...Store,operations:[{name:'put',argument_type:'I64',result_type:['Arrow','I64','I64',[]]}]}],
+    functions:[main('I64',[],({node})=>int(node,0))]}));
+  const Req={name:'Req',constructors:[{name:'Req',fields:['I64','Bytes']}]};
+  add('durable-entry-takes-request','valid','§2, §10: the entry may take any serializable argument, here a Req',program('p','d1',{effects:[Store],datatypes:[Req],
+    functions:[['main',['Data','Req'],'I64',[],({node})=>int(node,0)]]}),['data','Req','Req',['int','5'],['bytes','ab']]);
+  add('durable-entry-input-wrong-type','invalid','§10: the input is a value of the entry argument type',program('p','d1',{effects:[Store],datatypes:[Req],
+    functions:[['main',['Data','Req'],'I64',[],({node})=>int(node,0)]]}),['int','0']);
+  add('durable-entry-takes-function','invalid','§2: the argument is serializable',program('p','d1',{effects:[Store],functions:[['main',['Arrow','I64','I64',[]],'I64',[],({node})=>int(node,0)]],inputType:['Arrow','I64','I64',[]]}));
+  add('durable-no-task-forms','invalid','§11: a D1 artifact has no task forms',program('p','d1',{effects:[Store],functions:[main('Unit',[],({node})=>node('yield'))]}));
+  add('durable-no-runtime-effects','invalid','§11: Task is not an effect of D1',program('p','d1',{effects:[Store],functions:[main('I64',['Task'],({node})=>int(node,0))]}));
+  // ---------- tasks and channels (CONCURRENCY.md, schema tc1-task-demo/1) ----------
+  const T=['Channel','Emit','Task'];
+  const lam=(node,fresh,body,result='I64',eff=[])=>node('lambda',fresh(),'Unit',result,eff,[],body);
+  add('task-scope','valid','§2: scope(b) with b serializable',program('p','c1',{functions:[main('I64',['Task'],({node})=>node('scope',int(node,1)))]}));
+  add('task-scope-returns-channel','invalid','§3: a handle may not leave its scope',program('p','c1',{functions:[main(['Channel','I64'],T,({node})=>node('scope',node('channel','I64','1')))]}));
+  add('task-scope-returns-closure','invalid','§3: a closure may not leave its scope',program('p','c1',{functions:[main('I64',T,({node,fresh})=>
+    node('apply',node('scope',lam(node,fresh,int(node,1))),node('unit')))]}));
+  add('task-spawn-await','valid','§2: spawn then await gives Outcome(I64)',program('p','c1',{functions:[main(['Outcome','I64'],['Task'],({node,fresh})=>node('await',node('spawn',lam(node,fresh,int(node,1)))))]}));
+  add('task-spawn-not-unit','invalid','§2: spawn needs Unit -> T',program('p','c1',{functions:[main('Unit',['Task'],({node,fresh})=>
+    node('cancel',node('spawn',node('lambda',fresh(),'I64','I64',[],[],int(node,1)))))]}));
+  add('task-spawn-returns-handle','invalid','§3: a task result is serializable',program('p','c1',{functions:[main('Unit',T,({node,fresh})=>
+    node('cancel',node('spawn',lam(node,fresh,node('channel','I64','1'),['Channel','I64'],['Channel']))))]}));
+  add('task-spawn-effects-at-site','invalid','§2: spawn performs the effects of f: Emit is undeclared here',program('p','c1',{functions:[main('Unit',['Task'],({node,fresh})=>
+    node('cancel',node('spawn',lam(node,fresh,node('emit','x',int(node,1)),'Unit',['Emit']))))]}));
+  add('task-await-channel','invalid','§2: await needs Task(T)',program('p','c1',{functions:[main(['Outcome','I64'],T,({node})=>node('await',node('channel','I64','1')))]}));
+  add('task-capacity-1','valid','§2: 1 <= c',program('p','c1',{functions:[main('Unit',T,({node})=>node('close',node('channel','I64','1')))]}));
+  add('task-capacity-8','valid','§2: c <= the configured maximum, 8 by default',program('p','c1',{functions:[main('Unit',T,({node})=>node('close',node('channel','I64','8')))]}));
+  add('task-capacity-0','invalid','§2: 1 <= c',program('p','c1',{functions:[main('Unit',T,({node})=>node('close',node('channel','I64','0')))]}));
+  add('task-capacity-9','invalid','§2: above the default maximum',program('p','c1',{functions:[main('Unit',T,({node})=>node('close',node('channel','I64','9')))]}));
+  add('task-channel-of-outcomes','valid','§2: an element type serializable when its T is',program('p','c1',{functions:[main('Unit',T,({node})=>node('close',node('channel',['Outcome','I64'],'2')))]}));
+  add('task-channel-of-tasks','invalid','§2: handles are not serializable',program('p','c1',{functions:[main('Unit',T,({node})=>node('close',node('channel',['Task','I64'],'2')))]}));
+  add('task-send-receive','valid','§2: send T into Channel(T), receive ReceiveResult(T)',program('p','c1',{functions:[main(['ReceiveResult','I64'],['Channel'],({node,fresh})=>{const c=fresh();
+    return node('let',c,node('channel','I64','1'),node('let',fresh(),node('send',node('var',c),int(node,3)),node('receive',node('var',c))));})]}));
+  add('task-send-wrong-type','invalid','§2: v : T',program('p','c1',{functions:[main('SendResult',['Channel'],({node})=>node('send',node('channel','I64','1'),node('bool',true)))]}));
+  add('task-match-outcome','valid','§2: Outcome is matched exhaustively',program('p','c1',{functions:[main('I64',['Task'],({node,fresh})=>{const v=fresh(),c=fresh();
+    return node('match',node('await',node('spawn',lam(node,fresh,int(node,1)))),['Ok',[v],node('var',v)],['Cancelled',[],int(node,0)],['Failed',[c],int(node,2)]);})]}));
+  add('task-match-outcome-missing-arm','invalid','§2: exhaustive',program('p','c1',{functions:[main('I64',['Task'],({node,fresh})=>{const v=fresh();
+    return node('match',node('await',node('spawn',lam(node,fresh,int(node,1)))),['Ok',[v],node('var',v)],['Cancelled',[],int(node,0)]);})]}));
+  add('task-match-failed-binds-trapcode','invalid','§2: Failed carries a TrapCode, not an I64',program('p','c1',{functions:[main('I64',['Task'],({node,fresh})=>{const v=fresh(),c=fresh();
+    return node('match',node('await',node('spawn',lam(node,fresh,int(node,1)))),['Ok',[v],node('var',v)],['Cancelled',[],int(node,0)],['Failed',[c],node('var',c)]);})]}));
+  add('task-construct-outcome','invalid','§2: a program cannot construct Outcome',program('p','c1',{functions:[main('I64',[],({node})=>node('let','99',node('construct','Outcome','Cancelled'),int(node,0)))]}));
+  add('task-eq-on-results','valid','§2: SendResult is equality-compatible',program('p','c1',{functions:[main('Bool',['Channel'],({node,fresh})=>{const c=fresh();
+    return node('let',c,node('channel','I64','1'),node('prim','eq',node('send',node('var',c),int(node,1)),node('send',node('var',c),int(node,2))));})]}));
+  add('task-emit-channel','invalid','§2: a handle is not serializable',program('p','c1',{functions:[main('Unit',T,({node})=>node('emit','x',node('channel','I64','1')))]}));
+  add('task-entry-returns-sendresult','valid','§2: SendResult is serializable',program('p','c1',{functions:[main('SendResult',['Channel'],({node})=>node('send',node('channel','I64','1'),int(node,1)))]}));
+  add('task-entry-returns-task','invalid','core §2: a serializable entry result',program('p','c1',{functions:[main(['Task','I64'],['Task'],({node,fresh})=>node('spawn',lam(node,fresh,int(node,1))))]}));
+  add('task-effect-order','valid','§2: canonical order Channel, Emit, Task',program('p','c1',{functions:[main('I64',['Channel','Emit','Task'],({node})=>int(node,0))]}));
+  add('task-effect-order-wrong','invalid','§2: canonical order',program('p','c1',{functions:[main('I64',['Task','Channel'],({node})=>int(node,0))]}));
+  add('task-yield-needs-task','invalid','§2: yield has effect Task',program('p','c1',{functions:[main('Unit',[],({node})=>node('yield'))]}));
+  add('task-handle-runtime-effect','invalid','§2: Task cannot be handled by a user handler',program('p','c1',{functions:[main('Unit',[],({node,fresh})=>node('handle','Task',[['yield',fresh(),node('unit')]],node('yield')))]}));
+  add('task-user-effect-handled-around-spawn','valid','§5: handlers are copied into the child, so the spawn site needs a handler',program('p','c1',{effects:[Ask],
+    functions:[main('Unit',['Task'],({node,fresh})=>node('handle','Ask',[['ask',fresh(),int(node,0)]],
+      node('cancel',node('spawn',lam(node,fresh,node('perform','Ask','ask',int(node,1)),'I64',['Ask'])))))]}));
+  add('task-datatype-field-handle','valid','a datatype field may be a handle type; only serializable positions exclude it',program('p','c1',{datatypes:[{name:'Box',constructors:[{name:'Box',fields:[['Channel','I64']]}]}],
+    functions:[main('I64',[],({node})=>int(node,0))]}));
+  add('task-forms-under-h2','invalid','older schemas have no task forms',program('p','h2',{functions:[main('Unit',[],({node})=>node('yield'))]}));
+  add('task-runtime-effect-under-h2','invalid','older schemas cannot name Task in an effect set',program('p','h2',{functions:[main('I64',['Task'],({node})=>int(node,0))]}));
   return P;
 }

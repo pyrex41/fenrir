@@ -14,10 +14,12 @@
 (load (cn (value fh.*root*) "harness/common.shen"))
 (load (cn (value fh.*root*) "typing/validate.shen"))
 
-(define tt.input -> ["int" "0"])
+(set tt.*input* ["int" "0"])
+(define tt.input -> (value tt.*input*))
 
 (define tt.case
-  L -> (let Text (fh.field "text" L)
+  L -> (let Input (set tt.*input* (let I (fh.member "input" L) (if (= I []) ["int" "0"] I)))
+            Text (fh.field "text" L)
             Expect (fh.field "expect" L)
             D (fh.member "derivation" L)
             Got (if (= D []) (tt.validated Text) (tt.checked Text D))

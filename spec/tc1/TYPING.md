@@ -1,12 +1,15 @@
 # TC1 typing rules
 
-Draft 1 • 15 November 2026 • For owner review
+Draft 2 • 15 November 2026 • For owner review
 
 **Status.** The typing and effect rules of artifact schema `tc1-handler-demo/2`
-and its subsets (`tc1-handler-demo/1`, `tc0-a-pure-call-demo/1` and `/2`),
-written as named inference rules, together with the structural checks that are
-not typing. Nothing here is qualified. The rules restate what
-[EFFECTS.md](EFFECTS.md) §1–§3 and §7 and
+and its subsets (`tc1-handler-demo/1`, `tc0-a-pure-call-demo/1` and `/2`), and
+of the two schemas that extend it, `tc1-durable-demo/1` (slice TC1-D1,
+[DURABLE.md](DURABLE.md), §6.1) and `tc1-task-demo/1` (slice TC1-C1,
+[CONCURRENCY.md](CONCURRENCY.md), §6.2), written as named inference rules,
+together with the structural checks that are not typing. Nothing here is
+qualified. The rules restate what [EFFECTS.md](EFFECTS.md) §1–§3 and §7,
+DURABLE.md §1–§3 and §10, CONCURRENCY.md §2–§3 and
 [02_TINY_LANGUAGE_CORE.md](../../02_TINY_LANGUAGE_CORE.md) §2–§4 say, in the
 form the amendment asks for ([04_DIRECTION_AMENDMENT.md](../../04_DIRECTION_AMENDMENT.md)
 §3, "Programmable typing, fixed checking"); where those texts are silent the
@@ -55,8 +58,10 @@ acceptance").
 | --- | --- |
 | S-Transport | UTF-8 JSON with no BOM, no numeric token, no duplicate decoded key, object keys `[A-Za-z_][A-Za-z0-9_]*`, valid escapes and no unpaired surrogate (02 §2). Noncanonical spelling and whitespace are accepted and decoded, as the JavaScript decoder does |
 | S-Shape | Every object closed with exactly its fields (artifact, datatype, constructor, effect, operation, function, input schema, source-map row); each field of the right kind (string, array); identifiers `[A-Za-z_][A-Za-z0-9_]*` of at most 64 characters for datatype, constructor, effect and operation names; every expression an array `[tag, id, ...]` with a tag of the schema and its arity: `unit` 0, `bool` `int` `bytes` `var` 1, `let` `if` 3, `prim` an operator of the schema with its operand count (data operators and `eq` only with data), `tuple` 1–8 operands, `project` 2 with an unsigned index, `construct` at least 2, `match` a scrutinee and at least one arm `[C, [x...], e]`, `emit` 2 with a string label, `lambda` 6 with an empty capture list, `apply` 2, `call` 2 with a string name, `perform` 3, `handle` 3 with an array of clauses `[op, x, e]` (or `[op, x, k, e]` under `/2`), `resume` 2 and `discontinue` 1 with an unsigned binder ID; every effect set an array of strings; every ID an unsigned decimal string |
-| S-Identity | contract, schema and slice are one of `0.2 / tc0-a-pure-call-demo/1 / TC0-A`, `0.2 / tc0-a-pure-call-demo/2 / TC0-A`, `tc1-draft-1 / tc1-handler-demo/1 / TC1-H1`, `tc1-draft-1 / tc1-handler-demo/2 / TC1-H2` |
-| S-Features | datatype declarations only with data (`/2` and TC1); effect declarations only in TC1 |
+| S-Identity | contract, schema and slice are one of `0.2 / tc0-a-pure-call-demo/1 / TC0-A`, `0.2 / tc0-a-pure-call-demo/2 / TC0-A`, `tc1-draft-1 / tc1-handler-demo/1 / TC1-H1`, `tc1-draft-1 / tc1-handler-demo/2 / TC1-H2`, `tc1-draft-1 / tc1-durable-demo/1 / TC1-D1`, `tc1-draft-1 / tc1-task-demo/1 / TC1-C1` |
+| S-Features | datatype declarations only with data (`/2` and TC1); effect declarations only in TC1. D1 and C1 have everything of `tc1-handler-demo/2`; only C1 has the task forms and task types |
+| S-Classes (D1) | every effect declaration of `tc1-durable-demo/1` is the closed object `{name, class, operations}` with class `ordinary` or `durable` (DURABLE.md §1); no other schema has the field. Reported under S-Declarations ("Effect class") or S-Shape (a missing or extra field) |
+| S-Task-Shape (C1) | `scope` `spawn` `await` `cancel` `receive` `close` 1 operand, `send` 2, `yield` 0, `channel` a type and an unsigned capacity (CONCURRENCY.md §2 encoding); the types `Task(T)` `Channel(T)` `Outcome(T)` `ReceiveResult(T)` count one nesting level for L-Type-Depth |
 | S-Declarations | at most 16 datatypes, names not `Unit Bool I64 Bytes TrapCode` and unique; 1–16 constructors each, unique within their datatype; at most 8 fields; at most 8 effects, names not `Emit Task Channel Time Resource` and unique; 1–8 operations each, unique within their effect; 1–32 functions with unique names (any string) |
 | S-Unique-IDs | function IDs, parameter IDs, expression node IDs and every binder (let, match, lambda, clause, resumption) one set, no ID twice |
 | S-Source-Map | one row `{id, file, line, column}` for every function and expression node and no other, with unsigned id, line and column |
@@ -81,6 +86,8 @@ T ::= Unit | Bool | I64                     every schema
     | Tuple(T1..Tn)  1 <= n <= 8             with data
     | Data(D)        D declared              with data
     | Arrow(T1, T2, ε)                       a function type with effect set ε
+    | Task(T) | Channel(T)                   handles                                 C1
+    | Outcome(T) | ReceiveResult(T) | SendResult   built-in results                  C1
 ε ::= [E1, ..., En]                          a list of effect names
 Γ ::= x1 : T1, ..., k : Resumption(B, T), ...   a context; Resumption is not a type
 K ::= [n1, ..., nm]                          the use sites (resume / discontinue node IDs) of a resumption
@@ -92,9 +99,10 @@ structural recursion on a finite type, effect set, value, list or context:
 | Name | Meaning |
 | --- | --- |
 | WF-Type `⊢ T type` | T is of the grammar above for the schema; its effect sets are WF-Effects |
-| WF-Effects `⊢ ε effects` | before TC1: `[]` or `[Emit]`. In TC1: each name is `Emit` or a declared effect, the list in strictly increasing unsigned byte order (so no duplicates and one spelling per set, EFFECTS.md §3) |
-| `v ∈ ⟦T⟧` | `[unit]` : Unit; `[bool b]` : Bool with b a boolean; `[int n]` : I64 with n canonical decimal (no `+`, no leading zero, no `-0`) in −2^63 … 2^63−1; `[bytes h]` : Bytes with h lowercase even-length hex; `[tuple v1..vn]` : Tuple(T1..Tn) pointwise; `[data TrapCode C]` : TrapCode for C one of the six trap names; `[data D C v...]` : Data(D) for a constructor C of D, fields pointwise. No value has a function type |
-| `ctors(T)` | the constructor table `[C : fields]` of Data(D) (declared order) or of TrapCode (`Overflow DivZero Bounds InvalidDuration TaskLimit ChildFailed`, no fields); undefined for other types |
+| WF-Effects `⊢ ε effects` | before TC1: `[]` or `[Emit]`. In TC1: each name is `Emit` or a declared effect, or in C1 also the runtime effects `Task` and `Channel` (CONCURRENCY.md §2), the list in strictly increasing unsigned byte order (so no duplicates and one spelling per set, EFFECTS.md §3) |
+| `v ∈ ⟦T⟧` | `[unit]` : Unit; `[bool b]` : Bool with b a boolean; `[int n]` : I64 with n canonical decimal (no `+`, no leading zero, no `-0`) in −2^63 … 2^63−1; `[bytes h]` : Bytes with h lowercase even-length hex; `[tuple v1..vn]` : Tuple(T1..Tn) pointwise; `[data TrapCode C]` : TrapCode for C one of the six trap names; `[data D C v...]` : Data(D) for a constructor C of D, fields pointwise; in C1 `[data SendResult C]`, `[data Outcome C v...]`, `[data ReceiveResult C v...]` by `ctors`. No value has a function or handle type |
+| `ctors(T)` | the constructor table `[C : fields]` of Data(D) (declared order) or of TrapCode (`Overflow DivZero Bounds InvalidDuration TaskLimit ChildFailed`, no fields); in C1 also `SendResult` = `[Sent, Closed]`, `Outcome(T)` = `[Ok : T, Cancelled, Failed : TrapCode]`, `ReceiveResult(T)` = `[Item : T, End]`; undefined for other types |
+| `entry-row(A)` | the effects the entry may leave unhandled: `Emit`; in C1 also `Task` and `Channel`; in D1 also every declared effect of class `durable` (the residual row, DURABLE.md §2) |
 | `ops(E)` | the operations `op : A → B` of declared effect E |
 | `sig(op)` | add, sub, mul, div: I64 × I64 → I64; neg: I64 → I64; lt, le, gt, ge: I64 × I64 → Bool; not: Bool → Bool; with data, bytes_length: Bytes → I64, bytes_index: Bytes × I64 → I64, bytes_concat: Bytes × Bytes → Bytes (02 §3). `eq` has its own rule |
 | `Γ(x) = T` | the first binding of x in Γ is x : T |
@@ -112,7 +120,7 @@ different effect sets are different types.
             ⊢ T type   for every constructor field T and every operation type T
             ⊢plain[] A, ⊢plain[] B   for every operation op : A → B, in declaration order
             Σ ⊢ f ok                 for every function f, in order
-            the entry f_e exists;  ε(f_e) ⊆ [Emit];  input_schema = {type: A_e};  v ∈ ⟦A_e⟧
+            the entry f_e exists;  ε(f_e) ⊆ entry-row(A);  input_schema = {type: A_e};  v ∈ ⟦A_e⟧
             ⊢plain[] A_e,  ⊢plain[] B_e
 Program   ─────────────────────────────────────────────────────────────────────────
             ⊢ well-typed(A, v)
@@ -123,7 +131,12 @@ Function  ───────────────────────�
             Σ ⊢ f ok
 ```
 
-Σ, the artifact's declarations, is implicit in every rule. The premises of
+Σ, the artifact's declarations, is implicit in every rule. `entry-row` is
+`[Emit]` for every schema but D1 and C1 (§3). The input v is the one the
+validator is given: the harness's `["int","0"]` for every older schema, any
+serializable value of the entry's argument type in D1 (DURABLE.md §10; the
+frontend validates a durable program with the least value of that type). The
+premises of
 Program are exactly the judgments listed, in that order (§8). A field type may
 be a function type naming any effect the artifact declares (EFFECTS.md §3: an
 effect set names Emit or declared effects; nothing restricts where); see §10
@@ -149,7 +162,14 @@ P-Data     ───────────────────────
 
 P-Assumed  ──────────────────   D ∈ Δ
            ⊢plainΔ Data(D)
+
+           ⊢plainΔ T
+P-Result   ──────────────────────────────    C1; SendResult is a P-Base type in C1
+           ⊢plainΔ Outcome(T),  ⊢plainΔ ReceiveResult(T)
 ```
+
+Task(T) and Channel(T) have no rule: a handle is neither serializable nor
+equality-compatible (CONCURRENCY.md §2).
 
 There is no rule for Arrow: a function type is not serializable. A recursive
 datatype is serializable when nothing reachable is a function (P-Assumed closes
@@ -264,6 +284,89 @@ Notes on the rules, each a reading of the contract:
   parameter ("Named function captures"). That follows from the rules: the
   body's context is the parameter alone, and every variable must be bound.
 
+### 6.1 Durable effects: `tc1-durable-demo/1`
+
+D1 is `tc1-handler-demo/2` with effect classes (DURABLE.md §1–§3). Its typing
+rules are those of §4–§6 unchanged, with one side condition replaced:
+
+- **Program**, `ε(f_e) ⊆ entry-row(A)`: the entry may leave durable effects
+  unhandled (the residual row; DURABLE.md §2), and no ordinary one.
+- A **perform with no enclosing handler** needs no rule of its own: T-Perform
+  adds E to the effects; T-Handle removes it only under a handler for E; what
+  is left reaches the entry, where only durable effects are allowed. A durable
+  perform inside a clause of a handler for E goes out like any other (T-Handle
+  keeps the clause's effects), to the host if nothing else handles it.
+- A **user handler may enclose a durable effect** (DURABLE.md §3,
+  provisional): T-Handle does not look at the class.
+- **Operation types** of durable effects are serializable like all others (the
+  Program rule's plain premises).
+- **The entry input** is any serializable value of the entry's argument type
+  (Program: `⊢plain[] A_e`, `v ∈ ⟦A_e⟧`).
+- The class itself is structure (S-Classes, §2); D1 has no task forms and no
+  runtime effects (S-Features, WF-Effects).
+
+### 6.2 Tasks and channels: `tc1-task-demo/1`
+
+C1 is `tc1-handler-demo/2` with structured tasks and bounded channels
+(CONCURRENCY.md §2–§3). Its new types, constructor tables and serializability
+rules are in §3 and §5; the entry may leave `Task` and `Channel` (and Emit)
+unhandled. The expression rules:
+
+```text
+            Γ ⊢ b : T ! ε ▷ K      ⊢plain[] T
+T-Scope     ─────────────────────────────────                                      C1
+            Γ ⊢ scope(b) : T ! ε ∪ [Task] ▷ K
+
+            Γ ⊢ f : Arrow(Unit, T, εf) ! ε ▷ K      ⊢plain[] T
+T-Spawn     ──────────────────────────────────────────────                          C1
+            Γ ⊢ spawn(f) : Task(T) ! ε ∪ εf ∪ [Task] ▷ K
+
+            Γ ⊢ t : Task(T) ! ε ▷ K
+T-Await     ──────────────────────────────────────                                   C1
+            Γ ⊢ await(t) : Outcome(T) ! ε ∪ [Task] ▷ K
+
+            Γ ⊢ t : Task(T) ! ε ▷ K
+T-Cancel    ──────────────────────────────────                                       C1
+            Γ ⊢ cancel(t) : Unit ! ε ∪ [Task] ▷ K
+
+T-Yield     Γ ⊢ yield : Unit ! [Task] ▷ []                                            C1
+
+            ⊢ T type      ⊢plain[] T      1 ≤ c ≤ 8
+T-Channel   ─────────────────────────────────────────                                C1
+            Γ ⊢ channel(T, c) : Channel(T) ! [Channel] ▷ []
+
+            Γ ⊢ ch : Channel(T) ! ε1 ▷ K1      Γ ⊢ v : T ! ε2 ▷ K2
+T-Send      ──────────────────────────────────────────────────                       C1
+            Γ ⊢ send(ch, v) : SendResult ! ε1 ∪ ε2 ∪ [Channel] ▷ K1 K2
+
+            Γ ⊢ ch : Channel(T) ! ε ▷ K
+T-Receive   ───────────────────────────────────────────────────                      C1
+            Γ ⊢ receive(ch) : ReceiveResult(T) ! ε ∪ [Channel] ▷ K
+
+            Γ ⊢ ch : Channel(T) ! ε ▷ K
+T-Close     ──────────────────────────────────────                                   C1
+            Γ ⊢ close(ch) : Unit ! ε ∪ [Channel] ▷ K
+```
+
+- **What leaves a scope or a task is serializable** (CONCURRENCY.md §3): the
+  plain premises of T-Scope and T-Spawn, and of T-Channel for elements; emit
+  and operation types were already so. Handles and closures therefore never
+  outlive the scope they were made in.
+- **spawn performs f's effects at the spawn site** (CONCURRENCY.md §2): a user
+  effect of f needs a handler around the spawn, which is copied into the child
+  (CONCURRENCY.md §5).
+- **The results are matched, not constructed**: T-Match uses `ctors` of the
+  scrutinee's type, which in C1 covers SendResult, Outcome(T) and
+  ReceiveResult(T); T-Construct names only TrapCode or a declared datatype, so
+  no program constructs a result.
+- **Runtime effects are not handled by user handlers**: `Task` and `Channel`
+  cannot be declared (S-Declarations), so T-Handle never finds operations for
+  them.
+- The capacity bound 8 is the validator's default configured maximum
+  (`maxCapacity`); a validator configured otherwise is a different rule set.
+- One resumption may be used inside a scope's body (T-Scope passes K up); a
+  spawned lambda sees Γ⁻, so a resumption cannot cross into a task.
+
 ## 7 One-shot resumption as a usage-counting judgment
 
 EFFECTS.md §7: on every path through a clause `op(x, k) => c`, k is used exactly
@@ -329,7 +432,9 @@ the D a proof binds is the derivation. This is the same machinery
 [verification/shen-proving/](../../verification/shen-proving/README.md) used for
 2 + 1 = 3. The relation between that rule set, R_S, and R:
 
-- **One Shen rule per rule of R** for the expression and plain judgments, each
+- **One Shen rule per rule of R** for the expression and plain judgments,
+  D1's and C1's included (the task forms are nine more Shen rules, P-Result
+  one more), each
   building the node of the R rule it states, by name. Program and Function nodes
   are assembled by an ordinary function (`ts.assemble`), which has nothing to
   choose.
@@ -355,9 +460,9 @@ the D a proof binds is the derivation. This is the same machinery
   milliseconds; the whole rule set about 0.3 s, which the frontend saves by
   running from a Shen/JIT heap image that holds it compiled) and the quoting.
 
-`typing/unsound.shen` adds three deliberately unsound rule sets to the search
+`typing/unsound.shen` adds four deliberately unsound rule sets to the search
 (any expression has any type; the one-shot rule forgotten; perform without its
-effect), the analogue of `unsound-rule.shen`. Shen takes them silently and
+effect; scope and spawn without their serializability premise), the analogue of `unsound-rule.shen`. Shen takes them silently and
 finds "derivations" of ill-typed programs; the checker rejects every one (§12).
 
 ## 10 The fixed checker
@@ -366,8 +471,8 @@ finds "derivations" of ill-typed programs; the checker rejects every one (§12).
 concludes `["well-typed", A, v]`, and every node is an instance of its rule.
 One clause of `tc.rule` per rule of §4–§6, whose pattern is the rule's
 conclusion and its premises' conclusions (a repeated pattern variable ties a
-premise to its conclusion) and whose body is the side conditions; 65
-lines of rules and 255 of side conditions and transport, 322 lines without comments and
+premise to its conclusion) and whose body is the side conditions; 83
+lines of rules and 280 of side conditions and transport, 363 lines without comments and
 blank lines in all.
 
 It is total. `tc.node` recurses only into the premises of the node in hand,
@@ -410,6 +515,10 @@ Rejection classes. The validator's messages map onto §2 and §4–§6 as follow
 | Unknown effect operation, Perform argument | T-Perform |
 | Unknown effect, Handler clauses, Handler clause type, A resumption must be used exactly once on every path | T-Handle |
 | Unknown resumption; Resume argument | T-Resume, T-Discontinue; T-Resume |
+| Effect class (D1) | S-Classes (S-Declarations) |
+| A scope result must be serializable; A task result must be serializable, Spawn needs a function from Unit | T-Scope; T-Spawn |
+| Task handle required; Channel handle required | T-Await, T-Cancel; T-Send, T-Receive, T-Close |
+| Channel capacity, Channel elements must be serializable; Send value type | T-Channel; T-Send |
 
 The validator reuses "Array required" and "String required" for a type that is
 neither a built-in name nor an array (for example `Bytes` under schema `/1`),
@@ -445,7 +554,7 @@ No disagreement on acceptance was found anywhere else (§12).
 ## 12 Evidence and what is not done
 
 `sh typing/run.sh` (development evidence; status `development-pass`,
-qualification `UNKNOWN`, about 95 s: 23 s of it the JavaScript side): the structure checks, search and checker
+qualification `UNKNOWN`, about 140 s: 29 s of it the JavaScript side): the structure checks, search and checker
 against the validator on every family in the repository; the model run on every
 program the Shen side accepts; and the forged-derivation tests. Its report
 gives the numbers per family; the figures as of this draft:
@@ -458,23 +567,44 @@ gives the numbers per family; the figures as of this draft:
 | exhaustive-small to 5 nodes | 5,695 | 5,695 | 0 | 0 |
 | TC1 hand fixtures | 20 | 20 | 0 | 0 |
 | TC1 exhaustive grammar H to 7 nodes | 12,693 | 12,693 | 0 | 0 |
-| frontend programs (examples, tests/frontend/programs, roundtrip), elaborated | 39 | 39 | 0 | 0 |
+| frontend programs (examples, examples/service and its mutants, tests/frontend/programs, roundtrip), elaborated | 53 | 53 | 0 | 0 |
+| D1 durable hand fixtures (`fixtures/tc1/durable-hand-cases.mjs`, each with its input) | 16 | 16 | 0 | 0 |
+| every program `tests/tc1/durable-artifact.test.mjs` validates, with its input | 39 | 25 | 14 | 0 |
+| C1 task hand fixtures | 18 | 18 | 0 | 0 |
+| C1 grammar G, all programs (`tools/tc1/task-enumerate.mjs`) | 3,600 | 3,600 | 0 | 0 |
+| every program `tests/tc1/task-artifact.test.mjs` validates | 67 | 31 | 36 | 0 |
 | pure-data-invalid | 27 | 0 | 27 | 0 |
 | handler-artifact test rejections | 26 | 0 | 26 | 0 |
 | the same, source map made exact | 52 | 0 | 52 | 0 |
-| single-point mutants (`typing/mutate.mjs`) | 7,060 | 413 | 6,647 | 0 |
-| boundary probes (`typing/probes.mjs`) | 57 | 30 | 27 | 0 (one before the validator fix: §11, 1) |
+| single-point mutants (`typing/mutate.mjs`), all schemas | 10,445 | 755 | 9,690 | 0 |
+| of which D1 / C1 | 244 / 3,141 | 20 / 322 | 224 / 2,819 | 0 / 0 |
+| boundary probes (`typing/probes.mjs`), all schemas | 106 | 48 | 58 | 0 (one before the validator fix: §11, 1) |
+| of which D1 / C1 | 17 / 32 | 6 / 12 | 11 / 20 | 0 / 0 |
 
-- **Forged derivations**: every node of the derivations of 328 valid programs
+The frontend's `examples/service/mutants/commit-inside-atomic.fen` is rejected
+by the elaborator (a perform inside `atomic`, DURABLE.md §8) and so has no
+artifact to compare. The D1 and C1 rejections' classes agree everywhere but the
+two `task-artifact` cases that write `SendResult` under an older schema: the
+validator says "Array required" (§11, message reuse), the rules WF-Type.
+
+- **Forged derivations**: every node of the derivations of 474 valid programs
+  (the earlier 328, the 16 durable and 18 task hand fixtures, the frontend's
+  durable programs, and every 37th program of grammar G)
   corrupted eleven ways (rule name wrong or swapped for another rule's, premises
   swapped, dropped or duplicated, conclusion type altered, context weakened, a
-  use or an effect added or dropped): 55,014 corruptions, all rejected.
-  Derivations of valid programs transplanted onto their 6,646 ill-typed
-  mutants: all rejected. The three unsound search extensions of §9 built 9,614
+  use or an effect added or dropped): 91,350 corruptions, all rejected.
+  Derivations of valid programs transplanted onto their 9,688 ill-typed
+  mutants: all rejected. The four unsound search extensions of §9 (the fourth
+  lets a scope or task result be any type) built 16,622
   derivations for ill-typed programs: all rejected.
 - **Type safety, bounded**: every program the Shen side accepts in these
-  families (27,714) runs on the Shen model for 200 steps without reaching a
-  state the model cannot step (traps are outcomes); 4 stop at the step bound,
+  families (31,778) runs on the Shen model without reaching a state the model
+  cannot step (traps are outcomes): the handler or pure-call machine for 200
+  steps, the durable machine with no host (49 stop at their first host
+  request, AwaitingHost, which is where a run without a host ends), the task
+  machine under the schedule that always runs the first runnable task (988 end
+  in Deadlock, a footer of CONCURRENCY.md §7, not a stuck state); 30,737
+  complete and 4 stop at the step bound,
   the frontend programs that run longer. For the two exhaustive scopes this
   repeats what `harness/run-model-vs-candidate.sh` and
   `harness/run-tc1-exhaustive.sh` already show for the same programs (every one

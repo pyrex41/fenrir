@@ -15,6 +15,10 @@
 //              clause-drop-resumption (op(x,k) => c to op(x) => c), arm-drop, arm-duplicate
 //   resumption resume-to-argument (zero uses), discontinue-to-unit (zero uses),
 //              resume-twice, resume-as-variable, resume-unequal-paths (1 use against 2)
+//   durable    class-swap (durable <-> ordinary)
+//   tasks      capacity-edge (0 and 9), channel-element-arrow, channel-element-task,
+//              handle-swap (await <-> receive, cancel <-> close), scope-unwrap
+//              (scope(b) to b), yield-to-unit, spawn-call (spawn(f) to apply(f, unit))
 // When a mutation removes or adds expression nodes the source map is rebuilt to cover
 // exactly the program's locations, so the mutant breaks no structural rule by accident.
 import {cases as callHand} from '../fixtures/tc0/pure-call-hand-cases.mjs';
@@ -24,6 +28,9 @@ import {generatePureCalls} from '../tools/tc0/pure-call-generate.mjs';
 import {generatePureData} from '../tools/tc0/pure-data-generate.mjs';
 import {enumeratePureData} from '../tools/tc0/pure-data-enumerate.mjs';
 import {enumerateHandlers} from '../tools/tc1/handler-enumerate.mjs';
+import {cases as durableHand} from '../fixtures/tc1/durable-hand-cases.mjs';
+import {cases as taskHand} from '../fixtures/tc1/task-hand-cases.mjs';
+import {enumerateTasks} from '../tools/tc1/task-enumerate.mjs';
 
 const clone=x=>JSON.parse(JSON.stringify(x));
 // Child expression positions of a node: [container, key] pairs.
@@ -35,6 +42,8 @@ function children(e) {
     case 'apply':return at(2,3);case 'call':return at(3);case 'perform':return at(4);case 'resume':return at(3);
     case 'match':return [[e,2],...e.slice(3).map(arm=>[arm,2])];
     case 'handle':return [...e[3].map(c=>[c,c.length-1]),[e,4]];
+    case 'scope':case 'spawn':case 'await':case 'cancel':case 'receive':case 'close':return at(2);
+    case 'send':return at(2,3);
     default:return [];
   }
 }
@@ -104,6 +113,16 @@ const OPERATORS={
   'resume-twice':p=>sites(p).flatMap(({e},i)=>e[0]==='resume'?[[`node ${e[1]}`,q=>{const s=sites(q)[i],fresh=freshIds(q);
     s.holder[s.key]=['let',fresh(),fresh(),s.e,reid(s.e,fresh)];resync(q);}]]:[]),
   'resume-as-variable':p=>sites(p).flatMap(({e},i)=>e[0]==='resume'?[[`node ${e[1]}`,q=>{const s=sites(q)[i];s.holder[s.key]=['var',s.e[1],s.e[2]];resync(q);}]]:[]),
+  'class-swap':p=>p.schema_version!=='tc1-durable-demo/1'?[]:p.effects.map((d,i)=>[d.name,q=>{q.effects[i].class=q.effects[i].class==='durable'?'ordinary':'durable';}]),
+  'capacity-edge':p=>sites(p).flatMap(({e},i)=>e[0]==='channel'?['0','9'].map(c=>[`node ${e[1]} capacity ${c}`,q=>{sites(q)[i].e[3]=c;}]):[]),
+  'channel-element-arrow':p=>sites(p).flatMap(({e},i)=>e[0]==='channel'?[[`node ${e[1]}`,q=>{sites(q)[i].e[2]=['Arrow','Unit','I64',[]];}]]:[]),
+  'channel-element-task':p=>sites(p).flatMap(({e},i)=>e[0]==='channel'?[[`node ${e[1]}`,q=>{sites(q)[i].e[2]=['Task',sites(q)[i].e[2]];}]]:[]),
+  'handle-swap':p=>sites(p).flatMap(({e},i)=>{const to={await:'receive',receive:'await',cancel:'close',close:'cancel'}[e[0]];
+    return to?[[`node ${e[1]}`,q=>{sites(q)[i].e[0]=to;}]]:[];}),
+  'scope-unwrap':p=>sites(p).flatMap(({e},i)=>e[0]==='scope'?[[`node ${e[1]}`,q=>{const s=sites(q)[i];s.holder[s.key]=s.e[2];resync(q);}]]:[]),
+  'yield-to-unit':p=>sites(p).flatMap(({e},i)=>e[0]==='yield'?[[`node ${e[1]}`,q=>{const s=sites(q)[i];s.holder[s.key]=['unit',s.e[1]];}]]:[]),
+  'spawn-call':p=>sites(p).flatMap(({e},i)=>e[0]==='spawn'?[[`node ${e[1]}`,q=>{const s=sites(q)[i],fresh=freshIds(q);
+    s.holder[s.key]=['apply',s.e[1],s.e[2],['unit',fresh()]];resync(q);}]]:[]),
   'resume-unequal-paths':p=>sites(p).flatMap(({e},i)=>e[0]==='resume'?[[`node ${e[1]}`,q=>{const s=sites(q)[i],fresh=freshIds(q);
     s.holder[s.key]=['if',fresh(),['bool',fresh(),true],s.e,['let',fresh(),fresh(),reid(s.e,fresh),reid(s.e,fresh)]];resync(q);}]]:[])
 };
@@ -111,7 +130,8 @@ const OPERATORS={
 export function seeds() {
   const every=(xs,n)=>xs.filter((_,i)=>i%n===0);
   return [...callHand,...dataHand,...handlerCases,...resumptionCases,...generatePureCalls(32).cases,...generatePureData(24).cases,
-    ...every(enumeratePureData(5).cases,97),...every(enumerateHandlers(7).cases,97)];
+    ...every(enumeratePureData(5).cases,97),...every(enumerateHandlers(7).cases,97),
+    ...durableHand,...taskHand,...enumerateTasks().cases.filter(c=>Number(c.name.split('-').at(-1))%37===0)];
 }
 
 export function mutants() {
@@ -120,7 +140,7 @@ export function mutants() {
     const program=clone(seed.program);
     if(mutate(program)===false)continue;
     program.module=`mutant-${out.length}`;
-    out.push({name:`${seed.name} ${operator} ${label}`,operator,program});
+    out.push({name:`${seed.name} ${operator} ${label}`,operator,program,input:seed.input});
   }
   return out;
 }

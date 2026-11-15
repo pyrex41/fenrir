@@ -26,6 +26,26 @@ import {generateInvalidPureData} from '../tools/tc0/pure-data-invalid.mjs';
 import {enumerateHandlers} from '../tools/tc1/handler-enumerate.mjs';
 import {exactArithmeticCases} from '../tools/solo5/freerun-pure-call.mjs';
 import {mutants,resync} from './mutate.mjs';
+import {harvest} from './harvest.mjs';
+import {cases as durableHand} from '../fixtures/tc1/durable-hand-cases.mjs';
+import {cases as taskHand} from '../fixtures/tc1/task-hand-cases.mjs';
+import {enumerateTasks} from '../tools/tc1/task-enumerate.mjs';
+
+// The input the frontend validates a durable artifact with (frontend/validate.mjs): the
+// least value of the entry's argument type; 0 for every other schema.
+function least(t,datatypes,depth=0) {
+  if(depth>16)return null;
+  if(t==='Unit')return ['unit'];if(t==='Bool')return ['bool',false];if(t==='I64')return ['int','0'];
+  if(t==='Bytes')return ['bytes',''];if(t==='TrapCode')return ['data','TrapCode','Overflow'];
+  if(Array.isArray(t)&&t[0]==='Tuple'){const vs=t.slice(1).map(x=>least(x,datatypes,depth+1));return vs.includes(null)?null:['tuple',...vs];}
+  if(Array.isArray(t)&&t[0]==='Data')for(const c of datatypes.find(d=>d.name===t[1])?.constructors??[]){
+    const vs=c.fields.map(f=>least(f,datatypes,depth+1));if(!vs.includes(null))return ['data',t[1],c.name,...vs];}
+  return null;
+}
+export function frontendInput(text) {
+  try{const a=JSON.parse(text);if(a?.schema_version==='tc1-durable-demo/1')return least(a.input_schema?.type,a.datatypes??[])??INPUT;}catch{}
+  return INPUT;
+}
 import {probes} from './probes.mjs';
 
 // The validator's messages, each mapped to the TYPING.md structural check (S-...),
@@ -59,19 +79,22 @@ export const CLASSES={
   'Perform argument':'typing:T-Perform','Unknown effect':'typing:T-Handle','Handler clauses':'typing:T-Handle',
   'Handler clause type':'typing:T-Handle','A resumption must be used exactly once on every path':'typing:T-Handle',
   'Unknown resumption':'typing:T-Resume/T-Discontinue','Resume argument':'typing:T-Resume',
-  // schema tc1-task-demo/1 (spec/tc1/CONCURRENCY.md): outside TYPING.md's rule set R, which stops at
-  // tc1-handler-demo/2. Listed so the mapping stays complete; no family here uses that schema.
-  'A scope result must be serializable':'out-of-scope:tc1-task-demo/1',
-  'A task result must be serializable':'out-of-scope:tc1-task-demo/1',
-  'Channel capacity':'out-of-scope:tc1-task-demo/1',
-  'Channel elements must be serializable':'out-of-scope:tc1-task-demo/1',
-  'Send value type':'out-of-scope:tc1-task-demo/1',
-  'Spawn needs a function from Unit':'out-of-scope:tc1-task-demo/1',
+  // schema tc1-durable-demo/1 (spec/tc1/DURABLE.md)
+  'Effect class':'structure:S-Declarations',
+  // schema tc1-task-demo/1 (spec/tc1/CONCURRENCY.md)
+  'A scope result must be serializable':'typing:T-Scope',
+  'A task result must be serializable':'typing:T-Spawn',
+  'Spawn needs a function from Unit':'typing:T-Spawn',
+  'Task handle required':'typing:T-Await/T-Cancel',
+  'Channel handle required':'typing:T-Send/T-Receive/T-Close',
+  'Channel capacity':'typing:T-Channel',
+  'Channel elements must be serializable':'typing:T-Channel',
+  'Send value type':'typing:T-Send',
 };
 
 const INPUT=['int','0'];
-export function jsVerdict(bytes) {
-  try {validatePureCallArtifact(bytes,INPUT);return {status:'valid'};}
+export function jsVerdict(bytes,input=INPUT) {
+  try {validatePureCallArtifact(bytes,input);return {status:'valid'};}
   catch(e) {
     if(e instanceof PureCallValidationLimit||e instanceof EncodingLimit)return {status:'limit',message:e.message,class:CLASSES[e.message]??'limit:L-Encoding'};
     if(e instanceof EncodingError)return {status:'invalid',message:e.message,class:'structure:S-Transport'};
@@ -126,9 +149,9 @@ function handlerTestRejections() {
   return out;
 }
 
-export function families(elaborated) {
+export async function families(elaborated) {
   const list=[];
-  const add=(family,expect,cases)=>{for(const c of cases)list.push({family,name:c.name,expect,program:c.program,text:c.text,contract:c.contract});};
+  const add=(family,expect,cases)=>{for(const c of cases)list.push({family,name:c.name,expect,program:c.program,text:c.text,contract:c.contract,input:c.input});};
   add('tc0-hand','valid',[...callHand,...dataHand]);
   add('generated-pure-call','valid',generatePureCalls(32).cases);
   add('generated-pure-data','valid',generatePureData(24).cases);
@@ -136,8 +159,11 @@ export function families(elaborated) {
   add('exhaustive-5','valid',enumeratePureData(5).cases);
   add('tc1-hand','valid',[...handlerCases,...resumptionCases]);
   add('tc1-exhaustive-7','valid',enumerateHandlers(7).cases);
+  add('durable-hand','valid',durableHand);
+  add('task-hand','valid',taskHand);
+  add('task-grammar-G','valid',enumerateTasks().cases);
   if(elaborated)add('frontend','valid',readdirSync(elaborated).filter(f=>f.endsWith('.json')).sort()
-    .map(f=>({name:basename(f,'.json'),text:readFileSync(resolve(elaborated,f),'utf8')})));
+    .map(f=>{const text=readFileSync(resolve(elaborated,f),'utf8');return {name:basename(f,'.json'),text,input:frontendInput(text)};}));
   add('pure-data-invalid','invalid',generateInvalidPureData().cases);
   add('handler-test-rejections','invalid',handlerTestRejections());
   // The same invalid programs with the source map made to cover exactly their nodes: the
@@ -145,6 +171,10 @@ export function families(elaborated) {
   // different order. Without it each has one fault, and the classes should agree.
   add('invalid-resynced','invalid',[...generateInvalidPureData().cases.filter(c=>!c.name.includes('source-map')),...handlerTestRejections()]
     .map(c=>({name:c.name,program:resync(JSON.parse(JSON.stringify(c.program)))})));
+  // Every program the durable and task validator tests hand to the validator, with its
+  // input: their accepted programs and their rejections alike (typing/harvest.mjs).
+  for(const [family,file] of [['durable-artifact-tests','tests/tc1/durable-artifact.test.mjs'],['task-artifact-tests','tests/tc1/task-artifact.test.mjs']])
+    add(family,'test',(await harvest(resolve(import.meta.dirname,'..',file))).map((c,i)=>({name:`${family}-${i}`,...c})));
   add('mutants','mutant',mutants());
   add('probes','probe',probes());
   return list;
@@ -153,9 +183,9 @@ export function families(elaborated) {
 if(process.argv[1]&&resolve(process.argv[1])===import.meta.filename) {
   const [directory,elaborated]=process.argv.slice(2);
   if(!directory||process.argv.length>4)throw new Error('Usage: node typing/families.mjs OUTDIR [ELABORATED_DIR]');
-  const lines=families(elaborated).map(c=>{
-    const text=c.text??encode(c.program).toString('utf8');
-    return JSON.stringify({family:c.family,name:c.name,expect:c.expect,text,js:jsVerdict(Buffer.from(text,'utf8')),...c.contract?{contract:c.contract}:{}});
+  const lines=(await families(elaborated)).map(c=>{
+    const text=c.text??encode(c.program).toString('utf8'),input=c.input??INPUT;
+    return JSON.stringify({family:c.family,name:c.name,expect:c.expect,text,input,js:jsVerdict(Buffer.from(text,'utf8'),input),...c.contract?{contract:c.contract}:{}});
   });
   writeFileSync(resolve(directory,'families.jsonl'),lines.join('\n')+'\n',{flag:'wx'});
   console.log(JSON.stringify({programs:String(lines.length),output:resolve(directory,'families.jsonl')}));

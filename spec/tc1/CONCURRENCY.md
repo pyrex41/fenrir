@@ -447,6 +447,16 @@ deadlock is an outcome of a run, admissible, not a failure of the machine.
 
 ## 12 What is checked
 
+**Typing.** §2–§3 are stated as rules in [TYPING.md](TYPING.md) §6.2 (T-Scope,
+T-Spawn, T-Await, T-Cancel, T-Yield, T-Channel, T-Send, T-Receive, T-Close,
+P-Result, and the C1 constructor tables). `sh typing/run.sh` finds both
+validators accept the 18 hand fixtures and all 3,600 programs of grammar G, with
+a derivation the fixed checker accepts for each, and agree on every program
+`tests/tc1/task-artifact.test.mjs` validates, on 3,141 single-point mutants and
+on 32 boundary probes whose verdicts were written from this text first. The
+claim is "derivable under rule set R, soundness not yet proved".
+
+
 ```sh
 sh harness/run-tc1-tasks.sh             # hand fixtures, model against the JavaScript implementation
 sh harness/run-tc1-task-explore.sh      # exhaustive-small: the obligation of section 9
