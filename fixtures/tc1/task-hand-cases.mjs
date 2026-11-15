@@ -165,8 +165,10 @@ export const cases=[
     L(channel(1),c=>L(node('spawn',lam('I64',['Channel','Task'],L(node('spawn',lam('I64',['Channel'],onReceive(v(c),x=>v(x),int(0)))),()=>div(int(1),int(0))))),()=>
       L(node('spawn',lam('I64',['Channel','Emit'],seq(emit('b',int(0)),onReceive(v(c),x=>v(x),int(0))))),()=>int(0)))))],
    {all:{execution:'Completed',outcome:trap('ChildFailed'),terminations:{'1':trap('DivZero')},
-      absent_before:[[{kind:'CancelRequest',target:'2'},{kind:'Termination',task:'1'}],[{kind:'ScopeFailure'},{kind:'ScopeExit',task:'1'}]]},
-    per_schedule:{lowest:{terminations:{'2':CANCELLED,'3':CANCELLED},emissions:{'2':[['b',int(0)]]},
+      absent_before:[[{kind:'ScopeFailure'},{kind:'ScopeExit',task:'1'}]]},
+    // B is task 2 only where root spawns B before A spawns D (see CONTRADICTIONS).
+    per_schedule:{fifo:{absent_before:[[{kind:'CancelRequest',target:'2'},{kind:'Termination',task:'1'}]]},
+     lowest:{absent_before:[[{kind:'CancelRequest',target:'2'},{kind:'Termination',task:'1'}]],terminations:{'2':CANCELLED,'3':CANCELLED},emissions:{'2':[['b',int(0)]]},
       task_kinds:{'1':['Spawn','CancelRequest','ScopeExit','Termination','ScopeFailure','CancelRequest'],
         '2':['Emit','Receive','ReceiveWait','ReceiveRemoved','CancelEffective','ScopeExit','Termination'],'3':['CancelEffective','ScopeExit','Termination']},
       order:[[{kind:'CancelRequest',task:'1',target:'3'},{kind:'Emit',task:'2',label:'b'}],[{kind:'Emit',task:'2',label:'b'},{kind:'Termination',task:'3'}],
@@ -265,4 +267,8 @@ export const cases=[
 ];
 
 // Expectations the machines contradicted when they first ran, and which side was wrong.
-export const CONTRADICTIONS=[];
+export const CONTRADICTIONS=[
+  {fixture:'failure-after-descendant-join',expectation:"all schedules: no CancelRequest with target '2' before Termination of task 1",
+   observed:"under highest, random:1-3 and prandom:1 both machines give task ID 2 to A's descendant D, not to B: A spawns D before root spawns B",
+   wrong:'the fixture',
+   why:'Task IDs come from one counter in global spawn order (CONCURRENCY.md sections 4 and 13 item 4), so which task is 2 depends on the schedule. The expectation assumed the IDs of the lowest-ID schedule. It now holds for lowest and fifo, where B is task 2; for every schedule the fixture keeps: no ScopeFailure before A\'s ScopeExit.'}];
