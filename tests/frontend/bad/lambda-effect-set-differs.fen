@@ -1,0 +1,8 @@
+\\ expect 8:14 the argument of twice has type (Tuple (I64 --> I64) I64), but (Tuple (I64 --> I64 ! Ask) I64) is expected
+(effect Ask (ask I64 --> I64))
+(define twice {(Tuple (I64 --> I64 ! Ask) I64) --> I64} f x -> (f (f x)))
+(define main {I64 --> I64} input ->
+  (let pure (lambda (y : I64) y)
+       pair (tuple pure input)
+    (handle Ask ((ask x) -> x)
+      (twice pair))))

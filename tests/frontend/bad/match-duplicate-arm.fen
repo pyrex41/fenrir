@@ -1,0 +1,7 @@
+\\ expect 6:5 this match has two arms for None
+(datatype Opt None (Some I64))
+(define main {I64 --> I64} input ->
+  (match (Some input)
+    (None -> 0)
+    (None -> 1)
+    ((Some x) -> x)))

@@ -1,0 +1,2 @@
+\\ expect 2:46 unknown effect Ask
+(define main {I64 --> I64} input -> (perform Ask ask input))

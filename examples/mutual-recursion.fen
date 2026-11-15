@@ -1,0 +1,23 @@
+\\ Effect inference across mutually recursive functions.
+\\
+\\ ping and pong call each other. Only pong performs Tick.tick, yet ping can
+\\ reach it through pong, so both get the effect set {Tick}: the least sets
+\\ that are closed under the calls. main handles Tick with a clause that
+\\ doubles, and its own inferred set is empty.
+\\
+\\ Expected:
+\\ > outcome: Ok 12
+
+(effect Tick
+  (tick I64 --> I64))
+
+(define ping {I64 --> I64}
+  n -> (if (<= n 0) 0 (pong (- n 1))))
+
+(define pong {I64 --> I64}
+  n -> (+ (perform Tick tick n) (ping n)))
+
+(define main {I64 --> I64}
+  input -> (handle Tick
+             ((tick x) -> (* x 2))
+             (ping (+ input 4))))

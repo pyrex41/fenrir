@@ -155,7 +155,7 @@ The REPL reports `empty stream` and exits once stdin ends; check that `compiled/
 
 A development check MAY declare `blockedExitCode` (an integer from 2 to 125) for an unavailable prerequisite. Only that exact exit maps to BLOCKED; every other nonzero exit is FAIL. Qualification checks cannot declare it; their JSON report owns the verdict.
 
-The registered `tc0-a-qualification` entry runs `python3 -I tools/check-tc0-a-gate.py` with the authority paths listed in `.pi/fenrir-workflow.json`. That set must continue to cover the trusted runner, oracle, goldens and gate definitions. The candidate must not import those implementations as its own transition engine. Re-inspect/reapprove after any authority change and start a fresh run; candidate repair never rewrites acceptance authority.
+The registered `tc0-a-qualification` entry runs `sh harness/run-gate.sh` (the Shen evaluator `harness/gate.shen`; it replaced the Python evaluator on 13 November 2026) with the authority paths listed in `.pi/fenrir-workflow.json`. That set must continue to cover the trusted runner, oracle, goldens and gate definitions. The candidate must not import those implementations as its own transition engine. Re-inspect/reapprove after any authority change and start a fresh run; candidate repair never rewrites acceptance authority.
 
 Check definitions accept fixed argv only; the model supplies just a check ID. No shell expansion is performed by the controller. Development checks use exit status and have no conformance claims. Qualification commands must print **one JSON report** to stdout, send logs to stderr, and exit consistently: PASS=0, FAIL=1, UNKNOWN/BLOCKED=2.
 

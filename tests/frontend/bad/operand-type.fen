@@ -1,0 +1,2 @@
+\\ expect 2:46 operand 2 of + has type Bool, but I64 is expected
+(define main {I64 --> I64} input -> (+ input true))

@@ -1,0 +1,11 @@
+\\ Round trip: the hand fixture resume-on-one-path, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(effect Ask (ask I64 --> I64))
+
+(define main {I64 --> I64}
+  input -> (handle Ask
+             ((ask x k) -> (if (> x 0)
+                               (resume k 1)
+                               (let u (discontinue k) -1)))
+             (+ (perform Ask ask 3) 10)))

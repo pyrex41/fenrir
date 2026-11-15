@@ -1,0 +1,6 @@
+\\ expect 4:3 this handler for Cell has no clause for put
+(effect Cell (get Unit --> I64) (put I64 --> Unit))
+(define main {I64 --> I64} input ->
+  (handle Cell
+    ((get u) -> 5)
+    (perform Cell get unit)))

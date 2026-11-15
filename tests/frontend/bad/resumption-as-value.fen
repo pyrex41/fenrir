@@ -1,0 +1,6 @@
+\\ expect 5:30 k is a resumption, not a value
+(effect Ask (ask I64 --> I64))
+(define main {I64 --> I64} input ->
+  (handle Ask
+    ((ask x k) -> (let saved k (resume k x)))
+    (perform Ask ask input)))

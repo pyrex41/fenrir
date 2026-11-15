@@ -1,0 +1,2 @@
+\\ expect 2:46 outside I64
+(define main {I64 --> I64} input -> (+ input 9223372036854775808))

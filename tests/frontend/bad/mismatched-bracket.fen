@@ -1,0 +1,2 @@
+\\ expect 2:26 a } is expected
+(define main {I64 --> I64) input -> input)

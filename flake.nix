@@ -14,9 +14,11 @@
     # Sources fetched by Nix itself and locked by NAR hash in flake.lock.
     shen-cl-src = { url = "git+https://github.com/Shen-Language/shen-cl?rev=dff7445e6cd3ed9c021fdf6e8a45ffafa3128347"; flake = false; };
     yggdrasil-src = { url = "git+https://github.com/pyrex41/yggdrasil?rev=a40d8c5b6ed1eb2b5d7a4511e61d0304ce9a2e3d"; flake = false; };
+    # Shen/JIT v0.7: host of the Shen harness (harness/) and of the model it runs.
+    shen-jit-src = { url = "git+https://github.com/tizoc/shen-jit?rev=2f4b48bf9aabc2b93379d15f1818e4209137eb60"; flake = false; };
   };
 
-  outputs = { self, nixpkgs, shen-cl-src, yggdrasil-src }:
+  outputs = { self, nixpkgs, shen-cl-src, yggdrasil-src, shen-jit-src }:
     let
       system = "x86_64-linux"; # shen-scheme v0.26 ships a Linux x86-64 binary only
       pkgs = nixpkgs.legacyPackages.${system};
@@ -34,6 +36,39 @@
           mkdir -p $out
           cp -r bin lib $out/
         '';
+      };
+
+      # Shen/JIT builds itself from the kernel release and an earlier Shen/JIT release,
+      # which its tools/ci-deps.sh names with these hashes. bin/shen-jit is the runtime
+      # with its image appended, so it must not be stripped or patched after the build.
+      shen-jit-kernel = pkgs.fetchurl {
+        url = "https://github.com/Shen-Language/shen-sources/releases/download/shen-43.6/ShenOSKernel-43.6.tar.gz";
+        sha256 = "61d1795755a57da252ba8108cdfccc680f95a04bfd395a54f533ab6724647ef5";
+      };
+      shen-jit-bootstrap = pkgs.fetchurl {
+        url = "https://github.com/tizoc/shen-jit/releases/download/v0.1/shen-jit-0.1-linux-x86_64-static.tar.gz";
+        sha256 = "4e569fe92e24a722afe406807e7ad3271fd2d6cc4b7744c981536f732e2953bd";
+      };
+      shen-jit = pkgs.stdenv.mkDerivation {
+        pname = "shen-jit";
+        version = "0.7";
+        src = shen-jit-src;
+        buildPhase = ''
+          mkdir -p .deps/kernel .deps/shen-jit
+          tar -C .deps/kernel --strip-components=1 -xzf ${shen-jit-kernel}
+          tar -C .deps/shen-jit --strip-components=1 -xzf ${shen-jit-bootstrap}
+          make
+          make process
+        '';
+        installPhase = ''
+          mkdir -p $out/bin $out/lib
+          cp build/shen-jit $out/bin/
+          cp lib/*.shen $out/lib/
+          cp build/shen-process.so $out/lib/
+        '';
+        dontStrip = true;
+        dontPatchELF = true;
+        dontFixup = true;
       };
 
       shen-kernel = pkgs.fetchurl {
@@ -93,7 +128,7 @@
         echo "yggdrasil: ${yggdrasil}/bin/yggdrasil"
       '';
     in {
-      packages.${system} = { inherit shen-scheme shen-cl yggdrasil link-toolchain; default = link-toolchain; };
+      packages.${system} = { inherit shen-scheme shen-cl shen-jit yggdrasil link-toolchain; default = link-toolchain; };
       apps.${system}.default = { type = "app"; program = "${link-toolchain}/bin/fenrir-link-toolchain"; };
       devShells.${system}.default = pkgs.mkShell {
         packages = [ pkgs.nodejs_22 pkgs.python3 pkgs.sbcl pkgs.go_1_27 shen-scheme yggdrasil ];

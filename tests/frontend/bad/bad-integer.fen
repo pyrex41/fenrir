@@ -1,0 +1,2 @@
+\\ expect 2:46 is not an integer literal
+(define main {I64 --> I64} input -> (+ input 12ab))

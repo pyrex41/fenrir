@@ -1,0 +1,14 @@
+\\ Round trip: the hand fixture trapcode-enum-result, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(define main {I64 --> (Tuple I64 TrapCode)}
+  input -> (let c Bounds
+                _ (emit "code" c)
+             (tuple (match c
+                      (Overflow -> 0)
+                      (DivZero -> 1)
+                      (Bounds -> 42)
+                      (InvalidDuration -> 3)
+                      (TaskLimit -> 4)
+                      (ChildFailed -> 5))
+                    c)))

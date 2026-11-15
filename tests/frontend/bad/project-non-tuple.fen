@@ -1,0 +1,2 @@
+\\ expect 2:37 project needs a tuple, but this has type I64
+(define main {I64 --> I64} input -> (project input 0))

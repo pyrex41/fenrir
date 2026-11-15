@@ -1,0 +1,8 @@
+\\ Round trip: the hand fixture bytes-index-bounds-suppresses-emit, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(define main {I64 --> I64}
+  input -> (+ (bytes-index #x00 1) (later 1)))
+
+(define later {I64 --> I64}
+  p -> (let _ (emit "forbidden" p) p))

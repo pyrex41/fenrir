@@ -1,0 +1,3 @@
+\\ expect 3:77 effect Ask has no operation tell: its operations are ask
+(effect Ask (ask I64 --> I64))
+(define main {I64 --> I64} input -> (handle Ask ((ask x) -> x) (perform Ask tell input)))

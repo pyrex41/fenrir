@@ -1,0 +1,7 @@
+\\ Round trip: the hand fixture bytes-concat-length-index, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(define main {I64 --> I64}
+  input -> (let b (bytes-concat "hi" #xff00)
+             (+ (+ (bytes-length b) (bytes-index b 2))
+                (bytes-index b 3))))

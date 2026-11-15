@@ -1,0 +1,7 @@
+\\ expect 6:25 this match arm has type Bool, but I64 is expected (the type of the arms before it)
+(datatype Opt None (Some I64))
+(define main {I64 --> I64} input ->
+  (let r (match (Some input)
+           (None -> 0)
+           ((Some x) -> (> x 0)))
+    input))

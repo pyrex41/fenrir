@@ -1,0 +1,2 @@
+\\ expect 2:1 the entry function main must take I64
+(define main {Unit --> I64} input -> 1)

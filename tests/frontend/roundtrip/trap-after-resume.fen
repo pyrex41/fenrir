@@ -1,0 +1,11 @@
+\\ Round trip: the hand fixture trap-after-resume, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(effect Ask (ask I64 --> I64))
+
+(define main {I64 --> I64}
+  input -> (handle Ask
+             ((ask x k) -> (/ (resume k x) 0))
+             (let a (perform Ask ask 1)
+                  u (emit "body" a)
+               a)))

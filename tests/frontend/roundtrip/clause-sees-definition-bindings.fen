@@ -1,0 +1,16 @@
+\\ Round trip: the hand fixture clause-sees-definition-bindings, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(effect Ask (ask I64 --> I64))
+
+(define main {I64 --> I64}
+  input -> (handle Ask
+             ((ask x) -> 99)
+             (f 2)))
+
+(define f {I64 --> I64}
+  p -> (if (<= p 0)
+           (perform Ask ask 0)
+           (handle Ask
+             ((ask x) -> p)
+             (f (- p 1)))))

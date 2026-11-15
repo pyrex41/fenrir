@@ -3,8 +3,61 @@
 **Current stage: working research prototypes and a developing test harness—not a
 usable full language or production compiler yet.** Fenrir is the planned language;
 Gleipnir is the development, exploration and conformance harness. The narrow
-TC0-A pure slice has a recorded qualification PASS at `1db7471` under explicit
-waivers; the current master still needs a fresh source-bound gate run.
+TC0-A pure slice has a historical qualification PASS at `1db7471` under explicit
+waivers, issued by a Python evaluator that has since been replaced. The gate is
+now a Shen program; no qualification receipt exists for it yet.
+
+## Direction (November 2026)
+
+[04_DIRECTION_AMENDMENT.md](04_DIRECTION_AMENDMENT.md) records the owner's
+rulings of 12 November 2026. Fenrir keeps this repository and identity. Shen
+stays the semantic authority; proofs that Shen cannot give alone go through
+[Búri](https://github.com/pyrex41/buri)'s Rocq-proved contract rules. The
+effect system gets one-shot resumptions and inferred effect rows (TC1). Solo5
+is the first execution target, with BEAM as supervisor and SQLite as the first
+store. The amendment changes no TC0 evidence.
+
+- **Solo5 lane (development).** Fenrir programs run as guests of a stock Solo5
+  `spt` tender, built from the pinned Solo5 commit on Linux x86-64 with no
+  Docker and no KVM. `sh harness/run-solo5-pure-call.sh` compares every
+  reference step of 5,774 programs (calls, closures, datatypes, match, bytes;
+  86,286 steps) with the Shen model: all agree, and the guest's two injected
+  defects are detected (4,019 and 238 programs). The host observes a free run;
+  step control and replay are not there yet. See
+  [backends/solo5/README.md](backends/solo5/README.md).
+- **The gate is Shen.** On 13 November 2026 the registered TC0-A evaluator
+  changed from Python to [harness/gate.shen](harness/README.md), running on
+  Shen/JIT 0.7 pinned in the flake, by the owner's instruction
+  ([record](campaigns/tc0/G1_SHEN_EVALUATOR_SWITCH.md)). Its checks are Shen
+  programs: hand cases, the exhaustive scope, exact arithmetic, catalog
+  coverage, strict replay, the discovery-and-reduction campaign and the repair
+  evaluation. The model's integers are now exact on any Shen port
+  (`models/tc0/i64.shen`). The Python gate, its checkers and the JavaScript
+  tools that read their reports are removed; receipts they issued are
+  historical. `sh harness/run-gate.sh` on a committed tree gives verdict PASS
+  on 15 of 15 required rows in about two minutes; a controller run on a
+  supported runner is still needed for a receipt. JavaScript remains for the
+  second implementation, program generation and validation, tape replay and
+  the sandbox. **Sections below from "How far along are we?" onward describe
+  work done with the Python tools and keep its numbers; where they name a
+  `tools/check-tc0-*.py` command, the equivalent is now under `harness/`.**
+- **Effects and handlers (TC1).** [spec/tc1/EFFECTS.md](spec/tc1/EFFECTS.md)
+  is a draft effect contract: declared effects, `perform` and `handle`, finite
+  effect sets, dynamic handler selection, and explicit one-shot resumptions
+  (`resume`, `discontinue`) whose exactly-once use is checked at validation.
+  Both slices run in a Shen model, an independent JavaScript implementation
+  and the Solo5 guest, and all three agree step for step on twenty hand
+  fixtures with 51 handwritten expectations; six injected defects are each
+  detected. Generated handler programs, reduction and replay are not done.
+- **Service model.** [verification/service/](verification/service/) is a Rocq
+  model of a tenant-scoped request that atomically records a report, a durable
+  job and its retry result before answering, with write isolation, atomicity,
+  acceptance durability, retry safety and crash recovery proved **for the model
+  only** (`sh verification/service/check.sh`, Coq 8.18).
+- **Proving in Shen.** [verification/shen-proving/](verification/shen-proving/)
+  shows what Shen's sequent checker does and does not establish alone.
+- [campaigns/RECONCILIATION_2026-11.md](campaigns/RECONCILIATION_2026-11.md)
+  reviews open PRs #5–#8 against the direction.
 
 ## How far along are we?
 
@@ -78,9 +131,8 @@ discrepancy class; the outcome may change. New typed rules: `if-to-branch`,
 `call-to-argument` and `drop-tuple-element`, plus pruning of unused datatypes.
 
 ```sh
-python3 -I tools/check-tc0-pure-call-reduction.py --shen-executable build/toolchain/shen-scheme \
-  --family pure-data --mutant arm-by-position --max-cases 24 --wall-seconds 300 --output build/tc0/s2/arm.json
-node tools/tc0/check-pure-call-failure-replay.mjs build/tc0/s2/arm.json build/tc0/s2/arm-replay.json
+# Now: discovery, reduction and replay in one Shen program (LIB and ROOT as in harness/jit.sh)
+shen-jit script harness/reduction.shen LIB ROOT OUTDIR pure-data arm-by-position
 ```
 
 | Family / mutant | Discovered at | Attempts (accepted) | Nodes | Exact replay (first divergence) |
@@ -186,9 +238,9 @@ added for the last 18 gaps: `gt`/`ge`/`mul`, Overflow from `sub`, `neg` minimum,
 initializers and `if` conditions. This covers the catalog's named transitions, not
 every frame/context combination.
 
-**TC0-A gate (owner-reviewed, registered).** [`spec/tc0/tc0-a-requirements.json`](spec/tc0/tc0-a-requirements.json)
-is a versioned manifest of 15 required rows and 1 optional row.
-[`tools/check-tc0-a-gate.py`](tools/check-tc0-a-gate.py) runs every row freshly
+**TC0-A gate, as it was under the Python evaluator (replaced 13 November 2026; see the top of this file).** [`spec/tc0/tc0-a-requirements.json`](spec/tc0/tc0-a-requirements.json)
+was a versioned manifest of 15 required rows and 1 optional row.
+`tools/check-tc0-a-gate.py` ran every row freshly
 against a clean, committed HEAD and aggregates per TC0-GATE. That includes
 rebuilding an S3 packet and re-evaluating the retained independent patch. After
 the owner's review decisions
@@ -361,16 +413,15 @@ Node 22, Python and Go 1.27 from one nixpkgs release. Sources are fetched by Nix
 and locked in `flake.lock`.
 
 ```sh
-nix run .            # links build/toolchain/shen-scheme to the pinned host oracle
-node tools/tc0/dev-check-pure-call-oracle.mjs
-python3 -I tools/check-tc0-pure-data-exhaustive.py --shen-executable build/toolchain/shen-scheme \
-  --max-nodes 5 --output build/tc0/exhaustive-5.json
-python3 -I tools/check-tc0-exact-arithmetic.py --shen-executable build/toolchain/shen-scheme \
-  --output build/tc0/exact-arithmetic.json
-nix shell nixpkgs#sbcl -c node tools/tc0/build-shaken-oracle.mjs \
-  --yggdrasil "$(nix build --no-link --print-out-paths .#yggdrasil)/bin/yggdrasil" \
-  --shen-cl "$(nix build --no-link --print-out-paths .#shen-cl)"
+sh harness/run-gate.sh                 # the whole gate, on the flake's Shen/JIT
+sh harness/run-hand-cases.sh           # hand cases and strict replay
+sh harness/run-model-vs-candidate.sh   # exhaustive scope to 5 nodes
+sh harness/run-solo5-pure-call.sh exact  # exact arithmetic (needs Solo5 built)
+nix build .#shen-jit                   # the pinned Shen/JIT with its libraries
 ```
+
+The flake also still builds shen-scheme v0.26, shen-cl and Yggdrasil, which the
+gate no longer uses.
 
 For Go host tests, pinned toolchain instructions and optional explicit Shen/Node
 integration vectors, use the [native host README](tools/solo5/native-arithmetic/README.md).

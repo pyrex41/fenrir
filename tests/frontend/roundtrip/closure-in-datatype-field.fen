@@ -1,0 +1,10 @@
+\\ Round trip: the hand fixture closure-in-datatype-field, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(datatype Box
+  (Box (I64 --> I64)))
+
+(define main {I64 --> I64}
+  input -> (let k 10
+             (match (Box (lambda (q : I64) (+ q k)))
+               ((Box f) -> (f 5)))))

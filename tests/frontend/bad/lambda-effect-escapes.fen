@@ -1,0 +1,6 @@
+\\ expect 6:49 effect Ask is not handled: it comes from this application
+\\ The lambda is let-bound, so it gets exactly its body's effects; applying it
+\\ outside any handler leaves Ask unhandled at the entry.
+(effect Ask (ask I64 --> I64))
+(define main {I64 --> I64} input ->
+  (let f (lambda (x : I64) (perform Ask ask x)) (f input)))

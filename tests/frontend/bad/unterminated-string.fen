@@ -1,0 +1,2 @@
+\\ expect 2:47 string literal is not closed
+(define main {I64 --> I64} input -> (do (emit "label input) input))

@@ -1,0 +1,2 @@
+\\ expect 2:38 unknown name double
+(define main {I64 --> I64} input -> (double input))

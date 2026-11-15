@@ -27,8 +27,6 @@ separate proposal, never fixed by editing those inputs.
 ```sh
 node tools/tc0/run-pure-call.mjs PROGRAM.json          # candidate on one artifact
 node --test tests/tc0/*.test.mjs                        # regression suite
-# With a Shen executable (shen-scheme with lib/shen-scheme/shen.boot):
-python3 -I tools/check-tc0-pure-call.py --shen-executable SHEN --output build/hand.json
 ```
 
 The evaluator also uses held-out evaluation inputs that are frozen before this

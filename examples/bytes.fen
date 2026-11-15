@@ -1,0 +1,26 @@
+\\ Bytes, tuples, structural equality and the built-in TrapCode datatype.
+\\
+\\ A string literal is the Bytes value of its UTF-8 encoding; #x... gives the
+\\ octets in hexadecimal. checksum adds up the octets of its argument from the
+\\ last index down. The final bytes-index reads one past the end, which traps
+\\ Bounds, but only after the emit before it has happened.
+\\
+\\ Expected:
+\\ > emit "summary": (tuple 6 646 true Bounds)
+\\ > outcome: Trap Bounds
+
+(define checksum-from {(Tuple Bytes I64) --> I64}
+  bytes index -> (if (< index 0)
+                     0
+                     (+ (bytes-index bytes index) (checksum-from bytes (- index 1)))))
+
+(define checksum {Bytes --> I64}
+  bytes -> (checksum-from bytes (- (bytes-length bytes) 1)))
+
+(define main {I64 --> I64}
+  input -> (let name (bytes-concat "fen" #x726972)
+             (do (emit "summary" (tuple (bytes-length name)
+                                        (checksum name)
+                                        (= name "fenrir")
+                                        Bounds))
+                 (bytes-index name (bytes-length name)))))

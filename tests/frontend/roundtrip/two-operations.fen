@@ -1,0 +1,14 @@
+\\ Round trip: the hand fixture two-operations, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(effect Cell
+  (get Unit --> I64)
+  (put I64 --> Unit))
+
+(define main {I64 --> I64}
+  input -> (handle Cell
+             ((get g) -> 5)
+             ((put p) -> unit)
+             (let a (perform Cell get unit)
+                  u (perform Cell put a)
+               (+ a 1))))

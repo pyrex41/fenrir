@@ -1,0 +1,2 @@
+\\ expect 2:51 emit needs a serializable value, but this has type (I64 --> I64)
+(define main {I64 --> I64} input -> (do (emit "f" (lambda (x : I64) x)) input))

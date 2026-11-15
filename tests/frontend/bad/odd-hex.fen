@@ -1,0 +1,2 @@
+\\ expect 2:51 even number of hexadecimal digits
+(define main {I64 --> I64} input -> (bytes-length #x123))

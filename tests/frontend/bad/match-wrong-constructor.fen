@@ -1,0 +1,7 @@
+\\ expect 6:5 Bounds is not a constructor of Opt
+(datatype Opt None (Some I64))
+(define main {I64 --> I64} input ->
+  (match (Some input)
+    (None -> 0)
+    (Bounds -> 1)
+    ((Some x) -> x)))

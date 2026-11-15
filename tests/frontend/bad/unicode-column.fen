@@ -1,0 +1,2 @@
+\\ expect 2:49 unknown name oops
+(define main {I64 --> I64} input -> (let s "éé" oops))

@@ -1,0 +1,6 @@
+\\ expect 5:14 the else branch has type Bool, but I64 is expected
+(define main {I64 --> I64} input ->
+  (let x (if (< input 1)
+             1
+             false)
+    input))

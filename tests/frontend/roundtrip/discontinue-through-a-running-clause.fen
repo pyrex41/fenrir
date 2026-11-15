@@ -1,0 +1,14 @@
+\\ Round trip: the hand fixture discontinue-through-a-running-clause, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(effect Ask (ask I64 --> I64))
+(effect Tell (tell I64 --> Unit))
+
+(define main {I64 --> I64}
+  input -> (handle Ask
+             ((ask x k) -> (let u (discontinue k) 9))
+             (handle Tell
+               ((tell t) -> (let w (perform Ask ask 0) unit))
+               (let v (perform Tell tell 1)
+                    _ (emit "never" 0)
+                 3))))

@@ -1,0 +1,21 @@
+\\ Closures: a lambda captures the variables around it, and is a value.
+\\
+\\ adder returns a function that remembers n. twice takes a function and an
+\\ argument as a tuple and applies the function two times. The lambda's result
+\\ type and effect set are not written: adder's signature supplies them, and
+\\ for add-ten and the lambda passed last they are synthesized from the body.
+\\
+\\ Expected:
+\\ > outcome: Ok 129
+
+(define adder {I64 --> (I64 --> I64)}
+  n -> (lambda (x : I64) (+ x n)))
+
+(define twice {(Tuple (I64 --> I64) I64) --> I64}
+  f x -> (f (f x)))
+
+(define main {I64 --> I64}
+  input -> (let add-ten (adder 10)
+                scale 3
+             (+ (twice add-ten 100)
+                (twice (lambda (x : I64) (* x scale)) (+ input 1)))))

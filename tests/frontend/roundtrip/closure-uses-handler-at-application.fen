@@ -1,0 +1,12 @@
+\\ Round trip: the hand fixture closure-uses-handler-at-application, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(effect Ask (ask I64 --> I64))
+
+(define main {I64 --> I64}
+  input -> (let f (handle Ask
+                    ((ask x) -> 1)
+                    (lambda (u : Unit) (perform Ask ask 0)))
+             (handle Ask
+               ((ask x) -> 2)
+               (f unit))))

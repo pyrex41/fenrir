@@ -1,0 +1,11 @@
+\\ Round trip: the hand fixture body-continues-after-resume, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(effect Ask (ask I64 --> I64))
+
+(define main {I64 --> I64}
+  input -> (handle Ask
+             ((ask x) -> (let u (emit "clause" x) x))
+             (let a (perform Ask ask 7)
+                  u (emit "after" a)
+               a)))

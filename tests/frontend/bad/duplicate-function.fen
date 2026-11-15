@@ -1,0 +1,4 @@
+\\ expect 3:9 function helper is declared twice
+(define helper {I64 --> I64} n -> n)
+(define helper {I64 --> I64} n -> (+ n 1))
+(define main {I64 --> I64} input -> (helper input))

@@ -1,0 +1,25 @@
+\\ Recursion over a declared datatype.
+\\
+\\ range builds the list first, first+1, ..., last; sum folds it with match.
+\\ Both take their arguments as one tuple: a define with several parameters
+\\ names the components, and a call with several arguments passes their tuple.
+\\
+\\ Expected:
+\\ > outcome: Ok (tuple 55 (Cons 1 (Cons 2 (Cons 3 Nil))))
+
+(datatype IntList
+  Nil
+  (Cons I64 IntList))
+
+(define range {(Tuple I64 I64) --> IntList}
+  first last -> (if (> first last)
+                    Nil
+                    (Cons first (range (+ first 1) last))))
+
+(define sum {IntList --> I64}
+  list -> (match list
+            (Nil -> 0)
+            ((Cons head tail) -> (+ head (sum tail)))))
+
+(define main {I64 --> (Tuple I64 IntList)}
+  input -> (tuple (sum (range 1 10)) (range 1 3)))

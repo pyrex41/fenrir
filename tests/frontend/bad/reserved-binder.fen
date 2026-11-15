@@ -1,0 +1,2 @@
+\\ expect 2:42 if is a reserved word
+(define main {I64 --> I64} input -> (let if 1 (+ if input)))

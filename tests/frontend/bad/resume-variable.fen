@@ -1,0 +1,6 @@
+\\ expect 5:47 x is a variable, not a resumption
+(effect Ask (ask I64 --> I64))
+(define main {I64 --> I64} input ->
+  (handle Ask
+    ((ask x k) -> (do (discontinue k) (resume x 1)))
+    (perform Ask ask input)))

@@ -1,0 +1,2 @@
+\\ expect 2:37 applies a value of type I64, which is not a function
+(define main {I64 --> I64} input -> (input 1))

@@ -1,0 +1,26 @@
+\\ Effect sets of lambdas that depend on the effect sets of recursive functions.
+\\
+\\ The two lambdas in main call f and g. g performs Ask directly; f reaches it
+\\ only through g. The branches of the if must have the same function type,
+\\ effect set included, and they do, (I64 --> I64 ! Ask), but only once the
+\\ sets of f and g have reached their fixed point.
+\\
+\\ Expected:
+\\ > outcome: Ok 9
+
+(effect Ask
+  (ask I64 --> I64))
+
+(define f {I64 --> I64}
+  n -> (if (<= n 0) 0 (g n)))
+
+(define g {I64 --> I64}
+  n -> (+ (perform Ask ask n) (f (- n 1))))
+
+(define main {I64 --> I64}
+  input -> (let h (if (> input 0)
+                      (lambda (x : I64) (f x))
+                      (lambda (x : I64) (g x)))
+             (handle Ask
+               ((ask x) -> (+ x 1))
+               (h 3))))

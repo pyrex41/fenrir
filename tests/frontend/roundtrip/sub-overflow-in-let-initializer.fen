@@ -1,0 +1,7 @@
+\\ Round trip: the hand fixture sub-overflow-in-let-initializer, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(define main {I64 --> I64}
+  input -> (let x (- -9223372036854775808 1)
+                _ (emit "unreached" x)
+             x))

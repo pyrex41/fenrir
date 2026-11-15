@@ -1,0 +1,2 @@
+\\ expect 2:65 index 2 is out of range for (Tuple I64 Bool)
+(define main {I64 --> I64} input -> (project (tuple input true) 2))
