@@ -417,17 +417,19 @@ which here is WF-Type: the class differs, both reject.
 
 **Disagreements found, and which side is wrong.**
 
-1. **The validator rejects an effectful function type in a datatype field.**
+1. **The validator rejected an effectful function type in a datatype field
+   (fixed 15 November 2026).**
    `{name: Box, constructors: [{name: Box, fields: [Arrow(I64, I64, [Ask])]}]}`
-   with effect Ask declared is rejected with "Effect set": the validator checks
-   field types before it has read the effect declarations, so only `Emit` is
-   known then. EFFECTS.md §3 allows any declared effect in an effect set and
-   restricts nowhere where a function type may appear; the rules here accept.
-   **The validator is wrong** (an order-of-processing defect, not a rule); it is
-   reported, not fixed here (`tools/tc0/pure-call-artifact.mjs` is not this
-   work's to change). It reaches users: the surface program
-   `tests/typing/datatype-field-effect.fen` is valid by the contract, and
-   `fenrir.sh check` reports the two validators disagreeing (status 3).
+   with effect Ask declared was rejected with "Effect set": the validator
+   checked field types before it had read the effect declarations, so only
+   `Emit` was known then. EFFECTS.md §3 allows any declared effect in an effect
+   set and restricts nowhere where a function type may appear; the rules here
+   accept. **The validator was wrong** (an order-of-processing defect, not a
+   rule). It now reads the declared effect names before any type is checked;
+   the probe `datatype-field-arrow-with-user-effect` and the surface program
+   `tests/typing/datatype-field-effect.fen` are accepted by both validators.
+   The validator is in the gates' authority paths, so evidence from before the
+   fix is bound to the earlier source.
 2. **Order, in programs with two faults.** Where an artifact breaks a structural
    check and a typing rule, the validator reports whichever it meets first in
    its single pass, and the Shen side always reports the structural check. Both
@@ -461,7 +463,7 @@ gives the numbers per family; the figures as of this draft:
 | handler-artifact test rejections | 26 | 0 | 26 | 0 |
 | the same, source map made exact | 52 | 0 | 52 | 0 |
 | single-point mutants (`typing/mutate.mjs`) | 7,060 | 413 | 6,647 | 0 |
-| boundary probes (`typing/probes.mjs`) | 57 | 29 | 27 | 1 (§11, 1) |
+| boundary probes (`typing/probes.mjs`) | 57 | 30 | 27 | 0 (one before the validator fix: §11, 1) |
 
 - **Forged derivations**: every node of the derivations of 328 valid programs
   corrupted eleven ways (rule name wrong or swapped for another rule's, premises

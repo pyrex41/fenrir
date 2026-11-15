@@ -45,10 +45,15 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
  // Effect sets: at most Emit before TC1; under TC1 any declared effect or Emit, in
  // unsigned UTF-8 byte order with no duplicates (one canonical spelling per set).
  const declared=new Map();
+ // Names of the artifact's effect declarations, read before any type is checked: a
+ // datatype field may be a function type whose effect set names a declared effect
+ // (EFFECTS.md section 3). The declarations themselves are validated further down,
+ // so a malformed, reserved or duplicate name still rejects the artifact there.
+ const effectNames=new Set(a.effects.filter(d=>d!==null&&typeof d==='object'&&typeof d.name==='string').map(d=>d.name));
  function effects(v){
   array(v);
   if(!handlers){if(v.length>1||(v.length===1&&v[0]!=='Emit'))fail('Effect set');return;}
-  v.forEach((k,i)=>{text(k);if(k!=='Emit'&&!declared.has(k)&&!(tasks&&TASK_RUNTIME_EFFECTS.includes(k)))fail('Effect set');if(i&&Buffer.compare(Buffer.from(v[i-1]),Buffer.from(k))>=0)fail('Effect set order');});
+  v.forEach((k,i)=>{text(k);if(k!=='Emit'&&!effectNames.has(k)&&!(tasks&&TASK_RUNTIME_EFFECTS.includes(k)))fail('Effect set');if(i&&Buffer.compare(Buffer.from(v[i-1]),Buffer.from(k))>=0)fail('Effect set order');});
  }
  if(array(a.datatypes).length&&!data)fail('Declarations unsupported');
  // Datatype table: closed declarations, unique names, constructors in declared order.

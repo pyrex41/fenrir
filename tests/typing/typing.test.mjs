@@ -25,9 +25,9 @@ test('every message the validator can give is mapped to a check or rule of TYPIN
   for(const m of messages)assert.ok(CLASSES[m],`unmapped validator message: ${m}`);
 });
 
-test('the boundary probes: the validator agrees with the contract text except where TYPING.md §11 says it does not', () => {
+test('the boundary probes: the validator agrees with the contract text on every probe', () => {
   const departs=probes().filter(p=>jsVerdict(bytes(p)).status!==p.contract).map(p=>p.name);
-  assert.deepEqual(departs,['datatype-field-arrow-with-user-effect']);
+  assert.deepEqual(departs,[]);
 });
 
 test('mutants are single changes of valid seeds, deterministic', () => {
@@ -99,9 +99,9 @@ test('search finds a derivation for every hand fixture, and it survives a JSON r
   assert.equal(r.cases,String(all.length));
 });
 
-test('the frontend reports the validators disagreeing on an effectful datatype field (TYPING.md §11)', {skip:!haveShen&&'Shen/JIT not found'}, () => {
+test('both validators accept an effectful datatype field (the validator defect of TYPING.md §11, fixed)', {skip:!haveShen&&'Shen/JIT not found'}, () => {
   const r=spawnSync('sh',[resolve(root,'frontend/fenrir.sh'),'check',resolve(root,'tests/typing/datatype-field-effect.fen')],
     {encoding:'utf8',env:{...process.env,FENRIR_SHEN_JIT:jit}});
-  assert.equal(r.status,3,r.stdout+r.stderr);
-  assert.match(r.stderr,/validators disagree: the JavaScript validator says invalid \(Effect set\), the Shen typing checker says valid/);
+  assert.equal(r.status,0,r.stdout+r.stderr);
+  assert.match(r.stdout,/^ok: /);
 });

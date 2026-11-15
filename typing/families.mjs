@@ -58,7 +58,16 @@ export const CLASSES={
   'Apply type':'typing:T-Apply','Unknown function':'typing:T-Call','Call argument':'typing:T-Call','Unknown effect operation':'typing:T-Perform',
   'Perform argument':'typing:T-Perform','Unknown effect':'typing:T-Handle','Handler clauses':'typing:T-Handle',
   'Handler clause type':'typing:T-Handle','A resumption must be used exactly once on every path':'typing:T-Handle',
-  'Unknown resumption':'typing:T-Resume/T-Discontinue','Resume argument':'typing:T-Resume'};
+  'Unknown resumption':'typing:T-Resume/T-Discontinue','Resume argument':'typing:T-Resume',
+  // schema tc1-task-demo/1 (spec/tc1/CONCURRENCY.md): outside TYPING.md's rule set R, which stops at
+  // tc1-handler-demo/2. Listed so the mapping stays complete; no family here uses that schema.
+  'A scope result must be serializable':'out-of-scope:tc1-task-demo/1',
+  'A task result must be serializable':'out-of-scope:tc1-task-demo/1',
+  'Channel capacity':'out-of-scope:tc1-task-demo/1',
+  'Channel elements must be serializable':'out-of-scope:tc1-task-demo/1',
+  'Send value type':'out-of-scope:tc1-task-demo/1',
+  'Spawn needs a function from Unit':'out-of-scope:tc1-task-demo/1',
+};
 
 const INPUT=['int','0'];
 export function jsVerdict(bytes) {

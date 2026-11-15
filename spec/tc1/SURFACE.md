@@ -275,8 +275,8 @@ an outcome, with status 0.
 - `sh typing/run.sh` elaborates the 39 programs above (examples, programs,
   round trips) and finds that both validators accept every one, with a checked
   derivation for each; `tests/typing/datatype-field-effect.fen` is a program the
-  contract allows that the JavaScript validator rejects, so `check` reports the
-  validators disagreeing ([TYPING.md](TYPING.md) §11).
+  contract allows that the JavaScript validator used to reject; that defect is
+  fixed and both validators accept it ([TYPING.md](TYPING.md) §11).
 
 Not checked: any property of the inference beyond these programs; that the
 elaborator rejects everything the validators reject (the driver catches the

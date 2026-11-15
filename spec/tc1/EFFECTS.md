@@ -241,8 +241,8 @@ sh harness/run-tc1-gate.sh              # the proposed TC1 gate, all of the abov
   the small fixed checker `typing/checker.shen` accept it; both validators
   reject every invalid and ill-typed mutant. The claim is "derivable under rule
   set R, soundness not yet proved". It found one place where the JavaScript
-  validator departs from this text: it rejects a datatype field of a function
-  type that names a declared effect (TYPING.md §11).
+  validator departed from this text, since fixed: it rejected a datatype field
+  of a function type that names a declared effect (TYPING.md §11).
 - **TC0-A subset:** the JavaScript handler machine gives the same steps,
   outcome and closure descriptors as the TC0-A implementation on all 5,774
   TC0-A programs of the existing scopes, and the extended C machine still
