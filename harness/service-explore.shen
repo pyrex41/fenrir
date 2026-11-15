@@ -672,4 +672,6 @@
           (shen-jit.exit (if (hd R) 0 1))))
   Mode -> (do (output "unknown mode ~A~%" Mode) (shen-jit.exit 2)))
 
-(sx.main (value sx.*mode*))
+\\ harness/service-fenrir.shen (stage A2) loads this file for its definitions and sets
+\\ sx.*as-library* first; run on its own, this is the A1 check.
+(if (trap-error (value sx.*as-library*) (/. E false)) skip (sx.main (value sx.*mode*)))

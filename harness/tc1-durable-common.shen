@@ -60,6 +60,15 @@
       (dm.initial [tc1-state [evaluate (hd (tl Entry)) true] [[(hd Entry) (dh.value Input)]] [] (fh.function-codes Rows) Names]
                   (dh.context Artifact))))
 
+\\ The same for an input that is already a model value.
+(define dh.state-of-value
+  Artifact Value ->
+    (let Rows (map (/. F (fh.function-row F)) (fh.field "functions" Artifact))
+         Names (map (/. R [(fh.function-name (hd (tl R))) (hd R)]) Rows)
+         Entry (fh.entry-row (fh.field "entry" Artifact) Rows)
+      (dm.initial [tc1-state [evaluate (hd (tl Entry)) true] [[(hd Entry) Value]] [] (fh.function-codes Rows) Names]
+                  (dh.context Artifact))))
+
 \\ ---------- model observations in JSON shape (DURABLE.md section 7) ----------
 
 (define dh.event
