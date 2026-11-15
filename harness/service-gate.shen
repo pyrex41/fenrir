@@ -436,7 +436,7 @@
            (= (sg.show (length Negatives)) (sg.a3-negative-tests))
            (sg.all? (/. T (sg.a3-negative-ok? T)) Negatives))))
 
-\\ host/service/check.sh quick (about 2 to 5 minutes; it builds through nix from the flake's
+\\ host/service/check.sh quick (about 4 to 7 minutes; it builds through nix from the flake's
 \\ fenrir-a3-tools). The A3 tools output unavailable, no Solo5 (the script says BLOCKED) or Shen/JIT
 \\ not startable: BLOCKED. A time limit or no report: UNKNOWN. A report that does not meet every
 \\ condition above: FAIL.
@@ -461,7 +461,7 @@
                                                ["crashes_injected" (sg.show (fh.member "crashes_injected" (fh.member "normal_stack" Report)))]
                                                ["host_mutants" (sg.show (length (fh.member "host_mutants" Report)))]
                                                ["sync_off" "documented: not detectable by this campaign"]] Memo)
-                            (fh.row "FAIL" ["A3: a history was rejected or indeterminate, an audit was not clean, a host mutant other than the documented sync_off went uncaught, the equivalent control was flagged, a negative test of the history checker was not as expected, or a unit test failed"]
+                            (fh.row "FAIL" ["Host (A3 and A4): a history was rejected or indeterminate, an audit was not clean, a host mutant other than the documented sync_off went uncaught, the equivalent control was flagged, a negative test of the history checker was not as expected, or a unit test failed"]
                                     [["status" (sg.show (fh.member "status" Report))]
                                      ["reason" (sg.show (fh.member "reason" Report))]
                                      ["unit_tests" (json.stringify (fh.member "unit_tests" Report) [])]
@@ -573,7 +573,7 @@
                                    ["machines_failing" (json.stringify (sg.a4-machines-failing Mutants) [])]
                                    ["a1_subscope_agrees" (sg.show (fh.member "agree" Sub))]
                                    ["properties_never_failing_on_a_mutant" (json.stringify (fh.member "properties_never_failing_on_a_mutant" Report) [])]
-                                   ["checks_never_failing_on_a_mutant" (json.stringify (fh.member "checks_never_failing_on_a_mutant" Report) [])]] Memo)))))))))
+                                   ["checks_never_failing_on_a_mutant" (json.stringify (fh.member "checks_never_failing_on_a_mutant" Report) [])]] Memo))))))))
 
 (define sg.a4-sources
   -> (let Dir (cn (value fh.*root*) "examples/service/mutants-a4")
@@ -613,13 +613,14 @@
                     (fh.row "UNKNOWN" ["The A4 refinement check ran at another scope than the one this gate pins"] [] Kept)
                     (if (not (and (sg.untruncated? (fh.member "a4_model" Report)) (sg.untruncated? Exploration) (sg.every-untruncated? Mutants)))
                         (fh.row "UNKNOWN" ["An A4 exploration was truncated or incomplete (state cap reached)"] [] Kept)
-                        (if (not (and (sg.a4-graph? (fh.member "a4_model" Report)) (sg.a4-graph? Exploration)
+                        (if (not (and (sg.a4-graph? (fh.member "a4_model" Report))
                                       (sg.same-set? (sg.names Mutants "mutant") (sg.a4-fenrir-machines))))
-                            (fh.row "UNKNOWN" ["The graph or the set of Fenrir mutants is not the one this gate pins"] [] Kept)
+                            (fh.row "UNKNOWN" ["The A4 model's graph or the set of Fenrir mutants is not the one this gate pins"] [] Kept)
                             (if (not (and (= (fh.member "ran" J) true) (= (fh.member "sandboxed" J) true) (sg.positive? (fh.member "runs" J))))
                                 (fh.row "UNKNOWN" ["The sandboxed JavaScript implementation did not run on the A4 runs"] [] Kept)
                                 (if (and (= (fh.member "refines" Refinement) true)
                                          (= (fh.member "same_graph_as_a4_model" Refinement) true)
+                                         (sg.a4-graph? Exploration)
                                          (= (sg.show (fh.member "steps_differing" Refinement)) "0")
                                          (sg.positive? (fh.member "steps_compared_with_a4_model" Refinement))
                                          (sg.positive? (fh.member "compare_and_swap_checks" Refinement))
