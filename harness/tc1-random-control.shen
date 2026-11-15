@@ -8,7 +8,6 @@
 (set fh.*lib* (cn (hd (tl (value *argv*))) "/"))
 (set fh.*root* (cn (hd (tl (tl (value *argv*)))) "/"))
 (load (cn (value fh.*root*) "harness/gate-core.shen"))
-(load (cn (value fh.*root*) "harness/tc1-defects.shen"))
 (load (cn (value fh.*root*) "harness/tc1-random-rows.shen"))
 
 (define fh.main

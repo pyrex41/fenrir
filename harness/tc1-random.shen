@@ -216,6 +216,16 @@
   [] Seen -> Seen
   [[[Rule _] _] | Rules] Seen -> (fh.r-rule-names Rules (if (element? Rule Seen) Seen [Rule | Seen])))
 
+\\ The machine rules as step records name them (fh.rule of common.shen).
+(define fh.r-all-rules
+  -> (map (/. R (fh.rule R)) [dispatch ready let-return if-return match-return return-return collect-return handle-return
+                              clause-return clause-exit-return resume-return discontinue-return abandon-frame unwind-frame
+                              value unwind join terminate]))
+
+(define fh.r-rules-missing
+  [] _ -> []
+  [R | Rs] Seen -> (if (element? R Seen) (fh.r-rules-missing Rs Seen) [R | (fh.r-rules-missing Rs Seen)]))
+
 (define fh.r-highest
   [] Max -> Max
   [[Key _] | Rest] Max -> (fh.r-highest Rest (if (fh.string<? Max Key) Key Max)))
@@ -274,7 +284,9 @@
                          ["step_kinds_missing" (fh.r-kinds-missing (fh.kinds) Tally)]
                          ["steps_by_kind" (fh.r-kind-table Tally)]
                          ["untabulated_handler_steps" (fh.r-sorted (fh.r-get "other_steps" Tally))]
+                         ["rules" (str (length (fh.r-all-rules)))]
                          ["rules_exercised" (str (length (fh.r-rule-names (fh.r-get "rules" Tally) [])))]
+                         ["rules_not_exercised" (fh.r-rules-missing (fh.r-all-rules) (fh.r-rule-names (fh.r-get "rules" Tally) []))]
                          ["steps_by_rule" (fh.r-rule-table (fh.r-get "rules" Tally))]
                          ["guest" (if (= Guest []) "not run" Guest)]]
        (do (output "~A~%" (json.stringify Report [[byte-limit 1048576]]))

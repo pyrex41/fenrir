@@ -10,11 +10,14 @@
 \\ else any UNKNOWN gives UNKNOWN; else PASS. An evaluator error, a check that does
 \\ not report, or a check it does not know is UNKNOWN.
 \\ This file holds the TC1 row checks and the registration rule. The TC0-A rows are
-\\ not restated: the TC0-A evaluator is run as one prerequisite row.
+\\ not restated: the TC0-A evaluator is run as one prerequisite row. The rows for the
+\\ generated family, its reduction and its replay are in harness/tc1-random-rows.shen.
 
 (set fh.*lib* (cn (hd (tl (value *argv*))) "/"))
 (set fh.*root* (cn (hd (tl (tl (value *argv*)))) "/"))
 (load (cn (value fh.*root*) "harness/gate-core.shen"))
+\\ The rows for the generated family.
+(load (cn (value fh.*root*) "harness/tc1-random-rows.shen"))
 
 \\ ---------- the scope this gate requires ----------
 \\ The node bound of the exhaustive family and the number of programs of grammar H
@@ -143,6 +146,11 @@
   "tc1-guest-hand" Memo -> (fh.guest-row (fh.guest-batch ["--tc1"]) Memo)
   "tc1-guest-exhaustive" Memo -> (fh.tc1-guest-exhaustive Memo)
   "tc1-step-coverage" Memo -> (fh.tc1-step-coverage Memo)
+  "tc1-random" Memo -> (fh.tc1-random Memo)
+  "tc1-guest-random" Memo -> (fh.tc1-guest-random Memo)
+  "tc1-random-control" Memo -> (fh.tc1-random-control Memo)
+  "tc1-reduction" Memo -> (fh.tc1-reduction Memo)
+  "tc1-reduced-replay" Memo -> (fh.tc1-reduced-replay Memo)
   Name Memo -> (fh.row "UNKNOWN" [(cn "The evaluator has no check named " Name)] [] Memo))
 
 \\ Registered: the manifest is owner-accepted and the workflow has a tc1-qualification

@@ -52,18 +52,19 @@
 \\ a resumption used in a condition; handles of a type other than I64.
 \\
 \\ ---------- choices ----------
-\\ Every decision takes the next choice, reduced modulo the number of options open at
-\\ that point; an exhausted list gives 0. Option 0 is always the smallest one (a
-\\ literal, true, a tail-resumptive clause, resume(k, .), no spare nodes for a
-\\ subterm that others follow), so the all-zero list gives the program whose body is the literal 0. The
-\\ first two choices give the node budget of main's body: 1 + the larger of the two,
-\\ each taken modulo fh.g-max-nodes, so budgets lean towards the large end.
-\\ A decision with one option takes no choice.
+\\ Every decision takes the next choice, reduced modulo the number of options the
+\\ decision has; an exhausted list gives 0. Option 0 is always the smallest one (a
+\\ literal, the literal 0, true, a tail-resumptive clause, resume(k, .), no spare
+\\ nodes for a subterm that others follow), so the all-zero list gives the program
+\\ whose body is the literal 0. The first two choices give the node budget of main's
+\\ body: 1 + the larger of the two, each taken modulo fh.g-max-nodes, so budgets lean
+\\ towards the large end. Choosing a form always takes a choice; any other decision
+\\ with one option takes none.
 
 (define fh.g-max-nodes -> 40)
 
 (define fh.g-start
-  Choices -> (do (set fh.*g-choices* Choices) (set fh.*g-picked* []) (set fh.*g-id* 0)
+  Choices -> (do (set fh.*g-choices* Choices) (set fh.*g-picked* []) (set fh.*g-taken* 0) (set fh.*g-spans* []) (set fh.*g-id* 0)
                  (set fh.*g-nodes* 0) (set fh.*g-locations* []) (set fh.*g-uses* []) skip))
 
 \\ The next choice among N options. The choice made is recorded, so the list that
@@ -74,6 +75,7 @@
             C (if (empty? Cs) 0 (shen.mod (hd Cs) N))
             Rest (set fh.*g-choices* (if (empty? Cs) [] (tl Cs)))
             Kept (set fh.*g-picked* [C | (value fh.*g-picked*)])
+            Taken (set fh.*g-taken* (+ 1 (value fh.*g-taken*)))
          C))
 
 (define fh.g-choose
@@ -126,41 +128,49 @@
   r -> 2
   _ -> 1)
 
-\\ [Form MinimumNodes Available], simplest first. A form listed twice is twice as likely.
+\\ The forms of a kind: [Form MinimumNodes Needs], the smallest first; a form listed
+\\ twice is twice as likely. Needs says when the form is available: any always, some
+\\ when S is not empty, ask when Ask is in S, mix when Mix is in S. A choice is an
+\\ index into the whole list, whatever the context and the room; when the form there
+\\ is not available or does not fit, the nearest one below it that is and does is
+\\ taken instead. Form 0 always is and does. So a choice means the same form
+\\ wherever it can, which keeps a choice list meaningful when the shrinker removes
+\\ what was around it.
 (define fh.g-table
-  e [S V K] -> [[literal 1 true] [variable 1 (not (empty? V))] [tick 2 true] [perform 2 (not (empty? S))]
-                [neg 2 true] [deep 2 (element? "Ask" S)] [arith 3 true] [bind 3 true] [handle 3 true]
-                [perform 2 (not (empty? S))] [branch 4 true] [mark 4 true] [handle 3 true]
-                [perform 2 (not (empty? S))] [bind 3 true] [handle 3 true] [arith 3 true] [perform 2 (not (empty? S))]]
-  b [S V K] -> [[truth 1 true] [negate 2 true] [test 2 (element? "Mix" S)] [compare 3 true]]
-  r [S V K] -> [[resume 2 true] [drop 3 true] [tick 3 true] [perform 3 (not (empty? S))] [neg 3 true]
-                [deep 3 (element? "Ask" S)] [arith-left 4 true] [arith-right 4 true] [let-left 4 true]
-                [let-right 4 true] [handle 4 true] [branch 6 true]
-                [resume 2 true] [drop 3 true] [let-left 4 true] [arith-right 4 true] [branch 6 true]])
+  e -> [[leaf 1 any] [tick 2 any] [neg 2 any] [arith 3 any] [bind 3 any] [handle 3 any] [perform 2 some]
+        [branch 4 any] [mark 4 any] [handle 3 any] [perform 2 some] [bind 3 any] [deep 2 ask] [arith 3 any]
+        [handle 3 any] [perform 2 some] [tick 2 any] [perform 2 some] [branch 4 any] [handle 3 any]
+        [deep 2 ask] [bind 3 any] [perform 2 some] [arith 3 any]]
+  b -> [[truth 1 any] [negate 2 any] [compare 3 any] [test 2 mix] [compare 3 any] [test 2 mix]]
+  r -> [[resume 2 any] [drop 3 any] [tick 3 any] [neg 3 any] [arith-left 4 any] [arith-right 4 any]
+        [let-left 4 any] [let-right 4 any] [handle 4 any] [perform 3 some] [branch 6 any] [resume 2 any]
+        [drop 3 any] [let-left 4 any] [deep 3 ask] [arith-right 4 any] [branch 6 any] [perform 3 some]])
 
-(define fh.g-fitting
-  [] _ -> []
-  [[Form Min true] | Rows] Cap -> [Form | (fh.g-fitting Rows Cap)] where (<= Min Cap)
-  [_ | Rows] Cap -> (fh.g-fitting Rows Cap))
+(define fh.g-open?
+  any _ -> true
+  some [S _ _] -> (not (empty? S))
+  ask [S _ _] -> (element? "Ask" S)
+  mix [S _ _] -> (element? "Mix" S))
 
-\\ The rows that are not leaves: with room to grow, a subterm is three times as likely
-\\ to take one of them, so a budget is mostly used.
-(define fh.g-composite
-  [] -> []
-  [[_ 1 _] | Rows] -> (fh.g-composite Rows)
-  [Row | Rows] -> [Row | (fh.g-composite Rows)])
+\\ Rows holds the chosen row first, then the rows below it, nearest first.
+(define fh.g-nearest
+  [[Form Min Needs] | _] Ctx Cap -> Form where (and (<= Min Cap) (fh.g-open? Needs Ctx))
+  [_ | Lower] Ctx Cap -> (fh.g-nearest Lower Ctx Cap))
 
-(define fh.g-forms
-  Kind Ctx Cap -> (let Table (fh.g-table Kind Ctx)
-                       Composite (fh.g-composite Table)
-                    (fh.g-fitting (append Table Composite Composite) Cap)))
+(define fh.g-form
+  Kind Ctx Cap -> (let Rows (fh.g-table Kind)
+                    (fh.g-nearest (reverse (fh.take (+ 1 (fh.g-pick (length Rows))) Rows)) Ctx Cap)))
 
 \\ An expression of Kind with at most Cap nodes; Cap is at least the kind's minimum.
-\\ End is the node count this subterm must not pass.
+\\ End is the node count this subterm must not pass. The span of choices the subterm
+\\ took is recorded with its kind, for the shrinker (fh.g-hoists).
 (define fh.g-expr
   Kind Ctx Cap -> (let End (+ (value fh.*g-nodes*) Cap)
-                       Form (fh.g-choose (fh.g-forms Kind Ctx Cap))
-                    (fh.g-build Form Kind Ctx End (fh.g-node))))
+                       First (value fh.*g-taken*)
+                       Form (fh.g-form Kind Ctx Cap)
+                       E (fh.g-build Form Kind Ctx End (fh.g-node))
+                       Span (set fh.*g-spans* [[Kind First (value fh.*g-taken*)] | (value fh.*g-spans*)])
+                    E))
 
 \\ How many of Spare nodes a subterm may take beyond its minimum: a choice of eighths,
 \\ 0 for none and 7 for all. The choice does not depend on Spare, so a list keeps its
@@ -203,8 +213,10 @@
                             (fh.g-handleable Xs Kind Room)))
 
 (define fh.g-build
-  literal _ _ _ Node -> ["int" Node (fh.g-choose (fh.g-literals))]
-  variable _ [_ V _] _ Node -> ["var" Node (fh.g-choose V)]
+  \\ A literal, or with choice 1 a binder in scope when there is one.
+  leaf _ [_ V _] _ Node -> (if (and (= (fh.g-pick 2) 1) (not (empty? V)))
+                               ["var" Node (fh.g-choose V)]
+                               ["int" Node (fh.g-choose (fh.g-literals))])
   truth _ _ _ Node -> ["bool" Node (= (fh.g-pick 2) 0)]
   tick Kind Ctx End Node -> (do (fh.g-use "tick") ["call" Node "tick" (fh.g-last Kind Ctx End)])
   neg Kind Ctx End Node -> ["prim" Node "neg" (fh.g-last Kind Ctx End)]
@@ -362,17 +374,21 @@
   0 X Acc -> [(reverse Acc) X]
   N X Acc -> (let Y (fh.g-next X) (fh.g-draw (- N 1) Y [(shen.mod Y 1000) | Acc])))
 
-\\ Choices per program: more than a 40-node program takes (about three per node).
-(define fh.g-choices-per-program -> 160)
+\\ Choices per program: more than a 40-node program takes (three to four per node).
+(define fh.g-choices-per-program -> 200)
 
 \\ ---------- shrinking, on the choice list ----------
 \\ A candidate is a list that is shorter than the current one, or as long and smaller
-\\ at the first place they differ. A quick round proposes: a chunk deleted (sizes
-\\ halving from the whole list, at multiples of the size), an entry set to 0, an
-\\ entry halved, an entry decremented. When no quick candidate is kept, thorough
-\\ rounds follow: one to four entries deleted at every offset, and every entry
-\\ lowered to every smaller value. Every candidate is regenerated, so it is a valid
-\\ program.
+\\ at the first place they differ. A quick round proposes:
+\\   a subterm replaced by one of its own subterms of the same kind: the choices of
+\\     the outer one are deleted on both sides of the inner one's (the generator
+\\     records which choices each subterm took);
+\\   a chunk deleted, sizes halving from the whole list, at multiples of the size;
+\\   an entry set to 0, an entry halved, an entry decremented.
+\\ When no quick candidate is kept, a thorough round follows: one to six entries
+\\ deleted at every offset, and every entry lowered to every smaller value; if that
+\\ keeps one, quick rounds resume. Every candidate is regenerated, so it is a valid
+\\ program whatever the deletion did to the meaning of the choices after it.
 \\ Evaluate is given the candidates of one round and returns the choice list (in
 \\ normal form) of one for which the failure still holds, or [] when there is none;
 \\ the caller decides what "still holds" means. Each accepted list is smaller in
@@ -420,12 +436,39 @@
   V C Before After -> [(append Before [V | After]) | (fh.g-values (+ V 1) C Before After)])
 
 (define fh.g-candidates
-  quick Cs -> (append (fh.g-all-deletions (length Cs) Cs)
+  quick Cs -> (append (fh.g-hoists Cs)
+                      (fh.g-all-deletions (length Cs) Cs)
                       (fh.g-replacements (/. C 0) [] Cs)
                       (fh.g-replacements (/. C (if (> C 1) (fh.g-half C) C)) [] Cs)
                       (fh.g-replacements (/. C (if (> C 2) (- C 1) C)) [] Cs))
-  thorough Cs -> (append (fh.g-windows 4 [] Cs) (fh.g-windows 3 [] Cs) (fh.g-windows 2 [] Cs) (fh.g-windows 1 [] Cs)
-                         (fh.g-lowerings [] Cs)))
+  thorough Cs -> (append (fh.g-windows 6 [] Cs) (fh.g-windows 5 [] Cs) (fh.g-windows 4 [] Cs) (fh.g-windows 3 [] Cs)
+                         (fh.g-windows 2 [] Cs) (fh.g-windows 1 [] Cs) (fh.g-lowerings [] Cs)))
+
+\\ The lists in which the choices of one subterm are replaced by those of a subterm of
+\\ it of the same kind. Spans are [Kind First End] over the choices as they were taken.
+(define fh.g-hoists
+  Cs -> (let Generated (fh.generate "hoist" Cs)
+             Picks (reverse (value fh.*g-picked*))
+             Spans (value fh.*g-spans*)
+          (fh.g-hoist-all Spans Spans Picks)))
+
+(define fh.g-hoist-all
+  [] _ _ -> []
+  [Outer | Rest] Spans Picks -> (append (fh.g-hoist-into Outer Spans Picks) (fh.g-hoist-all Rest Spans Picks)))
+
+(define fh.g-hoist-into
+  _ [] _ -> []
+  [Kind First End] [[Kind First2 End2] | Inner] Picks ->
+    [(append (fh.take First Picks) (fh.take (- End2 First2) (fh.g-drop First2 Picks)) (fh.g-drop End Picks))
+     | (fh.g-hoist-into [Kind First End] Inner Picks)]
+    where (and (<= First First2) (<= End2 End) (< (- End2 First2) (- End First)))
+  Outer [_ | Inner] Picks -> (fh.g-hoist-into Outer Inner Picks))
+
+\\ The candidates, without trailing zeros, that are smaller than Choices.
+(define fh.g-proper
+  [] _ -> []
+  [C | Cs] Choices -> (let Stripped (reverse (fh.g-strip (reverse C)))
+                        (if (fh.g-smaller? Stripped Choices) [Stripped | (fh.g-proper Cs Choices)] (fh.g-proper Cs Choices))))
 
 (define fh.shrink
   Choices Evaluate Rounds -> (fh.g-shrink quick Choices Evaluate Rounds 0 0))
@@ -433,14 +476,14 @@
 (define fh.g-shrink
   _ Choices _ Rounds Rounds Tried -> [Choices Rounds Tried]
   Level Choices Evaluate Rounds Round Tried ->
-    (let Candidates (fh.g-candidates Level Choices)
+    (let Candidates (fh.g-proper (fh.g-candidates Level Choices) Choices)
          Next (if (empty? Candidates) [] (Evaluate Candidates))
          Total (+ Tried (length Candidates))
       (if (or (= Next []) (not (fh.g-smaller? Next Choices)))
           (if (= Level quick)
               (fh.g-shrink thorough Choices Evaluate Rounds (+ Round 1) Total)
               [Choices (+ Round 1) Total])
-          (fh.g-shrink Level Next Evaluate Rounds (+ Round 1) Total))))
+          (fh.g-shrink quick Next Evaluate Rounds (+ Round 1) Total))))
 
 \\ Shorter, or as long and smaller at the first difference.
 (define fh.g-smaller?

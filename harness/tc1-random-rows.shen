@@ -50,7 +50,7 @@
                            ["nodes" (json.stringify (fh.member "nodes" Report) [])]
                            ["max_handler_nesting_depth" (fh.member "max_handler_nesting_depth" Report)]
                            ["step_kinds_covered" (make-string "~A/~A" (fh.member "step_kinds_covered" Report) (fh.member "step_kinds" Report))]
-                           ["rules_exercised" (fh.member "rules_exercised" Report)]]
+                           ["rules_exercised" (make-string "~A/~A" (fh.member "rules_exercised" Report) (fh.member "rules" Report))]]
                           [["tc1-random" Report] ["tc1-random-directory" (cn Directory "/")] | Memo])
                   (fh.row "UNKNOWN" ["The generated-family report is not a pass at the required scope"] [] Memo))))))
 
@@ -89,6 +89,12 @@
     [[Defect (hd (fh.tc1-random-with Defect 1 (fh.tc1-control-per-seed) (cn "tc1-random-control-" Defect) []))]
      | (fh.tc1-control-statuses Defects)])
 
+\\ The six injected defects, by report key. The gate holds the list itself (tc1-defects.shen,
+\\ which the harness programs use, also defines a per-run fh.verdict and cannot be loaded
+\\ beside the gate's), so a control that leaves one out cannot pass.
+(define fh.tc1-control-defects
+  -> ["forgotten_resume" "double_resume" "outermost_handler" "dynamic_clause_environment" "resume_returns_argument" "shallow_resume"])
+
 (define fh.tc1-control-wrong
   [] -> []
   [[Defect "FAIL"] | Rest] -> (fh.tc1-control-wrong Rest)
@@ -97,7 +103,7 @@
 (define fh.tc1-random-control
   Memo ->
     (let Clean (hd (fh.tc1-random-with [] 1 (fh.tc1-control-per-seed) "tc1-random-control-none" []))
-         Statuses (fh.tc1-control-statuses (fh.defect-names))
+         Statuses (fh.tc1-control-statuses (fh.tc1-control-defects))
          Wrong (append (if (= Clean "PASS") [] [(cn "With no defect the family check on the control's scope is " Clean)])
                        (fh.tc1-control-wrong Statuses))
       (fh.row (if (empty? Wrong) "PASS" (if (or (element? "UNKNOWN" (map (/. S (hd (tl S))) Statuses)) (= Clean "UNKNOWN")) "UNKNOWN" "FAIL"))

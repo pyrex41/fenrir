@@ -136,6 +136,51 @@
    "acceptance": "harness/solo5-pure-call.shen on every program of grammar H with at most 7 nodes, with the TC0-A hand cases. The Solo5 guest agrees with the model on every step and both guest defects are detected. A batch whose handler family does not hold 12,693 programs, or a comparison that did not cover the whole batch, is UNKNOWN. Solo5 not built: BLOCKED."
   },
   {
+   "id": "random-family",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "check": "tc1-random",
+   "acceptance": "harness/tc1-random.shen: 20,000 handler programs generated in Shen (harness/tc1-generate.shen: main bodies of at most 40 nodes, three effects, both clause forms) from 20 fixed seeds, 1,000 programs per seed. The validator accepts every one; one rejection, or a node count that differs from the generator's, is FAIL. Every program agrees with the model run in the harness, with the implementation sandboxed: both complete with the same steps and outcome, or both reach the step bound of 1,000 with the same steps up to it. A family in which no program performs, none resumes, none discontinues or none abandons a suspended segment is FAIL. Another number of programs, or no report: UNKNOWN."
+  },
+  {
+   "id": "guest-random-family",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "check": "tc1-guest-random",
+   "acceptance": "harness/solo5-pure-call.shen on the programs the random-family row wrote in this run, one Solo5 guest image per seed, built with the same step bound. The guest agrees with the model on every step of every program and both guest defects are detected in every batch. No passing random-family row in this run, a batch that did not report, or batches that are not this run's 20,000 programs and steps: UNKNOWN. Solo5 not built: BLOCKED."
+  },
+  {
+   "id": "random-family-negative-control",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "check": "tc1-random-control",
+   "acceptance": "The random-family row's own check, on one seed of 1,000 programs, with each of the six injected defects switched on in the implementation in turn: it is FAIL every time, and PASS on the same programs with no defect. A control that passes with a defect, or fails without one, is FAIL."
+  },
+  {
+   "id": "random-reduction",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "check": "tc1-reduction",
+   "acceptance": "harness/tc1-reduce.shen: for each of the six injected defects, a generated program on which it fails is found (model and undefective implementation agree; the defective implementation completes with a different trace; a crash or a run that reaches the step bound is not a failure) and its choice list is shrunk, every candidate being regenerated and so valid. The failure holds on every shrunk program and none is larger than its original. A defect with no failing generated program, or a disagreement between the model and the undefective implementation, is FAIL."
+  },
+  {
+   "id": "reduced-replay",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "check": "tc1-reduced-replay",
+   "acceptance": "harness/tc1-replay.shen, in a fresh process, on the failures the random-reduction row recorded in this run: for each of the six defects the original and the shrunk choice lists regenerate programs of the recorded sizes (the shrunk one exactly the recorded program), the model and the undefective implementation agree on both, and the defective implementation completes with a different trace on both, on the shrunk program first differing from the model at the recorded step. No reduction in this run: UNKNOWN."
+  },
+  {
    "id": "handler-step-coverage",
    "required": false,
    "ledger": [
@@ -153,7 +198,9 @@
   "handler-model-implementation-agreement": [
    "toolchain-pinned",
    "hand-fixtures",
-   "exhaustive-small"
+   "exhaustive-small",
+   "random-family",
+   "random-family-negative-control"
   ],
   "handler-defects-detected": [
    "exhaustive-small",
@@ -164,10 +211,15 @@
    "defect-resume-returns-argument",
    "defect-shallow-resume"
   ],
+  "handler-defect-reduced-and-replayed": [
+   "random-reduction",
+   "reduced-replay"
+  ],
   "handler-model-guest-agreement": [
    "toolchain-pinned",
    "guest-hand-fixtures",
-   "guest-exhaustive-small"
+   "guest-exhaustive-small",
+   "guest-random-family"
   ],
   "tc0-a-preserved": [
    "unit-suite",
@@ -180,5 +232,5 @@
  ],
  "review": "None. This manifest is PROPOSED: it is not owner-accepted and the evaluator is not registered in .pi/fenrir-workflow.json, so every report says authority UNREGISTERED and qualification UNKNOWN. Registration is the owner's decision.",
  "model": "models/tc1/handler-machine.shen with models/tc0/i64.shen, run in-process by the Shen harness on the flake-pinned Shen/JIT",
- "not_covered": "Generated (non-exhaustive) handler programs, a discovery-and-reduction campaign, strict replay, a versioned and hashed transition catalog for the handler steps (the optional coverage row measures against the table in EFFECTS.md section 6), and any soundness proof of the typing or one-shot rules. Grammar H has one-operation effects with I64 operation types only, no closures, and programs of at most 7 nodes."
+ "not_covered": "Strict replay of whole runs against recorded tapes (the reduced-replay row re-runs and re-compares; it does not replay a tape), a versioned and hashed transition catalog for the handler steps (the optional coverage row measures against the table in EFFECTS.md section 6), and any soundness proof of the typing or one-shot rules. Grammar H has one-operation effects with I64 operation types only, no closures, and programs of at most 7 nodes. The generated family is a sample, not a scope: 20,000 programs of at most 40 nodes from fixed seeds, with three effects (one of two operations, one of them returning Bool), no closures, datatypes, tuples or bytes, no Unit-typed operations, and no handle of a type other than I64; its reduction shrinks to a small failing program, not to a proven smallest one. The guest is compared with the model on the generated family, not with the six implementation defects."
 }

@@ -29,7 +29,8 @@ test('the TC1 manifest is proposed, closed over its rows, and cites known ledger
 test('the required rows are the ones the gate was specified with', () => {
   const required=manifest.rows.filter(r=>r.required).map(r=>r.check);
   assert.deepEqual(required,['source-identity','toolchain-pinned','unit-suite','tc0-a-gate','tc1-handlers','tc1-exhaustive',
-    ...Object.keys(MUTANTS).map(key=>'tc1-defect:'+key),'tc1-guest-hand','tc1-guest-exhaustive']);
+    ...Object.keys(MUTANTS).map(key=>'tc1-defect:'+key),'tc1-guest-hand','tc1-guest-exhaustive',
+    'tc1-random','tc1-guest-random','tc1-random-control','tc1-reduction','tc1-reduced-replay']);
   // An optional row is never among a claim's rows or the prerequisites.
   const optional=manifest.rows.filter(r=>!r.required).map(r=>r.id);
   for(const rows of [...Object.values(manifest.claims),manifest.claim_prerequisites])assert.ok(!rows.some(id=>optional.includes(id)));
@@ -43,6 +44,23 @@ test('the evaluator, the manifest and the enumerator state the same scope', () =
     const text=manifest.rows.find(r=>r.id===id).acceptance;
     assert.ok(text.includes(`at most ${bound} nodes`)&&text.includes(grouped),id);
   }
+});
+
+test('the generated-family rows, the manifest and the harness state the same scope and the same defects', () => {
+  const rows=readFileSync('harness/tc1-random-rows.shen','utf8'),number=name=>Number(rows.match(new RegExp(`\\(define fh\\.${name} -> (\\d+)\\)`))[1]);
+  const seeds=number('tc1-random-seeds'),perSeed=number('tc1-random-per-seed'),control=number('tc1-control-per-seed');
+  const text=id=>manifest.rows.find(r=>r.id===id).acceptance,grouped=n=>n.toLocaleString('en-US');
+  assert.ok(text('random-family').includes(`${grouped(seeds*perSeed)} handler programs`)&&text('random-family').includes(`${seeds} fixed seeds, ${grouped(perSeed)} programs per seed`));
+  assert.ok(text('guest-random-family').includes(grouped(seeds*perSeed)));
+  assert.ok(text('random-family-negative-control').includes(`one seed of ${grouped(control)} programs`));
+  // The step bound and the node bound the acceptance text names are the harness's own.
+  const fuel=readFileSync('harness/tc1-random.shen','utf8').match(/\(define fh\.r-fuel -> (\d+)\)/)[1];
+  const nodes=readFileSync('harness/tc1-generate.shen','utf8').match(/\(define fh\.g-max-nodes -> (\d+)\)/)[1];
+  assert.ok(text('random-family').includes(`step bound of ${grouped(Number(fuel))}`)&&text('random-family').includes(`at most ${nodes} nodes`));
+  // The Shen harness holds the defect names itself; they are the implementation's six.
+  const names=readFileSync('harness/tc1-defects.shen','utf8').match(/\(define fh\.defect-names\n  -> \[([^\]]*)\]\)/)[1].match(/[a-z_]+/g);
+  assert.deepEqual(names,Object.keys(MUTANTS));
+  assert.deepEqual(rows.match(/\(define fh\.tc1-control-defects\n  -> \[([^\]]*)\]\)/)[1].match(/[a-z_]+/g),Object.keys(MUTANTS));
 });
 
 test('the TC0-A manifest no longer carries the TC1 rows, and its evaluator no longer checks them', () => {
