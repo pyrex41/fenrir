@@ -172,7 +172,7 @@ sh harness/run-tc1-exhaustive.sh        # grammar H up to 7 nodes, ~30 s
 sh harness/run-tc1-generated.sh         # generated family G, ~11 s
 sh harness/run-tc1-reduction.sh DEFECT  # one discovery-reduction-replay campaign, 8-25 s
 sh harness/run-tc1-strict-replay.sh     # ~9 s
-sh harness/run-tc1-gate.sh              # the proposed TC1 gate, about 9 min (runs the TC0-A gate and the three optional rows too)
+sh harness/run-tc1-gate.sh              # the proposed TC1 gate, about 15 min (15 min 21 s measured; runs the TC0-A gate and the seven optional rows too)
 ```
 
 | Program | What it checks | Measured |
@@ -197,7 +197,7 @@ The proposed TC1 gate ([tc1-gate.shen](tc1-gate.shen), manifest
 `guest-exhaustive-small` are BLOCKED where Solo5 is not built, so the verdict
 there is BLOCKED. Authority UNREGISTERED, qualification UNKNOWN.
 
-Three optional rows (`required: false`; no claim and no required row relies on
+Seven optional rows (`required: false`; no claim and no required row relies on
 them, so the verdict is that of the 21 required rows) run after the required
 ones. Each reads its harness program's own report, and none can pass without
 that report: `task-hand-fixtures` (`tc1-tasks.shen`: PASS on `development-pass`,
@@ -209,9 +209,37 @@ program and every witness agreeing; UNKNOWN for an incomplete or truncated scope
 or no report; FAIL otherwise) and `solo5-control-replay` (`solo5-control.shen` at
 stride 25, about 20 s: PASS on `development-pass`, FAIL on `development-fail`,
 BLOCKED where Solo5 or the guest build is unavailable, UNKNOWN on a timeout or no
-report). The accepted-job exploration (`service-explore.shen`) is not a row: it
-checks the service contract of application example A1, which is not part of
-slice TC1.
+report).
+
+The last four cover the durable and typing work, each reading its
+program's own report (none can pass without it; no claim relies on them):
+`durable-hand-fixtures` (`tc1-durable.shen`: PASS on `development-pass`, FAIL on
+`development-fail`, UNKNOWN without a report or on a timeout), `durable-guest`
+(`solo5-durable.shen` over control protocol v2 on the D1 hand fixtures: PASS on
+`development-pass` with every program agreeing, FAIL on a failing report, BLOCKED
+where Solo5 or Shen/JIT is unavailable or the guest build exits nonzero, UNKNOWN on a
+timeout or no report), `durable-validator-differential`
+(`tools/tc1/validator-differential.mjs` against the validator at the parent of the D1
+edit, read from git at a pinned revision and digest: PASS only with all 137,469 verdicts
+identical and the 10 corpora at their pinned program counts, 24,153 programs; a
+difference or other counts is FAIL; no old copy or no report is UNKNOWN) and
+`typing-differential` (`typing/run.shen`, about 2.5 min: PASS only on
+`development-pass` with no family whose acceptance disagrees and no probe on which the
+Shen side departs from the contract; a derivation search out of budget, no report or a
+timeout is UNKNOWN; FAIL otherwise). The validator differential is still meaningful
+after the later effect-name fix (b4f4af2): run against the pre-D1 validator with the
+current one, all verdicts are identical, so that fix changes no verdict on these corpora.
+
+Each of the four was shown non-PASS on the real failing condition, reverted afterwards:
+an expectation of the D1 fixtures changed (FAIL), `FENRIR_SOLO5=/nonexistent` (BLOCKED)
+and an edited protocol vector (FAIL) for the guest, the validator changed so the input
+schema check is gone (FAIL, 24,153 verdicts differ), and for typing the effect-set order
+check removed from the JavaScript validator (FAIL), a derivation budget of 50 (UNKNOWN)
+and a 5 s limit (UNKNOWN). The typing differential does not notice the removed input
+schema check: its families do not exercise it.
+
+The accepted-job contract (A1) and its Fenrir handler (A2) are not part of slice TC1
+and are not rows of this gate; they have their own proposed gate, below.
 
 Not done for TC1: exhaustive exploration beyond grammar H, and reduction
 campaigns for the two defects that show only through later values.
@@ -423,6 +451,31 @@ histories: a response without a commit, a duplicated mutation on retry, a cross-
 effect, a job lost after acceptance and others, with accepted controls) are run by every
 check. Measured numbers: [04_DIRECTION_AMENDMENT.md](../04_DIRECTION_AMENDMENT.md) §8,
 stage A3.
+
+## The proposed service gate
+
+```sh
+sh harness/run-service-gate.sh          # the proposed service gate, about 5 min (4 min 43 s measured)
+```
+
+[service-gate.shen](service-gate.shen), manifest
+[spec/service/service-requirements.json](../spec/service/service-requirements.json)
+(`proposed`; authority UNREGISTERED, qualification UNKNOWN; not registered in the
+workflow), on [gate-core.shen](gate-core.shen) with the same aggregation rule as the other
+gates. It gathers the accepted-job work (contract A1, handler A2), which is not slice
+TC1, so the TC1 gate has no row for it. Ten required rows, each reading the report of a
+harness program: `source-identity`, `toolchain-pinned`, `service-unit-tests`
+(`tests/service`), `a1-exploration` (`service-explore.shen` at the pinned scope: the model
+complete and not truncated, every mutant caught, the equivalent control unflagged;
+truncated or another scope is UNKNOWN), `a1-model-vs-js-differential` (629,165 runtime
+edges), `a2-refinement` (`service-fenrir.shen`: the handler gives the A1 model's next state
+and response on every edge, 3,336,483 steps), `a2-js-agreement`, `a2-solo5-agreement`
+(the handler's runs in the host-controlled Solo5 guest, quick mode; BLOCKED without
+Solo5), `a2-handler-mutants` (six caught, the control unflagged, `commit-inside-atomic`
+rejected statically) and `retained-counterexamples-replay` (22 A1 and 13 A2 files, each in
+a fresh process). Fields the rows rely on are those the programs report; nothing was
+added to them. Bounded exploration at the stated scope, development grade; the
+Shen-to-Rocq correspondence is by reading (ledger row `SERVICE-ACCEPTED-JOB`).
 
 ## What is still not Shen
 

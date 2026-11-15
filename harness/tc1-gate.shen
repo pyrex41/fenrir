@@ -33,6 +33,20 @@
 \\ Every n-th program of the 5-node grammar joins the Solo5 control check's batch.
 (define fh.solo5-control-stride -> "25")
 
+\\ The validator the differential row compares the current one against: the artifact
+\\ validator as it was before the TC1-D1 edit (the parent of commit 8d13bca, "validator:
+\\ schema tc1-durable-demo/1"), and the digest of that file. The row reads it from git; a
+\\ file with another digest is not the validator it pins. The scope the comparison must
+\\ cover is the tool's own corpora with the program counts below.
+(define fh.validator-old-rev -> "8b3d0c1a777e9f31fb43fc0face7e609dc6570be")
+(define fh.validator-old-sha256 -> "d7600203052bc56a77595b42600acca2fff5a3ca5ffbdf9b5a662f3478d532df")
+(define fh.validator-verdicts -> "137469")
+(define fh.validator-accepted -> "24153")
+(define fh.validator-corpora
+  -> [["tc0-call-hand" "8"] ["tc0-data-hand" "15"] ["tc0-call-generated" "32"] ["tc0-data-generated" "24"]
+      ["tc0-data-exhaustive-5" "5695"] ["tc1-handler-hand" "20"] ["tc1-handler-exhaustive-7" "12693"]
+      ["tc1-handler-generated" "2048"] ["tc1-task-hand" "18"] ["tc1-task-exhaustive" "3600"]])
+
 \\ The generated family G (tools/tc1/handler-generate.mjs): the number of programs a
 \\ complete batch holds, which is also the family's size.
 (define fh.tc1-generated-programs -> "2048")
@@ -307,6 +321,135 @@
   Text -> (let Lines (fh.lines Text)
             (if (empty? Lines) "" (fh.trim (hd (reverse Lines))))))
 
+\\ ---------- optional rows: durable effects (slice D1), the validator edit, the typing rules ----------
+
+\\ The TC1-D1 hand fixtures under their host replies (harness/tc1-durable.shen, as
+\\ harness/run-tc1-durable.sh runs it): the model and the sandboxed implementation agree,
+\\ every handwritten expectation holds and each expectation kind can fail, and the injected
+\\ durable defects are detected. Only the harness's own development-pass is PASS.
+(define fh.tc1-durable
+  Memo ->
+    (let Report (fh.harness "tc1-durable.shen" [(fh.subdir "tc1-durable") "sandbox"] 600)
+         Status (fh.member "status" Report)
+      (if (= Status "development-pass")
+          (fh.row "PASS" [] [["cases" (fh.member "cases" Report)] ["expectations_checked" (fh.member "expectations_checked" Report)]
+                             ["executions" (json.stringify (fh.member "executions" Report) [])]
+                             ["defects" (json.stringify (fh.member "defects" Report) [])]
+                             ["defects_crashing" (json.stringify (fh.member "defects_crashing" Report) [])]] Memo)
+          (if (= Status "development-fail")
+              (fh.row "FAIL" ["TC1-D1 fixtures: disagreement, a failed expectation, an expectation kind that cannot fail, or an undetected defect"]
+                      [["failures" (json.stringify (fh.member "failures" Report) [])]
+                       ["defects_undetected" (json.stringify (fh.member "defects_undetected" Report) [])]
+                       ["expectation_kinds_unable_to_fail" (json.stringify (fh.member "expectation_kinds_unable_to_fail" Report) [])]] Memo)
+              (fh.row "UNKNOWN" ["The TC1-D1 durable harness did not report (or exceeded its time limit)"] [] Memo)))))
+
+\\ The host-controlled Solo5 guest over control protocol v2 (harness/solo5-durable.shen), as
+\\ harness/run-solo5-durable.sh runs it. No Solo5, or a guest build that fails: BLOCKED.
+\\ Shen/JIT that cannot start: BLOCKED. A time limit or no report: UNKNOWN.
+(define fh.solo5-durable
+  Memo ->
+    (let Built (fh.exec "node" [(cn (value fh.*root*) "tools/solo5/control-durable-build.mjs")] 1800)
+      (if (= (hd Built) -1)
+          (fh.row "UNKNOWN" ["The Solo5 durable batch build did not complete within its time limit"] [] Memo)
+      (if (not (= (hd Built) 0))
+          (fh.row "BLOCKED" ["The Solo5 durable batch or guest could not be built (is Solo5 available at the pinned commit?)"] [] Memo)
+          (let Batch (fh.last-line-of (hd (tl Built)))
+               Run (fh.subdir "solo5-durable")
+               R (fh.exec (value fh.*jit*) ["script" (cn (value fh.*root*) "harness/solo5-durable.shen") (value fh.*lib*) (value fh.*root*) Batch Run] 1800)
+               Report (fh.last-report (hd (tl R)))
+               Status (fh.member "status" Report)
+            (if (element? (hd R) [126 127])
+                (fh.row "BLOCKED" ["Shen/JIT could not be started for the Solo5 durable harness"] [] Memo)
+                (if (and (= Status "development-pass")
+                         (= (fh.member "programs_agreeing_with_model" Report) (fh.member "programs" Report)))
+                    (fh.row "PASS" [] [["protocol" (fh.member "protocol" Report)] ["programs" (fh.member "programs" Report)]
+                                       ["steps_agreed" (fh.member "steps_agreed" Report)] ["total_boots" (fh.member "total_boots" Report)]] Memo)
+                    (if (element? Status ["development-pass" "development-fail"])
+                        (fh.row "FAIL" ["The Solo5 durable check failed: a divergence between the guest and the model, a tape that did not replay exactly, or an unexpected hostile-host or vector result"]
+                                [["failures" (json.stringify (fh.member "failures" Report) [])]] Memo)
+                        (fh.row "UNKNOWN" ["The Solo5 durable harness did not report (or exceeded its time limit)"] [] Memo)))))))))
+
+(define fh.validator-corpora-match?
+  [] Corpora -> true
+  [[Name Programs] | Rest] Corpora ->
+    (and (= (fh.show (fh.member "programs" (fh.member Name Corpora))) Programs) (fh.validator-corpora-match? Rest Corpora)))
+
+\\ A decoded JSON value as text: a number is read as [number N], a string stays itself.
+(define fh.show
+  [number N] -> (make-string "~A" N)
+  V -> (if (string? V) V (make-string "~A" V)))
+
+\\ The differential check of the artifact validator edits (tools/tc1/validator-differential.mjs):
+\\ every program of every older corpus, and mutations aimed at the edit, get the same verdict
+\\ from the validator before the TC1-D1 edit and from the current one. The earlier copy is
+\\ read from git at the pinned revision and must have the pinned digest. The current
+\\ validator also carries the later effect-name fix (b4f4af2); on these corpora it changes no
+\\ verdict, which the identical count shows. PASS only when every verdict is identical and the
+\\ counts are the pinned ones; a difference or other counts is FAIL; no report, or no earlier
+\\ copy, is UNKNOWN.
+(define fh.validator-differential
+  Memo ->
+    (let Old (cn (fh.subdir "validator-differential") "/old-validator.mjs")
+         Got (fh.exec "sh" ["-c" (make-string "git show ~A:tools/tc0/pure-call-artifact.mjs > ~A" (fh.validator-old-rev) Old)] 120)
+      (if (or (not (= (hd Got) 0)) (not (= (fh.sha256 Old) (fh.validator-old-sha256))))
+          (fh.row "UNKNOWN" ["The validator as it was before the TC1-D1 edit could not be read from git, or is not the file the evaluator pins"] [] Memo)
+          (let R (fh.exec "node" [(cn (value fh.*root*) "tools/tc1/validator-differential.mjs") Old] 900)
+               Report (fh.last-report (hd (tl R)))
+               Detail [["verdicts" (fh.show (fh.member "verdicts" Report))] ["identical" (fh.show (fh.member "identical" Report))]]
+            (if (or (= Report []) (not (= (fh.member "schema" Report) "fenrir.validator-differential/1")))
+                (fh.row "UNKNOWN" ["The validator differential did not report (or exceeded its time limit)"] [] Memo)
+                (if (and (= (fh.member "status" Report) "identical")
+                         (= (hd R) 0)
+                         (= (fh.member "differences" Report) [])
+                         (= (fh.show (fh.member "verdicts" Report)) (fh.validator-verdicts))
+                         (= (fh.show (fh.member "identical" Report)) (fh.validator-verdicts))
+                         (= (fh.show (fh.member "accepted_as_is" Report)) (fh.validator-accepted))
+                         (fh.validator-corpora-match? (fh.validator-corpora) (fh.member "corpora" Report)))
+                    (fh.row "PASS" [] (append Detail [["accepted_as_is" (fh.validator-accepted)] ["old_validator" (fh.validator-old-rev)]]) Memo)
+                    (fh.row "FAIL" ["Some verdict differs between the validator before the TC1-D1 edit and the current one, or the corpora are not the pinned ones"]
+                            (append Detail [["status" (fh.show (fh.member "status" Report))]
+                                            ["differences" (json.stringify (fh.member "differences" Report) [])]]) Memo)))))))
+
+\\ The families of the typing differential whose acceptance disagrees. The probe family is
+\\ judged against the contract text instead; its departures are listed separately.
+(define fh.typing-disagreeing
+  [] -> []
+  [F | Fs] -> (if (or (= (fh.member "family" F) "probes") (= (fh.member "agreeing" F) (fh.member "programs" F)))
+                  (fh.typing-disagreeing Fs)
+                  [(fh.member "family" F) | (fh.typing-disagreeing Fs)]))
+
+\\ typing/run.shen, as typing/run.sh runs it (about 2.5 minutes): Shen-side validation against
+\\ the JavaScript validator on every program family, the checker on forged derivations, and
+\\ the model on every accepted program. PASS only on development-pass with no family whose
+\\ acceptance disagrees, no probe on which the Shen side departs from the contract, and no
+\\ derivation search out of budget. A search out of budget, no report or a time limit is
+\\ UNKNOWN. The claim is derivable under rule set R, not sound.
+(define fh.typing-differential
+  Memo ->
+    (let Out (fh.subdir "typing")
+         R (fh.exec (value fh.*jit*) ["script" (cn (value fh.*root*) "typing/run.shen") (value fh.*lib*) (value fh.*root*) Out] 1800)
+         Report (fh.last-report (hd (tl R)))
+         Status (fh.member "status" Report)
+         Unknown (fh.member "search_unknown" Report)
+         Disagreeing (fh.typing-disagreeing (fh.member "families" Report))
+         ShenDeparts (fh.member "shen_departs_from_contract" (fh.member "probes" Report))
+      (if (not (element? Status ["development-pass" "development-fail"]))
+          (fh.row "UNKNOWN" ["The typing differential did not report (or exceeded its time limit)"] [] Memo)
+          (if (not (= Unknown "0"))
+              (fh.row "UNKNOWN" [(make-string "A derivation search ran out of budget (~A searches); acceptance disagreements it causes are not findings" (fh.show Unknown))]
+                      [["families_disagreeing" (fh.join Disagreeing ", ")]] Memo)
+              (if (not (empty? Disagreeing))
+                  (fh.row "FAIL" ["The Shen validation and the JavaScript validator disagree on the acceptance of some programs"]
+                          [["families_disagreeing" (fh.join Disagreeing ", ")]] Memo)
+                  (if (and (= Status "development-pass") (= ShenDeparts []))
+                      (fh.row "PASS" [] [["frontend_programs" (json.stringify (fh.member "frontend_programs" Report) [])]
+                                         ["forged_derivations" (json.stringify (fh.member "forged_derivations" Report) [])]
+                                         ["search_budget_inferences" (fh.member "search_budget_inferences" Report)]] Memo)
+                      (fh.row "FAIL" ["The typing differential failed: a program Shen accepts got stuck, a forged derivation was accepted, a probe departs from the contract, or a family's expectation did not hold"]
+                              [["model_runs_of_accepted_programs" (json.stringify (fh.member "model_runs_of_accepted_programs" Report) [])]
+                               ["forged_derivations" (json.stringify (fh.member "forged_derivations" Report) [])]
+                               ["shen_departs_from_contract" (json.stringify ShenDeparts [])]] Memo)))))))
+
 (define fh.check
   "source-identity" Memo -> (fh.source-identity Memo)
   "toolchain-pinned" Memo -> (fh.toolchain-pinned Memo)
@@ -332,6 +475,10 @@
   "tc1-tasks" Memo -> (fh.tc1-tasks Memo)
   "tc1-task-explore" Memo -> (fh.tc1-task-explore Memo)
   "solo5-control" Memo -> (fh.solo5-control Memo)
+  "tc1-durable" Memo -> (fh.tc1-durable Memo)
+  "solo5-durable" Memo -> (fh.solo5-durable Memo)
+  "validator-differential" Memo -> (fh.validator-differential Memo)
+  "typing-differential" Memo -> (fh.typing-differential Memo)
   Name Memo -> (fh.row "UNKNOWN" [(cn "The evaluator has no check named " Name)] [] Memo))
 
 \\ Registered: the manifest is owner-accepted and the workflow has a tc1-qualification
