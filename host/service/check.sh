@@ -44,12 +44,15 @@ step "artifact: the handler, elaborated by the frontend"
 pinned=$(cat "$here/artifacts/accepted-job.sha256")
 artifact="$out/accepted-job.json"
 emit=0
-sh "$root/frontend/fenrir.sh" emit "$root/examples/service/accepted-job.fen" "$artifact" > "$out/emit.txt" 2>&1 || emit=$?
+# The source map carries the file as named on the command line (SURFACE.md section 2),
+# so the handler is named relative to the repository root: the artifact's bytes, and
+# with them the pinned hash, are then the same on every machine.
+(cd "$root" && sh frontend/fenrir.sh emit examples/service/accepted-job.fen "$artifact") > "$out/emit.txt" 2>&1 || emit=$?
 if [ "$emit" -eq 0 ]; then
   source="frontend emit in this tree"
 else
-  # Known issue at bf5cb36: emit exits 3 (a second validator does not know the durable
-  # schema). The committed copy was emitted by the frontend of a sibling worktree.
+  # The committed copy is the same emit (repository-relative name), kept so a tree
+  # whose frontend cannot run still has the pinned bytes; the report says which was used.
   cp "$here/artifacts/accepted-job.json" "$artifact"
   source="committed copy host/service/artifacts/accepted-job.json (frontend emit exited $emit in this tree)"
 fi

@@ -103,13 +103,17 @@ gives that run's replies), `random_schedules`, `retries`, `duplicates`, `crash_p
 
 ## Artifact
 
-`sh frontend/fenrir.sh emit examples/service/accepted-job.fen` exits 3 at `bf5cb36` (a
-newly wired second validator does not know the durable schema yet). The artifact bytes are
-unaffected: [artifacts/accepted-job.json](artifacts/accepted-job.json) was emitted by the
-frontend of a sibling worktree and its SHA-256 is pinned in
+The handler is elaborated by `sh frontend/fenrir.sh emit examples/service/accepted-job.fen`,
+run from the repository root. An artifact's source map carries the file as named on the
+command line, so the name is repository-relative and the bytes are the same on every
+machine. [artifacts/accepted-job.json](artifacts/accepted-job.json) is a committed copy of
+that emit and its SHA-256 is pinned in
 [artifacts/accepted-job.sha256](artifacts/accepted-job.sha256). check.sh uses the
 frontend when it works and the copy otherwise, requires the pinned hash either way, and
-says which in the report (`artifact_source`).
+says which in the report (`artifact_source`). The copy first committed with this stage was
+emitted under an absolute worktree path while the frontend's second validator did not yet
+know the durable schema; it was re-emitted and re-pinned on 15 November 2026, and reports
+from before that name the earlier hash.
 
 ## Files
 
