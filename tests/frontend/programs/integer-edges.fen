@@ -1,0 +1,11 @@
+\\ The I64 minimum is a literal; negating it is a trap, as the contract says.
+\\
+\\ Expected:
+\\ > emit "minimum": -9223372036854775808
+\\ > emit "maximum": 9223372036854775807
+\\ > outcome: Trap Overflow
+
+(define main {I64 --> I64}
+  input -> (do (emit "minimum" -9223372036854775808)
+               (emit "maximum" (- (neg (+ -9223372036854775808 1)) input))
+               (neg -9223372036854775808)))

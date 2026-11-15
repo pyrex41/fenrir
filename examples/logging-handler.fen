@@ -1,0 +1,32 @@
+\\ A tail-resumptive handler: the clause's value is the result of the perform,
+\\ and the body carries on.
+\\
+\\ countdown performs Log.log and Config.limit and handles neither, so its
+\\ inferred effect set is {Config, Log}; nothing in its signature says so. main
+\\ handles both. The Log clause emits, which is how a handled effect becomes
+\\ visible outside the program; the Config clause answers with a constant.
+\\
+\\ Expected:
+\\ > emit "log": 3
+\\ > emit "log": 2
+\\ > emit "log": 1
+\\ > outcome: Ok 30
+
+(effect Log
+  (log I64 --> Unit))
+
+(effect Config
+  (limit Unit --> I64))
+
+(define countdown {I64 --> I64}
+  n -> (if (<= n 0)
+           (* 10 (perform Config limit unit))
+           (do (perform Log log n)
+               (countdown (- n 1)))))
+
+(define main {I64 --> I64}
+  input -> (handle Config
+             ((limit u) -> 3)
+             (handle Log
+               ((log x) -> (emit "log" x))
+               (countdown (perform Config limit unit)))))

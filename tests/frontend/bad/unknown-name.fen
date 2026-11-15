@@ -1,0 +1,2 @@
+\\ expect 2:40 unknown name inptu
+(define main {I64 --> I64} input -> (+ inptu 1))

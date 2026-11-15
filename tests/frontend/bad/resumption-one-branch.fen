@@ -1,0 +1,8 @@
+\\ expect 5:19 the branches of this if do not agree on resumption k: one uses it once, another not at all
+(effect Ask (ask I64 --> I64))
+(define main {I64 --> I64} input ->
+  (handle Ask
+    ((ask x k) -> (if (> x 0)
+                      (resume k x)
+                      0))
+    (perform Ask ask input)))

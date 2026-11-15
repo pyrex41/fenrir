@@ -1,0 +1,11 @@
+\\ Round trip: the hand fixture match-scrutinee-trap, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(datatype Opt
+  None
+  (Some I64))
+
+(define main {I64 --> I64}
+  input -> (+ 1 (match (Some (/ 1 0))
+                  (None -> 0)
+                  ((Some x) -> 0))))

@@ -1,0 +1,12 @@
+\\ Round trip: the hand fixture outer-effect-across-inner-handler, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(effect Ask (ask I64 --> I64))
+(effect Tell (tell I64 --> Unit))
+
+(define main {I64 --> I64}
+  input -> (handle Ask
+             ((ask x) -> 100)
+             (handle Tell
+               ((tell t) -> unit)
+               (+ (perform Ask ask 0) 1))))

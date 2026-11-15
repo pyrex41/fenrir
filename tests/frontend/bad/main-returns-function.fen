@@ -1,0 +1,2 @@
+\\ expect 2:1 the entry function main must return a serializable value
+(define main {I64 --> (I64 --> I64)} input -> (lambda (x : I64) x))

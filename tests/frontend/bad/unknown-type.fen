@@ -1,0 +1,2 @@
+\\ expect 2:23 unknown type Int
+(define main {I64 --> Int} input -> input)

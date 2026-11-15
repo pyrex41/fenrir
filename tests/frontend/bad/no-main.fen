@@ -1,0 +1,2 @@
+\\ expect 1:1 the program has no entry function
+(define start {I64 --> I64} input -> input)

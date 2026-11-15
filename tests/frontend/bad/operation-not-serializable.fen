@@ -1,0 +1,3 @@
+\\ expect 2:18 the argument type of Run.run must be serializable
+(effect Run (run (I64 --> I64) --> I64))
+(define main {I64 --> I64} input -> input)

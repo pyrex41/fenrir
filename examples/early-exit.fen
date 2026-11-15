@@ -1,0 +1,40 @@
+\\ discontinue: a clause that abandons the rest of the handled body.
+\\
+\\ first-over walks a list and performs Found.found on the first element above
+\\ the bound. The clause discontinues its resumption, so nothing after the
+\\ perform runs (the "unreached" emit never happens), and the clause's value, the
+\\ element, becomes the value of the handle. When nothing is found the body
+\\ finishes normally with -1. Each path through the clause uses k exactly once.
+\\
+\\ Expected:
+\\ > emit "visit": 4
+\\ > emit "visit": 8
+\\ > emit "visit": 15
+\\ > outcome: Ok (tuple 15 -1)
+
+(datatype IntList
+  Nil
+  (Cons I64 IntList))
+
+(effect Found
+  (found I64 --> Unit))
+
+(define first-over {(Tuple I64 IntList) --> I64}
+  bound list -> (match list
+                  (Nil -> -1)
+                  ((Cons head tail) ->
+                    (do (emit "visit" head)
+                        (if (> head bound)
+                            (do (perform Found found head)
+                                (emit "unreached" head)
+                                head)
+                            (first-over bound tail))))))
+
+(define search {(Tuple I64 IntList) --> I64}
+  bound list -> (handle Found
+                  ((found x k) -> (do (discontinue k) x))
+                  (first-over bound list)))
+
+(define main {I64 --> (Tuple I64 I64)}
+  input -> (tuple (search 10 (Cons 4 (Cons 8 (Cons 15 (Cons 16 Nil)))))
+                  (search 10 Nil)))

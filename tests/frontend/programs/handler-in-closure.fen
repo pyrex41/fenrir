@@ -1,0 +1,25 @@
+\\ Handlers and closures together: a handler inside a lambda, with a resumption
+\\ of its own, and a resumption used in the body of an inner handle (which is
+\\ allowed: only clauses and lambdas put a resumption out of reach).
+\\
+\\ Expected:
+\\ > emit "outer": 5
+\\ > emit "inner": 6
+\\ > outcome: Ok 113
+
+(effect Ask
+  (ask I64 --> I64))
+
+(effect Tell
+  (tell I64 --> Unit))
+
+(define main {I64 --> I64}
+  input -> (let run (lambda (n : I64)
+                      (handle Ask
+                        ((ask x k) -> (handle Tell
+                                        ((tell y) -> (emit "inner" y))
+                                        (do (emit "outer" x)
+                                            (perform Tell tell (+ x 1))
+                                            (+ (resume k (* x 2)) 100))))
+                        (+ (perform Ask ask n) 3)))
+             (run (+ input 5))))

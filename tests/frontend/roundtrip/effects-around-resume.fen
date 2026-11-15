@@ -1,0 +1,14 @@
+\\ Round trip: the hand fixture effects-around-resume, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(effect Ask (ask I64 --> I64))
+
+(define main {I64 --> I64}
+  input -> (handle Ask
+             ((ask x k) -> (let u1 (emit "before" x)
+                                r (resume k x)
+                                u2 (emit "after" r)
+                             r))
+             (let a (perform Ask ask 5)
+                  u3 (emit "body" a)
+               a)))

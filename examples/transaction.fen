@@ -1,0 +1,34 @@
+\\ An explicit resumption whose clause continues after the resume: the shape of
+\\ a transaction that commits after its body.
+\\
+\\ The clause for Tx.begin names its resumption k. It emits "begin", resumes the
+\\ body with unit, and when the body has finished (resume returns what the
+\\ handled body produced) emits "commit" with that value. The value of the
+\\ clause is the value of the whole handle. Nothing is stored here: the emits
+\\ only mark the order in which things happen.
+\\
+\\ Expected:
+\\ > emit "begin": unit
+\\ > emit "write": 20
+\\ > emit "write": 22
+\\ > emit "commit": 42
+\\ > outcome: Ok 42
+
+(effect Tx
+  (begin Unit --> Unit))
+
+(define write {I64 --> I64}
+  amount -> (do (emit "write" amount)
+                amount))
+
+(define transfer {I64 --> I64}
+  amount -> (do (perform Tx begin unit)
+                (+ (write amount) (write (+ amount 2)))))
+
+(define main {I64 --> I64}
+  input -> (handle Tx
+             ((begin u k) -> (do (emit "begin" u)
+                                 (let result (resume k unit)
+                                   (do (emit "commit" result)
+                                       result))))
+             (transfer (+ input 20))))

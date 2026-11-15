@@ -1,0 +1,11 @@
+\\ Round trip: the hand fixture structural-eq, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(datatype Opt
+  None
+  (Some I64))
+
+(define main {I64 --> I64}
+  input -> (if (= (tuple #x01 (Some 5)) (tuple #x01 (Some 5)))
+               (if (= (Some 1) None) 1 2)
+               3))

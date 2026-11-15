@@ -1,0 +1,38 @@
+\\ Everything that is sugar or a spelling choice, in one program.
+\\
+\\ Several let bindings with shadowing; do; _ as a binder that is not a name;
+\\ a constructor without fields written with and without parentheses; a call,
+\\ an application and a perform with several arguments (passed as a tuple); a
+\\ one-component tuple; a type annotation that gives a pure lambda a wider
+\\ effect set; string escapes; integer spellings.
+\\
+\\ Expected:
+\\ > emit "bytes": #x61225c0a
+\\ > emit "numbers": (tuple 7 0 -9223372036854775808)
+\\ > emit "single": (tuple (Pair None None))
+\\ > outcome: Ok 36
+
+(datatype Opt
+  None
+  (Some I64))
+
+(datatype Pair
+  (Pair Opt Opt))
+
+(effect Add
+  (add (Tuple I64 I64) --> I64))
+
+(define apply-to {(Tuple (I64 --> I64 ! Add) I64) --> I64}
+  f x -> (f x))
+
+(define main {I64 --> I64}
+  input -> (let x 1
+                x (+ x 1)
+                _ (emit "bytes" "a\"\\\n")
+                sum (lambda (pair : (Tuple I64 I64)) (+ (project pair 0) (project pair 1)))
+             (do (emit "numbers" (tuple 007 -0 -9223372036854775808))
+                 (emit "single" (tuple (Pair None (None))))
+                 (handle Add
+                   ((add pair) -> (sum pair))
+                   (+ (+ (perform Add add x 10) (sum 20 x))
+                      (apply-to (type (lambda (y : I64) (* y x)) (I64 --> I64 ! Add)) (+ input 1)))))))

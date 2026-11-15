@@ -1,0 +1,2 @@
+\\ expect 2:44 match needs a value of a datatype, but this has type I64
+(define main {I64 --> I64} input -> (match input (None -> 0)))

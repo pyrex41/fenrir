@@ -1,0 +1,14 @@
+\\ Round trip: the hand fixture tail-calls-under-handler, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(effect Ask (ask I64 --> I64))
+
+(define main {I64 --> I64}
+  input -> (handle Ask
+             ((ask x) -> 7)
+             (loop 5)))
+
+(define loop {I64 --> I64}
+  n -> (if (<= n 0)
+           (perform Ask ask 0)
+           (loop (- n 1))))

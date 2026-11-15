@@ -1,0 +1,2 @@
+\\ expect 2:44 = compares serializable values only
+(define main {I64 --> I64} input -> (if (= (lambda (x : I64) x) (lambda (x : I64) x)) 1 2))

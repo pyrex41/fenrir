@@ -1,0 +1,2 @@
+\\ expect 2:47 this expression has type I64, but Bool is expected (the type it is annotated with)
+(define main {I64 --> I64} input -> (if (type input Bool) 1 2))

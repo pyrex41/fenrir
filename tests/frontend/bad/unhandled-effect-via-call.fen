@@ -1,0 +1,6 @@
+\\ expect 6:8 effect Ask is not handled: it comes from the call to helper
+(effect Ask (ask I64 --> I64))
+(define helper {I64 --> I64} n -> (deeper n))
+(define deeper {I64 --> I64} n -> (perform Ask ask n))
+(define main {I64 --> I64} input ->
+  (+ 1 (helper input)))

@@ -1,0 +1,5 @@
+\\ expect 4:3 this match on Shape is not exhaustive: there is no arm for Square and Dot
+(datatype Shape (Circle I64) (Square I64) Dot)
+(define main {I64 --> I64} input ->
+  (match (Circle input)
+    ((Circle r) -> r)))

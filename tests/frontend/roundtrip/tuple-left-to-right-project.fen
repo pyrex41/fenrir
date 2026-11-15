@@ -1,0 +1,12 @@
+\\ Round trip: the hand fixture tuple-left-to-right-project, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(define main {I64 --> I64}
+  input -> (let t (tuple (left 2) (right 3) #x01)
+             (- (project t 1) (project t 0))))
+
+(define left {I64 --> I64}
+  p -> (let _ (emit "left" p) p))
+
+(define right {I64 --> I64}
+  p -> (let _ (emit "right" p) p))

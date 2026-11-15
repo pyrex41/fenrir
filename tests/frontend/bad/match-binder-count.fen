@@ -1,0 +1,6 @@
+\\ expect 6:5 constructor Some of Opt has 1 field, but this arm binds 2
+(datatype Opt None (Some I64))
+(define main {I64 --> I64} input ->
+  (match (Some input)
+    (None -> 0)
+    ((Some x y) -> x)))

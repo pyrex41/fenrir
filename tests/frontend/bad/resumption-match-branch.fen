@@ -1,0 +1,9 @@
+\\ expect 6:19 the branches of this match do not agree on resumption k
+(datatype Opt None (Some I64))
+(effect Ask (ask Opt --> I64))
+(define main {I64 --> I64} input ->
+  (handle Ask
+    ((ask x k) -> (match x
+                    (None -> (do (discontinue k) 0))
+                    ((Some n) -> n)))
+    (perform Ask ask (Some input))))

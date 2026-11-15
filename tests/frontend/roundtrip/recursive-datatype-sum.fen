@@ -1,0 +1,14 @@
+\\ Round trip: the hand fixture recursive-datatype-sum, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(datatype IntList
+  Nil
+  (Cons I64 IntList))
+
+(define main {I64 --> I64}
+  input -> (sum (Cons 1 (Cons 2 (Cons 3 Nil)))))
+
+(define sum {IntList --> I64}
+  p -> (match p
+         (Nil -> 0)
+         ((Cons h t) -> (+ h (sum t)))))

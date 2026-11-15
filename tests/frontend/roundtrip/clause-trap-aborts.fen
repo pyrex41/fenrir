@@ -1,0 +1,9 @@
+\\ Round trip: the hand fixture clause-trap-aborts, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(effect Ask (ask I64 --> I64))
+
+(define main {I64 --> I64}
+  input -> (handle Ask
+             ((ask x) -> (/ x 0))
+             (+ (perform Ask ask 1) 5)))

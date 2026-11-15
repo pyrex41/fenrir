@@ -1,0 +1,14 @@
+\\ Round trip: the hand fixture match-arm-tail-call, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(datatype IntList
+  Nil
+  (Cons I64 IntList))
+
+(define main {I64 --> I64}
+  input -> (count (tuple (Cons 5 (Cons 6 (Cons 7 (Cons 8 Nil)))) 0)))
+
+(define count {(Tuple IntList I64) --> I64}
+  p -> (match (project p 0)
+         ((Cons h t) -> (count (tuple t (+ (project p 1) 1))))
+         (Nil -> (project p 1))))

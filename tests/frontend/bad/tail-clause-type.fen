@@ -1,0 +1,6 @@
+\\ expect 5:18 the clause for Tell.tell has type I64, but Unit is expected (the result type of the operation
+(effect Tell (tell I64 --> Unit))
+(define main {I64 --> I64} input ->
+  (handle Tell
+    ((tell x) -> x)
+    (do (perform Tell tell input) input)))

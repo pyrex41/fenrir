@@ -1,0 +1,11 @@
+\\ Round trip: the hand fixture discontinue-abandons-the-body, in surface syntax.
+\\ frontend/test.sh compares this program's run with the run of the fixture's artifact.
+
+(effect Ask (ask I64 --> I64))
+
+(define main {I64 --> I64}
+  input -> (handle Ask
+             ((ask x k) -> (let u (discontinue k) 7))
+             (let a (perform Ask ask 1)
+                  v (emit "never" a)
+               a)))

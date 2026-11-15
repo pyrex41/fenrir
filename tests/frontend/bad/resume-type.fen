@@ -1,0 +1,6 @@
+\\ expect 5:29 the value resumed with has type Bool, but I64 is expected (the result type of the operation)
+(effect Ask (ask I64 --> I64))
+(define main {I64 --> I64} input ->
+  (handle Ask
+    ((ask x k) -> (resume k true))
+    (perform Ask ask input)))

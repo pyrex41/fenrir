@@ -1,0 +1,4 @@
+\\ expect 4:44 double is a function, not a value
+(define double {I64 --> I64} n -> (* n 2))
+(define twice {(Tuple (I64 --> I64) I64) --> I64} f x -> (f (f x)))
+(define main {I64 --> I64} input -> (twice double input))

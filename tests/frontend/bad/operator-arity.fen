@@ -1,0 +1,2 @@
+\\ expect 2:37 + takes 2 operands, but 3 are given
+(define main {I64 --> I64} input -> (+ input 1 2))

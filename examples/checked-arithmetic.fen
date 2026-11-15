@@ -1,0 +1,22 @@
+\\ Checked I64 arithmetic: a result outside I64 is a trap, never a wrapped value.
+\\
+\\ squares emits its argument and calls itself on the square. From 3 the values
+\\ are 3, 9, 81, 6561, 43046721 and 1853020188851841; the next square does not
+\\ fit in I64, so the multiplication traps and the program ends there. The call
+\\ is in tail position, so the recursion does not grow the continuation.
+\\
+\\ Expected:
+\\ > emit "square": 3
+\\ > emit "square": 9
+\\ > emit "square": 81
+\\ > emit "square": 6561
+\\ > emit "square": 43046721
+\\ > emit "square": 1853020188851841
+\\ > outcome: Trap Overflow
+
+(define squares {I64 --> I64}
+  n -> (do (emit "square" n)
+           (squares (* n n))))
+
+(define main {I64 --> I64}
+  input -> (squares (+ input 3)))
