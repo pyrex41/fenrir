@@ -18,9 +18,12 @@
     shen-jit-src = { url = "git+https://github.com/tizoc/shen-jit?rev=2f4b48bf9aabc2b93379d15f1818e4209137eb60"; flake = false; };
     # Solo5 v0.9.3 at the commit the Solo5 lane pins (tools/solo5/freerun.mjs SOLO5_COMMIT).
     solo5-src = { url = "git+https://github.com/Solo5/solo5?rev=38e0c348be231a2a3c59510a5caabf562792679f"; flake = false; };
+    # Rocq standard library V9.2.0 (the release nixpkgs pairs with Rocq 9.3.0), fetched by
+    # git: the AArch64 lane's proofs import ZArith, List and Lia from it.
+    rocq-stdlib-src = { url = "git+https://github.com/rocq-prover/stdlib?ref=refs/tags/V9.2.0&rev=8dd155bc10529814202f8f4c643e5ae6c2c88fa6"; flake = false; };
   };
 
-  outputs = { self, nixpkgs, shen-cl-src, yggdrasil-src, shen-jit-src, solo5-src }:
+  outputs = { self, nixpkgs, shen-cl-src, yggdrasil-src, shen-jit-src, solo5-src, rocq-stdlib-src }:
     let
       system = "x86_64-linux"; # shen-scheme v0.26 ships a Linux x86-64 binary only
       pkgs = nixpkgs.legacyPackages.${system};
@@ -180,12 +183,30 @@
         echo "shen-cl:   ${shen-cl}"
         echo "yggdrasil: ${yggdrasil}/bin/yggdrasil"
       '';
+      # AArch64 verification lane (verification/aarch64): Rocq 9.3.0, following Búri's
+      # pin (amendment §3), with its standard library, AArch64 GNU binutils and
+      # qemu-user, all from the pinned nixpkgs. One buildEnv so the lane's check.sh
+      # puts a single store path on PATH and records it.
+      rocq = pkgs.rocqPackages_9_3;
+      # nixpkgs fetches this source as a GitHub archive; the same tag by git instead.
+      rocq-stdlib = rocq.stdlib.overrideAttrs (_: { src = rocq-stdlib-src; });
+      aarch64-binutils = pkgs.pkgsCross.aarch64-multiplatform.buildPackages.binutils;
+      aarch64-verification = pkgs.buildEnv {
+        name = "fenrir-aarch64-verification-tools";
+        paths = [ rocq.rocq-core rocq-stdlib aarch64-binutils pkgs.qemu-user pkgs.nodejs_22 ];
+        pathsToLink = [ "/bin" "/lib" "/share" ];
+      };
     in {
-      packages.${system} = { inherit shen-scheme shen-cl shen-jit solo5 yggdrasil link-toolchain; default = link-toolchain; };
+      packages.${system} = { inherit shen-scheme shen-cl shen-jit solo5 yggdrasil link-toolchain aarch64-verification; default = link-toolchain; };
       apps.${system}.default = { type = "app"; program = "${link-toolchain}/bin/fenrir-link-toolchain"; };
       devShells.${system}.default = pkgs.mkShell {
         packages = [ pkgs.nodejs_22 pkgs.python3 pkgs.sbcl pkgs.go_1_27 shen-scheme yggdrasil ];
         FENRIR_SHEN_CL = "${shen-cl}";
+      };
+      devShells.${system}.aarch64-verification = pkgs.mkShell {
+        packages = [ aarch64-verification ];
+        # rocq resolves its standard library from here (the buildEnv's binaries are links).
+        ROCQPATH = "${aarch64-verification}/lib/coq/9.3/user-contrib";
       };
     };
 }

@@ -128,6 +128,17 @@ Smaller points:
 - The README change in this PR touches the status section that #5 also
   rewrites; they merge cleanly in the order above.
 
+**Follow-up status (15 November 2026, after merging this PR into the
+reconciliation branch).** (1) The lane README now states that its source
+semantics is local to the lane and agrees with the Shen model on tested cases
+only, and `harness/aarch64-differential.shen` is that test (3,280 cases agree,
+negative control caught). (2) The projection stays listed as open (ARM-02).
+(3) ARM-03 in `PLAN.md` continues Búri's ARM foundation. The two-register
+convention is pinned as `fenrir-aarch64-result-abi/1`
+(`verification/aarch64/ABI.md`); the lane runs on Rocq 9.3.0 and flake-pinned
+tools, and its own check was reproduced with them
+(`verification/aarch64/VALIDATION.md`).
+
 ## PR #7 — P2 task packet for TC0-B handlers
 
 The packet is careful about process: fixtures hand-derived before either

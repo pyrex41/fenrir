@@ -1,0 +1,233 @@
+{
+  "node": "v24.22.1",
+  "sourceInventory": {
+    "verification/aarch64/Core.v": "902886728e7eb1f48918d4880ccb9510fe30af257fac814af21f70eed97a30ff",
+    "tools/aarch64/compile.mjs": "88c57a9447803e22625fed95fd1d5a70b091a8523b38d25db03eeeb2e1463b45",
+    "tools/aarch64/check.mjs": "3b2ab60a05c8b158a13e13fe306def71d28c1e73b5becd225d50f37bc8c13827",
+    "tools/aarch64/fixtures.mjs": "876fb5a38da0b1bad1b27ec3cfc4c9ec66fc2878c8721e10cc09496cc3691cda",
+    "tools/tc0/canonical.mjs": "b6dd007121efa752f52bd89042e491c2dc0ba40751c7c2b195bc1aa5342b73e2",
+    "tools/tc0/pure-call-artifact.mjs": "678179041261748b2d0ad8f9357a184b21ee01e3894a56c67853f030953f9825",
+    "runtime/tc0/pure-call-machine.mjs": "0108c9ddd11079be70c19a095dd039538181d2d38b8761ef7f8c8dc0d5673cc4"
+  },
+  "profile": "fenrir-aarch64-checked-unary/1",
+  "status": "development-pass",
+  "versions": {
+    "coqc": "The Coq Proof Assistant, version 8.18.0",
+    "coqchk": "The Coq Proof Checker, version 8.18.0",
+    "aarch64-linux-gnu-as": "GNU assembler (GNU Binutils for Ubuntu) 2.42",
+    "aarch64-linux-gnu-ld": "GNU ld (GNU Binutils for Ubuntu) 2.42",
+    "aarch64-linux-gnu-objcopy": "GNU objcopy (GNU Binutils for Ubuntu) 2.42",
+    "qemu-aarch64": "qemu-aarch64 version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.18)"
+  },
+  "nativeCases": 564,
+  "proofInstances": 12,
+  "rejectedMutations": [
+    "immediate",
+    "branch-condition",
+    "success-status"
+  ],
+  "core_sha256": "902886728e7eb1f48918d4880ccb9510fe30af257fac814af21f70eed97a30ff",
+  "receipts": [
+    {
+      "profile": "fenrir-aarch64-checked-unary/1",
+      "artifact_sha256": "7e9fb59a575b40699512cfca416b8d38798fdad9002f192bcd471f9e173782b9",
+      "binary_sha256": "67b9e382638cc06044841d8137ffa883bc2ae5288f3b5318348887f39be80183",
+      "binary_bytes": 8,
+      "operations": 0,
+      "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+      "open_obligations": [
+        "json-projection",
+        "authoritative-isa-refinement",
+        "loader-and-call-abi",
+        "native-runtime",
+        "process-lifecycle"
+      ],
+      "module": "Case0"
+    },
+    {
+      "profile": "fenrir-aarch64-checked-unary/1",
+      "artifact_sha256": "45f00912fe7f31d74e5d34e0489c63c08a290047b9d8a2a16fd0e377f7ce534c",
+      "binary_sha256": "1b7f35e374727fe40f61f1dc5e1d8f413e9433bcde64a7fdb970726533077e08",
+      "binary_bytes": 24,
+      "operations": 1,
+      "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+      "open_obligations": [
+        "json-projection",
+        "authoritative-isa-refinement",
+        "loader-and-call-abi",
+        "native-runtime",
+        "process-lifecycle"
+      ],
+      "module": "Case1"
+    },
+    {
+      "profile": "fenrir-aarch64-checked-unary/1",
+      "artifact_sha256": "6f4f5dd58bbdfcecce836995090c720bd8249b2d57ca006d5d7d4c3b414d2fc5",
+      "binary_sha256": "fa84c35de75546a50bc8f1634c624c0ba1d1ea03a6341eb889f351cfbad82ffb",
+      "binary_bytes": 24,
+      "operations": 1,
+      "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+      "open_obligations": [
+        "json-projection",
+        "authoritative-isa-refinement",
+        "loader-and-call-abi",
+        "native-runtime",
+        "process-lifecycle"
+      ],
+      "module": "Case2"
+    },
+    {
+      "profile": "fenrir-aarch64-checked-unary/1",
+      "artifact_sha256": "a7abe832371c6eafd869f48103ec6ca028630558633511483c27399b5df8d816",
+      "binary_sha256": "930ea423d8885b9eaeb0a85f761f3507a623179cbd74e68624668651966487f2",
+      "binary_bytes": 24,
+      "operations": 1,
+      "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+      "open_obligations": [
+        "json-projection",
+        "authoritative-isa-refinement",
+        "loader-and-call-abi",
+        "native-runtime",
+        "process-lifecycle"
+      ],
+      "module": "Case3"
+    },
+    {
+      "profile": "fenrir-aarch64-checked-unary/1",
+      "artifact_sha256": "ceace3674489c53014b7c4fcb7c128916ab5807bbaebd9e715c02de62487e971",
+      "binary_sha256": "3c578c06c4975a55541303d2a3dc0b5fa625a12abbf209a6688fda85091c1802",
+      "binary_bytes": 24,
+      "operations": 1,
+      "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+      "open_obligations": [
+        "json-projection",
+        "authoritative-isa-refinement",
+        "loader-and-call-abi",
+        "native-runtime",
+        "process-lifecycle"
+      ],
+      "module": "Case4"
+    },
+    {
+      "profile": "fenrir-aarch64-checked-unary/1",
+      "artifact_sha256": "db2a2500926fb4704798a6a062e311a016fcd14c041e859e31fe17f443c9162f",
+      "binary_sha256": "89947d4e34e8d604dfc3904e8a95dc320ad03ccfbd244b0e1236b739ec962a57",
+      "binary_bytes": 24,
+      "operations": 1,
+      "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+      "open_obligations": [
+        "json-projection",
+        "authoritative-isa-refinement",
+        "loader-and-call-abi",
+        "native-runtime",
+        "process-lifecycle"
+      ],
+      "module": "Case5"
+    },
+    {
+      "profile": "fenrir-aarch64-checked-unary/1",
+      "artifact_sha256": "87e41b41e8e94cf111f61385551f28af64a2c7ddc2d9b8cbffc67eb29d8c9395",
+      "binary_sha256": "6b60b0c77dd97fa5d4c78f1174e67474c54426c888815c5ae571451150b17115",
+      "binary_bytes": 24,
+      "operations": 1,
+      "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+      "open_obligations": [
+        "json-projection",
+        "authoritative-isa-refinement",
+        "loader-and-call-abi",
+        "native-runtime",
+        "process-lifecycle"
+      ],
+      "module": "Case6"
+    },
+    {
+      "profile": "fenrir-aarch64-checked-unary/1",
+      "artifact_sha256": "b8b0cb7279cbf89ba15011005e32ac7844eeba8bc6e8339ae625305ede0079c0",
+      "binary_sha256": "b210d1980e235cd2c5cf199bb723a8d079c04c71283ccc83614a6fcfddf1a97c",
+      "binary_bytes": 40,
+      "operations": 2,
+      "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+      "open_obligations": [
+        "json-projection",
+        "authoritative-isa-refinement",
+        "loader-and-call-abi",
+        "native-runtime",
+        "process-lifecycle"
+      ],
+      "module": "Case7"
+    },
+    {
+      "profile": "fenrir-aarch64-checked-unary/1",
+      "artifact_sha256": "7e2baae2f7a8bc807213d23682f4501801fa602dc5a7aa72b3d3427258ec4d9a",
+      "binary_sha256": "d5849d51ca789b3f1921a70cef84e1b2f7047a475d98c452c074ca80955b4a19",
+      "binary_bytes": 40,
+      "operations": 2,
+      "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+      "open_obligations": [
+        "json-projection",
+        "authoritative-isa-refinement",
+        "loader-and-call-abi",
+        "native-runtime",
+        "process-lifecycle"
+      ],
+      "module": "Case8"
+    },
+    {
+      "profile": "fenrir-aarch64-checked-unary/1",
+      "artifact_sha256": "62b95450b4916b101972f49bba902e20389e5f39811248a9b53a02b07bb7eb0a",
+      "binary_sha256": "c4850f885a28fa0968ffd6a5e0e980bb7a1bd9984a7c4846b682c35b43e24a21",
+      "binary_bytes": 40,
+      "operations": 2,
+      "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+      "open_obligations": [
+        "json-projection",
+        "authoritative-isa-refinement",
+        "loader-and-call-abi",
+        "native-runtime",
+        "process-lifecycle"
+      ],
+      "module": "Case9"
+    },
+    {
+      "profile": "fenrir-aarch64-checked-unary/1",
+      "artifact_sha256": "f9f45bc9ae30e0731e1bd73a956a80a7dda9fd522bdf236e9132ccda5c82eb18",
+      "binary_sha256": "ac49cd9fd897af80718d99d2ed8ff867cc9f1518dd8267772e20de0508bc587e",
+      "binary_bytes": 56,
+      "operations": 3,
+      "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+      "open_obligations": [
+        "json-projection",
+        "authoritative-isa-refinement",
+        "loader-and-call-abi",
+        "native-runtime",
+        "process-lifecycle"
+      ],
+      "module": "Case10"
+    },
+    {
+      "profile": "fenrir-aarch64-checked-unary/1",
+      "artifact_sha256": "bb6a8c20338e2f6cf048fb02c19694208b3e2a7c7dbf420ecc6845c8e8f3397d",
+      "binary_sha256": "a5a6e9fdc10b200934b8cd9f5650e4c70c584c5ff74b062e90e5a1b5388412e8",
+      "binary_bytes": 200,
+      "operations": 12,
+      "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+      "open_obligations": [
+        "json-projection",
+        "authoritative-isa-refinement",
+        "loader-and-call-abi",
+        "native-runtime",
+        "process-lifecycle"
+      ],
+      "module": "Case11"
+    }
+  ],
+  "claims": {
+    "universal_handwritten_model_proof": true,
+    "exact_byte_identity": true,
+    "coqchk_replay": true,
+    "authoritative_ARM_refinement": false,
+    "full_TC0": false,
+    "whole_process": false,
+    "Shen_oracle_run": false
+  }
+}

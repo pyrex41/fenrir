@@ -1,0 +1,23 @@
+name: AArch64 verification development lane
+on:
+  push:
+    paths: ['verification/aarch64/**', 'tools/aarch64/**', 'tests/aarch64/**', 'harness/aarch64-*.shen', 'harness/run-aarch64-*.sh', 'harness/common.shen', 'models/tc0/**', 'tools/tc0/**', 'runtime/tc0/**', 'flake.nix', 'flake.lock', '.github/workflows/aarch64-verification.yml']
+  pull_request:
+    paths: ['verification/aarch64/**', 'tools/aarch64/**', 'tests/aarch64/**', 'harness/aarch64-*.shen', 'harness/run-aarch64-*.sh', 'harness/common.shen', 'models/tc0/**', 'tools/tc0/**', 'runtime/tc0/**', 'flake.nix', 'flake.lock', '.github/workflows/aarch64-verification.yml']
+permissions:
+  contents: read
+jobs:
+  proof-and-native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      # Every tool comes from the flake (Rocq 9.3.0, binutils 2.46, qemu-user 11.1.1,
+      # Node 22, Shen/JIT 0.7); nothing is installed with apt.
+      - uses: cachix/install-nix-action@v27
+      - run: sh verification/aarch64/check.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: aarch64-verification-evidence
+          path: build/
