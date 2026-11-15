@@ -16,9 +16,9 @@ test('the service manifest is proposed, reports no authority, and every row is r
   assert.ok(existsSync(manifest.evaluator)&&existsSync('harness/run-service-gate.sh'));
   const ledger=json(manifest.ledger).rows.map(r=>r.id);
   assert.deepEqual(manifest.rows.map(r=>r.id),['source-identity','toolchain-pinned','service-unit-tests','a1-exploration','a1-model-vs-js-differential',
-    'a2-refinement','a2-js-agreement','a2-solo5-agreement','a2-handler-mutants','retained-counterexamples-replay']);
+    'a2-refinement','a2-js-agreement','a2-solo5-agreement','a2-handler-mutants','retained-counterexamples-replay','a3-host-quick']);
   for(const r of manifest.rows) {
-    assert.equal(r.required,true,r.id);
+    assert.equal(r.required,r.id!=='a3-host-quick',r.id);
     assert.ok(r.ledger.length&&r.ledger.every(id=>ledger.includes(id)),r.id+' names ledger rows that exist');
     assert.ok(evaluator.includes(`"${r.check}" Memo ->`),`the evaluator knows check ${r.check}`);
   }
@@ -82,4 +82,29 @@ test('a truncated, absent or disagreeing exploration cannot be a pass in the eva
   assert.ok(/rejected_statically/.test(slice('sg.a2-mutants')));
   assert.ok(/reproduced/.test(slice('sg.replay-all'))&&/no replay report/.test(slice('sg.retained-replay')));
   assert.ok(/fh\.registered-as "service-qualification"/.test(evaluator));
+});
+
+test('the optional A3 row pins what host/service reports, accepts only the documented sync_off miss, and cites a ledger row with its gaps', () => {
+  const slice=name=>{const at=evaluator.indexOf(`(define ${name}\n`);return evaluator.slice(at,evaluator.indexOf('\n(define ',at+1));};
+  const check=readFileSync('host/service/check.sh','utf8');
+  const mutants=check.match(/mutants => \[([^\]]*)\]/)[1].split(',').map(x=>x.trim());
+  assert.deepEqual(shenList('sg.a3-mutants'),mutants);
+  assert.equal(readdirSync('tests/host/histories').filter(f=>f.endsWith('.json')).length,Number(shenString('sg.a3-negative-tests')));
+  const row=manifest.rows.find(r=>r.id==='a3-host-quick');
+  assert.equal(row.required,false);
+  assert.ok(row.acceptance.includes('check.sh quick')&&row.acceptance.includes('sync_off')&&row.acceptance.includes('18 negative')&&row.acceptance.includes(`${shenList('sg.a3-campaigns').length} campaigns`));
+  assert.deepEqual(Object.keys(manifest.claims).filter(c=>manifest.claims[c].includes('a3-host-quick')),[]);
+  const ok=slice('sg.a3-mutant-ok?');
+  assert.ok(/"sync_off"/.test(ok)&&/not_detectable_here/.test(ok)&&/"equivalent-control"|"equivalent_control"/.test(ok));
+  const host=slice('sg.a3-host-quick');
+  assert.ok(/"BLOCKED"/.test(host)&&/"UNKNOWN"/.test(host)&&/did not report/.test(host)&&/sg\.a3-passes\?/.test(host)&&/fenrir-a3-tools/.test(host));
+  const passes=slice('sg.a3-passes?');
+  assert.ok(/development-pass/.test(passes)&&/histories_rejected|sg\.a3-campaigns-clean\?/.test(passes)&&/flagged/.test(passes));
+  assert.ok(/histories_rejected/.test(slice('sg.a3-campaign-clean?'))&&/histories_indeterminate/.test(slice('sg.a3-campaign-clean?'))&&/audits_clean/.test(slice('sg.a3-campaign-clean?')));
+  const led=json(manifest.ledger).rows.find(r=>r.id==='SERVICE-A3-HOST');
+  assert.equal(led.status,'DEVELOPMENT-EVIDENCE');
+  for(const p of led.evidence)assert.ok(existsSync(p),p);
+  assert.ok(led.gaps.some(g=>/sync_off/.test(g)&&/fsync|power/.test(g))&&led.gaps.some(g=>/SQLite/.test(g)&&/OTP/.test(g))&&led.gaps.some(g=>/one request per tender boot/i.test(g))&&led.gaps.some(g=>/CONTRACT\.md/.test(g)));
+  assert.ok(/a3-host-quick/.test(manifest.not_covered)&&/sync_off/.test(manifest.not_covered));
+  assert.ok(manifest.rows.findLastIndex(r=>r.required)<manifest.rows.findIndex(r=>!r.required));
 });

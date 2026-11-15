@@ -371,6 +371,100 @@
                         (fh.row "FAIL" ["A retained counterexample is not reproduced: the named check no longer first fails at the recorded step"]
                                 [["not_reproduced" (json.stringify (append (hd A1) (hd A2)) [])]] Memo))))))))
 
+\\ ---------- optional row: stage A3, the host (OTP, SQLite, Solo5) ----------
+
+\\ The campaigns and host mutants the A3 report must carry (host/service/check.sh), and the
+\\ number of the history checker's own negative tests (tests/host/histories).
+(define sg.a3-campaigns
+  -> ["a2_runs" "busy" "crash_points" "duplicates" "hand_traces" "lost_ack" "random_schedules" "retries" "sqlite_kills" "two_workers"])
+(define sg.a3-mutants
+  -> ["volatile_mailbox" "respond_before_commit" "two_transactions" "busy_as_success" "no_dedup" "no_transaction" "sync_off" "equivalent_control"])
+(define sg.a3-negative-tests -> "18")
+
+(define sg.a3-campaign-clean?
+  C -> (let N (sg.show (fh.member "scenarios" C))
+         (and (sg.positive? N)
+              (= (sg.show (fh.member "histories_accepted" C)) N)
+              (= (sg.show (fh.member "histories_rejected" C)) "0")
+              (= (sg.show (fh.member "histories_indeterminate" C)) "0")
+              (= (sg.show (fh.member "audits_clean" C)) N)
+              (= (sg.show (fh.member "scenario_checks_ok" C)) N))))
+
+(define sg.a3-campaigns-clean?
+  [] -> true
+  [[Name C] | Rest] -> (and (sg.a3-campaign-clean? C) (sg.a3-campaigns-clean? Rest)))
+
+(define sg.a3-campaign-names
+  [] -> []
+  [[Name C] | Rest] -> [Name | (sg.a3-campaign-names Rest)])
+
+\\ Every host mutant but the documented sync_off is caught by the history checker, the scenario
+\\ checks or the SQLite audit; sync_off is documented as undetectable here (kill -9 keeps the page
+\\ cache) and is accepted only as that; the equivalent control is unflagged.
+(define sg.a3-mutant-ok?
+  M -> (let Name (fh.member "mutant" M)
+            Caught (or (cons? (fh.member "caught_by_history_checker" M)) (cons? (fh.member "caught_by_scenario_checks" M))
+                       (cons? (fh.member "caught_by_sqlite_audit" M)))
+         (and (= (fh.member "as_expected" M) true)
+              (if (= Name "sync_off")
+                  (and (= (fh.member "expected" M) "not_detectable_here") (not Caught))
+                  (if (= Name "equivalent_control")
+                      (and (= (fh.member "expected" M) "not_flagged") (= (sg.show (fh.member "flagged_scenarios" M)) "0") (not Caught))
+                      (and (= (fh.member "expected" M) "caught") Caught))))))
+
+(define sg.a3-negative-ok?
+  T -> (= (fh.member "as_expected" T) true))
+
+(define sg.a3-passes?
+  Report ->
+    (let Campaigns (tl (fh.member "campaigns" Report))
+         Mutants (fh.member "host_mutants" Report)
+         Negatives (fh.member "history_checker_negative_tests" Report)
+      (and (= (fh.member "status" Report) "development-pass")
+           (= (sg.show (fh.member "failed" (fh.member "unit_tests" Report))) "0")
+           (sg.positive? (fh.member "passed" (fh.member "unit_tests" Report)))
+           (sg.same-set? (sg.a3-campaign-names Campaigns) (sg.a3-campaigns))
+           (sg.a3-campaigns-clean? Campaigns)
+           (empty? (fh.member "flagged" (fh.member "normal_stack" Report)))
+           (sg.same-set? (sg.names Mutants "mutant") (sg.a3-mutants))
+           (sg.all? (/. M (sg.a3-mutant-ok? M)) Mutants)
+           (= (sg.show (length Negatives)) (sg.a3-negative-tests))
+           (sg.all? (/. T (sg.a3-negative-ok? T)) Negatives))))
+
+\\ host/service/check.sh quick (about 2 to 5 minutes; it builds through nix from the flake's
+\\ fenrir-a3-tools). The A3 tools output unavailable, no Solo5 (the script says BLOCKED) or Shen/JIT
+\\ not startable: BLOCKED. A time limit or no report: UNKNOWN. A report that does not meet every
+\\ condition above: FAIL.
+(define sg.a3-host-quick
+  Memo ->
+    (let Tools (fh.exec "nix" ["build" "--no-link" "--print-out-paths" ".#fenrir-a3-tools"] 1800)
+      (if (or (element? (hd Tools) [126 127]) (and (not (= (hd Tools) 0)) (not (= (hd Tools) -1))))
+          (fh.row "BLOCKED" ["The A3 tools (nix build .#fenrir-a3-tools: Erlang/OTP, SQLite, gcc, node) are unavailable"] [] Memo)
+      (if (= (hd Tools) -1)
+          (fh.row "UNKNOWN" ["The A3 tools build did not complete within its time limit"] [] Memo)
+          (let R (fh.exec "sh" [(cn (value fh.*root*) "host/service/check.sh") "quick"] 1800)
+               Report (fh.last-report (hd (tl R)))
+            (if (= (hd R) -1)
+                (fh.row "UNKNOWN" ["The A3 check did not complete within its time limit"] [] Memo)
+                (if (and (cons? Report) (sg.a3-blocked? (fh.member "reason" Report)))
+                    (fh.row "BLOCKED" [(fh.member "reason" Report)] [] Memo)
+                    (if (= Report [])
+                        (fh.row "UNKNOWN" ["The A3 check did not report"] [] Memo)
+                        (if (sg.a3-passes? Report)
+                            (fh.row "PASS" [] [["unit_tests_passed" (sg.show (fh.member "passed" (fh.member "unit_tests" Report)))]
+                                               ["histories_accepted" (sg.show (fh.member "histories_accepted" (fh.member "normal_stack" Report)))]
+                                               ["crashes_injected" (sg.show (fh.member "crashes_injected" (fh.member "normal_stack" Report)))]
+                                               ["host_mutants" (sg.show (length (fh.member "host_mutants" Report)))]
+                                               ["sync_off" "documented: not detectable by this campaign"]] Memo)
+                            (fh.row "FAIL" ["A3: a history was rejected or indeterminate, an audit was not clean, a host mutant other than the documented sync_off went uncaught, the equivalent control was flagged, a negative test of the history checker was not as expected, or a unit test failed"]
+                                    [["status" (sg.show (fh.member "status" Report))]
+                                     ["reason" (sg.show (fh.member "reason" Report))]
+                                     ["unit_tests" (json.stringify (fh.member "unit_tests" Report) [])]
+                                     ["flagged" (json.stringify (fh.member "flagged" (fh.member "normal_stack" Report)) [])]] Memo))))))))))
+
+(define sg.a3-blocked?
+  Reason -> (and (string? Reason) (fh.starts? "BLOCKED" Reason)))
+
 (define fh.check
   "source-identity" Memo -> (fh.source-identity Memo)
   "toolchain-pinned" Memo -> (fh.toolchain-pinned Memo)
@@ -382,6 +476,7 @@
   "service-a2-solo5" Memo -> (sg.a2-solo5 Memo)
   "service-a2-mutants" Memo -> (sg.a2-mutants Memo)
   "service-retained-replay" Memo -> (sg.retained-replay Memo)
+  "service-a3-host-quick" Memo -> (sg.a3-host-quick Memo)
   Name Memo -> (fh.row "UNKNOWN" [(cn "The evaluator has no check named " Name)] [] Memo))
 
 \\ Registered: the manifest is owner-accepted and the workflow has a service-qualification

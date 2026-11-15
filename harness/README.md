@@ -172,7 +172,7 @@ sh harness/run-tc1-exhaustive.sh        # grammar H up to 7 nodes, ~30 s
 sh harness/run-tc1-generated.sh         # generated family G, ~11 s
 sh harness/run-tc1-reduction.sh DEFECT  # one discovery-reduction-replay campaign, 8-25 s
 sh harness/run-tc1-strict-replay.sh     # ~9 s
-sh harness/run-tc1-gate.sh              # the proposed TC1 gate, about 15 min (15 min 21 s measured; runs the TC0-A gate and the seven optional rows too)
+sh harness/run-tc1-gate.sh              # the proposed TC1 gate, about 15 min (15 min 21 s measured; runs the TC0-A gate and the nine optional rows too)
 ```
 
 | Program | What it checks | Measured |
@@ -197,7 +197,7 @@ The proposed TC1 gate ([tc1-gate.shen](tc1-gate.shen), manifest
 `guest-exhaustive-small` are BLOCKED where Solo5 is not built, so the verdict
 there is BLOCKED. Authority UNREGISTERED, qualification UNKNOWN.
 
-Seven optional rows (`required: false`; no claim and no required row relies on
+Nine optional rows (`required: false`; no claim and no required row relies on
 them, so the verdict is that of the 21 required rows) run after the required
 ones. Each reads its harness program's own report, and none can pass without
 that report: `task-hand-fixtures` (`tc1-tasks.shen`: PASS on `development-pass`,
@@ -237,6 +237,15 @@ schema check is gone (FAIL, 24,153 verdicts differ), and for typing the effect-s
 check removed from the JavaScript validator (FAIL), a derivation budget of 50 (UNKNOWN)
 and a 5 s limit (UNKNOWN). The typing differential does not notice the removed input
 schema check: its families do not exercise it.
+
+Two more optional rows cover tasks through the stack, ledger row `TC1-C-TASKS`:
+`task-solo5-guest` (`solo5-tasks.shen` over control protocol v3, about 45 s: PASS on
+`development-pass` with no failure and no undetected defect, FAIL otherwise, BLOCKED
+without Solo5 / Shen/JIT or when the guest build exits nonzero, UNKNOWN on a timeout or no
+report) and `task-loop-closure` (`tc1-task-loop.shen`, about 135 s under a 600 s limit:
+PASS needs `development-pass`, coverage status `complete`, the catalog pin holding, the
+run's retained failures matching the committed `fixtures/tc1/task-retained-failures.json`
+and every retained tape as expected; FAIL otherwise; UNKNOWN on a timeout or no report).
 
 The accepted-job contract (A1) and its Fenrir handler (A2) are not part of slice TC1
 and are not rows of this gate; they have their own proposed gate, below.
@@ -476,6 +485,15 @@ rejected statically) and `retained-counterexamples-replay` (22 A1 and 13 A2 file
 a fresh process). Fields the rows rely on are those the programs report; nothing was
 added to them. Bounded exploration at the stated scope, development grade; the
 Shen-to-Rocq correspondence is by reading (ledger row `SERVICE-ACCEPTED-JOB`).
+
+One optional row, `a3-host-quick` (ledger row `SERVICE-A3-HOST`), runs stage A3,
+`sh host/service/check.sh quick` (Erlang/OTP and SQLite from `.#fenrir-a3-tools`, about
+2 to 5 min): PASS only on `development-pass` with all 10 campaigns' histories accepted
+(none rejected or indeterminate, audits clean), every host mutant but the documented
+`sync_off` caught, `sync_off` reported as not detectable by this campaign (power loss is
+not simulated), the equivalent control unflagged and the history checker's 18 negative
+tests as expected; BLOCKED without the A3 tools or Solo5; UNKNOWN on a timeout or no
+report; FAIL otherwise.
 
 ## Service example A4: a versioned upgrade that preserves pending work
 

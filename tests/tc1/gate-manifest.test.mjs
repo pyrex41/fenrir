@@ -89,7 +89,9 @@ test('the optional C1 and Solo5 control rows are optional, name their ledger row
     ['durable-hand-fixtures','tc1-durable',['TC1-D-DURABLE']],
     ['durable-guest','solo5-durable',['TC1-D-DURABLE']],
     ['durable-validator-differential','validator-differential',['TC1-D-DURABLE']],
-    ['typing-differential','typing-differential',['TC1-TYPING']]]);
+    ['typing-differential','typing-differential',['TC1-TYPING']],
+    ['task-solo5-guest','solo5-tasks',['TC1-C-TASKS']],
+    ['task-loop-closure','tc1-task-loop',['TC1-C-TASKS']]]);
   assert.deepEqual(Object.keys(manifest.claims).filter(c=>manifest.claims[c].some(id=>optional.some(r=>r.id===id))),[]);
   // The service contract model is not TC1: its exploration is not a row of this gate.
   assert.ok(!manifest.rows.some(r=>/service/.test(r.id)||/service/.test(r.check)||/service/.test(r.acceptance)));
@@ -163,4 +165,22 @@ test('the durable guest, validator and typing rows can only pass on the harness\
   assert.ok(/"UNKNOWN"[^\n]*ran out of budget/.test(typing)&&/"FAIL"[^\n]*disagree/.test(typing)&&/\(= Status "development-pass"\)/.test(typing));
   // Every check a row names is one the evaluator knows.
   for(const r of manifest.rows)assert.ok(evaluator.includes(`"${r.check}" Memo ->`),`the evaluator knows check ${r.check}`);
+});
+
+test('the task guest and task loop rows are optional, pass only on the harness\'s own evidence, and the ledger states what remains open', () => {
+  const slice=name=>{const at=evaluator.indexOf(`(define ${name}\n`);return evaluator.slice(at,evaluator.indexOf('\n(define ',at+1));};
+  const guest=slice('fh.solo5-tasks'),loop=slice('fh.tc1-task-loop');
+  assert.ok(guest.length>200&&loop.length>200);
+  assert.ok(/"BLOCKED"/.test(guest)&&/exceeded its time limit/.test(guest)&&/\(= \(hd Built\) -1\)/.test(guest)&&/development-pass/.test(guest));
+  assert.ok(/"status" Coverage\) "complete"/.test(loop)&&/catalog_pin_holds/.test(loop)&&/matches_committed/.test(loop)&&/retained_as_expected/.test(loop)&&/did not report/.test(loop)&&/600\)/.test(loop));
+  const row=id=>manifest.rows.find(r=>r.id===id);
+  assert.ok(/complete/.test(row('task-loop-closure').acceptance)&&/fixtures\/tc1\/task-retained-failures\.json/.test(row('task-loop-closure').acceptance));
+  for(const f of ['spec/tc1/task-catalog.json','fixtures/tc1/task-retained-failures.json'])assert.ok(existsSync(f),f);
+  const tasks=json(manifest.ledger).rows.find(r=>r.id==='TC1-C-TASKS');
+  for(const p of tasks.evidence)assert.ok(existsSync(p),p);
+  assert.ok(tasks.gaps.some(g=>/§13/.test(g)&&/durable/.test(g))&&tasks.gaps.some(g=>/FIFO/.test(g))&&tasks.gaps.some(g=>/lineage/.test(g)));
+  assert.ok(!tasks.gaps.some(g=>/no Solo5 guest/.test(g)),'the stale gap about a missing guest is gone');
+  assert.ok(/task-solo5-guest/.test(manifest.not_covered)&&/task-loop-closure/.test(manifest.not_covered));
+  assert.deepEqual(Object.keys(manifest.claims).filter(c=>manifest.claims[c].some(id=>['task-solo5-guest','task-loop-closure'].includes(id))),[]);
+  assert.ok(manifest.rows.findLastIndex(r=>r.required)<manifest.rows.findIndex(r=>!r.required));
 });

@@ -450,6 +450,68 @@
                                ["forged_derivations" (json.stringify (fh.member "forged_derivations" Report) [])]
                                ["shen_departs_from_contract" (json.stringify ShenDeparts [])]] Memo)))))))
 
+\\ ---------- optional rows: tasks through the stack (slice C1) ----------
+
+\\ The host-controlled Solo5 guest over control protocol v3 (harness/solo5-tasks.shen), as
+\\ harness/run-solo5-tasks.sh runs it (about 45 s): the guest agrees with the task model under
+\\ recorded reference schedules and under its own FIFO policy, the injected guest defects are
+\\ detected, tapes replay exactly, and the v3 negative tests give their expected results.
+\\ No Solo5, or a guest build that fails: BLOCKED. A time limit or no report: UNKNOWN.
+(define fh.solo5-tasks
+  Memo ->
+    (let Built (fh.exec "node" [(cn (value fh.*root*) "tools/solo5/control-task-build.mjs")] 1800)
+      (if (= (hd Built) -1)
+          (fh.row "UNKNOWN" ["The Solo5 task batch build did not complete within its time limit"] [] Memo)
+      (if (not (= (hd Built) 0))
+          (fh.row "BLOCKED" ["The Solo5 task batch or guest could not be built (is Solo5 available at the pinned commit?)"] [] Memo)
+          (let Batch (fh.last-line-of (hd (tl Built)))
+               Run (fh.subdir "solo5-tasks")
+               R (fh.exec (value fh.*jit*) ["script" (cn (value fh.*root*) "harness/solo5-tasks.shen") (value fh.*lib*) (value fh.*root*) Batch Run] 1800)
+               Report (fh.last-report (hd (tl R)))
+               Status (fh.member "status" Report)
+            (if (element? (hd R) [126 127])
+                (fh.row "BLOCKED" ["Shen/JIT could not be started for the Solo5 task harness"] [] Memo)
+                (if (and (= Status "development-pass") (empty? (fh.member "failures" Report)) (empty? (fh.member "defects_undetected" Report)))
+                    (fh.row "PASS" [] [["protocol" (fh.member "protocol" Report)] ["programs" (fh.show (fh.member "programs" Report))]
+                                       ["reference_runs_agreeing" (fh.show (fh.member "agreeing" (fh.member "reference_recorded" Report)))]
+                                       ["defects" (json.stringify (fh.member "defects" Report) [])]
+                                       ["tapes_exact" (fh.show (fh.member "tapes_exact_on_every_boot" (fh.member "replay" Report)))]] Memo)
+                    (if (element? Status ["development-pass" "development-fail"])
+                        (fh.row "FAIL" ["The Solo5 task check failed: a divergence between the guest and the model, an undetected guest defect, a tape that did not replay exactly, or an unexpected negative-test result"]
+                                [["failures" (json.stringify (fh.member "failures" Report) [])]
+                                 ["defects_undetected" (json.stringify (fh.member "defects_undetected" Report) [])]] Memo)
+                        (fh.row "UNKNOWN" ["The Solo5 task harness did not report (or exceeded its time limit)"] [] Memo)))))))))
+
+\\ Closing the loop for tasks (harness/tc1-task-loop.shen, as harness/run-tc1-task-loop.sh runs
+\\ it, about 135 s): the generated family, catalog coverage, discovery and reduction campaigns,
+\\ strict replay. PASS needs the harness's development-pass AND coverage status complete AND the
+\\ catalog pin holding (the harness's own pin check of spec/tc1/task-catalog.json) AND the run's
+\\ retained failures matching the committed fixtures/tc1/task-retained-failures.json AND every
+\\ retained tape behaving as expected. No report or a time limit: UNKNOWN. Anything else: FAIL.
+(define fh.tc1-task-loop
+  Memo ->
+    (let Report (fh.harness "tc1-task-loop.shen" [(fh.subdir "tc1-task-loop") "sandbox"] 600)
+         Status (fh.member "status" Report)
+         Coverage (fh.member "coverage" Report)
+         Retained (fh.member "retained" Report)
+         Replay (fh.member "replay" Report)
+      (if (not (element? Status ["development-pass" "development-fail"]))
+          (fh.row "UNKNOWN" ["The task loop harness did not report (or exceeded its time limit)"] [] Memo)
+          (if (and (= Status "development-pass")
+                   (= (fh.member "status" Coverage) "complete")
+                   (= (fh.member "catalog_pin_holds" Coverage) true)
+                   (= (fh.member "matches_committed" Retained) true)
+                   (= (fh.member "retained_as_expected" Replay) true))
+              (fh.row "PASS" [] [["transitions" (fh.show (fh.member "transitions" Coverage))] ["exercised" (fh.show (fh.member "exercised" Coverage))]
+                                 ["catalog_sha256" (fh.show (fh.member "catalog_sha256" Coverage))]
+                                 ["retained_cases" (fh.show (fh.member "committed_cases" Retained))]
+                                 ["generated_programs" (fh.show (fh.member "programs" (fh.member "generated" Report)))]] Memo)
+              (fh.row "FAIL" ["The task loop failed: a disagreement, an undetected defect, an uncovered or foreign transition, a catalog that is not the pinned one, retained failures that differ from the committed ones, or a retained tape that did not behave as expected"]
+                      [["status" (fh.show Status)] ["coverage_status" (fh.show (fh.member "status" Coverage))]
+                       ["catalog_pin_holds" (fh.show (fh.member "catalog_pin_holds" Coverage))]
+                       ["matches_committed" (fh.show (fh.member "matches_committed" Retained))]
+                       ["retained_as_expected" (fh.show (fh.member "retained_as_expected" Replay))]] Memo)))))
+
 (define fh.check
   "source-identity" Memo -> (fh.source-identity Memo)
   "toolchain-pinned" Memo -> (fh.toolchain-pinned Memo)
@@ -479,6 +541,8 @@
   "solo5-durable" Memo -> (fh.solo5-durable Memo)
   "validator-differential" Memo -> (fh.validator-differential Memo)
   "typing-differential" Memo -> (fh.typing-differential Memo)
+  "solo5-tasks" Memo -> (fh.solo5-tasks Memo)
+  "tc1-task-loop" Memo -> (fh.tc1-task-loop Memo)
   Name Memo -> (fh.row "UNKNOWN" [(cn "The evaluator has no check named " Name)] [] Memo))
 
 \\ Registered: the manifest is owner-accepted and the workflow has a tc1-qualification
