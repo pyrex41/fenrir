@@ -8,12 +8,11 @@ import {writeFileSync} from 'node:fs';
 import {encode} from '../tc0/canonical.mjs';
 import {validatePureCallArtifact} from '../tc0/pure-call-artifact.mjs';
 import {HandlerMachine} from '../../runtime/tc1/handler-machine.mjs';
+import {MUTANTS} from './handler-defects.mjs';
 import {cases as tailResumptive,resumptionCases} from '../../fixtures/tc1/handler-hand-cases.mjs';
 const cases=[...tailResumptive,...resumptionCases];
 const [output]=process.argv.slice(2);
 if(!output?.endsWith('.jsonl')||process.argv.length!==3)throw new Error('Usage: run-handler-cases.mjs OUTPUT.jsonl');
-export const MUTANTS={forgotten_resume:'forgottenResume',double_resume:'doubleResume',outermost_handler:'outermostHandler',dynamic_clause_environment:'dynamicClauseEnvironment',
-  resume_returns_argument:'resumeReturnsArgument',shallow_resume:'shallowResume'};
 if(cases.length>32||new Set(cases.map(c=>c.name)).size!==cases.length||cases.some(c=>!/^[a-z][a-z0-9-]*$/.test(c.name)))throw new Error('Unique safe case IDs required, at most 32');
 const lines=cases.map(({name,program,...expectations})=>{
   const checked=validatePureCallArtifact(encode(program),['int','0']);

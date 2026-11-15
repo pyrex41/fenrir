@@ -463,3 +463,11 @@
   0 _ -> []
   _ [] -> []
   N [X | Xs] -> [X | (fh.take (- N 1) Xs)])
+
+\\ ---------- counting ----------
+
+\\ Count one more of Key in a list of [Key N], which need not hold Key yet.
+(define fh.count-key
+  Key [] -> [[Key 1]]
+  Key [[Key N] | Rest] -> [[Key (+ N 1)] | Rest]
+  Key [Pair | Rest] -> [Pair | (fh.count-key Key Rest)])

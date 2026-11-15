@@ -5,74 +5,23 @@
 \\
 \\   shen-jit script harness/gate.shen LIBDIR ROOT OUTDIR SHEN_JIT_EXECUTABLE [NONCE CHECK_ID SOURCE_SHA256 CONFIG_SHA256]
 \\
-\\ It evaluates each manifest row and aggregates: any required FAIL gives FAIL; else
-\\ any BLOCKED gives BLOCKED; else any UNKNOWN gives UNKNOWN; else PASS. An evaluator
-\\ error, a check that does not report, or a check it does not know is UNKNOWN.
+\\ Row evaluation, aggregation and the report are in harness/gate-core.shen, shared
+\\ with the TC1 gate: any required FAIL gives FAIL; else any BLOCKED gives BLOCKED;
+\\ else any UNKNOWN gives UNKNOWN; else PASS. An evaluator error, a check that does
+\\ not report, or a check it does not know is UNKNOWN.
 \\ The verdict counts as a qualification only while the manifest is owner-accepted
 \\ and the workflow configuration names this evaluator; otherwise the report says
 \\ authority UNREGISTERED and qualification UNKNOWN.
-\\ The comparisons themselves are the other harness programs, each run as its
-\\ own process so one cannot disturb another.
-\\ With the four controller arguments it also prints the controller's check record.
+\\ This file holds the TC0-A row checks and the registration rule.
 
 (set fh.*lib* (cn (hd (tl (value *argv*))) "/"))
 (set fh.*root* (cn (hd (tl (tl (value *argv*)))) "/"))
-(set fh.*out* (cn (hd (tl (tl (tl (value *argv*))))) "/"))
-(set fh.*jit* (hd (tl (tl (tl (tl (value *argv*)))))))
-(set fh.*controller* (tl (tl (tl (tl (tl (value *argv*)))))))
-(load (cn (value fh.*root*) "harness/common.shen"))
+(load (cn (value fh.*root*) "harness/gate-core.shen"))
 
-\\ ---------- rows ----------
-\\ A check returns [Status Reasons Detail Memo]. Detail is a list of [Key String].
-\\ Memo carries results later rows depend on.
-
-(define fh.row
-  Status Reasons Detail Memo -> [Status Reasons Detail Memo])
+\\ ---------- TC0-A rows ----------
 
 (define fh.not-ported
   What Memo -> (fh.row "UNKNOWN" [(cn What " is not yet moved to the Shen harness")] [] Memo))
-
-(define fh.source-identity
-  Memo ->
-    (let Dirty (fh.exec "git" ["status" "--porcelain"] 60)
-         Head (fh.trim (hd (tl (fh.exec "git" ["rev-parse" "HEAD"] 60))))
-         Memo2 [["head" Head] | Memo]
-      (if (not (= (hd Dirty) 0))
-          (fh.row "UNKNOWN" ["git status failed; the source could not be identified"] [] Memo)
-          (if (= (fh.trim (hd (tl Dirty))) "")
-              (fh.row "PASS" [] [["head" Head]] Memo2)
-              (fh.row "UNKNOWN" ["Worktree has uncommitted changes; evidence would not be source-bound"] [["head" Head]] Memo2)))))
-
-\\ The executable and library directory this gate is running on must be the flake's
-\\ shen-jit output. No nix, or no such output: BLOCKED. Anything else running: UNKNOWN.
-(define fh.toolchain-pinned
-  Memo ->
-    (let Built (fh.exec "nix" ["build" "--no-link" "--print-out-paths" ".#shen-jit"] 1800)
-         Pinned (fh.trim (hd (tl Built)))
-         Executable (fh.trim (hd (tl (fh.exec "realpath" [(value fh.*jit*)] 30))))
-         Library (fh.trim (hd (tl (fh.exec "realpath" [(value fh.*lib*)] 30))))
-      (if (not (= (hd Built) 0))
-          (fh.row "BLOCKED" ["nix is unavailable or could not build the flake's shen-jit output"] [] Memo)
-          (if (and (= Executable (cn Pinned "/bin/shen-jit")) (= Library (cn Pinned "/lib")))
-              (fh.row "PASS" [] [["shen_jit" Pinned] ["shen" (make-string "~A ~A ~A" (value *implementation*) (value *port*) (version))]] Memo)
-              (fh.row "UNKNOWN" [(make-string "The gate is running on ~A with libraries ~A, not the pinned ~A" Executable Library Pinned)] [] Memo)))))
-
-(define fh.unit-suite
-  Memo ->
-    (let R (fh.exec "sh" ["-c" "node --test tests/tc0/*.test.mjs"] 900)
-         Lines (fh.lines (hd (tl R)))
-         Fail (fh.last-after "# fail " Lines [])
-         Skip (fh.last-after "# skipped " Lines [])
-         Pass (fh.last-after "# pass " Lines [])
-      (if (= (hd R) -1)
-          (fh.row "UNKNOWN" ["Test runner timed out or did not complete"] [] Memo)
-          (if (or (= Fail []) (= Skip []) (= Pass []))
-              (fh.row "FAIL" ["Test runner printed no summary"] [] Memo)
-              (if (or (not (= Fail "0")) (not (= (hd R) 0)))
-                  (fh.row "FAIL" [(cn Fail " failing tests")] [] Memo)
-                  (if (not (= Skip "0"))
-                      (fh.row "UNKNOWN" [(cn Skip " skipped tests are missing evidence")] [] Memo)
-                      (fh.row "PASS" [] [["passed" Pass]] Memo)))))))
 
 (define fh.hand-agreement-and-replay
   Memo ->
@@ -110,42 +59,11 @@
 (define fh.discovery-reduction-replay
   Memo -> (fh.campaigns ["arm-by-position" "reverse-operands"] Memo [] [] "PASS"))
 
-\\ Build a guest batch with the JavaScript builder and compare it in Shen.
-(define fh.guest-batch
-  BuilderArgs ->
-    (let Built (fh.exec "node" (append [(cn (value fh.*root*) "tools/solo5/freerun-pure-call.mjs")] (append BuilderArgs ["--build-only"])) 1800)
-      (if (= (hd Built) 0)
-          (fh.harness "solo5-pure-call.shen" [(fh.trim (hd (tl Built)))] 1800)
-          blocked)))
-
-(define fh.guest-row
-  blocked Memo -> (fh.row "BLOCKED" ["The Solo5 guest batch could not be built (is build/vendor/solo5 built at the pinned commit?)"] [] Memo)
-  Report Memo ->
-    (let Status (fh.member "status" Report)
-      (if (= Status "development-pass")
-          (fh.row "PASS" [] [["programs" (fh.member "programs" Report)] ["steps" (fh.member "model_steps" Report)]
-                             ["defects_detected" (json.stringify (fh.member "defects_detected" Report) [])]] Memo)
-          (if (= Status "development-fail")
-              (fh.row "FAIL" [(cn (fh.member "programs_differing" Report) " programs differ between the model and the Solo5 guest, or a guest defect went undetected")] [] Memo)
-              (fh.row "UNKNOWN" ["The Solo5 harness did not report"] [] Memo)))))
-
 (define fh.exact-arithmetic
   Memo -> (fh.guest-row (fh.guest-batch ["--exact-arithmetic"]) Memo))
 
 (define fh.solo5-guest-agreement
   Memo -> (fh.guest-row (fh.guest-batch ["--exhaustive-nodes" "5"]) Memo))
-
-(define fh.tc1-handlers
-  Memo ->
-    (let Report (fh.harness "tc1-handlers.shen" [(fh.subdir "tc1-handlers") "sandbox"] 600)
-         Status (fh.member "status" Report)
-      (if (= Status "development-pass")
-          (fh.row "PASS" [] [["cases" (fh.member "cases" Report)] ["expectations_checked" (fh.member "expectations_checked" Report)]
-                             ["defects" (json.stringify (fh.member "defects" Report) [])]] Memo)
-          (if (= Status "development-fail")
-              (fh.row "FAIL" ["TC1 handler slice: disagreement, a failed expectation, or an undetected or crashing defect"]
-                      [["failures" (json.stringify (fh.member "failures" Report) [])]] Memo)
-              (fh.row "UNKNOWN" ["The TC1 handler harness did not report"] [] Memo)))))
 
 (define fh.exhaustive-small
   Memo ->
@@ -257,7 +175,7 @@
 (define fh.check
   "source-identity" Memo -> (fh.source-identity Memo)
   "toolchain-pinned" Memo -> (fh.toolchain-pinned Memo)
-  "unit-suite" Memo -> (fh.unit-suite Memo)
+  "unit-suite" Memo -> (fh.unit-suite "tests/tc0/*.test.mjs" Memo)
   "hand-agreement-and-replay" Memo -> (fh.hand-agreement-and-replay Memo)
   "exact-arithmetic" Memo -> (fh.exact-arithmetic Memo)
   "exhaustive-small" Memo -> (fh.exhaustive-small Memo)
@@ -272,155 +190,10 @@
   "repair-isolation:campaigns/tc0/s3/repair-isolation-acceptance.json" Memo -> (fh.repair-isolation "campaigns/tc0/s3/repair-isolation-acceptance.json" Memo)
   "exact-arithmetic-shaken" Memo -> (fh.row "DEFERRED" ["Optional second port: the harness runs on Shen/JIT only"] [] Memo)
   "solo5-guest-agreement" Memo -> (fh.solo5-guest-agreement Memo)
-  "tc1-handlers" Memo -> (fh.tc1-handlers Memo)
-  "tc1-handler-guest" Memo -> (fh.guest-row (fh.guest-batch ["--tc1"]) Memo)
   Name Memo -> (fh.row "UNKNOWN" [(cn "The evaluator has no check named " Name)] [] Memo))
-
-\\ An evaluator fault is never a pass.
-(define fh.safe-check
-  Name Memo -> (trap-error (fh.check Name Memo) (/. E (fh.row "UNKNOWN" [(cn "Evaluator error: " (error-to-string E))] [] Memo))))
-
-\\ Evaluate rows in manifest order. Result: [RowObjects Memo], rows oldest first.
-(define fh.evaluate
-  [] Memo Acc -> [(reverse Acc) Memo]
-  [Spec | Specs] Memo Acc ->
-    (let R (fh.safe-check (fh.field "check" Spec) Memo)
-         Out (do (output "~A: ~A~%" (fh.field "id" Spec) (hd R)) skip)
-      (fh.evaluate Specs (nth 4 R)
-        [[object ["id" (fh.field "id" Spec)] ["required" (fh.field "required" Spec)] ["status" (hd R)]
-                 ["reasons" (nth 2 R)] ["detail" [object | (nth 3 R)]]] | Acc])))
-
-\\ ---------- aggregation ----------
-
-(define fh.any-required?
-  Status [] -> false
-  Status [Row | Rows] -> (or (and (= (fh.field "required" Row) true) (= (fh.field "status" Row) Status))
-                             (fh.any-required? Status Rows)))
-
-(define fh.verdict
-  Rows -> "FAIL" where (fh.any-required? "FAIL" Rows)
-  Rows -> "BLOCKED" where (fh.any-required? "BLOCKED" Rows)
-  Rows -> "UNKNOWN" where (fh.any-required? "UNKNOWN" Rows)
-  _ -> "PASS")
-
-(define fh.status-of
-  Id [] -> "ABSENT"
-  Id [Row | Rows] -> (if (= (fh.field "id" Row) Id) (fh.field "status" Row) (fh.status-of Id Rows)))
-
-(define fh.all-pass?
-  [] _ -> true
-  [Id | Ids] Rows -> (and (= (fh.status-of Id Rows) "PASS") (fh.all-pass? Ids Rows)))
-
-\\ A claim is credited only when every one of its rows and every prerequisite passed.
-(define fh.claims
-  [] _ _ -> []
-  [[Claim Ids] | Rest] Prerequisites Rows ->
-    (if (fh.all-pass? (append Ids Prerequisites) Rows)
-        [Claim | (fh.claims Rest Prerequisites Rows)]
-        (fh.claims Rest Prerequisites Rows)))
-
-(define fh.waivers
-  [] -> []
-  [["waiver" W] | Memo] -> [W | (fh.waivers Memo)]
-  [_ | Memo] -> (fh.waivers Memo))
-
-(define fh.count-status
-  Status Required [] N -> N
-  Status Required [Row | Rows] N ->
-    (fh.count-status Status Required Rows
-      (if (and (= (fh.field "status" Row) Status) (or (not Required) (= (fh.field "required" Row) true))) (+ N 1) N)))
-
-(define fh.ledger-ids
-  Ledger -> (map (/. R (fh.field "id" R)) (fh.field "rows" Ledger)))
-
-(define fh.unknown-references
-  [] _ -> []
-  [Spec | Specs] Ids -> (append (fh.missing (fh.field "ledger" Spec) Ids) (fh.unknown-references Specs Ids)))
-
-(define fh.missing
-  [] _ -> []
-  [X | Xs] Ids -> (if (element? X Ids) (fh.missing Xs Ids) [X | (fh.missing Xs Ids)]))
-
-(define fh.exit-status
-  "PASS" -> 0
-  "FAIL" -> 1
-  _ -> 2)
-
-(define fh.main
-  -> (let ManifestPath "spec/tc0/tc0-a-requirements.json"
-          Manifest (json.parse (read-file-as-string (cn (value fh.*root*) ManifestPath)) [[byte-limit 4194304]])
-          Ledger (json.parse (read-file-as-string (cn (value fh.*root*) (fh.field "ledger" Manifest))) [[byte-limit 4194304]])
-          Valid (if (and (= (fh.field "schema" Manifest) "tc0-a-requirement-manifest/1")
-                         (empty? (fh.unknown-references (fh.field "rows" Manifest) (fh.ledger-ids Ledger))))
-                    true (error "gate: manifest invalid or it names unknown ledger rows"))
-          Result (fh.evaluate (fh.field "rows" Manifest) [] [])
-          Rows0 (hd Result)
-          Memo (hd (tl Result))
-          \\ Read HEAD directly and compare it with the head recorded when the source-identity
-          \\ row ran. If that row never ran there is nothing to compare with: UNKNOWN.
-          HeadNow (fh.trim (hd (tl (fh.exec "git" ["rev-parse" "HEAD"] 60))))
-          DirtyNow (fh.trim (hd (tl (fh.exec "git" ["status" "--porcelain"] 60))))
-          Drift (or (not (= HeadNow (fh.member-in "head" Memo))) (not (= DirtyNow "")))
-          Rows (if Drift
-                   (append Rows0 [[object ["id" "source-drift"] ["required" true] ["status" "UNKNOWN"]
-                                          ["reasons" ["Source changed during evaluation, or was never identified"]] ["detail" [object]]]])
-                   Rows0)
-          Verdict (fh.verdict Rows)
-          Claims (fh.claims (tl (fh.field "claims" Manifest)) (fh.field "claim_prerequisites" Manifest) Rows)
-          Registered (fh.registered? Manifest)
-          Passing (make-string "~A/~A" (fh.count-status "PASS" true Rows 0) (- (length Rows) (fh.count-optional Rows 0)))
-          Report [object ["schema" "tc0-a-gate-run/3"]
-                         ["authority" (if Registered "owner-accepted, registered" "UNREGISTERED")]
-                         ["qualification" (if Registered Verdict "UNKNOWN")]
-                         ["verdict" Verdict]
-                         ["claims" Claims]
-                         ["waivers" (fh.waivers Memo)]
-                         ["head" (fh.member-in "head" Memo)]
-                         ["manifest" ManifestPath]
-                         ["evaluator" "harness/gate.shen"]
-                         ["shen" (make-string "~A ~A ~A" (value *implementation*) (value *port*) (version))]
-                         ["aggregation" (fh.field "aggregation" Manifest)]
-                         ["required_rows_passing" Passing]
-                         ["rows" Rows]]
-          Text (json.stringify Report [[byte-limit 4194304]])
-          Written (write-to-file (cn (value fh.*out*) "gate.json") (cn Text "c#10;"))
-       (do (output "~A~%" Text)
-           (fh.controller-record (value fh.*controller*) Registered Verdict Claims Passing (fh.waivers Memo))
-           (shen-jit.exit (fh.exit-status Verdict)))))
 
 \\ Registered: the manifest is owner-accepted and the workflow's qualification check runs this gate.
 (define fh.registered?
-  Manifest ->
-    (let Config (trap-error (json.parse (read-file-as-string (cn (value fh.*root*) ".pi/fenrir-workflow.json")) [[byte-limit 4194304]]) (/. E []))
-         Command (fh.member "command" (fh.member "tc0-a-qualification" (fh.member "checks" Config)))
-      (and (= (fh.field "status" Manifest) "owner-accepted") (cons? Command) (element? "harness/run-gate.sh" Command))))
+  Manifest -> (fh.registered-as "tc0-a-qualification" "harness/run-gate.sh" Manifest))
 
-\\ A path below the repository root, without the root.
-(define fh.relative
-  Path -> (if (fh.starts? (value fh.*root*) Path) (fh.drop (value fh.*root*) Path) Path))
-
-(define fh.join
-  [] _ -> ""
-  [X] _ -> X
-  [X | Xs] Sep -> (cn X (cn Sep (fh.join Xs Sep))))
-
-\\ The workflow controller's check record, printed last when it supplied its nonce.
-\\ An unregistered evaluator credits no verdict and no claims.
-(define fh.controller-record
-  [Nonce CheckId SourceHash ConfigHash] Registered Verdict Claims Passing Waivers ->
-    (output "~A~%"
-      (json.stringify
-        [object ["schema" "fenrir.check.v1"] ["nonce" Nonce] ["checkId" CheckId] ["sourceHash" SourceHash] ["configHash" ConfigHash]
-                ["verdict" (if Registered Verdict "UNKNOWN")] ["cleanup" "confirmed"] ["claims" (if Registered Claims [])]
-                ["evidence" [(fh.relative (cn (value fh.*out*) "gate.json"))]]
-                ["summary" (make-string "TC0-A gate (Shen): ~A; ~A required rows PASS; claims ~A~A"
-                                        Verdict Passing (if (empty? Claims) "none" (fh.join Claims ", "))
-                                        (if (empty? Waivers) "" (cn "; waivers: " (fh.join Waivers " | "))))]]
-        [[byte-limit 1048576]]))
-  _ _ _ _ _ _ -> skip)
-
-(define fh.count-optional
-  [] N -> N
-  [Row | Rows] N -> (fh.count-optional Rows (if (= (fh.field "required" Row) true) N (+ N 1))))
-
-(fh.main)
+(fh.gate-main "spec/tc0/tc0-a-requirements.json" "tc0-a-requirement-manifest/1" "tc0-a-gate-run/3" "harness/gate.shen" "TC0-A gate (Shen)")

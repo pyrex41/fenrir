@@ -1,0 +1,184 @@
+{
+ "schema": "tc1-requirement-manifest/1",
+ "status": "proposed",
+ "slice": "TC1",
+ "contract": "spec/tc1/EFFECTS.md (tc1-draft-1: slices H1 and H2)",
+ "ledger": "spec/tc0/requirement-ledger-a.json",
+ "evaluator": "harness/tc1-gate.shen",
+ "aggregation": "As the TC0-A gate (TC0-GATE, 02 \u00a714): any required row FAIL -> FAIL; else any BLOCKED -> BLOCKED; else any UNKNOWN -> UNKNOWN; else PASS. A defect killed on no program is FAIL; a crash is never a kill. An evaluator error or a check that does not report is UNKNOWN. Every row's reasons are reported whatever the aggregate. Optional rows never satisfy a required row.",
+ "rows": [
+  {
+   "id": "source-identity",
+   "required": true,
+   "ledger": [
+    "G0-TOOLCHAIN-BASELINE"
+   ],
+   "check": "source-identity",
+   "acceptance": "Clean worktree at a committed HEAD; every later row binds to it. A dirty tree is UNKNOWN (evidence not source-bound)."
+  },
+  {
+   "id": "toolchain-pinned",
+   "required": true,
+   "ledger": [
+    "G0-TOOLCHAIN-BASELINE"
+   ],
+   "check": "toolchain-pinned",
+   "acceptance": "The Shen/JIT executable and library directory the gate runs on resolve to the flake's shen-jit output. No nix or no such flake output: BLOCKED. Another executable: UNKNOWN."
+  },
+  {
+   "id": "unit-suite",
+   "required": true,
+   "ledger": [
+    "TC0-CANONICAL",
+    "TC0-VALIDATE",
+    "TC0-B-HANDLERS"
+   ],
+   "check": "unit-suite",
+   "acceptance": "node --test tests/tc0/*.test.mjs tests/tc1/*.test.mjs: no failures. Any skipped test is UNKNOWN."
+  },
+  {
+   "id": "tc0-a-gate",
+   "required": true,
+   "ledger": [
+    "TC0-GATE"
+   ],
+   "check": "tc0-a-gate",
+   "acceptance": "TC0-A gate rows still pass: the TC0-A evaluator (harness/gate.shen, manifest spec/tc0/tc0-a-requirements.json) is run as a prerequisite in this run, on the same HEAD, and its verdict is this row's status. Its rows are not re-implemented here. No report, another schema or another HEAD: UNKNOWN. Its waivers are reported as waivers of this gate."
+  },
+  {
+   "id": "hand-fixtures",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "check": "tc1-handlers",
+   "acceptance": "harness/tc1-handlers.shen. On every TC1 hand fixture (tail-resumptive handlers and explicit one-shot resumptions) the model and the sandboxed implementation agree and satisfy the handwritten expectations, and every injected handler defect is detected on some fixture."
+  },
+  {
+   "id": "exhaustive-small",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "check": "tc1-exhaustive",
+   "acceptance": "harness/tc1-exhaustive.shen: every program of grammar H (tools/tc1/handler-enumerate.mjs) with at most 7 nodes, 12,693 programs, agrees with the model run in the harness (every step, and the outcome), with the implementation sandboxed. A truncated scope, or a program count other than 12,693 (the number the evaluator holds, which the harness also derives from the grammar), is UNKNOWN."
+  },
+  {
+   "id": "defect-forgotten-resume",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "check": "tc1-defect:forgotten_resume",
+   "acceptance": "The injected defect forgotten_resume (a clause return that discards the suspended segment) is killed (completed, trace differs from the model's) on at least one exhaustive program; crashes are never kills. No exhaustive report in this run: UNKNOWN."
+  },
+  {
+   "id": "defect-double-resume",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "check": "tc1-defect:double_resume",
+   "acceptance": "The injected defect double_resume (a clause return that restores the suspended segment twice) is killed (completed, trace differs from the model's) on at least one exhaustive program; crashes are never kills. No exhaustive report in this run: UNKNOWN."
+  },
+  {
+   "id": "defect-outermost-handler",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "check": "tc1-defect:outermost_handler",
+   "acceptance": "The injected defect outermost_handler (a perform that selects the outermost matching handler) is killed (completed, trace differs from the model's) on at least one exhaustive program; crashes are never kills. No exhaustive report in this run: UNKNOWN."
+  },
+  {
+   "id": "defect-dynamic-clause-environment",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "check": "tc1-defect:dynamic_clause_environment",
+   "acceptance": "The injected defect dynamic_clause_environment (a clause run in the bindings of the perform site) is killed (completed, trace differs from the model's) on at least one exhaustive program; crashes are never kills. No exhaustive report in this run: UNKNOWN."
+  },
+  {
+   "id": "defect-resume-returns-argument",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "check": "tc1-defect:resume_returns_argument",
+   "acceptance": "The injected defect resume_returns_argument (a resume that yields its argument instead of the handled body's result) is killed (completed, trace differs from the model's) on at least one exhaustive program; crashes are never kills. No exhaustive report in this run: UNKNOWN."
+  },
+  {
+   "id": "defect-shallow-resume",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "check": "tc1-defect:shallow_resume",
+   "acceptance": "The injected defect shallow_resume (a resumed segment that comes back without its handler) is killed (completed, trace differs from the model's) on at least one exhaustive program; crashes are never kills. No exhaustive report in this run: UNKNOWN."
+  },
+  {
+   "id": "guest-hand-fixtures",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "check": "tc1-guest-hand",
+   "acceptance": "harness/solo5-pure-call.shen on the TC1 hand fixtures with the TC0-A hand cases. The Solo5 guest agrees with the model on every step and both guest defects are detected. Solo5 not built: BLOCKED."
+  },
+  {
+   "id": "guest-exhaustive-small",
+   "required": true,
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "check": "tc1-guest-exhaustive",
+   "acceptance": "harness/solo5-pure-call.shen on every program of grammar H with at most 7 nodes, with the TC0-A hand cases. The Solo5 guest agrees with the model on every step and both guest defects are detected. A batch whose handler family does not hold 12,693 programs, or a comparison that did not cover the whole batch, is UNKNOWN. Solo5 not built: BLOCKED."
+  },
+  {
+   "id": "handler-step-coverage",
+   "required": false,
+   "ledger": [
+    "TC0-B-HANDLERS"
+   ],
+   "check": "tc1-step-coverage",
+   "acceptance": "Optional. harness/tc1-coverage.shen: every reference step kind of spec/tc1/EFFECTS.md section 6 (fifteen kinds from its thirteen rows) is exercised by this run's agreeing hand or exhaustive traces. An uncovered kind is UNKNOWN and is listed; a step classified under a kind the table does not have is FAIL. A measure of the traces, not of compiled code."
+  }
+ ],
+ "claims": {
+  "handler-hand-derived-behaviour": [
+   "hand-fixtures",
+   "guest-hand-fixtures"
+  ],
+  "handler-model-implementation-agreement": [
+   "toolchain-pinned",
+   "hand-fixtures",
+   "exhaustive-small"
+  ],
+  "handler-defects-detected": [
+   "exhaustive-small",
+   "defect-forgotten-resume",
+   "defect-double-resume",
+   "defect-outermost-handler",
+   "defect-dynamic-clause-environment",
+   "defect-resume-returns-argument",
+   "defect-shallow-resume"
+  ],
+  "handler-model-guest-agreement": [
+   "toolchain-pinned",
+   "guest-hand-fixtures",
+   "guest-exhaustive-small"
+  ],
+  "tc0-a-preserved": [
+   "unit-suite",
+   "tc0-a-gate"
+  ]
+ },
+ "claim_prerequisites": [
+  "source-identity",
+  "tc0-a-gate"
+ ],
+ "review": "None. This manifest is PROPOSED: it is not owner-accepted and the evaluator is not registered in .pi/fenrir-workflow.json, so every report says authority UNREGISTERED and qualification UNKNOWN. Registration is the owner's decision.",
+ "model": "models/tc1/handler-machine.shen with models/tc0/i64.shen, run in-process by the Shen harness on the flake-pinned Shen/JIT",
+ "not_covered": "Generated (non-exhaustive) handler programs, a discovery-and-reduction campaign, strict replay, a versioned and hashed transition catalog for the handler steps (the optional coverage row measures against the table in EFFECTS.md section 6), and any soundness proof of the typing or one-shot rules. Grammar H has one-operation effects with I64 operation types only, no closures, and programs of at most 7 nodes."
+}

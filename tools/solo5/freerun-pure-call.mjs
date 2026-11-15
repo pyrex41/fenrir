@@ -21,6 +21,7 @@ import {enumeratePureData} from '../tc0/pure-data-enumerate.mjs';
 import {VALUES} from '../tc0/check-i64.mjs';
 import {HandlerMachine} from '../../runtime/tc1/handler-machine.mjs';
 import {cases as handlerCases,resumptionCases} from '../../fixtures/tc1/handler-hand-cases.mjs';
+import {enumerateHandlers} from '../tc1/handler-enumerate.mjs';
 
 const root=resolve(import.meta.dirname,'../..');
 const FUEL=200,CHUNK=250,INPUT=['int','0'];
@@ -88,8 +89,16 @@ function main() {
   const exact=args.includes('--exact-arithmetic');
   // --tc1: the TC1 handler fixtures (both slices), with the TC0-A hand cases alongside so
   // the guest's two injected defects still have programs that expose them.
-  const tc1=args.includes('--tc1');
+  // --tc1-exhaustive-nodes N: every program of the TC1 handler grammar H
+  // (tools/tc1/handler-enumerate.mjs) with at most N nodes, again with the TC0-A hand
+  // cases: H has no overflow, so the wrap-overflow defect needs them.
+  const handlerBound=args.includes('--tc1-exhaustive-nodes')?Number(option('--tc1-exhaustive-nodes')):0;
+  if(args.includes('--tc1-exhaustive-nodes')&&!(Number.isSafeInteger(handlerBound)&&handlerBound>=1&&handlerBound<=7))throw new Error('--tc1-exhaustive-nodes must be 1..7');
+  if([exact,args.includes('--tc1'),handlerBound>0].filter(Boolean).length>1)throw new Error('Choose one of --exact-arithmetic, --tc1 and --tc1-exhaustive-nodes');
+  // Either TC1 family runs on the handler machine.
+  const tc1=args.includes('--tc1')||handlerBound>0;
   const families=exact?{'exact-arithmetic':exactArithmeticCases()}
+    :handlerBound?{[`tc1-exhaustive-${handlerBound}`]:enumerateHandlers(handlerBound).cases,hand:[...callHand,...dataHand]}
     :tc1?{'tc1-handlers':[...handlerCases,...resumptionCases],hand:[...callHand,...dataHand]}
     :{hand:[...callHand,...dataHand],'generated-pure-call':generatePureCalls(32).cases,'generated-pure-data':generatePureData(24).cases};
   if(bound&&!exact&&!tc1){
@@ -105,7 +114,8 @@ function main() {
   // (harness/solo5-pure-call.shen) and stop. No comparison happens in this process.
   if(args.includes('--build-only')) {
     writeFileSync(resolve(out,'programs.json'),JSON.stringify(checked.map(c=>c.artifact)));
-    writeFileSync(resolve(out,'batch.json'),JSON.stringify({guest,tender:tools.tender,batch_sha256:lowered.batch_sha256,programs:resolve(out,'programs.json'),count:String(programs.length)})+'\n');
+    writeFileSync(resolve(out,'batch.json'),JSON.stringify({guest,tender:tools.tender,batch_sha256:lowered.batch_sha256,programs:resolve(out,'programs.json'),count:String(programs.length),
+      families:Object.fromEntries(Object.entries(families).map(([family,cases])=>[family,String(cases.length)]))})+'\n');
     console.log(out);return;
   }
   // The TC1 implementation has no operand-order or overflow defect switches, so under --tc1

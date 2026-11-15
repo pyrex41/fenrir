@@ -14,6 +14,7 @@
 (set fh.*sandbox* (element? "sandbox" (tl (tl (tl (tl (value *argv*)))))))
 (load (cn (value fh.*root*) "harness/common.shen"))
 (load (cn (value fh.*root*) "harness/expectations.shen"))
+(load (cn (value fh.*root*) "harness/tc1-defects.shen"))
 
 (define fh.failed
   [] -> []
@@ -23,45 +24,11 @@
   [] _ N -> N
   [R | Rs] F N -> (fh.sum Rs F (+ N (F R))))
 
-\\ killed: completed with a different trace. survived: same trace. crashed: anything else.
-(define fh.verdict
-  Steps Run -> crashed where (not (= (fh.field "execution" Run) "Completed"))
-  Steps Run -> (if (= (fh.canon Steps) (fh.canon (fh.field "steps" Run))) survived killed))
-
-(define fh.bump
-  Key [[Key N] | Rest] -> [[Key (+ N 1)] | Rest]
-  Key [Pair | Rest] -> [Pair | (fh.bump Key Rest)])
-
-\\ Tally is a list of [MutantName [[killed N] [survived N] [crashed N]]].
-(define fh.tally-mutants
-  [] _ Tally -> Tally
-  [[Name Run] | Runs] Steps Tally -> (fh.tally-mutants Runs Steps (fh.tally-one Name (fh.verdict Steps Run) Tally)))
-
-(define fh.tally-one
-  Name Verdict [] -> [[Name (fh.bump Verdict [[killed 0] [survived 0] [crashed 0]])]]
-  Name Verdict [[Name Counts] | Rest] -> [[Name (fh.bump Verdict Counts)] | Rest]
-  Name Verdict [Other | Rest] -> [Other | (fh.tally-one Name Verdict Rest)])
-
 \\ Only cases on which the model and the implementation agree give a reference for the defects.
 (define fh.all-mutants
   [] [] Tally -> Tally
   [Row | Rows] [[_ Reasons _ _ _ Steps] | Results] Tally ->
     (fh.all-mutants Rows Results (if (= Reasons []) (fh.tally-mutants (tl (fh.field "mutants" Row)) Steps Tally) Tally)))
-
-(define fh.count-of
-  Key [[Key N] | _] -> N
-  Key [_ | Rest] -> (fh.count-of Key Rest))
-
-(define fh.undetected
-  [] -> []
-  [[Name Counts] | Rest] -> (if (> (fh.count-of killed Counts) 0) (fh.undetected Rest) [Name | (fh.undetected Rest)]))
-
-(define fh.crashing
-  [] -> []
-  [[Name Counts] | Rest] -> (if (= (fh.count-of crashed Counts) 0) (fh.crashing Rest) [Name | (fh.crashing Rest)]))
-
-(define fh.tally-json
-  Tally -> [object | (map (/. T [(hd T) [object | (map (/. P [(str (hd P)) (str (hd (tl P)))]) (hd (tl T)))]]) Tally)])
 
 (define fh.main
   -> (let File (cn (value fh.*out*) "handlers.jsonl")
@@ -75,7 +42,8 @@
           Tally (fh.all-mutants Rows Results [])
           Undetected (fh.undetected Tally)
           Crashing (fh.crashing Tally)
-          Pass (and (empty? Failures) (> (length Rows) 0) (not (empty? Tally)) (empty? Undetected))
+          Unreported (fh.unreported (fh.defect-names) Tally)
+          Pass (and (empty? Failures) (> (length Rows) 0) (empty? Unreported) (empty? Undetected))
           Report [object ["schema" "fenrir.harness.tc1-handlers/1"]
                          ["status" (if Pass "development-pass" "development-fail")]
                          ["qualification" "UNKNOWN"]
@@ -87,7 +55,7 @@
                          ["expectations_checked" (str (fh.sum Results (/. R (nth 3 R)) 0))]
                          ["model_steps" (str (fh.sum Results (/. R (nth 4 R)) 0))]
                          ["defects" (fh.tally-json Tally)]
-                         ["defects_undetected" Undetected]
+                         ["defects_undetected" (append Unreported Undetected)]
                          ["defects_crashing" Crashing]
                          ["failures" Failures]]
        (do (output "~A~%" (json.stringify Report [[byte-limit 1048576]]))
