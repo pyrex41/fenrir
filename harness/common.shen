@@ -86,6 +86,17 @@
   ["perform" Node Effect Op Arg] -> [perform Node Effect Op (fh.expr Arg)]
   ["resume" Node K Arg] -> [resume Node K (fh.expr Arg)]
   ["discontinue" Node K] -> [discontinue Node K]
+  \\ TC1-C1 (spec/tc1/CONCURRENCY.md); only schema tc1-task-demo/1 has these. A channel's
+  \\ element type is not needed by the machine; its capacity stays a decimal string.
+  ["scope" Node Body] -> [scope Node (fh.expr Body)]
+  ["spawn" Node E] -> [spawn Node (fh.expr E)]
+  ["await" Node E] -> [await Node (fh.expr E)]
+  ["cancel" Node E] -> [cancel Node (fh.expr E)]
+  ["yield" Node] -> [yield Node]
+  ["channel" Node _ Capacity] -> [channel Node Capacity]
+  ["send" Node C V] -> [send Node (fh.expr C) (fh.expr V)]
+  ["receive" Node C] -> [receive Node (fh.expr C)]
+  ["close" Node C] -> [close Node (fh.expr C)]
   X -> (error "harness: unsupported expression ~S" X))
 
 \\ One [Id [Parameter Body]] entry per lambda in a translated expression.
