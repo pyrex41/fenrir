@@ -13,7 +13,9 @@
 //
 // Default programs: the TC1-D1 hand fixtures (fixtures/tc1/durable-hand-cases.mjs).
 // FILE.json: {"family": NAME, "programs": [{name, program, input, replies}...]}, for
-// example the service sample written by harness/service-fenrir.shen. The free-running
+// example the service sample written by harness/service-fenrir.shen; an optional "fuel"
+// member (1 to 100000, the guest's limit) replaces the default step budget of 200 for the
+// whole batch (the A4 migration program runs longer than 200 steps). The free-running
 // guest is not built: it has no host and refuses residual programs (v2 section 6).
 import {createHash} from 'node:crypto';
 import {copyFileSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
@@ -51,6 +53,8 @@ function main() {
   const file=option('--programs',null);
   const given=file?JSON.parse(readFileSync(resolve(file),'utf8')):null;
   const family=given?given.family:'tc1-durable';
+  const fuel=given&&given.fuel!==undefined?Number(given.fuel):FUEL;
+  if(!Number.isSafeInteger(fuel)||fuel<1||fuel>100000)throw new Error('fuel must be 1 to 100000');
   const programs=(given?given.programs:durableCases).map(c=>({family,name:c.name,program:c.program,input:c.input,replies:c.replies}));
   if(!programs.length||programs.length>4096)throw new Error('1 to 4096 programs');
   const tools=toolchain(option('--solo5',null));
@@ -68,7 +72,7 @@ function main() {
     schema:'fenrir.solo5.control-durable-batch/1',
     guest:control,control,tender:tools.tender,solo5_identity:tools.identity,
     guest_sha256:sha(readFileSync(control)),control_sha256:sha(readFileSync(control)),tender_sha256:tools.tender_sha256,
-    batch_sha256:lowered.batch_sha256,fuel:String(FUEL),count:String(programs.length),
+    batch_sha256:lowered.batch_sha256,fuel:String(fuel),count:String(programs.length),
     families:{[family]:String(programs.length)},
     programs:programs.map((p,i)=>({family:p.family,name:p.name,schema:checked[i].artifact.schema_version,artifact_sha256:lowered.artifact_sha256[i],
       input_sha256:lowered.input_sha256[i],input:checked[i].input,replies:p.replies}))})+'\n');

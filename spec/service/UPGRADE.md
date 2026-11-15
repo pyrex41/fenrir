@@ -190,31 +190,47 @@ run.
 
 The migration function is written in Fenrir:
 [examples/service/migrate-v1-v2.fen](../../examples/service/migrate-v1-v2.fen). Its
-residual row is one durable effect, `Migration`, with two operations:
+residual row is one durable effect, `Migration`, with three operations, one row per
+request:
 
 ```text
-snapshot : Unit --> Rows1                 every job and key entry of every tenant, schema 1
-install  : Install --> Migrated           (Install Rows1 Rows2): the snapshot it read, and
-                                          the schema-2 rows it computed from it
+read    : I64 --> Next1        row i of the snapshot (NoMore past the end); reading row 0
+                               makes the host take a new snapshot of every job and key row
+                               of every tenant (schema 1) and drop anything staged
+stage   : Row2 --> Ack         the v2 row the program computed from a v1 row, kept by the
+                               host in the migration's session (volatile)
+install : I64 --> Migrated     install the staged rows, after reading all n rows
+Row1       (Job1 t id report status) | (Key1 t key digest receipt)
+Row2       (Job2 t id report status attempts) | (Key2 t key digest receipt)
 Migrated   Installed | Changed | Refused
 ```
 
-The program reads the snapshot, computes the v2 rows by a pure function (`mig-job`,
-`mig-key` of §2.1) and asks the host to install them. Under D1 a transaction cannot be
-held open across two host requests (DURABLE.md §8), so `install` is
+The program reads the rows, stages the v2 row of each, computed by a pure function
+(`mig-job`, `mig-key` of §2.1), and asks the host to install them. Under D1 a
+transaction cannot be held open across host requests (DURABLE.md §8), so `install` is a
 **compare-and-swap**: the host applies it, in one transaction, only when `U` is
-`[prepared Img]` and the store's current schema-1 rows are exactly the `Rows1` it
-carries; it then replaces every job and key row with `Rows2`, sets the schema to 2 and
-`U` to `[migrated Img]`, and replies `Installed`. If a v1 request committed in between,
-the reply is `Changed` and nothing is applied; the program reads again (at most three
-times, then gives up with `Changed`). `Refused` means `U` is not `[prepared _]`. Reports
-and `Next` are not part of the rows: their shape does not change, and the install keeps
-them; the compare covers them too (*provisional*: the snapshot carries them for the
-compare only through the job and key rows that reference them, §11).
+`[prepared Img]`, n is the number of rows in the snapshot, and the store's current
+schema-1 rows are exactly the snapshot; it then replaces every job and key row with the
+staged rows in their order, sets the schema to 2 and `U` to `[migrated Img]`, and
+replies `Installed`. If a v1 request committed after the snapshot, the reply is
+`Changed` and nothing is applied; the program reads again from row 0 (at most three
+times, then gives up with `Changed`). `Refused` means `U` is not `[prepared _]` or n is
+not the snapshot's size. Reports and `Next` are not rows: their shape does not change and
+the install keeps them; the compare covers them through the job and key rows (§11). The
+session is the migration run's own and is lost with it: a crash during a migration loses
+only volatile state, and the migration is run again.
 
-The host installs the rows the program computed, checking only their types (§5 of
-DURABLE.md) and the compare. It does not re-derive them: what is checked against the
-model is that the program computes `mig-store` (§9), not that the host would catch a
+The first draft of this section had one `snapshot` request returning every row and one
+`install` carrying them. That is expressible in D1 and ran in the Shen model and the
+JavaScript implementation, but **not in the Solo5 guest**: control protocol v2 limits a
+host reply to 512 bytes (pure-call-control-v2.md §6), and a snapshot of more than a few
+rows exceeds it (`GuestError Oversize`). One row per request keeps every reply under the
+limit; the guest-to-host direction (61,440 bytes) was never the constraint. This is a
+transport limit, not a limit of the durable contract.
+
+The host installs the rows the program computed, checking only their types (DURABLE.md
+§5), the row count and the compare. It does not re-derive them: what is checked against
+the model is that the program computes `mig-store` (§9), not that the host would catch a
 wrong program.
 
 ## 6 Properties
