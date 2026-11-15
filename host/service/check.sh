@@ -62,9 +62,28 @@ if [ "$asha" != "$pinned" ]; then
   exit 1
 fi
 
+step "artifacts (A4): the v2 handler and the migration program"
+# As for v1: emitted from the repository root with repository-relative names, the hash
+# pinned, the committed copy used when the frontend cannot run here.
+for p in accepted-job-v2 migrate-v1-v2; do
+  pin=$(cat "$here/artifacts/$p.sha256")
+  st=0
+  (cd "$root" && sh frontend/fenrir.sh emit "examples/service/$p.fen" "$out/$p.json") > "$out/emit-$p.txt" 2>&1 || st=$?
+  [ "$st" -eq 0 ] || cp "$here/artifacts/$p.json" "$out/$p.json"
+  got=$(sha256sum "$out/$p.json" | cut -d' ' -f1)
+  if [ "$got" != "$pin" ]; then
+    echo "{\"status\":\"development-fail\",\"reason\":\"artifact $p sha256 $got differs from the pinned $pin\"}"
+    exit 1
+  fi
+done
+
 step "image: the guest image over the request domain"
 image=$(FENRIR_SOLO5=$FENRIR_SOLO5 "$tools/bin/node" "$here/tools/build-image.mjs" "$artifact" "$out/image" 3 3 2 8)
 other=$(FENRIR_SOLO5=$FENRIR_SOLO5 "$tools/bin/node" "$root/tools/solo5/control-durable-build.mjs")/control.spt
+step "images (A4): the v2 handler (contract 2) and the migration program"
+v2image=$(FENRIR_SOLO5=$FENRIR_SOLO5 "$tools/bin/node" "$here/tools/build-image.mjs" "$out/accepted-job-v2.json" "$out/image-v2" 3 3 2 8 2)
+migimage=$(FENRIR_SOLO5=$FENRIR_SOLO5 "$tools/bin/node" "$here/tools/build-migration-image.mjs" "$out/migrate-v1-v2.json" "$out/image-mig")
+v2sha=$("$tools/bin/node" -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).artifact_sha256)' "$v2image")
 
 if [ "$mode" = full ]; then
   repeats=5; random=60; mutant_random=6; sqlite_repeats=2; batches=20
@@ -77,10 +96,15 @@ cat > "$out/config.term" <<EOF
   sqlite_port => "$out/bin/fenrir_sqlite_port", image => "$image", artifact => "$artifact",
   other_image => "$other",
   hand_traces => "$root/spec/service/hand-traces.json", a2_runs => "$root/tests/host/a2-runs.json",
+  v2_artifact => "$out/accepted-job-v2.json", migration_artifact => "$out/migrate-v1-v2.json",
   tenants => 3, repeats => $repeats, random_schedules => $random, schedule_length => 10,
   sqlite_kill_repeats => $sqlite_repeats, concurrent_batches => $batches, mutant_random_schedules => $mutant_random,
   mutants => [volatile_mailbox, respond_before_commit, two_transactions, busy_as_success, no_dedup,
               no_transaction, sync_off, equivalent_control],
+  v2_image => "$v2image", migration_image => "$migimage", v2_sha => <<"$v2sha">>, a4_repeats => $repeats,
+  a4_mutants => [no_fencing, migration_drops_pending, migration_two_transactions, keys_not_migrated,
+                 receipt_rewritten, cutover_before_migration, stale_workers, no_manifest_check,
+                 volatile_upgrade_state, equivalent_control_a4],
   families => ${FENRIR_A3_FAMILIES:-all},
   mode => $mode, artifact_source => "$source"}.
 EOF

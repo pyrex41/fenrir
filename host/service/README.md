@@ -101,6 +101,53 @@ gives that run's replies), `random_schedules`, `retries`, `duplicates`, `crash_p
 (9 fault points × the kills that apply × {submit, delivery}: 60 combinations), `sqlite_kills`, `lost_ack`, `busy`,
 `two_workers`, and the host mutants. The report's `campaigns` member has the exact counts.
 
+## Stage A4: the versioned upgrade
+
+[spec/service/UPGRADE.md](../../spec/service/UPGRADE.md) on this stack; named assumptions
+in [CONTRACT.md](CONTRACT.md) §7. The same check runs it (`check.sh` builds three images:
+the v1 handler, the v2 handler [examples/service/accepted-job-v2.fen](../../examples/service/accepted-job-v2.fen)
+with `contract_version` 2, and the migration program
+[examples/service/migrate-v1-v2.fen](../../examples/service/migrate-v1-v2.fen) with
+contract `migration` and fuel 100,000; each artifact's hash is pinned in
+[artifacts/](artifacts)).
+
+- **Durable upgrade state** in the `meta` table: `schema` (`…/1`, `…/2`), `upgrade`
+  (`v1`, `prepared`, `migrated`, `v2`) and, from begin-upgrade on, the v2 image's artifact
+  hash and the two descriptors. The adapter refuses to open a file whose schema it does
+  not know, whose schema and state disagree, or whose columns are not its schema's.
+- **Fencing in the store.** A commit's constructor is its contract version (`Tx` 1,
+  `Tx2` 2). After `BEGIN IMMEDIATE` the adapter reads `meta` and refuses (`stale`) a
+  commit whose version is not in force; the worker ends the run without a reply and the
+  client is told `unavailable`. This holds for a worker the supervisor does not know
+  (the campaigns start one and hold its run across migrate and cut-over).
+- **Version-pinned workers.** A worker takes the image of the version in force when it
+  starts and re-checks before each run; on a change it stops and its supervisor restarts
+  it with the new image. (The first campaign run found the need: a crash after the
+  cut-over had committed but before the workers were replaced left v1 workers whose every
+  commit was fenced. Safety held; the service was unavailable until a restart.)
+- **Migration.** `fenrir_upgrade:migrate/0` boots the migration image; its host requests
+  go to the adapter's migration session: `read i` (row 0 takes a snapshot in one read
+  transaction), `stage row`, `install n`: one transaction that compares the current rows
+  with the snapshot (`Changed` if a v1 commit came in between, and the program reads
+  again), adds the `attempts` and `r_version` columns, replaces every job and key row by
+  the staged ones and writes `meta`. SQLite's DDL is transactional: after any crash the
+  file is wholly v1 or wholly v2.
+- **Orchestration API** (node commands, [src/fenrir_upgrade.erl](src/fenrir_upgrade.erl)):
+  `{begin_upgrade, V2Image, MigrationImage}` (both manifests checked: contract 2 and the
+  migration contract), `migrate`, `cut_over` (then every worker is restarted),
+  `abort_upgrade`, `upgrade_state`; and, for the campaigns, `{async, Req}` /
+  `{await, Ticket}`, `{async, {detached, Req}}` (a v1 worker outside the supervisor),
+  `{release, Point}` for the fault action `pause`.
+- **Histories** of the A4 families are schema `fenrir.service.history/2`
+  ([HISTORY_FORMAT.md](../../spec/service/HISTORY_FORMAT.md) §4), checked against the A4
+  model; the A3 families still write `/1` and are checked against A1 as before.
+
+Families: `upgrade_load`, `upgrade_crash` (40 fault combinations: the begin, migrate and
+cut-over transactions, inside the install, in the migration guest, after migrate, between
+migrate and cut-over, after the cut-over committed), `upgrade_stale` (5 variants),
+`upgrade_cas`, `upgrade_manifest`, and 10 A4 host mutants (CONTRACT.md §7). The report's
+`campaigns` and `host_mutants` members have the counts.
+
 ## Artifact
 
 The handler is elaborated by `sh frontend/fenrir.sh emit examples/service/accepted-job.fen`,

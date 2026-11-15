@@ -1,0 +1,1 @@
+{"schema":"fenrir.service.history/2","tenants":2,"scenario":"a4-upgrade-state-lost-in-crash","expect":"rejected","note":"after a node crash the upgrade state reads v1 while the store is migrated","events":[["upgrade","begin","good",["ok"]],["upgrade","migrate",["ok"]],["crash","node"],["observe",[[[],[],[],0],[[],[],[],0]],["v1"]]],"expect_index":3}

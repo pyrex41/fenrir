@@ -12,7 +12,8 @@ main([ConfigFile]) ->
     Out = maps:get(out, C),
     ok = filelib:ensure_dir(filename:join(Out, "unit/x")),
     fenrir_faults:init(),
-    Tests = lists:append([vectors(maps:get(root, C)), values(), store(C), settings(C), manifest(C), identity(C)]),
+    Tests = lists:append([vectors(maps:get(root, C)), values(), store(C), settings(C), manifest(C), identity(C),
+                          upgrade(C)]),
     Failed = [T || T = {_, false, _} <- Tests],
     Json = #{<<"tests">> => [#{<<"name">> => iolist_to_binary(io_lib:format("~p", [N])), <<"pass">> => P,
                                <<"detail">> => iolist_to_binary(io_lib:format("~0P", [D, 12]))} || {N, P, D} <- Tests],
@@ -257,3 +258,115 @@ identity(C) ->
                      unlink(W), exit(W, shutdown),
                      {element(1, R) =:= failed andalso element(2, R) =:= {'Identity', hello}, R} end)
          end end)].
+
+%% ---------- A4: the durable upgrade state, fencing, the v2 contract, the migration ----------
+
+tx2(T, G, Ws) -> d(<<"Tx">>, <<"Tx2">>, [d(<<"Cap">>, <<"Tenant">>, [i(T)]), G,
+                                          lists:foldr(fun(W, Acc) -> d(<<"Writes">>, <<"Then">>, [W, Acc]) end,
+                                                      d(<<"Writes">>, <<"Done">>, []), Ws)]).
+sub2(T, K, D) -> tx2(T, once(K), [w(<<"StageJob2">>, [i(0)]), w(<<"PutReport">>, [i(D), {bytes, <<D>>}]), w(<<"RecordKey">>, [i(K), i(D)])]).
+receipt2(T, K, D, R, J) -> d(<<"Receipt">>, <<"Receipt2">>, [i(T), i(K), i(D), i(R), i(J)]).
+
+%% The migration of a store as the program computes it (UPGRADE.md section 2.1), staged
+%% row by row through the store's migration session.
+migrate_store() ->
+    {reply, First} = fenrir_store:migration(read, i(0)),
+    Rows = read_rows(First, 1),
+    [{reply, _} = fenrir_store:migration(stage, row2(R)) || R <- Rows],
+    fenrir_store:migration(install, i(length(Rows))).
+
+read_rows({data, <<"Next1">>, <<"NoMore">>, []}, _) -> [];
+read_rows({data, <<"Next1">>, <<"Next">>, [R]}, I) ->
+    {reply, N} = fenrir_store:migration(read, i(I)), [R | read_rows(N, I + 1)].
+
+row2({data, <<"Row1">>, <<"Job1">>, [T, J, R, S]}) ->
+    A = case S of {data, _, <<"Pending">>, _} -> 0; _ -> 1 end,
+    d(<<"Row2">>, <<"Job2">>, [T, J, R, S, i(A)]);
+row2({data, <<"Row1">>, <<"Key1">>, Fs}) -> d(<<"Row2">>, <<"Key2">>, Fs).
+
+begin_upgrade() -> fenrir_store:transition(begin_upgrade, #{image => <<"x">>, v2_image => <<"v2">>, migration_image => <<"m">>}).
+
+upgrade(C) ->
+    V2 = maps:get(v2_artifact, C, none),
+    Mig = maps:get(migration_artifact, C, none),
+    [t(upgrade_fresh_store_is_v1, fun() ->
+         with_store(C, "u-fresh", normal, fun(_) ->
+             U = fenrir_store:upgrade_state(), {maps:with([schema, upgrade], U) =:= #{schema => 1, upgrade => v1}, U} end) end),
+     t(upgrade_v2_commit_fenced_while_v1, fun() ->
+         with_store(C, "u-fence2", normal, fun(_) ->
+             R = fenrir_store:commit(sub2(0, 0, 0)), S = fenrir_store:snapshot(),
+             {element(1, R) =:= stale andalso S =:= [[[], [], [], 0], [[], [], [], 0]], {R, S}} end) end),
+     t(upgrade_full_cycle_in_the_adapter, fun() ->
+         with_store(C, "u-cycle", normal, fun(_) ->
+             {reply, _} = fenrir_store:commit(sub(0, 0, 0)),
+             {reply, _} = fenrir_store:commit(sub(1, 0, 1)),
+             {reply, _} = fenrir_store:commit(tx(1, pending(0), [w(<<"Finish">>, [i(0), {bool, false}])])),
+             E1 = fenrir_store:transition(cut_over, #{}),
+             ok = begin_upgrade(),
+             {reply, _} = fenrir_store:commit(sub(0, 1, 1)),
+             I = migrate_store(),
+             Stale = fenrir_store:commit(sub(0, 2, 0)),
+             Window = fenrir_store:commit(sub2(0, 2, 0)),
+             ok = fenrir_store:transition(cut_over, #{}),
+             Old = fenrir_store:commit(sub(0, 2, 0)),
+             Retry = fenrir_store:commit(sub2(0, 0, 0)),
+             New = fenrir_store:commit(sub2(0, 2, 0)),
+             Done = fenrir_store:commit(tx2(0, pending(0), [w(<<"Finish">>, [i(0), {bool, true}]), w(<<"CountAttempt">>, [i(0)])])),
+             Snap = fenrir_store:snapshot(),
+             Want = [[[[0, 0], [1, 1], [2, 0]], [[0, 0, <<"done">>, 1], [1, 1, <<"pending">>, 0], [2, 2, <<"pending">>, 0]],
+                      [[0, 0, [0, 0, 0, 0, 0]], [1, 1, [0, 1, 1, 1, 1]], [2, 0, [0, 2, 0, 2, 2, 2]]], 3],
+                     [[[0, 1]], [[0, 0, <<"failed">>, 1]], [[0, 1, [1, 0, 1, 0, 0]]], 1]],
+             Ok = element(1, E1) =:= refused andalso I =:= {reply, d(<<"Migrated">>, <<"Installed">>, [])}
+                  andalso element(1, Stale) =:= stale andalso element(1, Window) =:= stale andalso element(1, Old) =:= stale
+                  andalso Retry =:= {reply, d(<<"Reply">>, <<"Recorded">>, [i(0), receipt(0, 0, 0, 0, 0)])}
+                  andalso New =:= committed(receipt2(0, 2, 0, 2, 2)) andalso Done =:= reply(<<"Applied">>) andalso Snap =:= Want,
+             {Ok, {E1, I, Stale, Window, Old, Retry, New, Done, Snap}} end) end),
+     t(upgrade_install_changed_after_a_commit, fun() ->
+         with_store(C, "u-cas", normal, fun(_) ->
+             {reply, _} = fenrir_store:commit(sub(0, 0, 0)),
+             ok = begin_upgrade(),
+             {reply, First} = fenrir_store:migration(read, i(0)),
+             Rows = read_rows(First, 1),
+             [{reply, _} = fenrir_store:migration(stage, row2(R)) || R <- Rows],
+             {reply, _} = fenrir_store:commit(sub(0, 1, 0)),
+             R1 = fenrir_store:migration(install, i(length(Rows))),
+             U = maps:get(upgrade, fenrir_store:upgrade_state()),
+             R2 = migrate_store(),
+             {R1 =:= {reply, d(<<"Migrated">>, <<"Changed">>, [])} andalso U =:= prepared
+              andalso R2 =:= {reply, d(<<"Migrated">>, <<"Installed">>, [])}, {R1, U, R2}} end) end),
+     t(upgrade_install_refused_unless_prepared, fun() ->
+         with_store(C, "u-refused", normal, fun(_) ->
+             {reply, _} = fenrir_store:commit(sub(0, 0, 0)),
+             R = migrate_store(),
+             {R =:= {reply, d(<<"Migrated">>, <<"Refused">>, [])} andalso maps:get(schema, fenrir_store:upgrade_state()) =:= 1, R} end) end),
+     t(upgrade_unknown_schema_refused_at_open, fun() -> open_refused(C, "u-unknown",
+         ["UPDATE meta SET v = 'fenrir.host.service-store/9' WHERE k = 'schema'"]) end),
+     t(upgrade_inconsistent_state_refused_at_open, fun() -> open_refused(C, "u-inconsistent",
+         ["UPDATE meta SET v = 'migrated' WHERE k = 'upgrade'"]) end),
+     t(upgrade_v2_columns_under_schema_1_refused_at_open, fun() -> open_refused(C, "u-columns",
+         ["ALTER TABLE jobs ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0"]) end),
+     t(manifest_v2_handler_is_contract_2, fun() ->
+         R = fenrir_manifest:contract_version(V2), {R =:= {ok, 2}, R} end),
+     t(manifest_migration_program_is_migration_contract, fun() ->
+         R = fenrir_manifest:contract_version(Mig), {R =:= {ok, migration}, R} end),
+     t(manifest_v1_handler_is_contract_1, fun() ->
+         R = fenrir_manifest:contract_version(maps:get(artifact, C)), {R =:= {ok, 1}, R} end),
+     t(manifest_descriptor_claiming_another_contract_refused, fun() ->
+         {ok, IB} = file:read_file(maps:get(image, C)),
+         I = json:decode(IB),
+         Art = filename:join(maps:get(<<"batch_dir">>, I), "artifacts/0.json"),
+         R = fenrir_manifest:check(Art, I#{<<"contract_version">> => 2}),
+         {element(1, R) =:= refused, R} end)].
+
+%% A store file changed behind the adapter's back: reopening it must be refused.
+open_refused(C, Name, Sqls) ->
+    Db = filename:join([maps:get(out, C), "unit", Name ++ ".db"]),
+    with_store(C, Name, normal, fun(_) -> ok end),
+    {ok, P} = fenrir_sqlite:open(Db),
+    [{rows, _} = fenrir_sqlite:exec(P, Q) || Q <- Sqls],
+    fenrir_sqlite:close(P),
+    Old = process_flag(trap_exit, true),
+    R = fenrir_store:start_link(#{db => Db, tenants => 2, mutant => normal}),
+    receive {'EXIT', _, _} -> ok after 100 -> ok end,
+    process_flag(trap_exit, Old),
+    {element(1, R) =:= error andalso element(1, element(2, R)) =:= store_refused, R}.

@@ -6,4 +6,5 @@
   {mod, {fenrir_service_app, []}},
   {env, []},
   {modules, [fenrir_service_app, fenrir_service_sup, fenrir_store, fenrir_sqlite, fenrir_worker, fenrir_proto,
-             fenrir_value, fenrir_manifest, fenrir_front, fenrir_runner, fenrir_holder, fenrir_faults, fenrir_node]}]}.
+             fenrir_value, fenrir_manifest, fenrir_front, fenrir_runner, fenrir_holder, fenrir_faults, fenrir_node,
+             fenrir_upgrade]}]}.

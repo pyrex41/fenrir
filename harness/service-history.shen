@@ -192,7 +192,15 @@
     (let _ (set sh.*model-steps* 0)
          _ (set sh.*predicate-checks* 0)
          H (sh.norm (json.parse (read-file-as-string File) [[byte-limit 67108864]]))
-         Tenants (fh.field "tenants" H)
+      (if (= (trap-error (fh.field "schema" H) (/. E "")) "fenrir.service.history/2")
+          (shu.check File H [["history" File] ["scenario" (trap-error (fh.field "scenario" H) (/. E ""))]
+                             ["schema" "fenrir.service.history/2"] ["expect" (trap-error (fh.field "expect" H) (/. E "none"))]])
+          (sh.check-file-1 File H))))
+
+\\ Schema /1 (A3): against the A1 model, unchanged.
+(define sh.check-file-1
+  File H ->
+    (let Tenants (fh.field "tenants" H)
          Events (fh.field "events" H)
          Expect (trap-error (fh.field "expect" H) (/. E "none"))
          Start [[(svc.initial Tenants) (svcp.monitor-initial)]]
@@ -229,5 +237,9 @@
 (define sh.join
   [] -> ""
   [L | Ls] -> (cn L (cn (make-string "~%") (sh.join Ls))))
+
+\\ Stage A4: schema /2 histories, against the A4 model (spec/service/HISTORY_FORMAT.md
+\\ section 4).
+(load (cn (value fh.*root*) "harness/service-history-upgrade.shen"))
 
 (sh.main (value sx.*mode*))

@@ -8,6 +8,8 @@
 %% CONFIG: one Erlang map (consulted), see host/service/check.sh.
 -module(fenrir_campaign).
 -export([main/1]).
+%% Shared with the A4 campaigns (fenrir_campaign_a4).
+-export([ctx/3, scenario/5, check/3, snapshot_of/1, no_pending/1, retry_complete/5]).
 
 -define(D, fenrir_drive).
 
@@ -21,7 +23,9 @@ main([ConfigFile]) ->
     R = lists:append(
           [run_family(F, Ctx, C) || F <- [hand_traces, a2_runs, random_schedules, retries, duplicates,
                                            crash_points, sqlite_kills, lost_ack, busy, two_workers], Want(F)]
-          ++ [mutant_suite(M, C) || Want(mutants), M <- maps:get(mutants, C)]),
+          ++ [mutant_suite(M, C) || Want(mutants), M <- maps:get(mutants, C)]
+          ++ fenrir_campaign_a4:families(C, Want)
+          ++ [fenrir_campaign_a4:mutant_suite(M, C) || Want(a4_mutants), M <- maps:get(a4_mutants, C, [])]),
     ok = file:write_file(filename:join(Out, "scenarios.bin"), term_to_binary(R)),
     Hist = [maps:get(history, X) || X <- R, maps:is_key(history, X)],
     ok = file:write_file(filename:join(Out, "histories.txt"), [[H, $\n] || H <- Hist]),

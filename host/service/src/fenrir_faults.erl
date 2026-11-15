@@ -12,9 +12,14 @@
 %%   no flush), kill_tender (kill -9 of the solo5-spt process), kill_worker (exit kill of
 %%   the worker process), kill_port (kill -9 of the SQLite port program), lose_ack
 %%   (store: the port program kills itself after the next statement completes, before
-%%   answering), kill_store (exit kill of the store process).
+%%   answering), kill_store (exit kill of the store process), pause (A4: hold the hitting
+%%   process until release/1).
+%% A4 points: m1_before_request, m2_before_install (worker, migration run);
+%%   i1_after_begin .. i7_between_transactions (store, install); begin_upgrade_before_commit,
+%%   begin_upgrade_after_commit, cut_over_before_commit, cut_over_after_commit, abort_* (store,
+%%   upgrade transitions); u_after_migrate, u_after_cut_over_meta (fenrir_upgrade).
 -module(fenrir_faults).
--export([init/0, arm/3, disarm/0, hit/2, fired/0]).
+-export([init/0, arm/3, disarm/0, hit/2, fired/0, release/1, paused/1]).
 
 -define(T, fenrir_faults).
 
@@ -39,9 +44,23 @@ hit(Point, Ctx) ->
         [{Point, Action, 1}] ->
             ets:delete(?T, Point),
             ets:insert(?T, {{fired, Point}, Action}),
-            fire(Action, Ctx);
+            fire(Action, Point, Ctx);
         [{Point, Action, N}] -> ets:insert(?T, {Point, Action, N - 1}), ok
     end.
+
+fire(pause, Point, _) ->
+    %% A4: hold the process at Point until release(Point) (at most 60 s).
+    ets:insert(?T, {{paused, Point}, self()}),
+    receive {fenrir_release, Point} -> ok after 60000 -> ets:delete(?T, {paused, Point}), ok end;
+fire(Action, _Point, Ctx) -> fire(Action, Ctx).
+
+release(Point) ->
+    case ets:lookup(?T, {paused, Point}) of
+        [{_, Pid}] -> ets:delete(?T, {paused, Point}), Pid ! {fenrir_release, Point}, ok;
+        [] -> not_paused
+    end.
+
+paused(Point) -> ets:lookup(?T, {paused, Point}) =/= [].
 
 fire(kill_node, _) -> os:cmd("kill -9 " ++ os:getpid()), timer:sleep(infinity);
 fire(halt_node, _) -> erlang:halt(137, [{flush, false}]);

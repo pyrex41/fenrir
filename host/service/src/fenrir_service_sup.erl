@@ -36,8 +36,15 @@ init({top, Config}) ->
     {ok, {#{strategy => one_for_one, intensity => 1000, period => 10}, Children}};
 init({workers, Workers, Config}) -> worker_sup_init({Workers, Config}).
 
+%% A4: every worker resolves its image from the durable upgrade state when it starts
+%% (fenrir_worker:init/1, resolve): the configured image is the v1 image, the v2 image is
+%% the one begin-upgrade recorded. A restart after cut-over therefore boots v2 workers.
 worker_sup_init({Workers, Config}) ->
+    persistent_term:put(fenrir_launcher, maps:get(launcher, Config)),
+    persistent_term:put(fenrir_v1_image, maps:get(image, Config)),
+    persistent_term:put(fenrir_console_dir, maps:get(console_dir, Config, "/tmp")),
     Opts = #{image => maps:get(image, Config), launcher => maps:get(launcher, Config),
-             console_dir => maps:get(console_dir, Config, "/tmp")},
+             console_dir => maps:get(console_dir, Config, "/tmp"), resolve => true,
+             mutant => maps:get(mutant, Config, normal)},
     {ok, {#{strategy => one_for_one, intensity => 1000, period => 10},
           [#{id => W, start => {fenrir_worker, start_link, [W, Opts#{name => W}]}} || W <- Workers]}}.

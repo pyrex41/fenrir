@@ -1,0 +1,1 @@
+{"schema":"fenrir.service.history/2","tenants":2,"scenario":"a4-cut-over-before-migrate","expect":"rejected","note":"cut-over reported done in prepared","events":[["submit",0,0,0,["accepted",[0,0,0,0,0]]],["upgrade","begin","good",["ok"]],["upgrade","cut-over",["ok"]]],"expect_index":2}
