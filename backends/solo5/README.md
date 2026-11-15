@@ -164,6 +164,12 @@ Recorded run (15 November 2026; tender `c1b82476…`, guest image `9d2f225c…`,
 | Strict replay | 43 tapes (every hand and TC1 run), each replayed on 3 cold boots: 43 of 43 byte-identical every time; one tape on 10 cold boots and a run stopped mid-program (`reverse-operands`) on 3: all exact; all 43 re-recorded independently: byte-identical tapes |
 | Negative tests | 16 tape drifts, 25 hostile-host inputs, 21 hostile guest outputs, 3 non-responding peers and 16 byte vectors: each rejected (or accepted) exactly as expected |
 
+With stride 1 (`sh harness/run-solo5-control.sh 1`, about 2 minutes, 17,434 boots) the
+scope is the whole 5-node grammar: 5,738 programs, 82,527 steps, no difference in normal
+mode, `reverse-operands` caught on 3,979 (3,940 of them exhaustive) and `wrap-overflow` on
+238 (233 exhaustive), the counts the JS candidate's mutants give, again each at the exact
+first diverging step; replay and negative tests as above. The default stays the sample.
+
 The negative tests, with the rejection each must produce, are listed in the report
 (`build/solo5/control-pure-call/<run>/run/report.json`) and in
 [harness/README.md](../../harness/README.md).
