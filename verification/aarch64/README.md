@@ -1,77 +1,65 @@
 # Fenrir AArch64 verification lane
 
-This is an executable first milestone, separate from TC0 qualification and the
-historical Solo5 campaign. It compiles a closed subset of existing TC0-A artifacts
-to real AArch64 function bytes, proves the lowering in Rocq/Coq, and compares the
-bytes' execution under QEMU with the existing independent Fenrir candidate.
+This lane compiles closed subsets of existing TC0-A pure-call artifacts to real
+AArch64 function bytes, proves the compilation in Rocq, and checks the bytes'
+execution under QEMU against the existing independent Fenrir candidate. It is
+separate from TC0 qualification and from the Solo5 campaign.
 
-**The proof currently ends at a handwritten instruction model.** It does not yet
-prove correspondence with authoritative ARM/Sail semantics, the JSON projection,
-Linux process execution, Solo5, Chez, or the complete Fenrir language. These are
-explicit missing theorems, not axioms silently introduced into the proof.
+**The proofs end at a handwritten instruction model.** They do not prove
+correspondence with Arm's authoritative semantics, the JSON projection, loading,
+Linux process execution, Solo5, or the complete Fenrir language. These are
+explicit missing theorems, not axioms introduced into the proofs.
+
+Status under the amendment's vocabulary (§9): *implementation refinement proved*
+for two closed profiles against that model; the source side is related to the
+Shen model by test only (below).
 
 ## Run
 
-Tested with Coq 8.18.0 (Rocq's former name), GNU AArch64 binutils 2.42, Node 22+
-and QEMU 8.2.2 on Linux x86-64. No runtime dependency is downloaded by the check.
-
 ```sh
-# Ubuntu 24.04, when these tools are not already installed:
-sudo apt-get install coq binutils-aarch64-linux-gnu qemu-user
-node --test tests/aarch64/*.test.mjs
-node tools/aarch64/check.mjs
-
-# Compile an individual existing-format artifact:
-node tools/aarch64/compile.mjs fixtures/aarch64/checked-roundtrip.json build/arm-example
+sh verification/aarch64/check.sh
 ```
 
-The full check creates a fresh directory under `build/aarch64/`, compiles the
-universal theorem and twelve concrete image theorems, replays the resulting
-objects with `coqchk`, independently assembles equivalent mnemonics, executes 564
-QEMU comparisons, and rejects three mutated binaries both by proof and by execution.
-Missing tools, timeouts and proof-checker errors fail the gate. The one-shot compile
-command emits **candidate** bytes and a proof obligation; it does not certify them.
+Every tool comes from the flake (`nix build .#aarch64-verification`, devShell
+`nix develop .#aarch64-verification`): Rocq 9.3.0 (Búri's pin, amendment §3)
+with its standard library V9.2.0, GNU binutils 2.46 for AArch64, qemu-user
+11.1.1 and Node 22; Shen/JIT 0.7 from `.#shen-jit`. The script runs, in a fresh
+`build/aarch64/check-*` directory, and fails on any error, missing tool or
+timeout:
 
-The report is `development-pass`, never a TC0 qualification receipt. It includes
-exact artifact/code identities, proof source identity, tool versions, claim scope,
-and remaining obligations. `assumptions.log` must show closure under the global
-context. `coqchk.log` is retained. Coqchk is separate replay of compiled proof
-objects, not an independently implemented proof kernel. The Linux test launcher
-and its syscalls are tested infrastructure, outside the function theorem.
+1. `node --test tests/aarch64/*.test.mjs`;
+2. `node tools/aarch64/check.mjs` — profile `fenrir-aarch64-checked-unary/1` as
+   published in PR #8 (only its tool names now go through `toolchain.mjs`);
+3. `node tools/aarch64/check-expr.mjs` — profile `fenrir-aarch64-checked-expr/1`;
+4. `sh harness/run-aarch64-differential.sh` — the source semantics against the
+   Shen model.
 
-## Closed admitted profile
+It writes `summary.json` with links to each report. Status is
+`development-pass`, never a qualification receipt.
 
-`fenrir-aarch64-checked-unary/1` accepts one pure I64-to-I64 function with no
-additional declarations. Its body is the parameter or a chain of:
+Recorded run, 15 November 2026 ([validation-2026-11-15.json](validation-2026-11-15.json)),
+3 min 40 s on Linux x86-64:
 
-- `add expression literal`, where the literal is in 0..4095;
-- `sub expression literal`, in the same range;
-- `neg expression`.
+| Part | Result |
+| --- | --- |
+| Unit tests | 9 passed, 0 failed |
+| Unary profile | Core.v plus 12 exact-image theorems closed under the global context; rocqchk replay passed; 12 GNU-as byte agreements; 564 QEMU comparisons agree with `PureCallMachine`; 3 mutated binaries rejected by proof and by execution |
+| Expr profile | 6 modules compiled; `compile_correct` and `compile_correct_typed` closed under the global context; 70 programs (30 hand, 40 generated) each with an exact-image theorem closed under the global context; 70 GNU-as byte agreements; 2,520 QEMU comparisons (70 × 36 inputs: 1,335 Ok I64, 535 Ok Bool, 573 Overflow, 77 DivZero) agree with `PureCallMachine`; 10 single-instruction mutants each rejected by its byte-identity proof and diverging under QEMU; rocqchk replayed all 76 modules |
+| Shen differential | 82 programs (12 unary, 70 expr) × 40 inputs = 3,280 cases; the Shen model completed every case (1,920 Ok I64, 593 Ok Bool, 682 Overflow, 85 DivZero); Rocq proved `failures = []`; the control file with three falsified expectations was refuted at exactly those three cases |
 
-The existing `validatePureCallArtifact` runs first, including schema, types,
-unique IDs and source-map coverage. The narrower profile then rejects all other
-well-typed syntax. Neither unsupported operations nor unused functions disappear
-silently. Both existing pure-call schema versions are supported without changes.
+Not run here: physical ARM hardware, Sail/Islaris, Solo5 on AArch64, a second
+Shen port, and this repository's GitHub Actions workflow (configured, its
+remote result is not part of this record).
 
-Input is a signed I64 in x0. On return, x1 is 0 for success and x0 is the signed
-result, or x1 is 1 for Overflow with x0 unspecified. x30 supplies the caller return
-address in real execution. This is a custom two-register result convention, not
-a proof of general AAPCS64 interoperability. Generated instructions touch x0, x1
-and NZCV and return through x30. No emitted instruction accesses data memory, but
-the model has no memory subsystem: there is no whole-machine memory-safety claim.
+## Profiles
 
-Each arithmetic operation is followed by `b.vc` over an overflow-return path.
-Intermediate overflow is observable: `(x + 1) - 1` traps at maximum I64. It must
-not be optimized into identity. Negating minimum I64 traps too.
+### `fenrir-aarch64-checked-unary/1` (PR #8, unchanged)
 
-## What is proved
-
-`Core.v` defines mathematical checked arithmetic, a unary source AST, its lowering,
-word encoding/decoding, little-endian byte decoding and a fuelled instruction
-interpreter. Integer registers are represented by their signed mathematical
-values. Results are normalized modulo 2^64. V is calculated independently from
-input/output sign conditions for each supported instruction, then proved equal
-to Fenrir's out-of-range predicate for admitted operands.
+One pure `I64 → I64` function whose body is the parameter or a chain of `add`
+or `sub` by a literal in 0..4095 and `neg`. Each operation is followed by
+`b.vc` over an inline overflow return. Its PC is the remaining-instruction
+list and registers are signed integers. Theorems in [Core.v](Core.v), whose
+only edit is the Rocq 9 import prefix:
 
 | Theorem | Meaning |
 |---|---|
@@ -84,28 +72,104 @@ to Fenrir's out-of-range predicate for admitted operands.
 | Generated `image_identity` | Exact emitted byte list decodes to the proved instruction sequence |
 | Generated `exact_image_correct` | Those exact bytes implement the projected source AST in the model for every signed-I64 input |
 
-The bound `4 * operation_count + 2` is sufficient for modeled return. This is a
-termination theorem for the closed loop-free profile, not a wall-clock guarantee
-or a statement about blocking I/O. The proofs introduce no custom axioms.
+### `fenrir-aarch64-checked-expr/1` (new)
+
+One pure function `I64 → I64` or `I64 → Bool` with no other declarations,
+whose body uses only: I64 and Bool literals, the parameter and `let`-bound
+variables, `let`, `if`, `neg`, `not`, `add`/`sub`/`mul`/`div` between arbitrary
+subexpressions, and `lt`/`le`/`gt`/`ge`/`eq` (I64 or Bool operands for `eq`). The
+closed TC0 validator runs first; every other well-typed construct (calls,
+lambdas, `emit`, data) is rejected, not dropped. An image is admitted only if
+every encoded field fits (`encodable`), which bounds code size (±1 MiB branch
+range) and stack depth (2,047 slots for variable offsets); no profile program
+comes near these.
+
+Code shape: `x9` holds the frame base; the parameter and every `let` value
+live in 16-byte stack slots addressed from `sp`; a binary operation evaluates
+its left operand, pushes it, evaluates the right operand, pops the left into
+`x1`. Each check is inline and returns at once with the trap status: `adds`/
+`subs` then `b.vc`; `smulh`, `mul`, `cmp hi, lo, asr #63` then `b.eq`;
+`cbnz` for the zero divisor and `cmn`/`b.ne`/`negs xzr`/`b.vc` for MIN / −1
+before `sdiv`; `cmp` then `csinc` for comparisons; `cbz`/`b` for `if`. Nothing
+is reordered: `(x + 1) - 1` traps at maximum I64, an operand's trap is the
+expression's trap, and a branch not taken is never evaluated.
+
+## What is proved
+
+[Expr.v](Expr.v) (source), [Machine.v](Machine.v) (instruction model),
+[Flags.v](Flags.v), [Encode.v](Encode.v), [Compile.v](Compile.v):
+
+| Theorem | Statement in words |
+| --- | --- |
+| `Expr.type_safety` | If `typeof G e = Some t` and the environment's values have the types `G`, then `eval env e` is `Some r` and `r` is a trap or a value of type `t` (I64 values inside the I64 range) |
+| `Flags.addsub_fst/N/Z/V` | The AddWithCarry transcription's result is the signed normalization of `x ± y`; N, Z and V are its sign, zero test and "not in I64" |
+| `Flags.cmp_conditions` | After `SUBS` of two in-range values, ConditionHolds for GE, LT, GT, LE, EQ, NE is exactly `y ≤ x`, `x < y`, `y < x`, `x ≤ y`, `x = y`, `x ≠ y` |
+| `Flags.mul_check` | For in-range `a`, `b`: EQ after `CMP SMULH(a,b), MUL(a,b) ASR 63` holds exactly when `a·b` is in I64 |
+| `Flags.quot_overflow` | For in-range `a` and non-zero in-range `b`, the truncated quotient is in I64 exactly unless `a = MIN ∧ b = −1` |
+| `Flags.load_imm_value` | MOVZ then three MOVK of the four 16-bit halves of an in-range `n` leave `n` |
+| `Encode.decode_encode` | For every instruction whose fields fit, `decode (encode i) = Some i` |
+| `Encode.image_decodes` | For every list of such instructions, its little-endian byte image decodes back to the list |
+| `Compile.compile_correct` | For every source `e`, input `x` and machine state `s` with in-range registers, PC 0, `x0 = x`, 16-byte-aligned `sp` and 16·(1 + depth e) bytes of stack below it: if `eval_main e x = Some r` then there is a final state `f` such that for every fuel ≥ the code length the interpreter returns `f` (it reaches `ret` within that many steps); `f`'s PC is the entry `x30`, `sp` is restored, every register other than x0–x3 and x9 and all memory at or above the entry `sp` are unchanged, and `x1 = 0 ∧ x0 = repr v` when `r = Ok v`, `x1 = trap_code t` when `r` is trap `t` |
+| `Compile.compile_correct_typed` | The same for every `e` with `typeof [TInt] e = Some t` and every in-range `x`, with `eval_main e x` shown to exist and have type `t` |
+| Generated `image_identity` | The exact emitted bytes equal `image_of (compile_fn source)` (kernel `vm_compute`) |
+| Generated `exact_image_correct` | Any code the exact bytes decode to satisfies `compile_correct_typed` for `source` |
+
+`Print Assumptions` for `compile_correct`, `compile_correct_typed` and every
+`exact_image_correct`: *Closed under the global context*. No `Admitted`, no
+axioms. The trap behaviour and left-to-right order are part of `eval`, hence
+of every statement.
+
+### What "implementation refinement proved" covers here
+
+- **A handwritten instruction model.** `Machine.v` transcribes the Arm ARM
+  pseudocode for the instructions used (AddWithCarry, ConditionHolds,
+  ShiftReg, MADD, SMULH, SDIV, CSINC, MOVZ, MOVK, LDR/STR immediate with the SP
+  alignment check, B, B.cond, CBZ/CBNZ, RET). The flag and condition facts are
+  proved from the transcription, not defined as the answers. Nothing relates
+  the transcription to Arm's machine-readable specification.
+- **Registers as bounded mathematical integers.** X0–X30 and SP hold the
+  SInt of their 64 bits, an integer in [−2^63, 2^63); `wf` is that range
+  invariant and every instruction preserves it (`step_wf`). UInt is recovered
+  modulo 2^64. PC is a byte offset from the image start (aligned fetch of the
+  image's words), not an address. Memory is a map from addresses to
+  doublewords: no bytes, no overlapping accesses, permissions, faults or other
+  agents.
+- **No ISA correspondence, no loader, no ABI beyond [ABI.md](ABI.md).** RET
+  ends the modelled execution; the caller and the image's placement are not
+  modelled.
+
+## Source semantics and the Shen model
+
+The lane's source semantics is **local to the lane**: `Core.eval_expr` and
+`Expr.eval_main` are Rocq definitions written by hand, each rule citing the
+function of [models/tc0/pure-call-machine.shen](../../models/tc0/pure-call-machine.shen)
+or [models/tc0/i64.shen](../../models/tc0/i64.shen) it transcribes. There is no
+proof that they agree with the Shen model; the amendment (§3) puts that route
+through Búri's KLambda semantics. What exists is a test:
+[harness/aarch64-differential.shen](../../harness/aarch64-differential.shen)
+runs the model on every program the lane proves and runs, over the I64 boundary
+inputs, and Rocq checks the lane's definitions against the model's outcomes
+(3,280 cases agree; table above). Outside those cases agreement is unknown.
 
 ## Trust and evidence boundaries
 
-1. **Source authority:** TC0 defines language meaning; `Core.v` is a scoped
-   formalization. JavaScript JSON admission/projection into the Rocq AST is not
-   verified. The existing candidate supplies differential evidence, not semantic
-   authority. The gate does not execute the Shen oracle and says so explicitly.
-2. **ISA:** the decoder and interpreter are handwritten. GNU assembly agreement
-   and QEMU comparisons test the encoding and model; they do not prove ARM
-   semantics. The next research task is a checked Sail/Islaris bridge for exactly
-   this instruction set, including flags and control transfer.
-3. **Execution:** code loading, executable permissions, instruction fetch, address
-   placement, return-address validity, exceptions, other registers, cache effects
-   and hardware faults are outside this model. The model's remaining-list PC is
-   not yet related to architectural addresses.
-4. **Checking:** Rocq's kernel and its execution environment remain trusted.
-   Native computation is not used as an unproved acceptance axiom; generated
-   instances use kernel-checked `vm_compute` proof terms.
-5. **Scope:** neither the existing TC0-A qualification status nor the frozen Solo5
-   image epoch changes. No existing oracle, goldens, controller or gate is edited.
+1. **Projection (open, ARM-02).** `tools/aarch64/compile.mjs` and `expr.mjs`
+   turn artifact JSON into the Rocq AST. This is unverified. The differential
+   test exercises it (it uses the same projection), but proves nothing about it.
+2. **ISA (open, ARM-03).** The decoder and interpreter are handwritten. GNU
+   assembly agreement and QEMU runs test them. ARM-03 builds on Búri's ARM
+   foundation (Sail model, Islaris environment, a first byte-level lemma against
+   the Armv9.4 model; [PLAN.md](PLAN.md)).
+3. **Execution (open, ARM-04).** Loading, executable permissions, instruction
+   fetch from addresses, return-address validity, exceptions, caches, other
+   cores, hardware faults. The QEMU launcher and its Linux syscalls are tested
+   infrastructure outside every theorem.
+4. **Checking.** Rocq's kernel and its build remain trusted; `rocqchk` replays
+   the compiled objects but is not an independent kernel. Generated instances
+   use kernel-checked `vm_compute`.
+5. **Scope.** Neither TC0-A qualification status nor the Solo5 epochs change.
+   No oracle, golden, controller or gate is edited. Proved code reaches a Solo5
+   guest only once the Solo5 lane builds for AArch64 (amendment §7 item 5).
 
-See [PLAN.md](PLAN.md) for the route to a reusable, authoritative ARM backend.
+See [PLAN.md](PLAN.md) for the route to a reusable, authoritative ARM backend
+and [VALIDATION.md](VALIDATION.md) for the recorded runs.

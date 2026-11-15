@@ -65,7 +65,7 @@ So Fenrir does not get its own Rocq core:
 
 **Harness language.** The owner ruled that the machinery around the model should be Shen as well, not Python or JavaScript. [harness/](harness/README.md) holds it: every check of the TC0-A gate is a Shen program, and on 13 November 2026 the registered gate evaluator changed from Python to `harness/gate.shen` by the owner's instruction ([record](campaigns/tc0/G1_SHEN_EVALUATOR_SWITCH.md)). The second implementations (JavaScript, C) stay non-Shen because their value is independence from the model.
 
-**Proof assistant version.** Use a current Rocq release where Rocq is needed. Búri pins Rocq 9.3.0 for its current lane; this repository follows Búri's pin rather than choosing separately. The two Rocq files here were checked with Coq 8.18 and are to be moved when they are next touched.
+**Proof assistant version.** Use a current Rocq release where Rocq is needed. Búri pins Rocq 9.3.0 for its current lane; this repository follows Búri's pin rather than choosing separately. The two Rocq files here were checked with Coq 8.18 and are to be moved when they are next touched; the AArch64 lane moved to Rocq 9.3.0 on 15 November 2026 (flake output `aarch64-verification`).
 
 ### Programmable typing, fixed checking
 
@@ -217,7 +217,7 @@ Gate verdicts (PASS, FAIL, UNKNOWN, BLOCKED, DEFERRED) are unchanged. Claims add
 | Bounded exploration passed | No violation within the explored programs, schedules and bounds |
 | Observed history accepted | This recorded execution is consistent with the specification |
 
-Current standing under this vocabulary: TC0-A is *bounded exploration passed* (at `1db7471`, under waivers). The Solo5 free-run comparisons are *bounded exploration passed* against Shen and the JS candidate, development grade, and so is the host-controlled run with strict replay against Shen (stock `spt`, sampled exhaustive scope). The AArch64 lane is *implementation refinement proved* for a closed unary checked-I64 add/subtract/negate profile against a handwritten instruction model, and is still a draft PR. The service example is *model property proved*. Nothing in the repository is yet a refinement proof against real hardware semantics or a real database.
+Current standing under this vocabulary: TC0-A is *bounded exploration passed* (at `1db7471`, under waivers). The Solo5 free-run comparisons are *bounded exploration passed* against Shen and the JS candidate, development grade, and so is the host-controlled run with strict replay against Shen (stock `spt`, sampled exhaustive scope). The AArch64 lane is *implementation refinement proved* against a handwritten instruction model for two closed profiles: the unary checked-I64 add/subtract/negate chain, and since 15 November 2026 `fenrir-aarch64-checked-expr/1` (add/sub/mul/div between subexpressions with intermediate traps, comparisons and Bool, `if`, `let`; `compile_correct` closed under the global context, 70 exact-image theorems, 2,520 QEMU comparisons, 10 rejected mutants). Its source semantics is local to the lane and agrees with the Shen model on 3,280 tested cases (*bounded exploration passed*, not proved). The service example is *model property proved*. Nothing in the repository is yet a refinement proof against real hardware semantics or a real database.
 
 ## 10 Build order
 
@@ -231,7 +231,7 @@ Current standing under this vocabulary: TC0-A is *bounded exploration passed* (a
 | B3 | **Frontend**, written in Shen: reader, elaboration to checked core artifacts, effect-row inference, typing rules as sequent rules | A program a person can write, read, run and check, executing in Solo5 |
 | B4 | **Tasks and channels** under the production scheduling contract (§14) | The commuting obligation checked on the exhaustive-small scope |
 | B5 | **Service example** A1 → A3 (§8) on BEAM, SQLite and a Solo5 worker | Crash and duplicate-delivery campaigns accepted against the contract |
-| B6 | **Proved native code** growing from the AArch64 lane: branches, calls, closures, data | Proved code for a program that is not only arithmetic |
+| B6 | **Proved native code** growing from the AArch64 lane: branches, calls, closures, data (branches, comparisons, Bool, `let` and stack slots done in development 15 November 2026: profile `fenrir-aarch64-checked-expr/1`, Rocq 9.3, `compile_correct` closed, 70 programs proved for their exact bytes and run in QEMU, Shen differential 3,280 cases agree; calls, closures and data not started. The done-when holds at development grade against the handwritten instruction model only; ARM-03 is open) | Proved code for a program that is not only arithmetic |
 
 B1 and B2 do not depend on each other. B3 needs B2's contract text, not its implementation. The first universal-claim test of §3 (one TC0-A property through Búri's checker) runs alongside B1.
 

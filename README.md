@@ -61,13 +61,17 @@ store. The amendment changes no TC0 evidence.
 
 ## AArch64 proof development
 
-The [AArch64 verification lane](verification/aarch64/README.md) compiles a closed
-checked-I64 subset of existing TC0-A artifacts to actual instruction bytes, proves
-its lowering in Rocq/Coq, and checks execution against the existing candidate with
-QEMU. The proof currently uses a **handwritten instruction model**; authoritative
-ARM refinement, JSON/source correspondence and whole-image execution remain open.
-This lane does not promote the historical TC0 or Solo5 qualification status.
-See the [implementation roadmap](verification/aarch64/PLAN.md).
+The [AArch64 verification lane](verification/aarch64/README.md) compiles closed
+subsets of existing TC0-A artifacts to actual instruction bytes, proves the
+compilation in Rocq 9.3, and checks execution against the existing candidate with
+QEMU. Two profiles are proved: the unary checked-I64 chain of PR #8, and
+`fenrir-aarch64-checked-expr/1` with binary arithmetic between subexpressions
+(intermediate traps kept), comparisons and Bool, `if` and `let`. The proofs use a
+**handwritten instruction model**; authoritative ARM refinement, the JSON
+projection, loading and whole-image execution remain open, and the lane's source
+semantics agrees with the Shen model by test only. One entry point runs it all:
+`sh verification/aarch64/check.sh`. This lane does not promote the historical TC0
+or Solo5 qualification status. See the [implementation roadmap](verification/aarch64/PLAN.md).
 
 ## How far along are we?
 
