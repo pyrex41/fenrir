@@ -1,0 +1,100 @@
+{
+  "schema": "fenrir.service.upgrade-hand-traces/1",
+  "contract": "spec/service/UPGRADE.md",
+  "provenance": "Derived by hand from UPGRADE.md sections 2-4 and 7 (encoding: section 7) after models/service-a4/upgrade.shen was written and before it, or any harness, was run on anything. Committed before the first exploration.",
+  "tenants": 2,
+  "traces": [
+    {
+      "name": "upgrade-with-pending-job",
+      "schedule": [["submit", 0, 0, 0], ["respond", ["accepted", [0, 0, 0, 0, 0]]], ["begin-upgrade", "good"], ["migrate"], ["cut-over"], ["complete", 0, 0, true]],
+      "responses": [["accepted", [0, 0, 0, 0, 0]], ["accepted", [0, 0, 0, 0, 0]], null, null, null, null],
+      "final": [["v2", "good"],
+                [[[[0, 0]], [[0, 0, "done", 1]], [[0, 0, [0, 0, 0, 0, 0]]], 1], [[], [], [], 0]],
+                [["accepted", [0, 0, 0, 0, 0]]],
+                [["accepted", [0, 0, 0, 0, 0]]]]
+    },
+    {
+      "name": "retry-after-upgrade-returns-v1-receipt",
+      "schedule": [["submit", 1, 0, 1], ["crash"], ["begin-upgrade", "good"], ["migrate"], ["cut-over"], ["submit", 1, 0, 1], ["submit", 1, 0, 0]],
+      "responses": [["accepted", [1, 0, 1, 0, 0]], null, null, null, null, ["accepted", [1, 0, 1, 0, 0]], ["conflict", 1, 0]],
+      "final": [["v2", "good"],
+                [[[], [], [], 0], [[[0, 1]], [[0, 0, "pending", 0]], [[0, 1, [1, 0, 1, 0, 0]]], 1]],
+                [["accepted", [1, 0, 1, 0, 0]], ["conflict", 1, 0]],
+                []]
+    },
+    {
+      "name": "new-request-after-cut-over-gets-v2-receipt",
+      "schedule": [["begin-upgrade", "good"], ["migrate"], ["cut-over"], ["submit", 0, 1, 0], ["complete", 0, 0, false], ["respond", ["accepted", [0, 1, 0, 0, 0, 2]]]],
+      "responses": [null, null, null, ["accepted", [0, 1, 0, 0, 0, 2]], null, ["accepted", [0, 1, 0, 0, 0, 2]]],
+      "final": [["v2", "good"],
+                [[[[0, 0]], [[0, 0, "failed", 1]], [[1, 0, [0, 1, 0, 0, 0, 2]]], 1], [[], [], [], 0]],
+                [["accepted", [0, 1, 0, 0, 0, 2]]],
+                [["accepted", [0, 1, 0, 0, 0, 2]]]]
+    },
+    {
+      "name": "requests-refused-between-migrate-and-cut-over",
+      "schedule": [["submit", 0, 0, 0], ["begin-upgrade", "good"], ["migrate"], ["submit", 0, 1, 1], ["complete", 0, 0, true], ["crash"], ["cut-over"], ["complete", 0, 0, true]],
+      "responses": [["accepted", [0, 0, 0, 0, 0]], null, null, "unavailable", "unavailable", null, null, null],
+      "final": [["v2", "good"],
+                [[[[0, 0]], [[0, 0, "done", 1]], [[0, 0, [0, 0, 0, 0, 0]]], 1], [[], [], [], 0]],
+                [],
+                []]
+    },
+    {
+      "name": "stale-v1-run-fenced",
+      "schedule": [["dispatch", ["submit", 0, 0, 0]], ["begin-upgrade", "good"], ["migrate"], ["land", 0], ["cut-over"], ["submit", 0, 0, 0]],
+      "responses": [null, null, null, "unavailable", null, ["accepted", [0, 0, 0, 0, 0, 2]]],
+      "final": [["v2", "good"],
+                [[[[0, 0]], [[0, 0, "pending", 0]], [[0, 0, [0, 0, 0, 0, 0, 2]]], 1], [[], [], [], 0]],
+                [["accepted", [0, 0, 0, 0, 0, 2]]],
+                []]
+    },
+    {
+      "name": "v1-run-lands-while-prepared",
+      "schedule": [["dispatch", ["submit", 1, 1, 0]], ["begin-upgrade", "good"], ["land", 0], ["migrate"]],
+      "responses": [null, null, ["accepted", [1, 1, 0, 0, 0]], null],
+      "final": [["migrated", "good"],
+                [[[], [], [], 0], [[[0, 0]], [[0, 0, "pending", 0]], [[1, 0, [1, 1, 0, 0, 0]]], 1]],
+                [["accepted", [1, 1, 0, 0, 0]]],
+                []]
+    },
+    {
+      "name": "bad-image-refused",
+      "schedule": [["begin-upgrade", "bad"], ["submit", 0, 0, 1]],
+      "responses": ["refused", ["accepted", [0, 0, 1, 0, 0]]],
+      "final": [["v1"],
+                [[[[0, 1]], [[0, 0, "pending"]], [[0, 1, [0, 0, 1, 0, 0]]], 1], [[], [], [], 0]],
+                [["accepted", [0, 0, 1, 0, 0]]],
+                []]
+    },
+    {
+      "name": "abort-before-migrate-then-migrate-not-enabled",
+      "schedule": [["begin-upgrade", "good"], ["submit", 0, 0, 0], ["abort-upgrade"], ["complete", 0, 0, true], ["migrate"]],
+      "disabled_at": 4
+    },
+    {
+      "name": "migrate-counts-a-finished-job-once",
+      "schedule": [["submit", 1, 0, 0], ["complete", 1, 0, false], ["complete", 1, 0, true], ["begin-upgrade", "good"], ["migrate"], ["complete", 1, 0, true]],
+      "responses": [["accepted", [1, 0, 0, 0, 0]], null, null, null, null, "unavailable"],
+      "final": [["migrated", "good"],
+                [[[], [], [], 0], [[[0, 0]], [[0, 0, "failed", 1]], [[0, 0, [1, 0, 0, 0, 0]]], 1]],
+                [["accepted", [1, 0, 0, 0, 0]]],
+                []]
+    },
+    {
+      "name": "cut-over-not-enabled-before-migrate",
+      "schedule": [["begin-upgrade", "good"], ["cut-over"]],
+      "disabled_at": 1
+    },
+    {
+      "name": "dispatch-not-offered-while-migrated",
+      "schedule": [["begin-upgrade", "good"], ["migrate"], ["dispatch", ["complete", 0, 0, true]]],
+      "disabled_at": 2
+    },
+    {
+      "name": "crash-keeps-upgrade-state-and-drops-runs",
+      "schedule": [["begin-upgrade", "good"], ["dispatch", ["submit", 0, 0, 0]], ["crash"], ["land", 0]],
+      "disabled_at": 3
+    }
+  ]
+}
