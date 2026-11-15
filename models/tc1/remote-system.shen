@@ -1,6 +1,7 @@
 \\ TC1 remote perform: a system of images under one supervisor.
-\\ Contract: spec/tc1/EFFECTS.md §12. UNQUALIFIED. A model only: no supervisor
-\\ and no multi-image runtime exists yet.
+\\ Contract: spec/tc1/EFFECTS.md §12. UNQUALIFIED. A model only. The first
+\\ implementation (supervisor/, backends/solo5/remote/) is judged against it by
+\\ harness/tc1-remote-run.shen.
 \\
 \\ A system is a fixed set of members (images), a supervisor that carries every
 \\ message between them, and a manifest of the connections it will carry. This

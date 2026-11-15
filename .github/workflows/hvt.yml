@@ -28,6 +28,12 @@ jobs:
             system-features = nixos-test benchmark big-parallel kvm
       - name: Build pinned Solo5
         run: nix build .#solo5 --print-out-paths -L
+      # Not hvt: the remote-perform system (Erlang/OTP supervisor and two guests) runs on
+      # the spt tender. Its transport is plain files, so it needs no privileges and no KVM.
+      - name: Remote perform on spt against the Shen model
+        run: |
+          export FENRIR_SOLO5=$(nix build .#solo5 --no-link --print-out-paths)
+          nix shell --inputs-from . nixpkgs#nodejs_22 -c sh harness/run-tc1-remote-run.sh
       # hvt directly on the runner: one level of nesting.
       - name: hvt against the Shen model and spt, on the runner
         run: nix run .#hvt-compare

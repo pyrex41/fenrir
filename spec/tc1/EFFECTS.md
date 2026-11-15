@@ -299,12 +299,15 @@ Open:
 3. Whether a clause that traps before using its resumption should be a
    validation error instead of an implicit abort.
 
-## 12 Remote perform (model only)
+## 12 Remote perform (model, and a first implementation)
 
 **Status.** A contract and an executable Shen model of it
 (`models/tc1/remote-system.shen`), explored exhaustively on small systems
-(§12.8). No supervisor and no multi-image runtime exist; nothing here has been
-run against Erlang/OTP or a Solo5 guest. The owner's decisions of 15 November
+(§12.8). A first implementation exists, an Erlang/OTP supervisor and two Solo5
+images on the `spt` tender; recorded runs of it have been replayed through the
+model (§12.11). That is observed histories accepted, not a proof, and there is
+no `hvt` run. Paragraphs marked *Clarification (implementation)* were added
+because the implementation forced the question. The owner's decisions of 15 November
 2026 are taken as fixed: three outcomes and failure as data; no continuation
 crosses an image boundary; a static, declared topology. Where this section had
 to choose beyond them, the choice is listed in §12.10.
@@ -410,6 +413,15 @@ back along the connection of its request.
 This is an authority property: which member can cause which other member to
 act. It is not confidentiality (§12.9).
 
+*Clarification (implementation).* The first implementation assumes the answer
+to question 1 of §12.10 that was recommended for it: the first check is when
+the system is assembled. Each image carries the connections its program was
+built with, and if one of them is not in the manifest the supervisor starts no
+member at all. The refusal above stays as the backstop behind it,
+because it does not depend on what an image says about itself. A system that
+passed the start-time check never takes a `refuse` step unless an image
+performs on a connection it did not declare.
+
 ### 12.7 Crash and restart
 
 Any member that is up may crash at any time. The crash loses its volatile
@@ -490,6 +502,22 @@ given the outcome as the value of that perform.
 
 This is in no gate.
 
+*Clarification (implementation).* Three things the list of events leaves open,
+which the implementation had to settle:
+
+- **Hand-over.** A request counts as handed over from the moment the
+  supervisor starts to put it where the peer image can read it. The record is
+  made before the write, not after it.
+- **An outcome is reported before it is observed.** The supervisor's `outcome`
+  event is its report. The program sees the value when its image next runs. A
+  caller that crashes in between is in the same position as one that crashed
+  just after observing it: its image is lost either way. What an image does
+  between two scheduling points (its emissions) becomes visible outside before
+  the supervisor's next step for that image, and a crash can cut it anywhere.
+- **A finished caller.** A member whose program has ended is still up in the
+  sense of §12.1; its image no longer runs. A crash of it only makes a restart
+  possible.
+
 ### 12.9 Not covered
 
 - **Liveness.** Nothing says a request is ever handed over, a reply ever
@@ -521,9 +549,14 @@ This is in no gate.
 1. **Refusal.** An undeclared connection returns `peer_down` here, because the
    guarantee is the same and the outcomes stay three. Alternatives: reject the
    program at build time and fault the image if it tries; or a fourth outcome.
+   *Assumed by the first implementation, not yet an owner ruling:* rejected
+   when the system is assembled from the manifest, with the run-time refusal
+   kept as a backstop (§12.6).
 2. **Who chooses the key.** Here the program does, as part of the argument, so
    that a retry and a restarted caller name the same request. The alternative,
    ids assigned by the supervisor, cannot survive the caller's restart.
+   *Assumed by the first implementation, not yet an owner ruling:* the program
+   chooses.
 3. **May the supervisor duplicate?** Allowed here, to be safe. If the OTP
    supervisor never redelivers, the clause can go; retries still need §12.3.
 4. **`peer_down` only while the peer is down.** The supervisor could also
@@ -540,3 +573,80 @@ This is in no gate.
    does with `Conflict`, or unspecified?
 9. **Naming and class.** Is a remote operation a runtime effect with a reserved
    name, or a fourth class beside ordinary, runtime and durable (§8)?
+10. **The supervisor's record of `acted`** (raised by the implementation). In
+    the model a peer's action, its record and the sending of the reply are one
+    step. In an implementation the durable commit comes first and the reply
+    after it, and the supervisor learns of the action from the reply. A peer
+    killed in between has acted and the supervisor's record does not say so.
+    The outcomes are unaffected, since after hand-over nothing but `reply` and
+    `timed_out` is possible; but the record of §12.8 is then incomplete, and a
+    replay of it through the model fails at the later `replayed`. Either the
+    supervisor completes its record from the peer's durable store when the
+    peer restarts (the store is on the host side), or the record is specified
+    as what the supervisor could observe. Not decided; not handled.
+
+### 12.11 First implementation
+
+```sh
+sh harness/run-tc1-remote-run.sh    # the real system under schedules, judged by the model
+```
+
+The smallest system, for real: an Erlang/OTP supervisor
+([supervisor/](../../supervisor/README.md); Erlang/OTP is assumed for this
+step, on a recommendation that is not yet an owner ruling), a caller image and
+a peer image, each a Solo5 guest run as an OS process under the `spt` tender.
+The caller is a TC1 program on the C machine of `backends/solo5/pure-call`,
+unchanged: it performs `Ledger.add` with key 7, once more with the same key
+after `timed_out`, then with key 8. The build binds `Ledger` to the peer, the
+outcome becomes the value of the perform, and the frames stay in the image.
+The validator admits the program only through an option, because the typing of
+remote effects is open (§12.9). The peer is the model's counter with its
+durable store in a file. Messages go through block-device files used as
+mailboxes, which need no privileges, not through the network device; arguments
+and replies are I64 only. The supervisor's README has the wire format, what is
+trusted, and what is not shown.
+
+`harness/tc1-remote-run.shen` runs the system and judges each recorded run:
+(a) every recorded step is enabled in the model at that point, and the set of
+steps the supervisor considered enabled is the model's; (b) the properties of
+§12.8 hold in every state and on every step of the replay; (c) the consoles of
+the images show what the model says they observe (the caller's outcomes,
+requests and TC1 events per incarnation, the peer's actions and the store it
+found at each start), and the peer's store file at the end is the model's
+durable store. The model's caller is the same program, read from the build.
+
+| Schedules | Number | Result |
+| --- | --- | --- |
+| Written by hand from this section | 12 | Accepted; the recorded steps are the schedule's and the outcomes the expected ones |
+| Seeded (1 crash, 1 duplicate, until no step is enabled) | 40, 599 steps | Accepted |
+| Free-running, one of them with the peer killed from outside | 2 | Accepted |
+
+The hand schedules cover: plain reply; request dropped, timeout, retry applied;
+reply dropped, timeout, retry replayed; peer killed before hand-over,
+`peer_down`; peer killed after hand-over, `timed_out`, restart, retry (applied
+if it had not acted, replayed from the surviving store if it had); no
+`peer_down` offered after a hand-over; a duplicate applied once; a reply after
+`timed_out` discarded; a caller restarted from its beginning; an undeclared
+connection refused at start, and at run time with the start-time check off.
+Every step kind of the model occurs. Each scheduled run was made twice with
+equal recordings.
+
+| Defect, as a switch on the real system | Caught by | Schedule |
+| --- | --- | --- |
+| Supervisor reports `peer_down` after hand-over | (a): the step is not the model's | issue, hand over, crash peer, peer-down |
+| Peer image applies a recorded request id again | (a): the model has only `replayed` there | issue, duplicate, hand over, hand over, act, act |
+| Supervisor hands over a reply after `timed_out` | (a): the model has only `discard-reply` there | issue, hand over, act, timeout, deliver reply |
+| Supervisor carries an undeclared connection (start-time check off) | (a): the model has only `refuse` there | issue, hand over, act, deliver reply |
+
+Each of these recordings, replayed through the corresponding model mutant, is
+accepted and violates the property that mutant is aimed at in §12.8. A run
+that ends in an error would count as crashed, not caught; none does. As a
+negative control the checker is run with the non-idempotent peer image in
+place of the peer: it reports failure and exits with status 1, and the runner
+requires that.
+
+Limits. One two-member system and a few dozen histories of it: (a) to (c) say
+those histories are ones the model allows, nothing more. The supervisor's log
+is its own account. In the scheduled modes a crash is taken only between
+steps, with the images at rest, so question 10 of §12.10 does not arise there.
+No defect above is caught by (c) alone. No `hvt` run, no proof, no gate.

@@ -127,6 +127,21 @@ has the numbers. In short:
   proposed and unregistered, so it reports `qualification: UNKNOWN`. On a
   committed tree its verdict is PASS.
 
+### Remote perform
+
+```sh
+sh harness/run-tc1-remote.sh        # the model of remote perform, explored exhaustively on small systems
+sh harness/run-tc1-remote-run.sh    # the real system (Erlang/OTP supervisor, two Solo5 spt guests) against that model, ~35 s
+```
+
+Contract and numbers: EFFECTS.md §12 (§12.8 for the model, §12.11 for the
+implementation). **[tc1-remote-run.shen](tc1-remote-run.shen)** starts the
+supervisor of [supervisor/](../supervisor/README.md) once per schedule,
+replays the event log it recorded through the model, checks the properties of
+[tc1-remote-properties.shen](tc1-remote-properties.shen) on the replay, and
+compares the guests' console frames and the peer's store with what the model
+says. Both are development evidence and in no gate.
+
 ### The generated family
 
 [tc1-generate.shen](tc1-generate.shen) builds a handler program from a list of

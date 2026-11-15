@@ -116,3 +116,18 @@ and gives no replay. `spt` is a seccomp-sandboxed process, not a virtual machine
 toolchain, tender and host kernel are trusted as built, and the build is not
 reproducible-build pinned. The guest machine and the JS candidate share an author lineage.
 The pure-call guest takes unit, bool and int entry inputs and IDs up to 2^64 − 1 only.
+
+### Remote-perform guests (two images and a supervisor)
+
+```sh
+sh harness/run-tc1-remote-run.sh    # Erlang/OTP supervisor + caller and peer images on spt, judged by the Shen model
+```
+
+`backends/solo5/remote/` holds the two images of the first remote-perform system
+(spec/tc1/EFFECTS.md §12.11): `caller.c` runs a TC1 program on the pure-call machine
+above, unchanged, and turns a perform of a build-bound effect into a request to the
+supervisor; `peer.c` is the abstract counter peer with a durable store. They talk to the
+supervisor through block devices used as mailboxes (`wire.h`, `support.c`): files, no
+tap interface, no privileges. The images are built by `tools/solo5/remote-build.mjs`;
+the supervisor is [supervisor/](../../supervisor/README.md). Development evidence only,
+`spt` only; the limits are listed there.

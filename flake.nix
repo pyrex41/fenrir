@@ -8,6 +8,8 @@
   #   sbcl, nodejs_22, python3, go 1.27 from the pinned nixpkgs release
   #   solo5 38e0c348      v0.9.3 built from source: spt and hvt tenders, elftool and
   #                       guest toolchain wrappers (use with FENRIR_SOLO5)
+  #   erlang (OTP)        from the pinned nixpkgs, without wx: runs the supervisor of
+  #                       supervisor/ (use with FENRIR_ERLANG); plain OTP, compiled with erlc
   # The control-channel native host (patched tender) is separate and not opened here.
   description = "Fenrir / Gleipnir TC0 development toolchain epoch";
 
@@ -200,6 +202,11 @@
         '';
       };
 
+      # Erlang/OTP for the remote-perform supervisor (supervisor/, spec/tc1/EFFECTS.md §12).
+      # The minimal build: no wx, so no GUI libraries in its closure. Nothing from hex or
+      # rebar is used; harness/run-tc1-remote-run.sh compiles the sources with erlc.
+      erlang = pkgs.beam_minimal.interpreters.erlang;
+
       shen-kernel = pkgs.fetchurl {
         url = "https://github.com/Shen-Language/shen-sources/releases/download/shen-41.2/ShenOSKernel-41.2.tar.gz";
         hash = "sha256-0hgtcEU9PpPRO8IPdj79wYzbI7SB9Br7mUP16aB5j2E=";
@@ -257,14 +264,14 @@
         echo "yggdrasil: ${yggdrasil}/bin/yggdrasil"
       '';
     in {
-      packages.${system} = { inherit shen-scheme shen-cl shen-jit solo5 solo5-batches hvt-compare yggdrasil link-toolchain; default = link-toolchain; };
+      packages.${system} = { inherit shen-scheme shen-cl shen-jit solo5 solo5-batches hvt-compare yggdrasil link-toolchain erlang; default = link-toolchain; };
       checks.${system}.hvt = hvt-vm-test;
       apps.${system} = {
         default = { type = "app"; program = "${link-toolchain}/bin/fenrir-link-toolchain"; };
         hvt-compare = { type = "app"; program = "${hvt-compare}/bin/fenrir-hvt-compare"; };
       };
       devShells.${system}.default = pkgs.mkShell {
-        packages = [ pkgs.nodejs_22 pkgs.python3 pkgs.sbcl pkgs.go_1_27 shen-scheme yggdrasil ];
+        packages = [ pkgs.nodejs_22 pkgs.python3 pkgs.sbcl pkgs.go_1_27 shen-scheme yggdrasil erlang ];
         FENRIR_SHEN_CL = "${shen-cl}";
       };
     };

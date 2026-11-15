@@ -1,0 +1,7 @@
+{application, fenrir_supervisor,
+ [{description, "Fenrir remote perform: the supervisor between images (spec/tc1/EFFECTS.md section 12). UNQUALIFIED."},
+  {vsn, "0.1.0"},
+  {modules, [fenrir_supervisor_app, fenrir_sup, fenrir_member_sup, fenrir_member, fenrir_relay, fenrir_run, fenrir_wire, fenrir_main]},
+  {registered, [fenrir_sup, fenrir_member_sup, fenrir_relay]},
+  {applications, [kernel, stdlib]},
+  {mod, {fenrir_supervisor_app, []}}]}.

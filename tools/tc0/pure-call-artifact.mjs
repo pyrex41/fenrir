@@ -26,7 +26,10 @@ const ids=a=>[...a].sort((x,y)=>BigInt(x)<BigInt(y)?-1:BigInt(x)>BigInt(y)?1:0);
 const arities={add:2,sub:2,mul:2,div:2,neg:1,lt:2,le:2,gt:2,ge:2,not:1,bytes_length:1,bytes_index:2,bytes_concat:2,eq:2};
 const dataPrimitives=new Set(['bytes_length','bytes_index','bytes_concat','eq']);
 const dataTags=new Set(['bytes','tuple','project','construct','match']);
-export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,maxBytes=256,maxValueNodes=1000}={}){
+// remoteEffects: declared effects the entry function may leave unhandled, because the
+// image's build binds them to a peer (spec/tc1/EFFECTS.md §12). Empty unless the caller
+// of this function is building such an image; their typing is not part of TC1 yet.
+export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,maxBytes=256,maxValueNodes=1000,remoteEffects=[]}={}){
  for(const n of [maxNodes,maxDepth,maxBytes,maxValueNodes])if(!Number.isSafeInteger(n)||n<1)throw new TypeError('Invalid cap');
  const a=decode(bytes);object(a,['contract_version','schema_version','slice','module','datatypes','effects','functions','entry','input_schema','source_map']);
  const resumptions=a.schema_version===TC1_RESUMPTION_SCHEMA,handlers=resumptions||a.schema_version===TC1_HANDLER_SCHEMA;
@@ -84,7 +87,7 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
  const fresh=(id,location=false)=>{unsigned(id);if(ID.has(id))fail('Duplicate ID');ID.add(id);if(location)locations.add(id);};
  if(!array(a.functions).length||a.functions.length>32)fail('Function count');
  for(const f of a.functions){object(f,['id','name','parameter_id','argument_type','result_type','effects','body']);fresh(f.id,true);fresh(f.parameter_id);text(f.name);if(functions.has(f.name))fail('Duplicate function name');type(f.argument_type);type(f.result_type);effects(f.effects);functions.set(f.name,f);}
- const entry=functions.get(a.entry);if(!entry)fail('Entry');if(entry.effects.some(k=>k!=='Emit'))fail('Entry must handle every user effect');if(!plain(entry.argument_type)||!plain(entry.result_type))fail('Serializable entry');object(a.input_schema,['type']);if(!same(a.input_schema.type,entry.argument_type))fail('Input schema');value(input,entry.argument_type);
+ const entry=functions.get(a.entry);if(!entry)fail('Entry');if(entry.effects.some(k=>k!=='Emit'&&!remoteEffects.includes(k)))fail('Entry must handle every user effect');if(!plain(entry.argument_type)||!plain(entry.result_type))fail('Serializable entry');object(a.input_schema,['type']);if(!same(a.input_schema.type,entry.argument_type))fail('Input schema');value(input,entry.argument_type);
  const union=rows=>new Set(rows.flatMap(r=>[...r.effects]));
  const free=rows=>new Set(rows.flatMap(r=>[...r.free]));
  const primitive={add:['I64','I64','I64'],sub:['I64','I64','I64'],mul:['I64','I64','I64'],div:['I64','I64','I64'],neg:['I64','I64'],lt:['I64','I64','Bool'],le:['I64','I64','Bool'],gt:['I64','I64','Bool'],ge:['I64','I64','Bool'],not:['Bool','Bool'],bytes_length:['Bytes','I64'],bytes_index:['Bytes','I64','I64'],bytes_concat:['Bytes','Bytes','Bytes']};
