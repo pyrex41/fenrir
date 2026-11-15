@@ -204,6 +204,11 @@ Recorded now so that the concurrency slice is designed against it:
 ```sh
 sh harness/run-tc1-handlers.sh          # model against the JavaScript implementation
 sh harness/run-solo5-pure-call.sh tc1   # model against the Solo5 guest
+sh harness/run-tc1-exhaustive.sh        # grammar H, every program up to 7 nodes
+sh harness/run-tc1-generated.sh         # generated family G, 2,048 programs
+sh harness/run-tc1-reduction.sh DEFECT  # discover, reduce and replay one defect
+sh harness/run-tc1-strict-replay.sh     # tapes for the fixtures and retained failures
+sh harness/run-tc1-gate.sh              # the proposed TC1 gate, all of the above
 ```
 
 - **Fixtures** (`fixtures/tc1/handler-hand-cases.mjs`): twenty programs, eleven
@@ -231,14 +236,66 @@ sh harness/run-solo5-pure-call.sh tc1   # model against the Solo5 guest
   TC0-A programs of the existing scopes, and the extended C machine still
   agrees with the model on those and on the 8,745 exact-arithmetic programs.
 
-The two checks are optional rows of the TC0-A gate (`tc1-handler-slice`,
-`tc1-handler-guest`). TC1 gets its own gate when it has more than hand
-fixtures behind it.
+- **Exhaustive-small:** every program of grammar H
+  (`tools/tc1/handler-enumerate.mjs`, one-operation effects with I64 types, no
+  closures) with at most 7 nodes, 12,693 programs over 263,222 steps (11,192
+  Ok, 1,501 DivZero), agrees with the model step for step; each of the six
+  defects is killed on some of them.
+- **Generated family:** the 2,048 programs of family G
+  (`tools/tc1/handler-generate.mjs`: seeded, finite, not exhaustive) go beyond
+  H with multi-operation effects and Unit operation types, closures, `Opt`
+  matches and explicit clauses that do work after `resume`. Model and
+  implementation agree on all of them, over 80,611 steps (1,655 Ok, 393
+  DivZero). Read from the model's traces, the family exercises: two operations
+  of one effect in one run (84 programs), a perform inside two or more handle
+  bodies (296), a handler installed after another was removed (332),
+  same-effect forwarding out of a clause (72), a closure made under one handler
+  performing under another (7), a clause continuing after `resume` returns
+  (136), `discontinue` (50), a trap in a clause (85) and in a handled body
+  (170), and emissions before and after a perform (159). Every defect is
+  killed: forgotten resume on 559 programs, double resume 572, outermost
+  handler 304, clause environment 119, resume yielding its argument 21,
+  resumed segment without its handler 393 (crashes, between 0 and 111 per
+  defect, are counted apart and never as kills).
+- **Discovery, reduction and replay:** for four defects a campaign
+  (`harness/tc1-reduction.shen`) finds the first generated program showing the
+  defect's class of discrepancy, reduces it by typed, handler-aware proposals
+  (`tools/tc1/handler-reduce.mjs`: handle-to-body, perform-to-argument,
+  resume-to-argument, clause-to-binder and others, each revalidated), accepting
+  one only when fresh model and implementation runs show the same class, and
+  replays both failures strictly. Forgotten resume: program 6, 61 to 4 nodes in
+  54 attempts, class clause-return-drops-segment, diverging at epochs 77 and 6.
+  Double resume: the same program and sizes, clause-return-duplicates-segment.
+  Outermost handler: program 6, 61 to 23 nodes in 153 attempts,
+  selected-other-handler, epochs 75 and 44. Resumed segment without its
+  handler: program 5, 56 to 12 nodes in 50 attempts, resume-drops-handler,
+  epochs 34 and 11. The original and minimized cases are retained in
+  `fixtures/tc1/handler-retained-failures.json`. The other two defects show
+  their first difference only through later values; no class is defined for
+  them yet.
+- **Strict replay** (`harness/tc1-strict-replay.shen`): a tape of the
+  implementation recorded against the model's trace replays exactly and is
+  admitted for all twenty fixtures; for the eight retained failures the
+  defect-free tape is admitted and the defective one diverges at the retained
+  epoch. Tapes bind the program, the reference, the implementation with its
+  defect switches and the transition catalog.
+- **Catalog coverage:** `spec/tc1/handler-catalog.json`
+  (`tc1-handler-catalog/1`) turns the table of §6 into 29 transitions, with the
+  depth change each allows. It adds what the table leaves out: dispatch of
+  `discontinue` (Ready at once), the argument collection of `perform` and
+  `resume`, unwinding through handler and clause-exit frames, and
+  AbandonFrame per kind of frame. The hand, exhaustive and generated traces
+  exercise all 29, and no handler step falls outside the catalog or
+  contradicts its depth change.
 
-Not done: generated or exhaustive handler programs, reduction, strict replay,
-catalog coverage, and any soundness proof of the typing rules in §3 or of the
-one-shot check in §7. The fixtures, all three machines and the harness share
-one author lineage.
+TC1 has its own proposed gate (`harness/tc1-gate.shen`, manifest
+`spec/tc1/tc1-requirements.json`), with a row for each check above; it is not
+owner-accepted, so it reports authority UNREGISTERED and qualification UNKNOWN.
+
+Not done: exhaustive exploration beyond grammar H, reduction campaigns for the
+two value-only defects, any soundness proof of the typing rules in §3 or of the
+one-shot check in §7. The fixtures, all three machines, the generators and the
+harness share one author lineage.
 
 ## 10 Answers to the earlier open questions
 
