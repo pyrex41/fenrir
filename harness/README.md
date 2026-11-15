@@ -360,6 +360,30 @@ Limits: A1's scope only; capabilities are forgeable (DURABLE.md §9), so wrong-t
 is caught dynamically, not refused; the host is A1's store under the stated contract,
 not SQLite (that is A3); one author lineage for handler, contract, machines and harness.
 
+## Service example A3: the real stack, history checked
+
+```sh
+sh host/service/check.sh          # quick; full: sh host/service/check.sh full
+sh harness/run-service-history.sh FILE.json|LISTFILE   # check recorded histories
+```
+
+Stage A3 runs the A2 handler unchanged as a Solo5 guest under an OTP supervisor, with
+SQLite behind the storage adapter ([host/service/README.md](../host/service/README.md),
+contract [host/service/CONTRACT.md](../host/service/CONTRACT.md)). The campaigns record
+every externally visible event as a history
+([spec/service/HISTORY_FORMAT.md](../spec/service/HISTORY_FORMAT.md)) and
+[service-history.shen](service-history.shen) decides whether the A1 model admits it: a
+model execution with the same labels and responses, the observed stores, and every A1
+property predicate holding on its states and edges (the model's own `svc.step` and
+`svcp.*` functions; nothing reimplemented). Indeterminate outcomes and concurrent groups
+are explored as choices. Verdicts: accepted, rejected (first inadmissible event),
+indeterminate. Evidence: *observed history accepted; bounded crash campaign*. The
+checker's negative tests ([tests/host/histories](../tests/host/histories), 18 fabricated
+histories: a response without a commit, a duplicated mutation on retry, a cross-tenant
+effect, a job lost after acceptance and others, with accepted controls) are run by every
+check. Measured numbers: [04_DIRECTION_AMENDMENT.md](../04_DIRECTION_AMENDMENT.md) §8,
+stage A3.
+
 ## What is still not Shen
 
 | Piece | Now | Notes |

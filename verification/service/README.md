@@ -86,6 +86,16 @@ schedules against it, with the volatile-mailbox variant kept as a mutant that
 must be caught. The real store is SQLite under an OTP supervisor (amendment
 §8); its single-writer transactions match assumption 1 above.
 
+## Stage A3: SQLite and OTP (pointer)
+
+Stage A3 ([host/service/](../../host/service/README.md)) is where this file's storage
+assumption meets SQLite: one `BEGIN IMMEDIATE` transaction per commit, WAL with
+`synchronous=FULL`, busy and indeterminate (lost acknowledgment) outcomes kept apart from
+rollback. Its named assumptions are in
+[host/service/CONTRACT.md](../../host/service/CONTRACT.md); its evidence is *observed
+history accepted; bounded crash campaign* against the Shen A1 model, not a refinement
+proof against this Rocq model or against SQLite. Power loss is not tested.
+
 ## Stage A1: the executable Shen model (pointer)
 
 Stage A1 now exists. The contract's authoritative statement is the Shen model
