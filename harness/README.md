@@ -275,10 +275,28 @@ The two programs are optional rows of the proposed TC1 gate (`task-hand-fixtures
 `task-commuting-obligation`), with ledger row `TC1-C-TASKS`; the contract is a
 draft, so no claim relies on them.
 
-Not done for C1: generated (random) programs beyond G, reduction, strict replay
-tapes, catalog coverage, the Solo5 guest, the frontend. Evidence is bounded
-exploration, development grade; the fixtures, both machines and the harness
-share one author lineage.
+**[solo5-tasks.shen](solo5-tasks.shen)** (`sh harness/run-solo5-tasks.sh`, about
+20 s, 1,338 tender boots): the same slice in the Solo5 guest
+(`backends/solo5/pure-call/tasks.c` over the unchanged handler machine), over control
+protocol v3 ([spec/solo5/pure-call-control-v3.md](../spec/solo5/pure-call-control-v3.md)),
+where the scheduler choice is an input. Batch: the 18 hand fixtures and every 50th
+program of G (72). Measured 15 November 2026:
+
+| Check | Measured |
+| --- | --- |
+| Reference, recorded schedules | the 151 (fixture, schedule) runs of `tc1-tasks.shen` (54 of production policies), the host naming every task: 151 of 151 agree with the model step for step, 7,167 steps; every production policy's schedule is a production schedule by the model's records |
+| Reference, exploration witnesses | the G sample under one witness schedule per reference observation class, found in-process by the exploration of `tc1-task-explore.shen` (loaded as a library): 248 witnesses, 248 agree, 11,507 steps, no bound hit; consecutive steps of one task go in one Run |
+| FIFO, guest's own scheduler | all 90 programs: the guest chooses, the host replays each choice on the model: 90 of 90 agree (4,051 steps), every guest schedule is a production schedule by the model's records and equals the FIFO schedule the batch declares |
+| Guest defects | `cancel-off-point` killed on 18 runs, `lost-wakeup` on 48, `capacity-off-by-one` on 7, `fifo-reversed` on 18 of 18 FIFO runs (each of the 18 still agrees with the model and is a production schedule: only the comparison with the declared FIFO schedule catches it); no crash |
+| Strict replay | 169 tapes (151 reference, 18 FIFO), each on 2 cold boots: all byte-identical; the 18 FIFO runs re-recorded: byte-identical tapes. The Run frames name the chosen tasks, so a tape binds its schedule |
+| Negatives | 18 tape drifts (v1's 16, an edited schedule choice, a header naming the other scheduler), 15 hostile-host inputs (Run without a task under `reference`, with one under `fifo`, an unallocated task, non-canonical task, reordered keys, over budget, a v2 Reply frame, the v1 Init template, unknown scheduler and mode, the v2 protocol, Run after a deadlock, ...), 5 hostile guest outputs (Deadlock without a wait graph, a wait graph while Running, a record of another task, an unknown execution) and 10 v3 byte vectors: each as expected |
+
+Free run: task programs are refused (the lowering rejects them for the free-running
+image, which has no scheduler input); `guest.c` never sees one.
+
+Not done for C1: generated (random) programs beyond G, reduction, catalog coverage,
+the frontend. Evidence is bounded exploration, development grade; the fixtures, the
+machines (Shen, JavaScript, C) and the harness share one author lineage.
 
 ## TC1: durable effects (slice D1)
 

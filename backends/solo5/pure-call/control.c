@@ -23,9 +23,18 @@
  * effects. A Run stops at a host request (execution HostWait); the host answers it with a
  * Reply frame (type A), which the guest checks against the operation's result type before
  * the program sees it (BadReply otherwise) and answers with the HostReply step. Without
- * the flag nothing of v2 is compiled in and the guest is the v1 guest. */
+ * the flag nothing of v2 is compiled in and the guest is the v1 guest.
+ *
+ * Built with -DFGC_V3 (and linked with tasks.c in place of machine.c and format.c) the same
+ * source is the guest of fenrir.solo5.pure-call-control/3 (spec/solo5/pure-call-control-v3.md):
+ * TC1-C1 tasks. Init names a scheduler: `reference`, where every Run names the task that
+ * steps, or `fifo`, where the guest's FIFO production policy chooses and each record names
+ * the task it chose. Without the flag nothing of v3 is compiled in. */
 #include <solo5.h>
 #include "machine.h"
+#ifdef FGC_V3
+#include "tasks.h"
+#endif
 #include "data.h"
 #include "control-data.h"
 
@@ -35,9 +44,15 @@
 #define FGC_RECORD_MAX 16384u
 #define FGC_RUN_MAX 64u
 #define FGC_FUEL_MAX 100000u
+#if defined(FGC_V2) && defined(FGC_V3)
+#error "FGC_V2 and FGC_V3 are separate guests"
+#endif
 #ifdef FGC_V2
 #define FGC_PROTOCOL "fenrir.solo5.pure-call-control/2"
 #define FGC_PROFILE "fenrir.solo5.pure-call-machine/2"
+#elif defined(FGC_V3)
+#define FGC_PROTOCOL "fenrir.solo5.pure-call-control/3"
+#define FGC_PROFILE "fenrir.solo5.pure-call-machine/3"
 #else
 #define FGC_PROTOCOL "fenrir.solo5.pure-call-control/1"
 #define FGC_PROFILE "fenrir.solo5.pure-call-machine/1"
@@ -53,7 +68,9 @@ void *memcpy(void *dest,const void *source,size_t count) {
     for(size_t i=0;i<count;i++)d[i]=s[i];
     return dest;
 }
+#ifndef FGC_V3
 static unsigned length(const char *s) {unsigned n=0;while(s[n])n++;return n;}
+#endif
 static int same(const char *a,const char *b) {while(*a && *a==*b){a++;b++;}return *a==*b;}
 
 /* ---------- output: one frame at a time ---------- */
@@ -193,6 +210,10 @@ static const char *word(const char *s,char *outword) {
 }
 
 /* ---------- state digest: FNV-1a 64 over the machine's semantic state ---------- */
+#ifdef FGC_V3
+/* v3: the digest walks the whole task machine (tasks.c). */
+static void state_digest(char *hex) {tk_digest(hex);}
+#else
 
 struct digest { uint64_t h; unsigned long budget; };
 static const struct pc_node *machine_nodes(void);
@@ -254,23 +275,35 @@ static void state_digest(char *hex) {
     for(int i=15;i>=0;i--){unsigned x=(unsigned)(d.h&15u);hex[i]=(char)(x<10?'0'+x:'a'+x-10);d.h>>=4;}
     hex[16]=0;
 }
+#endif
 
 /* ---------- the session ---------- */
 
 static uint64_t fuel;
 static int initialized;
 static const char *execution(void) {
+#ifdef FGC_V3
+    return tk_execution(fuel);
+#else
     if(machine.control==PC_TERMINAL)return "Completed";
 #ifdef FGC_V2
     if(machine.control==PC_HOSTWAIT)return "HostWait";
 #endif
     if(machine.epoch>=fuel)return "BudgetExhausted";
     return "Running";
+#endif
 }
+#ifdef FGC_V3
+static char graph[FGC_RECORD_MAX];
+static int fifo_scheduler;
+static uint64_t epoch_now(void) {return tk_epoch();}
+#else
+static uint64_t epoch_now(void) {return machine.epoch;}
+#endif
 /* {"digest":D,"epoch":E,"execution":X,"kind":K ... the common prefix of state responses. */
 static void state_fields(struct text *t,const char *kind) {
     char hex[17];state_digest(hex);
-    put(t,"{\"digest\":\"");put(t,hex);put(t,"\",\"epoch\":\"");put_decimal(t,machine.epoch);
+    put(t,"{\"digest\":\"");put(t,hex);put(t,"\",\"epoch\":\"");put_decimal(t,epoch_now());
     put(t,"\",\"execution\":\"");put(t,execution());put(t,"\",\"kind\":\"");put(t,kind);put(t,"\"");
 }
 static char steps[FGC_GUEST_MAX];
@@ -299,27 +332,80 @@ int solo5_app_main(const struct solo5_start_info *info) {
             s=lit(decimal(s,&f),"\",\"kind\":\"Init\",\"mode\":\"");
             s=lit(word(s,mode),"\",\"program\":\"");
             s=lit(decimal(s,&program),"\",\"protocol\":\"");
+#ifdef FGC_V3
+            char scheduler[64];
+            s=lit(word(s,protocol),"\",\"scheduler\":\"");
+            s=lit(word(s,scheduler),"\",\"schema\":\"");
+#else
             s=lit(word(s,protocol),"\",\"schema\":\"");
+#endif
             s=lit(word(s,schema),"\"}");
             if(!s || *s)fail(seq,"BadPayload");
             if(initialized)fail(seq,"BadState");
             if(!same(protocol,FGC_PROTOCOL) || !same(batch,PC_BATCH_SHA256) || program>=pc_program_count ||
                !same(artifact,pc_program_sha256[program]) ||
                !same(schema,pc_program_schema[program]))fail(seq,"Identity");
+#ifdef FGC_V3
+            int defect=TK_NORMAL;
+            if(same(mode,"fifo-reversed"))defect=TK_FIFO_REVERSED;
+            else if(same(mode,"cancel-off-point"))defect=TK_CANCEL_OFF_POINT;
+            else if(same(mode,"lost-wakeup"))defect=TK_LOST_WAKEUP;
+            else if(same(mode,"capacity-off-by-one"))defect=TK_CAPACITY_OFF_BY_ONE;
+            else if(!same(mode,"normal"))fail(seq,"Identity");
+            if(same(scheduler,"fifo"))fifo_scheduler=1;
+            else if(!same(scheduler,"reference"))fail(seq,"Identity");
+            if(f<1 || f>FGC_FUEL_MAX)fail(seq,"BadBudget");
+            if(tk_init(&pc_programs[program],defect,fifo_scheduler)!=1)fail(seq,"GuestLimit");
+#else
             int reverse=0,wrap=0;
             if(same(mode,"reverse-operands"))reverse=1;
             else if(same(mode,"wrap-overflow"))wrap=1;
             else if(!same(mode,"normal"))fail(seq,"Identity");
             if(f<1 || f>FGC_FUEL_MAX)fail(seq,"BadBudget");
             if(pc_init(&machine,&pc_programs[program],reverse,wrap)!=1)fail(seq,"GuestLimit");
+#endif
             fuel=f;initialized=1;
             char hex[17];state_digest(hex);
             put(&t,"{\"artifact_sha256\":\"");put(&t,artifact);put(&t,"\",\"digest\":\"");put(&t,hex);
             put(&t,"\",\"epoch\":\"0\",\"execution\":\"");put(&t,execution());put(&t,"\",\"fuel\":\"");put_decimal(&t,fuel);
             put(&t,"\",\"kind\":\"Ready\",\"mode\":\"");put(&t,mode);put(&t,"\",\"program\":\"");put_decimal(&t,program);
+#ifdef FGC_V3
+            put(&t,"\",\"scheduler\":\"");put(&t,fifo_scheduler?"fifo":"reference");
+#endif
             put(&t,"\",\"schema\":\"");put(&t,schema);put(&t,"\"}");
             frame('Y',seq,payload,t.used);
         } else if(r.type=='R'){
+#ifdef FGC_V3
+            /* {"kind":"Run","steps":N,"task":T} (reference) or {"kind":"Run","steps":N} (fifo). */
+            uint64_t n=0,task=0;int named=0;
+            const char *s=lit(r.body,"{\"kind\":\"Run\",\"steps\":\"");
+            s=s?decimal(s,&n):0;
+            const char *tail=lit(s,"\"}");
+            if(!tail){s=lit(s,"\",\"task\":\"");s=lit(s?decimal(s,&task):0,"\"}");named=1;} else s=tail;
+            if(!s || *s)fail(seq,"BadPayload");
+            if(!initialized || named==fifo_scheduler)fail(seq,"BadState");
+            if(n<1 || n>FGC_RUN_MAX)fail(seq,"BadBudget");
+            if(!same(execution(),"Running"))fail(seq,"NotRunning");
+            if(named && !tk_runnable(task))fail(seq,"NotRunnable");
+            struct text st={steps,0,sizeof steps-256,0};
+            unsigned done=0;
+            while(done<n && same(execution(),"Running") && (!named || tk_runnable(task)) && st.cap-st.used>FGC_RECORD_MAX+1){
+                size_t k=0;
+                if(tk_step(task,record,sizeof record,&k)!=1)fail(seq,"GuestLimit");
+                if(done)put(&st,",");
+                put_span(&st,record,k);done++;
+            }
+            if(st.bad)fail(seq,"GuestLimit");
+            state_fields(&t,"Steps");put(&t,",\"steps\":[");put_span(&t,steps,st.used);put(&t,"]");
+            if(same(execution(),"Deadlock")){
+                size_t g=tk_wait_graph(graph,sizeof graph);
+                if(!g)fail(seq,"GuestLimit");
+                put(&t,",\"wait_graph\":");put_span(&t,graph,g);
+            }
+            put(&t,"}");
+            if(t.bad)fail(seq,"GuestLimit");
+            frame('S',seq,payload,t.used);
+#else
             uint64_t n;
             const char *s=lit(r.body,"{\"kind\":\"Run\",\"steps\":\"");
             s=lit(s?decimal(s,&n):0,"\"}");
@@ -341,6 +427,7 @@ int solo5_app_main(const struct solo5_start_info *info) {
             state_fields(&t,"Steps");put(&t,",\"steps\":[");put_span(&t,steps,st.used);put(&t,"]}");
             if(t.bad)fail(seq,"GuestLimit");
             frame('S',seq,payload,t.used);
+#endif
 #ifdef FGC_V2
         } else if(r.type=='A'){
             /* {"kind":"Reply","request":R,"value":V}: V a canonical value, checked by the

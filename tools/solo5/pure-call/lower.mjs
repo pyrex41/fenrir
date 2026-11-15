@@ -6,6 +6,11 @@
 // durable flag and the result type descriptor on each perform of a durable effect, the
 // datatype table, and the entry input as a canonical JSON value with its type. Rows of
 // every older schema are lowered exactly as before.
+// TC1-C1 (schema tc1-task-demo/1, spec/tc1/CONCURRENCY.md) adds the nine task forms as
+// node tags (scope, spawn, await, cancel, yield, channel, send, receive, close; a
+// channel's capacity in `integer`, its element type dropped: it is metadata). Task
+// programs are lowered only for the v3 control guest (lowerBatch with {tasks:true}); the
+// free-running guest has no scheduler input and refuses them here.
 import {createHash} from 'node:crypto';
 import {validatePureCallArtifact} from '../../tc0/pure-call-artifact.mjs';
 import {encode} from '../../tc0/canonical.mjs';
@@ -13,7 +18,8 @@ import {encode} from '../../tc0/canonical.mjs';
 export class UnsupportedGuestProgram extends Error {}
 const reject=message=>{throw new UnsupportedGuestProgram(message);};
 const TAGS=['unit','bool','int','bytes','var','let','if','lambda','apply','call','prim','emit','tuple','project','construct','match',
-  'handle','perform','resume','discontinue'];
+  'handle','perform','resume','discontinue',
+  'scope','spawn','await','cancel','yield','channel','send','receive','close'];
 const OPS=['none','add','sub','mul','div','neg','lt','le','gt','ge','not','eq','bytes_length','bytes_index','bytes_concat'];
 const MAX_ID=(1n<<64n)-1n,MAX_OPERANDS=16;
 const id=value=>{if(!/^(0|[1-9][0-9]*)$/.test(value)||BigInt(value)>MAX_ID)reject('ID outside the guest adapter range');return `UINT64_C(${value})`;};
@@ -41,6 +47,8 @@ function operands(e) {
   if(tag==='project')return [x[0]];
   if(tag==='perform')return [x[2]];
   if(tag==='resume')return [x[1]];
+  if(['scope','spawn','await','cancel','receive','close'].includes(tag))return [x[0]];
+  if(tag==='send')return [x[0],x[1]];
   return [];
 }
 
@@ -52,8 +60,9 @@ function descriptor(t,datatypes) {
   return reject('Type outside the guest adapter');
 }
 
-export function lowerProgram(program,input,prefix) {
+export function lowerProgram(program,input,prefix,{tasks=false}={}) {
   const {artifact}=validatePureCallArtifact(encode(program),input);
+  if(artifact.schema_version==='tc1-task-demo/1'&&!tasks)reject('Task programs need the v3 control guest (a scheduler input)');
   const functions=artifact.functions,index=new Map(functions.map((f,i)=>[f.name,i]));
   const durable=artifact.schema_version==='tc1-durable-demo/1';
   const durableEffects=new Map(artifact.effects.filter(e=>e.class==='durable').map(e=>[e.name,e]));
@@ -98,6 +107,7 @@ export function lowerProgram(program,input,prefix) {
       if(tag==='prim'){if(!OPS.includes(x[0])||x[0]==='none')reject('Unsupported primitive');row.op=x[0];}
       if(tag==='call'){if(!index.has(x[0]))reject('Unknown function');row.index=String(index.get(x[0]));}
       if(tag==='emit')row.text=name(x[0]);
+      if(tag==='channel')row.integer=int64(x[1]);
       if(tag==='project')row.index=String(BigInt(x[1]));
       if(tag==='construct'){row.text=name(x[0]);row.text2=name(x[1]);}
       row.children=operands(e).map(visit);
@@ -136,8 +146,8 @@ export function lowerProgram(program,input,prefix) {
 // items: [{program, input}]. Returns {header, batch_sha256, artifact_sha256[]}.
 // bindInputs (TC1-D1 batches): the batch identity covers each entry's input as well,
 // since one image entry is one (artifact, input) pair.
-export function lowerBatch(items,{bindInputs=false}={}) {
-  const lowered=items.map((item,i)=>lowerProgram(item.program,item.input,`p${i}`));
+export function lowerBatch(items,{bindInputs=false,tasks=false}={}) {
+  const lowered=items.map((item,i)=>lowerProgram(item.program,item.input,`p${i}`,{tasks}));
   const batch=createHash('sha256').update(lowered.map(l=>bindInputs?`${l.artifact_sha256}:${l.input_sha256}`:l.artifact_sha256).join('\n')).digest('hex');
   const header=`/* Validated artifact DATA ONLY, not precomputed transitions. */\n#define PC_BATCH_SHA256 "${batch}"\n`+
     lowered.map(l=>l.text).join('\n')+`\nstatic const struct pc_program pc_programs[]={\n${lowered.map(l=>l.row).join(',\n')}\n};\n`+
