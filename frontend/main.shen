@@ -16,10 +16,12 @@
 \\   0 done   1 the program was rejected   2 a file could not be read or written
 \\   3 a defect in the frontend            4 the step budget ran out
 \\
-\\ The stages are kept apart on purpose. The elaborator produces an artifact; the
-\\ JavaScript validator, an independent implementation of the artifact rules,
-\\ judges those exact bytes; the model then runs what is decoded from the same
-\\ bytes. Nothing here interprets a program.
+\\ The stages are kept apart on purpose. The elaborator produces an artifact; two
+\\ validators judge those exact bytes: the JavaScript validator, an independent
+\\ implementation of the artifact rules, and the Shen one of typing/ (structural
+\\ checks, then a derivation found by search and accepted by the fixed checker of
+\\ spec/tc1/TYPING.md); the model then runs what is decoded from the same bytes.
+\\ A program runs only when both accept. Nothing here interprets a program.
 
 (set fh.*lib* (cn (hd (tl (value *argv*))) "/"))
 (set fh.*root* (cn (hd (tl (tl (value *argv*)))) "/"))
@@ -62,16 +64,62 @@
                 (fe.finish 3 (make-string "the artifact validator did not run: ~A~%" (hd (tl (tl R)))))
                 Report)))
 
-\\ Write the artifact, have it validated, and return [Text Report]. A rejection
-\\ of what the elaborator accepted is a defect here or in the validator: the two
-\\ are meant to agree, and the program is not run on the strength of either alone.
+\\ Write the artifact, have both validators judge it, and return [Text Report
+\\ RuleInstances]. A rejection of what the elaborator accepted is a defect here or
+\\ in a validator, and so is any disagreement between the two validators: they are
+\\ meant to agree, and the program is not run on the strength of one alone.
 (define fe.checked
   Source Artifact ->
     (let Text (json.stringify Artifact [[byte-limit 16777216]])
          Path (cn (value fe.*work*) "artifact.json")
          Written (write-to-file Path Text)
-         Report (fe.validation Path)
-      (fe.verdict Source Text Report (fh.member "status" Report))))
+      (fe.judged Source Text (fe.validation Path) (fe.typing Text))))
+
+\\ The Shen side's verdict on Text. Its files are loaded only when an artifact
+\\ exists to judge, which a rejected program never gets to: compiling the search's
+\\ sequent rules is most of what the Shen side costs a run (about 0.3 s).
+(set fe.*typing-loaded* false)
+
+(define fe.typing
+  Text -> (do (if (value fe.*typing-loaded*) skip
+                  (do (load (cn (value fh.*root*) "typing/validate.shen")) (set fe.*typing-loaded* true)))
+              (tv.validate Text ["int" "0"] (value fe.*typing-budget*))))
+
+\\ The Shen side's search budget, in inferences per proof. Running out is UNKNOWN,
+\\ which is never acceptance.
+(set fe.*typing-budget* 2000000)
+
+\\ Text, the JavaScript validator's report, and the Shen side's verdict (tv.validate):
+\\ both accept, both stop at a cap, or both reject; anything else is a disagreement.
+(define fe.judged
+  Source Text Report Typing -> (fe.judged-by Source Text Report (fh.member "status" Report) Typing))
+
+(define fe.judged-by
+  Source Text Report "valid" [valid D] -> (do (fe.verdict Source Text Report "valid") [Text Report (fe.rule-instances D)])
+  Source Text Report "limit" [limit _ _] -> (fe.verdict Source Text Report "limit")
+  Source Text Report "invalid" [invalid _ _] -> (fe.verdict Source Text Report "invalid")
+  Source _ Report _ Typing -> (fe.finish 3 (fe.disagreement Source Report Typing)))
+
+(define fe.disagreement
+  Source Report Typing ->
+    (make-string "~A: internal error: the two artifact validators disagree: the JavaScript validator says ~A, the Shen typing checker says ~A~%"
+                 Source (fe.javascript-reason Report) (fe.typing-reason Typing)))
+
+(define fe.javascript-reason
+  Report -> (if (= (fh.member "status" Report) "valid") "valid" (make-string "~A (~A)" (fh.member "status" Report) (fh.member "message" Report))))
+
+(define fe.typing-reason
+  [valid _] -> "valid"
+  [unknown Why] -> (cn "UNKNOWN, " Why)
+  [Status Check Message] -> (make-string "~A (~A: ~A)" Status Check Message)
+  [Status Why] -> (make-string "~A (~A)" Status Why))
+
+(define fe.rule-instances
+  [_ _ Ps] -> (+ 1 (fe.total (map (/. P (fe.rule-instances P)) Ps))))
+
+(define fe.total
+  [] -> 0
+  [N | Ns] -> (+ N (fe.total Ns)))
 
 (define fe.verdict
   Source Text Report "valid" ->
@@ -153,7 +201,7 @@
 (define fe.command
   ["check" Source Module] ->
     (let Checked (fe.checked Source (fe.artifact Source Module))
-      (fe.finish 0 (make-string "ok: ~A: ~A~%" Source (fe.summary (hd (tl Checked))))))
+      (fe.finish 0 (make-string "ok: ~A: ~A, typing derivation of ~A rule instances~%" Source (fe.summary (hd (tl Checked))) (nth 3 Checked))))
   ["run" Source Module Fuel] ->
     (let Checked (fe.checked Source (fe.artifact Source Module))
       (fe.execute (hd Checked) (fe.natural Fuel 0)))
@@ -168,9 +216,13 @@
     (let Text (trap-error (read-file-as-string Path)
                           (/. E (fe.finish 2 (make-string "~A: error: the file cannot be read~%" Path))))
          Report (fe.validation Path)
-      (if (= (fh.member "status" Report) "valid")
+         Typing (fe.typing Text)
+         Status (fh.member "status" Report)
+      (if (and (= Status "valid") (= (hd Typing) valid))
           (fe.execute Text (fe.natural Fuel 0))
-          (fe.finish 1 (make-string "~A: error: not a valid artifact (~A)~%" Path (fh.member "message" Report)))))
+          (if (or (= Status "valid") (= (hd Typing) valid) (= (hd Typing) unknown))
+              (fe.finish 3 (fe.disagreement Path Report Typing))
+              (fe.finish 1 (make-string "~A: error: not a valid artifact (~A)~%" Path (fh.member "message" Report))))))
   _ -> (fe.finish 3 (make-string "internal error: frontend/main.shen was started with arguments it does not understand~%")))
 
 (fe.command (value fe.*command*))

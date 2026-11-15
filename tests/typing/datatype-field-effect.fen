@@ -1,0 +1,18 @@
+\\ Valid by spec/tc1/EFFECTS.md §3: a constructor field of a function type whose
+\\ effect set names the declared effect Ask. The JavaScript validator rejects the
+\\ artifact ("Effect set") because it checks field types before it reads the
+\\ effect declarations; the Shen typing checker accepts it. spec/tc1/TYPING.md §11
+\\ records the disagreement; fenrir.sh check reports it with status 3.
+\\ > outcome: Ok 1
+
+(effect Ask
+  (ask I64 --> I64))
+
+(datatype Box
+  (Box (I64 --> I64 ! Ask)))
+
+(define main {I64 --> I64}
+  x -> (handle Ask
+         ((ask y) -> y)
+         (match (Box (lambda (z : I64) (perform Ask ask z)))
+           ((Box f) -> (f 1)))))
