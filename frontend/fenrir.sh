@@ -37,8 +37,28 @@ if [ ! -x "$jit/bin/shen-jit" ]; then
 fi
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
+# The Shen typing checker (typing/): its files are compiled once into a heap image
+# per Shen/JIT build and version of those files, under build/typing/, so that a run
+# does not recompile the search's sequent rules (about 0.3 s). The image holds only
+# what those files define; without it, main.shen loads them from source.
+image=
+if key=$( { echo "$jit"; cat "$root/typing/checker.shen" "$root/typing/structure.shen" "$root/typing/search.shen"; } 2>/dev/null |
+          sha256sum 2>/dev/null | cut -c1-16) && [ ${#key} -eq 16 ]; then
+  image="$root/build/typing/image-$key.img"
+  if [ ! -f "$image" ]; then
+    partial="$image.$$"
+    if mkdir -p "$root/build/typing" 2>/dev/null &&
+       "$jit/bin/shen-jit" --save "$partial" eval -q -l "$root/typing/checker.shen" -l "$root/typing/structure.shen" \
+         -l "$root/typing/search.shen" > /dev/null 2>&1 < /dev/null &&
+       mv "$partial" "$image" 2>/dev/null; then :; else rm -f "$partial"; image=; fi
+  fi
+fi
 status=0
-"$jit/bin/shen-jit" script "$root/frontend/main.shen" "$jit/lib" "$root" "$work" "$@" > "$work/log" 2>&1 < /dev/null || status=$?
+if [ -n "$image" ]; then
+  SHEN_JIT_IMAGE=$image "$jit/bin/shen-jit" script "$root/frontend/main.shen" "$jit/lib" "$root" "$work" "$@" > "$work/log" 2>&1 < /dev/null || status=$?
+else
+  "$jit/bin/shen-jit" script "$root/frontend/main.shen" "$jit/lib" "$root" "$work" "$@" > "$work/log" 2>&1 < /dev/null || status=$?
+fi
 if [ ! -f "$work/result" ]; then
   # The driver always writes a result; without one, Shen itself stopped.
   echo "internal error in the frontend; the end of the Shen log follows" >&2
