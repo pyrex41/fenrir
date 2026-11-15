@@ -137,3 +137,14 @@ Hand-written variants of the program under
    capability names, so a wrong-tenant handler is caught by `authority.frame`, not
    refused.
 5. The payload is carried to the store and dropped by A1's abstraction.
+
+## 7 Measured
+
+15 November 2026, A1's default scope, `sh harness/run-service-fenrir.sh`: the handler
+gives A1's graph exactly (251,374 product states, 122,801 system states, 1,093,203
+edges, no violation); 3,336,483 handler steps compared with A1's, none differ; 68
+distinct runs, agreeing step for step in the JavaScript TC1-D1 implementation and in
+the Solo5 guest (10,808 steps each). Mutants: see
+[harness/README.md](../../harness/README.md) ("Service example A2"): each caught or
+rejected as predicted, at the predicted lengths, plus one unpredicted catch
+(wrong-tenant also by `retry.replay`).

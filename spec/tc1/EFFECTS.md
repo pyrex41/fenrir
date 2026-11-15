@@ -199,7 +199,10 @@ concurrency slice, C1 (tasks and bounded channels), is specified in
   user handlers as above; **runtime** effects (tasks, channels, time,
   resources, emit), discharged by the runtime and not replaceable by a user
   handler; and **durable** effects (transaction, durable job, durable inbox),
-  discharged only by a handler that carries a storage contract.
+  discharged only by a handler that carries a storage contract. Slice D1,
+  [DURABLE.md](DURABLE.md), specifies and implements durable effects: the host is
+  that handler, a host request is an observation, and the transaction is one commit
+  of data.
 
 ## 9 What is checked today
 
