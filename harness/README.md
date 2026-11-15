@@ -170,7 +170,7 @@ sh harness/run-tc1-exhaustive.sh        # grammar H up to 7 nodes, ~30 s
 sh harness/run-tc1-generated.sh         # generated family G, ~11 s
 sh harness/run-tc1-reduction.sh DEFECT  # one discovery-reduction-replay campaign, 8-25 s
 sh harness/run-tc1-strict-replay.sh     # ~9 s
-sh harness/run-tc1-gate.sh              # the proposed TC1 gate, ~4 min (runs the TC0-A gate too)
+sh harness/run-tc1-gate.sh              # the proposed TC1 gate, TBD (runs the TC0-A gate and the three optional rows too)
 ```
 
 | Program | What it checks | Measured |
@@ -194,6 +194,22 @@ The proposed TC1 gate ([tc1-gate.shen](tc1-gate.shen), manifest
 21 required rows PASS; `tc0-a-gate`, `guest-hand-fixtures` and
 `guest-exhaustive-small` are BLOCKED where Solo5 is not built, so the verdict
 there is BLOCKED. Authority UNREGISTERED, qualification UNKNOWN.
+
+Three optional rows (`required: false`; no claim and no required row relies on
+them, so the verdict is that of the 21 required rows) run after the required
+ones. Each reads its harness program's own report, and none can pass without
+that report: `task-hand-fixtures` (`tc1-tasks.shen`: PASS on `development-pass`,
+FAIL on `development-fail`, UNKNOWN without a report),
+`task-commuting-obligation` (`tc1-task-explore.shen`, about 4 min under an
+1,800 s limit: PASS only with `scope_complete`, exactly 3,600 programs, no bound
+hit, the obligation holding, both broken variants failing the check on some
+program and every witness agreeing; UNKNOWN for an incomplete or truncated scope
+or no report; FAIL otherwise) and `solo5-control-replay` (`solo5-control.shen` at
+stride 25, about 20 s: PASS on `development-pass`, FAIL on `development-fail`,
+BLOCKED where Solo5 or the guest build is unavailable, UNKNOWN on a timeout or no
+report). The accepted-job exploration (`service-explore.shen`) is not a row: it
+checks the service contract of application example A1, which is not part of
+slice TC1.
 
 Not done for TC1: exhaustive exploration beyond grammar H, and reduction
 campaigns for the two defects that show only through later values.
@@ -254,6 +270,10 @@ schedule for every one of the 15,808 reference observation classes and agrees
 with the model step for step on all (777,583 steps). The defects run on the
 first witness of each program only, a sample, reported and not required: all
 but `stale_waiter` are killed there.
+
+The two programs are optional rows of the proposed TC1 gate (`task-hand-fixtures`,
+`task-commuting-obligation`), with ledger row `TC1-C-TASKS`; the contract is a
+draft, so no claim relies on them.
 
 Not done for C1: generated (random) programs beyond G, reduction, strict replay
 tapes, catalog coverage, the Solo5 guest, the frontend. Evidence is bounded
