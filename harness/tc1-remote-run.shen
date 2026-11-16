@@ -20,9 +20,14 @@
 \\ The model's caller is the same program, read from the build's program.json
 \\ and run by models/tc1/handler-machine.shen (models/tc1/remote-tc1-caller.shen),
 \\ with the operations the build derived from its remote-effect declarations.
-\\ What each image declares of itself is derived the same way, and two schedules
-\\ are refusals at assembly: a connection the manifest lacks, and a peer image
-\\ with no durable store that serves an operation which is not read-only.
+\\ What each image declares of itself is derived the same way. Which member serves
+\\ a remote effect is the system manifest's binding (EFFECTS.md §12.6): the build
+\\ read it from examples/remote/ledger-system.json, and every run here hands the
+\\ supervisor that manifest's bindings unless the schedule is about them. Four
+\\ schedules are refusals at assembly: an effect the manifest binds to no member,
+\\ an effect bound to a name that is no member, an effect bound to a member the
+\\ manifest declares no connection to, and a peer image with no durable store
+\\ that serves an operation which is not read-only.
 \\ Every scheduled run is made twice and the two recordings must be equal.
 \\ Then each defect switch of the supervisor or the peer must be killed: its
 \\ recorded run must fail (a), (b) or (c). A run that ends in an error is
@@ -507,10 +512,15 @@
 \\ one refusal at assembly "peer_without_store".
 (set fx.*peer-image* "peer")
 
+\\ The manifest's bindings, [[Caller Effect Member] ...]: the ones the build read
+\\ from the system manifest, or for two refusals at assembly other ones.
+(set fx.*bindings* (fh.field "bindings" (value fx.*info*)))
+
 (define fx.manifest
   Edges -> [object ["members" [[object ["name" "caller"] ["kind" "caller"] ["image" (fh.field "caller" (value fx.*info*))]]
                               [object ["name" "peer"] ["kind" "peer"] ["image" (fh.field (value fx.*peer-image*) (value fx.*info*))]]]]
-                   ["connections" Edges]])
+                   ["connections" Edges]
+                   ["bindings" (value fx.*bindings*)]])
 
 \\ One run of the supervisor: the decoded result.json, or an error record.
 (define fx.execute
@@ -554,7 +564,8 @@
 \\ its incarnations. The recorded log must be exactly Steps (or, when the status
 \\ is step-not-enabled, Steps without the last one).
 \\ A refusal at assembly that is not a missing connection has two more fields:
-\\ the build's peer image to use, and the refusals the supervisor must report.
+\\ the build's peer image to use, and the refusals the supervisor must report;
+\\ and a third when it is about the bindings: the bindings the manifest is given.
 \\ The program (examples/remote/ledger-caller.fen): key 7 with argument 5, once
 \\ more after timed_out; key 8 with 5; key 7 with 6; then the read-only total,
 \\ once more after timed_out. A read-only request has no key: the supervisor
@@ -678,7 +689,17 @@
         ["undeclared-refused-at-start" [] true
          []
          "refused-at-start" [] none
-         "the caller's program declares a connection the manifest lacks: nothing is started"]
+         "the manifest binds Ledger to the member peer and declares no connection from the caller to it: nothing is started"]
+        ["unbound-effect-refused-at-start" (fx.declared) true
+         []
+         "refused-at-start" [] none
+         "the caller's program uses the remote effect Ledger and the manifest binds it to no member: nothing is started (EFFECTS.md section 12.6, ruling on question 14)"
+         "peer" [["caller" "unbound" "Ledger"]] []]
+        ["effect-bound-to-no-member-refused-at-start" (fx.declared) true
+         []
+         "refused-at-start" [] none
+         "the manifest binds Ledger to a name that is no member of the system: nothing is started (EFFECTS.md section 12.6, ruling on question 14)"
+         "peer" [["caller" "unknown-member" "Ledger" "ledger"]] [["caller" "Ledger" "ledger"]]]
         ["undeclared-refused-at-run-time" [] false
          [[refuse C P "7"] [refuse C P "8"] [refuse C P "7"] [refuse C P (Read 4)] [finish C]]
          "completed" [ND ND ND ND] 0
@@ -727,8 +748,10 @@
   Defects [Name Edges StartCheck Steps Status Outcomes Applications Why | Extra] ->
     (let Image (set fx.*peer-image* (if (cons? Extra) (hd Extra) "peer"))
          Refusals (if (cons? Extra) (hd (tl Extra)) (fx.declared))
+         Built (value fx.*bindings*)
+         Bindings (set fx.*bindings* (if (and (cons? Extra) (cons? (tl (tl Extra)))) (hd (tl (tl Extra))) Built))
          T (fx.twice Name Edges (fx.list-schedule Steps) Defects StartCheck)
-         Usual (set fx.*peer-image* "peer")
+         Usual (do (set fx.*bindings* Built) (set fx.*peer-image* "peer"))
          R (hd T)
          J (fx.judge Edges none R)
          Info (hd (tl (tl J)))

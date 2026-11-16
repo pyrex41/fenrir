@@ -62,9 +62,12 @@ run(SpecFile) ->
                  image => text(maps:get(<<"image">>, M))}
                || M <- maps:get(<<"members">>, Manifest)],
     Connections = maps:get(<<"connections">>, Manifest),
+    %% Which member serves each remote effect of each caller: [[Caller, Effect, Member]].
+    %% A manifest that says nothing binds nothing, and a caller that uses a remote effect is then refused.
+    Bindings = maps:get(<<"bindings">>, Manifest, []),
     StartCheck = maps:get(<<"start_check">>, Spec, true),
     Budget = fun(Key) -> number(maps:get(Key, Schedule, 0)) end,
-    System = #{members => Members, connections => Connections, defects => Defects, start_check => StartCheck,
+    System = #{members => Members, connections => Connections, bindings => Bindings, defects => Defects, start_check => StartCheck,
                tender => text(maps:get(<<"tender">>, Spec)), dir => Dir,
                life_ms => number(maps:get(<<"life_ms">>, Spec, 60000)),
                crashes => Budget(<<"crashes">>), duplicates => Budget(<<"duplicates">>),
@@ -82,7 +85,7 @@ run(SpecFile) ->
                         #{schema => <<"fenrir.supervisor.run/1">>,
                           schedule => Schedule, defects => Defects, start_check => StartCheck,
                           manifest => #{members => [#{name => maps:get(name, M), kind => atom_to_binary(maps:get(kind, M))} || M <- Members],
-                                        connections => Connections}}),
+                                        connections => Connections, bindings => Bindings}}),
     ok = file:write_file(filename:join(Dir, "result.json"), [json:encode(Result), "\n"]),
     Status = maps:get(status, Outcome),
     io:format("~s ~s events=~b~n", [Status, filename:join(Dir, "result.json"), length(maps:get(events, Report))]),

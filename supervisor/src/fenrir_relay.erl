@@ -205,8 +205,8 @@ value(conflict) -> [<<"tuple">>, int(1), int(0)].
 %% ---------- assembling the system ----------
 
 %% What an image says about itself: one line in the image file, which the build
-%% derived from the remote-effect declarations of the caller's program and its
-%% binding of each remote effect to a member (tools/solo5/remote-build.mjs).
+%% derived from the remote-effect declarations of the caller's program and the
+%% manifest's binding of each remote effect to a member (tools/solo5/remote-build.mjs).
 %%   caller  FENRIR-REMOTE-DECL/2 connects=<peers> uses=<peer>/<Effect>.<op>/<mode>,...
 %%   peer    FENRIR-REMOTE-SERVES/1 store=yes|no operations=<Effect>.<op>/<mode>,...
 %% {ok, {caller, Peers, [{Peer, Operation, Mode}]}} | {ok, {peer, HasStore, [{Operation, Mode}]}}
@@ -271,35 +271,68 @@ peer_declaration([{<<"store">>, [Store]}, {<<"operations">>, Items}]) when is_li
     end;
 peer_declaration(_) -> {error, bad_declaration}.
 
-%% The assembly check. Nothing is started unless it passes. Three refusals:
-%%   [Caller, Peer]                         the caller's program declares a connection the
-%%                                          manifest lacks (the start-time check, which
-%%                                          start_check => false switches off for the harness)
+%% The effect of "Effect.operation".
+effect_of(Operation) -> hd(binary:split(Operation, <<".">>)).
+
+%% The assembly check. Nothing is started unless it passes. Which member serves a
+%% remote effect of a caller is the manifest's binding, [Caller, Effect, Member]
+%% (EFFECTS.md §12.6; owner ruling of 16 November 2026, §12.10 question 14): the
+%% effects are the ones the caller's image says it uses. Five refusals:
+%%   [Caller, <<"unbound">>, Effect]        the caller uses a remote effect the manifest
+%%                                          binds to no member
+%%   [Caller, <<"unknown-member">>, Effect, Name]  the manifest binds the effect to a name
+%%                                          that is no member of the system
+%%   [Caller, Member]                       the effect is bound to a member the manifest
+%%                                          declares no connection to from the caller (the
+%%                                          start-time check, which start_check => false
+%%                                          switches off for the harness)
 %%   [Peer, <<"no-store">>, Operation]      a peer image without a durable store serves an
 %%                                          operation that is not read-only (EFFECTS.md §12.3)
-%%   [Caller, Peer, <<"unserved">>, Operation]  the caller uses an operation the peer's
-%%                                          image does not serve in that mode
-%% The last two are never switched off: nothing at run time stands behind them.
-assemble_system(Spec = #{members := Members, connections := Edges}) ->
+%%   [Caller, Member, <<"unserved">>, Operation]  the caller uses an operation the bound
+%%                                          member's image does not serve in that mode
+%% Only the third is ever switched off: nothing at run time stands behind the others.
+%% A caller image was built with a binding of its own. Where the manifest binds an
+%% effect to another member than the image was built for, the image is not an image of
+%% this system: an error of the manifest, like an image without its line.
+assemble_system(Spec = #{members := Members, connections := Edges, bindings := Bindings}) ->
     Names = [maps:get(name, M) || M <- Members],
     Declared = [{maps:get(name, M), maps:get(kind, M), declaration(maps:get(image, M))} || M <- Members],
-    Bad = [{N, E} || {N, _, {error, E}} <- Declared] ++
+    Callers = [N || {N, caller, _} <- Declared],
+    BindingOk = fun([C, E, M]) -> is_binary(C) andalso is_binary(E) andalso is_binary(M) andalso lists:member(C, Callers);
+                   (_) -> false
+                end,
+    Keys = [[C, E] || [C, E, _] <- Bindings],
+    %% {Caller, Effect, Member the image was built for}, one per effect the image uses.
+    Uses = lists:usort([{N, effect_of(Operation), P} || {N, caller, {ok, {caller, _, Us}}} <- Declared, {P, Operation, _} <- Us]),
+    Bound = fun(N, Effect) -> [M || [C, E, M] <- Bindings, C =:= N, E =:= Effect] end,
+    Bad = [{B, bad_binding} || B <- Bindings, not BindingOk(B)] ++
+          [{K, duplicate_binding} || K <- lists:usort(Keys -- lists:usort(Keys))] ++
+          [{[C, E, M], binding_of_unused_effect} || B = [C, E, M] <- Bindings, BindingOk(B), not lists:any(fun({N, Effect, _}) -> N =:= C andalso Effect =:= E end, Uses)] ++
+          [{[N, Effect, M], image_built_for_another_member} || {N, Effect, P} <- Uses, [M] <- [Bound(N, Effect)], lists:member(M, Names), M =/= P] ++
+          [{N, E} || {N, _, {error, E}} <- Declared] ++
           [{N, caller_image_without_declaration} || {N, caller, {ok, D}} <- Declared, D =:= none orelse element(1, D) =/= caller] ++
           [{N, peer_image_without_declaration} || {N, peer, {ok, D}} <- Declared, D =:= none orelse element(1, D) =/= peer] ++
           [{N, bad_name} || N <- Names, not fenrir_wire:name_ok(N)] ++
           [{N, duplicate_name} || N <- Names -- lists:usort(Names)] ++
           [{E, bad_connection} || E = [A, B] <- Edges, not (lists:member(A, Names) andalso lists:member(B, Names))],
-    Wanted = [[N, P] || {N, caller, {ok, {caller, Peers, _}}} <- Declared, P <- Peers],
+    Unbound = [[N, <<"unbound">>, Effect] || {N, Effect, _} <- Uses, Bound(N, Effect) =:= []],
+    Unknown = [[N, <<"unknown-member">>, Effect, M] || {N, Effect, _} <- Uses, [M] <- [Bound(N, Effect)], not lists:member(M, Names)],
+    %% The connections the bindings need, in the order of the caller's uses, each once.
+    Wanted = lists:foldl(fun(E, Acc) -> case lists:member(E, Acc) of true -> Acc; false -> Acc ++ [E] end end, [],
+                         [[N, M] || {N, Effect, _} <- Uses, [M] <- [Bound(N, Effect)], lists:member(M, Names)]),
     Missing = [E || E <- Wanted, not lists:member(E, Edges)],
     Serves = maps:from_list([{N, S} || {N, peer, {ok, {peer, _, S}}} <- Declared]),
     Storeless = [[N, <<"no-store">>, Operation]
                  || {N, peer, {ok, {peer, false, S}}} <- Declared, {Operation, Mode} <- S, Mode =/= <<"read-only">>],
-    Unserved = [[N, P, <<"unserved">>, Operation]
-                || {N, caller, {ok, {caller, _, Uses}}} <- Declared, {P, Operation, Mode} <- Uses,
-                   is_map_key(P, Serves), not lists:member({Operation, Mode}, maps:get(P, Serves))],
+    %% The member an operation goes to is the bound one; a member that is not a peer serves nothing.
+    Unserved = [[N, M, <<"unserved">>, Operation]
+                || {N, caller, {ok, {caller, _, Us}}} <- Declared, {_, Operation, Mode} <- Us,
+                   [M] <- [Bound(N, effect_of(Operation))], lists:member(M, Names),
+                   not lists:member({Operation, Mode}, maps:get(M, Serves, []))],
     Stores = maps:from_list([{N, case D of {ok, {peer, HasStore, _}} -> HasStore; _ -> false end} || {N, _, D} <- Declared]),
-    Refusals = case map_get(start_check, Spec) of true -> Missing; false -> [] end ++ Storeless ++ Unserved,
-    Base = #{assembled => false, declared => Wanted, refusals => Missing ++ Storeless ++ Unserved},
+    Always = Unbound ++ Unknown,
+    Refusals = Always ++ case map_get(start_check, Spec) of true -> Missing; false -> [] end ++ Storeless ++ Unserved,
+    Base = #{assembled => false, declared => Wanted, refusals => Always ++ Missing ++ Storeless ++ Unserved},
     if
         Bad =/= [] -> {{error, {manifest, Bad}}, Base};
         Refusals =/= [] -> {{refused, Refusals}, Base#{refusals := Refusals}};

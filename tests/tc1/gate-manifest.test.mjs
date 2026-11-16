@@ -85,7 +85,9 @@ test('the gate is registered by the rule the TC0-A gate uses, and the workflow p
   // The caller image is built from a source file through the frontend: both are what the remote-run row depends on.
   for(const path of ['frontend','examples/remote'])assert.ok(paths.has(path),path);
   const build=readFileSync('tools/solo5/remote-build.mjs','utf8');
-  assert.ok(build.includes("SOURCE='examples/remote/ledger-caller.fen'")&&build.includes("'frontend/fenrir.sh'"));
+  // The build takes the source's name from the system manifest, which is under examples/remote too.
+  assert.ok(build.includes("MANIFEST='examples/remote/ledger-system.json'")&&build.includes("'frontend/fenrir.sh'"));
+  assert.equal(json('examples/remote/ledger-system.json').members[0].program,'examples/remote/ledger-caller.fen');
   // The workflow's completion condition is still the TC0-A slice's: this record does not change it.
   assert.deepEqual(workflow.requiredChecks,['tc0-a-qualification']);
 });
@@ -119,14 +121,18 @@ test('the remote rows, the manifest and the checks state the same scope', () => 
 
 test('the registration record carries its amendments, and the remote checks agree on names, properties and the wire version', () => {
   const record=readFileSync('campaigns/tc1/TC1_GATE_REGISTRATION.md','utf8');
-  const first=record.indexOf('## Amendment 1, 2026-11-16'),second=record.indexOf('## Amendment 2, 2026-11-16'),amendment=record.slice(second);
+  const first=record.indexOf('## Amendment 1, 2026-11-16'),second=record.indexOf('## Amendment 2, 2026-11-16'),third=record.indexOf('## Amendment 3, 2026-11-16'),amendment=record.slice(third);
   // The amendments are at the end, in order, by instruction and not by line review; the last is the part that names the manifest as it is now.
-  assert.ok(first>0&&second>first&&/given in\s+conversation, not line\s+review/.test(record.slice(first,second))&&/given in\s+conversation, not line\s+review/.test(amendment));
+  const instructed=/given in\s+conversation, not line\s+review/;
+  assert.ok(first>0&&second>first&&third>second&&instructed.test(record.slice(first,second))&&instructed.test(record.slice(second,third))&&instructed.test(amendment));
   const hash=createHash('sha256').update(readFileSync('spec/tc1/tc1-requirements.json')).digest('hex');
-  assert.ok(amendment.includes(hash)&&!record.slice(0,second).includes(hash));
+  assert.ok(amendment.includes(hash)&&!record.slice(0,third).includes(hash));
   assert.match(manifest.review,/Amended on 2026-11-16 a second time \(Amendment 2/);
-  assert.match(manifest.contract,/draft 7/);
-  assert.match(readFileSync('spec/tc1/EFFECTS.md','utf8'),/^Draft 7 /m);
+  assert.match(manifest.review,/Amended on 2026-11-16 a third time \(Amendment 3/);
+  assert.match(manifest.contract,/draft 8/);
+  assert.match(readFileSync('spec/tc1/EFFECTS.md','utf8'),/^Draft 8 /m);
+  // Questions 13 and 15 of the contract are open, and the record does not say otherwise.
+  assert.match(amendment,/Questions 13 and 15[^.]*open/);
   // The outcome renamed on 16 November 2026 is not left under its old name in anything that runs.
   const sources=['models/tc1/remote-system.shen','models/tc1/remote-tc1-caller.shen','harness/tc1-remote.shen','harness/tc1-remote-properties.shen',
     'harness/tc1-remote-run.shen','harness/tc1-remote-rows.shen','supervisor/src/fenrir_relay.erl','supervisor/src/fenrir_run.erl','supervisor/src/fenrir_main.erl',

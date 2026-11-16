@@ -8,7 +8,7 @@ import {encode} from '../../tools/tc0/canonical.mjs';
 import {validatePureCallArtifact,InvalidPureCallArtifact,TC1_REMOTE_SCHEMA,REMOTE_OUTCOMES} from '../../tools/tc0/pure-call-artifact.mjs';
 import {HandlerMachine} from '../../runtime/tc1/handler-machine.mjs';
 import {cases} from '../../fixtures/tc1/handler-hand-cases.mjs';
-import {remoteOperations,wireProblems,callerDeclaration,peerDeclaration,assemblyProblems,SOURCE,BINDINGS} from '../../tools/solo5/remote-build.mjs';
+import {remoteOperations,wireProblems,callerDeclaration,peerDeclaration,assemblyProblems,checkManifest,readManifest,MANIFEST} from '../../tools/solo5/remote-build.mjs';
 
 const check=p=>validatePureCallArtifact(encode(p),['int','0']);
 const clone=p=>JSON.parse(JSON.stringify(p));
@@ -79,8 +79,56 @@ test('a remote perform takes the key first unless the operation is read-only, an
   const keyed=program(),unit=inner(keyed)[2][4];inner(keyed)[2][4]=['tuple',unit[1],['int','900','7'],['unit','901']];
   keyed.source_map.push({id:'900',file:'x',line:'0',column:'0'},{id:'901',file:'x',line:'0',column:'0'});rejects(keyed,'read-only operation with a key',/Perform argument/);
   // The result is the outcome, not the operation's value: main's declared I64 cannot be the perform itself.
-  const raw=program();raw.functions[0].body=inner(raw)[2];remap(raw);rejects(raw,'outcome used as the value',/Function signature/);
-  const typed=clone(raw);typed.functions[0].result_type=['Remote','I64'];assert.ok(check(typed));
+  // And it cannot be the function's result under any signature: the perform is not a scrutinee, and the type cannot be written.
+  const raw=program();raw.functions[0].body=inner(raw)[2];remap(raw);rejects(raw,'outcome used as the value',/A remote outcome must be matched where it is performed/);
+  const typed=clone(raw);typed.functions[0].result_type=['Remote','I64'];rejects(typed,'outcome returned',/The outcome type Remote cannot be written/);
+});
+// Must-use (EFFECTS.md §3, ruling on §12.10 question 11). Each edit takes the read-only perform of program(), the
+// scrutinee of the inner match, and puts it, or the outcome type, somewhere else. New nodes get IDs from 900.
+function edited(edit) {
+  const p=program();let next=900;
+  const node=(tag,...args)=>{const id=String(next++);p.source_map.push({id,file:'remote-unit',line:'0',column:'0'});return [tag,id,...args];};
+  const binder=()=>String(next++),match=inner(p),perform=match[2];
+  edit({p,node,binder,match,perform,arms:()=>match.slice(3),set:e=>{match[2]=e;}});
+  return remap(p);
+}
+test('must-use: a remote perform is the scrutinee of a match, and a hand-made artifact cannot put it anywhere else', () => {
+  const unexamined=/A remote outcome must be matched where it is performed/;
+  assert.ok(check(edited(()=>{})));
+  const wrong={
+    'bound by let, then matched':({node,binder,perform,set})=>{const b=binder();set(node('let',b,perform,node('var',b)));},
+    'bound by let inside the scrutinee and dropped':({node,binder,perform,set,p})=>{const b=binder();p.functions[0].body=node('let',b,perform,node('int','0'));},
+    'the scrutinee is an if that yields it':({node,perform,set})=>{const again=clone(perform);again[1]='990';again[4][1]='991';
+      set(node('if',node('bool',true),perform,again));edited.extra=['990','991'];},
+    'stored in a tuple':({node,perform,p})=>{p.functions[0].body=node('project',node('tuple',node('int','0'),perform),'0');},
+    'returned by a function':({perform,p})=>{p.functions[0].body=perform;},
+    'returned by a lambda':({node,binder,perform,p})=>{const b=binder(),u=binder();
+      p.functions[0].body=node('let',b,node('lambda',u,'Unit','I64',['Ledger'],[],perform),node('int','0'));},
+    'passed to a function':({node,perform,p})=>{p.functions[0].body=node('call','main',perform);},
+    'compared':({node,perform,p})=>{const again=clone(perform);again[1]='990';again[4][1]='991';p.functions[0].body=node('prim','eq',perform,again);edited.extra=['990','991'];},
+    'emitted':({node,perform,p})=>{p.functions[0].body=node('emit','outcome',perform);},
+    'the argument of another perform':({node,perform,p})=>{p.functions[0].body=node('perform','Note','note',perform);},
+  };
+  for(const [why,edit] of Object.entries(wrong)){
+    edited.extra=[];const p=edited(edit);for(const id of edited.extra)p.source_map.push({id,file:'remote-unit',line:'0',column:'0'});
+    rejects(p,why,unexamined);
+  }
+});
+test('must-use: the outcome type is written nowhere, so nothing can be declared to hold an outcome', () => {
+  const unwritable=/The outcome type Remote cannot be written/,remote=['Remote','I64'];
+  const wrong={
+    'a function argument':p=>{p.functions[0].argument_type=remote;p.input_schema.type=remote;},
+    'a function result':p=>{p.functions[0].result_type=remote;},
+    'a component of a tuple type':p=>{p.functions[0].result_type=['Tuple','I64',remote];},
+    'the result of a function type':p=>{p.functions[0].result_type=['Arrow','I64',remote,['Ledger']];},
+    'a datatype field':p=>{p.datatypes=[{name:'Kept',constructors:[{name:'kept',fields:[remote]}]}];},
+    'the argument type of an operation':p=>{p.effects[1].operations[0].argument_type=remote;},
+    'the result type of an operation':p=>{p.effects[0].operations[1].result_type=remote;},
+  };
+  for(const [why,edit] of Object.entries(wrong)){const p=program();edit(p);rejects(p,why,unwritable);}
+  // An outcome cannot come in as the input either: the entry's argument type would have to name it.
+  const p=program();p.functions[0].argument_type=remote;p.input_schema.type=remote;
+  assert.throws(()=>validatePureCallArtifact(encode(p),['data','RemoteResult','not_delivered']),e=>e instanceof InvalidPureCallArtifact&&unwritable.test(e.message));
 });
 test('all three outcomes must be dealt with: a match on an outcome is exhaustive', () => {
   for(const missing of [3,4,5]){const p=program();outer(p).splice(missing,1);remap(p);rejects(p,`arm ${missing} missing`,/Non-exhaustive or duplicate match arms/);}
@@ -91,7 +139,7 @@ test('all three outcomes must be dealt with: a match on an outcome is exhaustive
 test('the name of the outcome values cannot be declared, and a program cannot construct an outcome', () => {
   const named=program();named.datatypes=[{name:'RemoteResult',constructors:[{name:'reply',fields:['I64']}]}];rejects(named,'RemoteResult declared',/Datatype name/);
   const made=program();made.functions[0].body=['construct',made.functions[0].body[1],'RemoteResult','not_delivered'];remap(made);
-  made.functions[0].result_type=['Remote','I64'];made.functions[0].effects=[];rejects(made,'outcome constructed',/Unknown datatype/);
+  made.functions[0].effects=[];rejects(made,'outcome constructed',/Unknown datatype/);
 });
 test('the JavaScript machine runs a schema /3 program that performs no remote operation', () => {
   const p=program();p.functions[0].body[4]=['perform',outer(p)[1],'Note','note',['var',outer(p)[2][1],p.functions[0].parameter_id]];
@@ -100,14 +148,17 @@ test('the JavaScript machine runs a schema /3 program that performs no remote op
   assert.equal(run.execution,'Completed');assert.deepEqual(run.outcome,['Ok',['int','0']]);
 });
 
-const operations=()=>remoteOperations(check(program()).artifact,[['Ledger','peer']]);
-test('the operations of an image are derived from the declarations and the binding, and from nothing else', () => {
+const BOUND=[['caller','Ledger','peer']];
+const operations=()=>remoteOperations(check(program()).artifact,'caller',BOUND);
+test('the operations of an image are derived from the declarations and the manifest\'s bindings, and from nothing else', () => {
   assert.deepEqual(operations().map(o=>[o.effect,o.operation,o.peer,o.mode]),[['Ledger','add','peer','keyed'],['Ledger','total','peer','read-only']]);
   const {artifact}=check(program());
-  assert.throws(()=>remoteOperations(artifact,[]),/binds it to no member/);
-  assert.throws(()=>remoteOperations(artifact,[['Ledger','peer'],['Note','peer']]),/does not declare as a remote effect/);
-  assert.throws(()=>remoteOperations(artifact,[['Ledger','peer'],['Ledger','other']]),/bound twice/);
-  assert.throws(()=>remoteOperations(cases[0].program,[]),/schema tc1-handler-demo\/3/);
+  assert.throws(()=>remoteOperations(artifact,'caller',[]),/the manifest binds it to no member/);
+  // Another caller's binding is not this caller's.
+  assert.throws(()=>remoteOperations(artifact,'caller',[['other','Ledger','peer']]),/the manifest binds it to no member/);
+  assert.throws(()=>remoteOperations(artifact,'caller',[...BOUND,['caller','Note','peer']]),/does not declare it as a remote effect/);
+  assert.throws(()=>remoteOperations(artifact,'caller',[...BOUND,['caller','Ledger','other']]),/bound twice/);
+  assert.throws(()=>remoteOperations(cases[0].program,'caller',[]),/schema tc1-handler-demo\/3/);
   assert.deepEqual(wireProblems(operations()),[]);
   const wide=operations();wide[1].argument_type='I64';assert.equal(wireProblems(wide).length,1);
   const two=operations();two.push({...two[1],operation:'count'});assert.equal(wireProblems(two).length,2);
@@ -118,30 +169,75 @@ test('the declarations the images carry are spelled as the supervisor reads them
   assert.equal(peerDeclaration(operations(),'peer',false),'FENRIR-REMOTE-SERVES/1 store=no operations=Ledger.add/keyed,Ledger.total/read-only');
   const relay=readFileSync('supervisor/src/fenrir_relay.erl','utf8');
   for(const marker of ['FENRIR-REMOTE-DECL/2 ','FENRIR-REMOTE-SERVES/1 '])assert.ok(relay.includes(`<<"\\n${marker}">>`),marker);
-  for(const refusal of ['<<"no-store">>','<<"unserved">>'])assert.ok(relay.includes(refusal),refusal);
+  for(const refusal of ['<<"no-store">>','<<"unserved">>','<<"unbound">>','<<"unknown-member">>'])assert.ok(relay.includes(refusal),refusal);
   // The hand-written marker is gone: the caller's line comes from data.h, the peer's from the build's command line.
   assert.ok(!/FENRIR-REMOTE/.test(readFileSync('backends/solo5/remote/caller.c','utf8')+readFileSync('backends/solo5/remote/peer.c','utf8')));
 });
 test('assembly refuses a declared remote effect with no manifest connection, and a storeless peer that serves a keyed operation', () => {
-  const serves=operations().map(({effect,operation,mode})=>({effect,operation,mode}));
-  const caller={name:'caller',kind:'caller',operations:operations()},peer=store=>({name:'peer',kind:'peer',store,serves});
-  assert.deepEqual(assemblyProblems([caller,peer(true)],[['caller','peer']]),[]);
-  assert.deepEqual(assemblyProblems([caller,peer(true)],[]),[['caller','peer']]);
-  assert.deepEqual(assemblyProblems([caller,peer(true)],[['peer','caller']]),[['caller','peer']]);
-  assert.deepEqual(assemblyProblems([caller,peer(false)],[['caller','peer']]),[['peer','no-store','Ledger.add']]);
+  const serves=operations().map(({effect,operation,mode})=>({effect,operation,mode})),edge=[['caller','peer']];
+  const caller={name:'caller',kind:'caller',operations:serves},peer=store=>({name:'peer',kind:'peer',store,serves});
+  assert.deepEqual(assemblyProblems([caller,peer(true)],edge,BOUND),[]);
+  assert.deepEqual(assemblyProblems([caller,peer(true)],[],BOUND),[['caller','peer']]);
+  assert.deepEqual(assemblyProblems([caller,peer(true)],[['peer','caller']],BOUND),[['caller','peer']]);
+  assert.deepEqual(assemblyProblems([caller,peer(false)],edge,BOUND),[['peer','no-store','Ledger.add']]);
   // A peer without a store is allowed for read-only operations, and only for them.
-  const reader={name:'caller',kind:'caller',operations:operations().filter(o=>o.mode==='read-only')};
+  const reader={name:'caller',kind:'caller',operations:serves.filter(o=>o.mode==='read-only')};
   const meter={name:'peer',kind:'peer',store:false,serves:serves.filter(o=>o.mode==='read-only')};
-  assert.deepEqual(assemblyProblems([reader,meter],[['caller','peer']]),[]);
-  assert.deepEqual(assemblyProblems([caller,meter],[['caller','peer']]),[['caller','peer','unserved','Ledger.add']]);
+  assert.deepEqual(assemblyProblems([reader,meter],edge,BOUND),[]);
+  assert.deepEqual(assemblyProblems([caller,meter],edge,BOUND),[['caller','peer','unserved','Ledger.add']]);
   // A caller that takes an operation for read-only when the peer does not serve it so is refused too.
-  const mistaken={name:'caller',kind:'caller',operations:operations().map(o=>({...o,mode:'read-only'}))};
-  assert.deepEqual(assemblyProblems([mistaken,peer(true)],[['caller','peer']]),[['caller','peer','unserved','Ledger.add']]);
+  const mistaken={name:'caller',kind:'caller',operations:serves.map(o=>({...o,mode:'read-only'}))};
+  assert.deepEqual(assemblyProblems([mistaken,peer(true)],edge,BOUND),[['caller','peer','unserved','Ledger.add']]);
 });
-test('the build names a source file as the caller program, and no fixture stands in for it', () => {
-  assert.equal(SOURCE,'examples/remote/ledger-caller.fen');
-  assert.deepEqual(BINDINGS,[['Ledger','peer']]);
-  const source=readFileSync(SOURCE,'utf8');
+test('assembly takes the member of a remote effect from the manifest\'s bindings, and refuses each way a binding can fail with its own message', () => {
+  const serves=operations().map(({effect,operation,mode})=>({effect,operation,mode})),edge=[['caller','peer']];
+  const caller={name:'caller',kind:'caller',operations:serves},peer={name:'peer',kind:'peer',store:true,serves};
+  // No binding: the effect is used and the manifest says nothing of who serves it. Another caller's binding does not count.
+  assert.deepEqual(assemblyProblems([caller,peer],edge,[]),[['caller','unbound','Ledger']]);
+  assert.deepEqual(assemblyProblems([caller,peer],edge,[['other','Ledger','peer']]),[['caller','unbound','Ledger']]);
+  // Bound to a name that is no member of the system.
+  assert.deepEqual(assemblyProblems([caller,peer],edge,[['caller','Ledger','ledger']]),[['caller','unknown-member','Ledger','ledger']]);
+  // Bound to a member the manifest declares no connection to from the caller: a connection the other way is not one.
+  const spare={name:'spare',kind:'peer',store:true,serves};
+  assert.deepEqual(assemblyProblems([caller,peer,spare],edge,[['caller','Ledger','spare']]),[['caller','spare']]);
+  assert.deepEqual(assemblyProblems([caller,peer],[['peer','caller']],BOUND),[['caller','peer']]);
+  // The member an operation goes to is the bound one, whatever else is in the system; a caller serves nothing.
+  const idle={name:'spare',kind:'peer',store:true,serves:[]};
+  assert.deepEqual(assemblyProblems([caller,peer,idle],[['caller','spare']],[['caller','Ledger','spare']]),[['caller','spare','unserved','Ledger.add'],['caller','spare','unserved','Ledger.total']]);
+  const second={name:'second',kind:'caller',operations:[]};
+  assert.deepEqual(assemblyProblems([caller,second],[['caller','second']],[['caller','Ledger','second']]),[['caller','second','unserved','Ledger.add'],['caller','second','unserved','Ledger.total']]);
+});
+test('the build reads the system from its manifest: the source of the caller, the connections and the bindings; it holds no binding itself', () => {
+  assert.equal(MANIFEST,'examples/remote/ledger-system.json');
+  const manifest=readManifest(MANIFEST);
+  assert.deepEqual(manifest,{schema:'fenrir.system-manifest/1',members:[{name:'caller',kind:'caller',program:'examples/remote/ledger-caller.fen'},{name:'peer',kind:'peer'}],
+    connections:[['caller','peer']],bindings:[['caller','Ledger','peer']]});
+  const source=readFileSync(manifest.members[0].program,'utf8');
   assert.match(source,/^\(remote-effect Ledger\n  \(add I64 --> \(Tuple I64 I64\)\)\n  \(read-only total Unit --> I64\)\)$/m);
   assert.throws(()=>readFileSync('fixtures/tc1/remote-caller.mjs'));
+  // Neither the effect's name nor the source's is in the build script: both come from the manifest.
+  const build=readFileSync('tools/solo5/remote-build.mjs','utf8');
+  assert.ok(!/Ledger|ledger-caller|BINDINGS/.test(build)&&build.includes("MANIFEST='examples/remote/ledger-system.json'"));
+  // The supervisor takes the bindings from the manifest it is given, and the harness from what the build read.
+  assert.ok(readFileSync('supervisor/src/fenrir_main.erl','utf8').includes('maps:get(<<"bindings">>, Manifest, [])'));
+  assert.ok(readFileSync('harness/tc1-remote-run.shen','utf8').includes('(set fx.*bindings* (fh.field "bindings" (value fx.*info*)))'));
+  assert.ok(!/"Ledger" "peer"/.test(readFileSync('harness/tc1-remote-run.shen','utf8')));
+});
+test('a system manifest is closed and well formed, or the build does not start', () => {
+  const good=()=>JSON.parse(readFileSync(MANIFEST,'utf8')),bad=(edit,pattern)=>{const m=good();edit(m);assert.throws(()=>checkManifest(m),pattern);};
+  assert.ok(checkManifest(good()));
+  bad(m=>{delete m.bindings;},/schema fenrir.system-manifest\/1/);
+  bad(m=>{m.schema='fenrir.system-manifest/2';},/schema fenrir.system-manifest\/1/);
+  bad(m=>{m.extra=1;},/schema fenrir.system-manifest\/1/);
+  bad(m=>{m.members[1].kind='store';},/a member is/);
+  bad(m=>{delete m.members[0].program;},/a member is/);
+  bad(m=>{m.members[0].program='/etc/passwd';},/relative to the repository/);
+  bad(m=>{m.members[1].name='caller';},/listed twice/);
+  bad(m=>{m.members[1].name='Peer';},/member name/);
+  bad(m=>{m.connections=[['caller','ledger']];},/does not join two members/);
+  bad(m=>{m.bindings=[['Ledger','peer']];},/is not \[caller, Effect, member\]/);
+  bad(m=>{m.bindings=[['peer','Ledger','peer']];},/is not for a caller/);
+  bad(m=>{m.bindings.push(['caller','Ledger','caller']);},/bound twice/);
+  // Well formed, and refused at assembly instead: a binding to no member, and one with no connection behind it.
+  for(const edit of [m=>{m.bindings=[['caller','Ledger','ledger']];},m=>{m.connections=[];},m=>{m.bindings=[];}]){const m=good();edit(m);assert.ok(checkManifest(m));}
 });

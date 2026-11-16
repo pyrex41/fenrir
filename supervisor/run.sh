@@ -16,15 +16,14 @@ out="$root/build/supervisor/run-$(date +%s)-$$"
 mkdir -p "$out"
 sh "$root/supervisor/build.sh" "$erlc" "$out/ebin" >/dev/null
 timeout 600 node "$root/tools/solo5/remote-build.mjs" --out "$out/images" >/dev/null
-abi=spt
 tender=$(sed -n 's/.*"tender":"\([^"]*\)".*/\1/p' "$out/images/build.json")
 schedule='{"mode":"free","timeout_ms":"2000","deadline_ms":"20000"}'
 [ $# -ge 1 ] && schedule=$(cat "$1")
+# The manifest is the one the build wrote: the system manifest
+# (examples/remote/ledger-system.json) with each member's image.
 cat > "$out/spec.json" <<EOF
 {"dir":"$out/run","tender":"$tender","life_ms":"60000","start_check":true,"defects":[],
- "manifest":{"members":[{"name":"caller","kind":"caller","image":"$out/images/caller.$abi"},
-                        {"name":"peer","kind":"peer","image":"$out/images/peer.$abi"}],
-             "connections":[["caller","peer"]]},
+ "manifest":"$out/images/manifest.json",
  "schedule":$schedule}
 EOF
 status=0

@@ -4,12 +4,13 @@ Erlang/OTP implementation of the supervisor's part of remote perform. The
 contract is [spec/tc1/EFFECTS.md](../spec/tc1/EFFECTS.md) §12; the model is
 [models/tc1/remote-system.shen](../models/tc1/remote-system.shen). First
 implementation, development code. Its check is the row `remote-run` of the TC1
-gate, registered on 15 November 2026 and amended twice on 16 November 2026
+gate, registered on 15 November 2026 and amended three times on 16 November 2026
 ([record](../campaigns/tc1/TC1_GATE_REGISTRATION.md)); that row's evidence is
 observed histories on `spt` accepted by the model, nothing stronger.
 
-A system is one image per member, a static manifest of declared connections,
-and this supervisor, which is outside the images and carries every message. A
+A system is one image per member, a static manifest of the members, the
+declared connections and the member each remote effect is bound to, and this
+supervisor, which is outside the images and carries every message. A
 remote operation returns exactly one of `reply v`, `not_delivered`,
 `timed_out`. `not_delivered` was called `peer_down` until 16 November 2026;
 it says that no copy of the request was handed to the peer, whether the peer
@@ -39,7 +40,7 @@ Solo5 as for the other guests: `FENRIR_SOLO5` or `build/vendor/solo5`.
 | Caller image | [backends/solo5/remote/caller.c](../backends/solo5/remote/caller.c) | A real TC1 program, the source file [examples/remote/ledger-caller.fen](../examples/remote/ledger-caller.fen) elaborated by the frontend, on the unchanged C machine of `backends/solo5/pure-call`. A perform of an operation of an effect the program declares remote is the remote operation: request out, one outcome in, given to the machine as the value of that perform. The frames never leave the image |
 | Peer image | [backends/solo5/remote/peer.c](../backends/solo5/remote/peer.c) | The model's abstract peer: a counter with a durable store on a block device and two operations. The keyed one is idempotent per request id: a reply record keeps the argument it was made with, the same key with another argument is answered `conflict` and changes nothing, and it commits to the store first and replies afterwards. The read-only one replies with the counter and writes nothing |
 | Wire format | [backends/solo5/remote/wire.h](../backends/solo5/remote/wire.h), [src/fenrir_wire.erl](src/fenrir_wire.erl) | Version 3: 512-byte blocks, little-endian, explicit lengths, sequence numbers, incarnation numbers, CRC-32; strict decoding on both sides. An inbox header also has `hold`, below |
-| Image build | [tools/solo5/remote-build.mjs](../tools/solo5/remote-build.mjs) | JavaScript, as for the other guests. It runs the frontend on the source file, and derives from the program's remote-effect declarations, and its own binding of `Ledger` to the member `peer`, the line each image carries about itself |
+| Image build | [tools/solo5/remote-build.mjs](../tools/solo5/remote-build.mjs) | JavaScript, as for the other guests. It reads the system manifest ([examples/remote/ledger-system.json](../examples/remote/ledger-system.json)), runs the frontend on the source file the manifest names for the caller, and derives from the program's remote-effect declarations and the manifest's binding of `Ledger` to the member `peer` the line each image carries about itself. It holds no binding of its own, and writes `manifest.json`, the manifest with each member's image, for the supervisor |
 | Supervisor | [src/](src/) | This directory |
 | Judgement | [harness/tc1-remote-run.shen](../harness/tc1-remote-run.shen) | Shen: replays what a run recorded through the model |
 
@@ -126,10 +127,40 @@ file or JSON text:
  "tender": "/path/to/solo5-spt",
  "manifest": {"members": [{"name": "caller", "kind": "caller", "image": "/path/caller.spt"},
                           {"name": "peer", "kind": "peer", "image": "/path/peer.spt"}],
-              "connections": [["caller", "peer"]]},
+              "connections": [["caller", "peer"]],
+              "bindings": [["caller", "Ledger", "peer"]]},
  "schedule": {"mode": "free"},
  "start_check": true, "defects": [], "life_ms": "60000"}
 ```
+
+`"manifest"` may also be the name of a file that holds that object; the image
+build writes one, `manifest.json`, next to the images.
+
+**The system manifest.** One description of the system, used by the image
+build and by the supervisor (EFFECTS.md §12.6; owner ruling of 16 November
+2026 on §12.10 question 14). In the repository it is a file,
+[examples/remote/ledger-system.json](../examples/remote/ledger-system.json):
+
+```json
+{"schema": "fenrir.system-manifest/1",
+ "members": [{"name": "caller", "kind": "caller", "program": "examples/remote/ledger-caller.fen"},
+             {"name": "peer", "kind": "peer"}],
+ "connections": [["caller", "peer"]],
+ "bindings": [["caller", "Ledger", "peer"]]}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `members` | Each has a `name` (`[a-z0-9-]`, 1 to 15 characters, unique) and a `kind`, `caller` or `peer`. In the file a caller has `program`, its source, named relative to the repository. In the manifest the supervisor is given, every member has `image`, the image file, instead; that is the only difference, and the build makes it |
+| `connections` | `[caller, member]`: the caller may send requests to that member. Both are members |
+| `bindings` | `[caller, Effect, member]`: the operations of the remote effect `Effect` that the caller's program performs are carried out by `member`. One binding at most for a caller and an effect. A manifest without the field binds nothing |
+
+A binding says who serves an effect; a connection says the caller may reach
+that member. Neither implies the other and both are required. The build
+refuses a file that is not of this shape (closed fields, the schema name),
+and makes the assembly check below on it before compiling anything. This
+build makes the images of one system shape: one caller named `caller` and
+one peer named `peer`.
 
 **Assembly.** Before anything is started the supervisor reads from each image
 file one line that says what the image is:
@@ -140,27 +171,42 @@ FENRIR-REMOTE-SERVES/1 store=yes operations=Ledger.add/keyed,Ledger.total/read-o
 ```
 
 Neither line is written by hand. The build derives both from the remote-effect
-declarations of the caller's program and its binding of each remote effect to
-a member: the connections are the members the declared remote effects are
-bound to, and the peer serves the operations bound to it (there is no peer
-program to take them from). `store` is whether the image was linked with a
-store device. The supervisor compares the lines with the manifest and with
-each other, and starts nothing (status `refused-at-start`, exit status 2,
-`refusals` in the report) when:
+declarations of the caller's program and the manifest's binding of each
+remote effect to a member: the caller's line names the members its effects
+were bound to when it was built, and the peer serves the operations bound to
+it (there is no peer program to take them from). `store` is whether the image
+was linked with a store device. At assembly the member an effect goes to is
+the one the manifest binds it to; the caller's line says which effects and
+operations it uses. The supervisor compares the lines with the manifest and
+with each other, and starts nothing (status `refused-at-start`, exit status
+2, `refusals` in the report) when:
 
 | Refusal in the report | Meaning |
 | --- | --- |
-| `[Caller, Peer]` | the caller's program declares a connection the manifest lacks |
+| `[Caller, "unbound", "Effect"]` | the caller's program uses a remote effect and the manifest binds it to no member |
+| `[Caller, "unknown-member", "Effect", Name]` | the manifest binds the effect to a name that is no member of the system |
+| `[Caller, Member]` | the effect is bound to a member, and the manifest declares no connection from the caller to it |
 | `[Peer, "no-store", "Effect.op"]` | the peer image has no durable store and serves an operation that is not read-only (EFFECTS.md §12.3) |
-| `[Caller, Peer, "unserved", "Effect.op"]` | the caller uses an operation the peer's image does not serve in that mode |
+| `[Caller, Member, "unserved", "Effect.op"]` | the caller uses an operation the bound member's image does not serve in that mode; a member that is not a peer serves nothing |
 
-A caller image without its line, or a peer image without its line, is an
-error of the manifest. `"start_check": false` switches off the first check
-only, for the harness; behind it the check at run time stays as a backstop:
-every request is checked against the manifest when it is accepted, whatever
-the image declares, and an undeclared one gets `not_delivered` with nothing
-put in flight (`refuse`). Nothing at run time stands behind the other two, so
-they cannot be switched off. A member is given a store file only if its image
+The report lists them in that order. An error of the manifest is something
+else: the run ends with status `error`, exit status 1, and no refusal. These
+are errors: a caller image without its line, or a peer image without its
+line; a member name outside the alphabet or given twice; a connection that
+names no member; a binding that is not `[caller, Effect, member]` with a
+caller of the system first (`bad_binding`); two bindings of one effect for
+one caller (`duplicate_binding`); a binding for an effect the caller's image
+does not use (`binding_of_unused_effect`); and a manifest that binds an
+effect to a member other than the one the caller image was built for
+(`image_built_for_another_member`: the image sends its requests to the member
+compiled into it, so it is not an image of this system).
+
+`"start_check": false` switches off the third check only, for the harness;
+behind it the check at run time stays as a backstop: every request is checked
+against the manifest's connections when it is accepted, whatever the image
+declares, and an undeclared one gets `not_delivered` with nothing put in
+flight (`refuse`). Nothing at run time stands behind the other four, so they
+cannot be switched off. A member is given a store file only if its image
 says it has a store.
 
 **Modes.**
@@ -260,8 +306,8 @@ run had.
   authority on what was applied (owner ruling, EFFECTS.md §12.10 question 10),
   and the judgement compares it with the model's store.
 - What an image declares of itself, for the checks at assembly. The run-time
-  check of connections does not rely on it; the store and the served
-  operations have no other check. Nothing ties an image file to the build
+  check of connections does not rely on it; the store, the served operations
+  and the effects a caller uses have no other check. Nothing ties an image file to the build
   that derived its line.
 
 ## What is not shown
@@ -273,6 +319,11 @@ run had.
   with two arguments) and a read, I64 arguments, replies of a status and an
   I64 or of an I64, one keyed and one read-only operation (the operation name
   is not sent).
+- The errors of a manifest listed under Assembly were tried by hand, once
+  each; no check runs them. The three refusals about a binding are hand
+  schedules of the check.
+- A system of another shape than one caller and one peer; a caller with two
+  remote effects bound to two members.
 - A peer without a durable store that is accepted and runs: the one storeless
   image is built to be refused. A peer written in the language: the peer is C.
 - The scheduled modes take crash steps between steps, when the images are at

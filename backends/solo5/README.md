@@ -125,8 +125,8 @@ sh harness/run-tc1-remote-run.sh    # Erlang/OTP supervisor + caller and peer im
 
 `backends/solo5/remote/` holds the two images of the first remote-perform system
 (spec/tc1/EFFECTS.md §12.11): `caller.c` runs a TC1 program on the pure-call machine
-above, unchanged, and turns a perform of a build-bound effect into a request to the
-supervisor; `peer.c` is the abstract counter peer with a durable store. They talk to the
+above, unchanged, and turns a perform of a remote effect, bound to a member by the
+system manifest (examples/remote/ledger-system.json), into a request to the supervisor; `peer.c` is the abstract counter peer with a durable store. They talk to the
 supervisor through block devices used as mailboxes (`wire.h`, `support.c`): files, no
 tap interface, no privileges. The images are built by `tools/solo5/remote-build.mjs`;
 the supervisor is [supervisor/](../../supervisor/README.md). Development evidence only,

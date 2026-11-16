@@ -1,6 +1,6 @@
 # TC1 gate: two remote rows added, and the gate registered
 
-15 November 2026 • Authority record • Amendments 1 and 2 of 16 November 2026 are at the end
+15 November 2026 • Authority record • Amendments 1, 2 and 3 of 16 November 2026 are at the end
 
 ## What changed
 
@@ -411,6 +411,139 @@ addition:
   where the peer's state never changes, and by hand schedules.
 - **The operation's name is not on the wire.** One keyed and one read-only
   operation per peer; an I64 or unit argument.
+
+### Checked before this amendment
+
+On a scratch clone of the working tree with one snapshot commit, by direct
+runs, not controller runs:
+
+- `sh harness/run-tc1-gate.sh`: verdict PASS, 21 of 21 required rows; the
+  report says `authority: owner-accepted, registered` and
+  `qualification: PASS`.
+- `sh harness/run-gate.sh` (TC0-A, manifest untouched): verdict PASS, 15 of 15
+  required rows.
+
+There is still no qualification receipt from the workflow controller.
+
+## Amendment 3, 2026-11-16
+
+16 November 2026, later again the same day • Amends the record above; nothing
+above is rewritten, and Amendments 1 and 2 stand as the record of what the
+manifest was after each. Where Amendment 2 gives the number of hand schedules
+of the row `remote-run`, or the manifest's hash, this amendment replaces
+them. The hash under "Manifest now" in Amendment 2 is that of the manifest
+between Amendments 2 and 3.
+
+### Basis
+
+Later again on 16 November 2026, in conversation, the owner (pyrex41) ruled
+on four of the six questions that draft 7 of EFFECTS.md raised in §12.10, and
+instructed that the contract, the frontend, the validator, the build, the
+supervisor and the gate be brought into line, that the pins be updated and
+that this amendment be appended with the new manifest hash:
+
+- question 11: a remote outcome may not be ignored. The result of a remote
+  perform must be scrutinised by a `match`, and may not be discarded, stored,
+  returned or passed on; the simplest sound rule is to be chosen, stated
+  exactly, and enforced in both the frontend and the validator;
+- question 12: each read-only perform is its own request. Confirmed;
+- question 14: the binding of a remote effect to the member that serves it
+  moves out of the build script into the system manifest, the file that lists
+  the members and the declared connections; the build reads it there, the
+  supervisor's assembly check uses the same manifest, and an effect with no
+  binding, bound to a member not in the manifest, or bound to a member with
+  no declared connection from the caller is refused at assembly, each with
+  its own message;
+- question 16: a `handle` of a remote effect is rejected. Confirmed.
+
+Questions 13 and 15 were not ruled on and are open; the owner said they are
+taken up in a following step. Nothing here touches them.
+
+As before, this is **acceptance by instruction given in conversation, not line
+review**. The owner had not seen the changed row text, the rule as written,
+the manifest's format, the names of the refusals, or what this change decided
+where the rulings left a choice. Those choices are listed in EFFECTS.md
+§12.10 under questions 11 and 14. Three of them are worth naming here because
+they are stricter than the rulings require: a `let` between a remote perform
+and its match is rejected; the type of an outcome can no longer be written in
+a program at all, which draft 7 allowed; and a caller image built for another
+member than the manifest binds is an error of the manifest, not a refusal.
+They were written to carry the rulings out and are for the owner to confirm
+or change.
+
+### What changed
+
+| | After Amendment 2 | After this amendment |
+| --- | --- | --- |
+| Contract | `spec/tc1/EFFECTS.md` draft 7 | Draft 8: rulings on questions 11, 12, 14 and 16 in §12.10; the must-use rule (§3); the system manifest, its bindings and five refusals at assembly (§12.6) |
+| Typing of a remote perform | Type `Remote B`, taken apart only by an exhaustive match; an outcome could be bound, passed, returned, compared or dropped | Accepted only as the scrutinee of a `match`; the type `Remote B` is written nowhere. Enforced by the frontend and, for any artifact, by the validator |
+| Artifact schemas | `/1`, `/2`, `/3` | The same three. `/3` admits fewer artifacts: the two conditions above. `/1` and `/2` are untouched |
+| The caller image's program | `examples/remote/ledger-caller.fen` | The same file; four comment lines reworded, no line added or removed. Its artifact is the same bytes (SHA-256 `28e97289cad10cb1483d2bf8053d79ce35281083119979f03fe709dc5cc7bf35`), and so are the caller and peer images |
+| Where the binding of `Ledger` to the member `peer` is | A constant of `tools/solo5/remote-build.mjs` | The system manifest `examples/remote/ledger-system.json`, which also names the caller's source and the connection. The build holds no binding; the supervisor is given the manifest's bindings |
+| Refusals at assembly | 3: a connection the manifest lacks, `no-store`, `unserved` | 5: `unbound` and `unknown-member` are new; the first of the three is now derived from the manifest's binding instead of the image's line, and `unserved` is judged against the bound member. None was removed or weakened |
+| Row `remote-run`, required scope | 24 hand schedules, 40 seeded, 4 free-running; 8 defect switches | 26 hand schedules, 40 seeded, 4 free-running; 8 defect switches. The two new hand schedules are the refusals `unbound` and `unknown-member` |
+| Row `remote-model` | 10 systems, 13 model mutants, 19 hand schedules | Unchanged, text and numbers |
+| Workflow configuration | | Unchanged. The system manifest is under `examples/remote`, which was already evaluator authority of the check `tc1-qualification` |
+| Manifest text | | The acceptance text of the row `remote-run`, `contract`, `review` and `not_covered` |
+
+Not changed: the number of rows (21 required, 1 optional), their ids, checks,
+required flags and ledger references; the other twenty rows' acceptance
+texts; the eight claims, their rows and prerequisites; the claims' evidence
+classes; the aggregation rule; the evaluator; the rule for `registered`; the
+workflow's checks, required checks and claims; the model; the wire format;
+the images' sources; the properties, mutants, seeds, free-running runs and
+defect switches. No check was loosened: every condition the row `remote-run`
+had is still required, the 24 hand schedules of Amendment 2 are all still
+among the 26 with the same steps and expectations, and every run that is not
+about a binding is given the binding the build read from the manifest, which
+is the one the constant had.
+
+The rows for slices H1 and H2 are untouched, and so are their inputs.
+
+Manifest now, SHA-256 of `spec/tc1/tc1-requirements.json`:
+
+```text
+5b691b824f0fbd076bc230ddbe6bade03613276f1ed0e3787640b4d9630c4433
+```
+
+### What the row shows now
+
+- **`remote-run`.** *Observed histories on `spt` accepted by the model.* As in
+  Amendment 2, with 26 hand schedules. Four of them are refusals at assembly
+  with nothing started: a remote effect the manifest binds to no member; one
+  bound to a name that is no member; one bound to a member the manifest
+  declares no connection to (the schedule Amendment 2 describes as "a
+  connection the manifest lacks"); and a storeless peer image that serves a
+  keyed operation.
+
+### What it still does not show, and what is new among it
+
+Everything under "What it does not show" and in Amendments 1 and 2 stands,
+with one line of Amendment 2 overtaken: a program can no longer drop an
+outcome unexamined. In addition:
+
+- **The must-use rule is tested, not proved.** It is two syntactic
+  conditions. The validator's cases are in the unit-suite row
+  (`tests/tc1/remote-artifact.test.mjs`); the frontend's are in
+  `sh frontend/test.sh`, which is not a row. Nothing says an arm of the match
+  does anything with the outcome: an arm may return unit.
+- **The gate exercises the rule on one accepted program**, the caller, which
+  already had the required shape. No rejected program is a row.
+- **The supervisor's treatment of a malformed manifest is not checked.** A
+  duplicate binding, a binding for an effect the image does not use, a
+  binding for a member that is not a caller, and an image built for another
+  member each end a run in an error; each was tried by hand once.
+- **One system shape.** The build makes one caller named `caller` and one
+  peer named `peer`. No system with two bindings, two peers or two callers is
+  built or run.
+- **The binding the image was built with is still in the image.** The caller
+  sends its requests to the member compiled into it; the supervisor checks
+  that this is the member the manifest binds, by what the image declares.
+  Nothing ties an image file to the manifest it was built from beyond that
+  line.
+- **Questions 13 and 15 of EFFECTS.md §12.10 are open:** who vouches for
+  read-only, and who owns the signature of an effect that two callers
+  declare.
 
 ### Checked before this amendment
 

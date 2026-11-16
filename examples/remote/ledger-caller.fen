@@ -1,7 +1,7 @@
 \\ A caller image's program: remote perform against a peer (EFFECTS.md §12).
 \\
 \\ Ledger is a remote effect. Its operations are carried out by another member
-\\ of the system, the one the image's build binds Ledger to; no handler in this
+\\ of the system, the one the system's manifest binds Ledger to; no handler in this
 \\ program takes their place, and main is allowed to leave Ledger unhandled.
 \\ The declaration states each operation with the peer's own types.
 \\
@@ -13,9 +13,9 @@
 \\   total  is read-only: no key, nothing recorded, and a repeat is simply
 \\          evaluated again.
 \\
-\\ A remote perform always returns, with one of three outcomes, and its type
-\\ (Remote B) can only be taken apart by a match with an arm for each:
-\\ (Reply b), NotDelivered and TimedOut.
+\\ A remote perform always returns, with one of three outcomes, and it may only
+\\ be written as the value a match takes apart, with an arm for each:
+\\ (Reply b), NotDelivered and TimedOut. No outcome can be left unexamined.
 \\
 \\ The program: add 5 under key 7, once more with the same key if that timed
 \\ out; add 5 under key 8; add 6 under key 7 again, a reuse of the key that the

@@ -1,0 +1,10 @@
+\\ expect 9:43 the outcome of this remote perform is not examined: a perform of Ledger.total may only be written as the value a match takes apart
+\\ Must-use: an outcome cannot be the result of a lambda.
+
+(remote-effect Ledger
+  (add I64 --> (Tuple I64 I64))
+  (read-only total Unit --> I64))
+
+(define main {I64 --> I64}
+  input -> (let reader (lambda (u : Unit) (perform Ledger total u))
+             input))

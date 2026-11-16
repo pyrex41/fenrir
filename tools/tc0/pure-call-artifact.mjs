@@ -14,6 +14,11 @@
 // a closed sum with the constructors reply(B), not_delivered and timed_out, in that
 // order, which only an exhaustive match takes apart. No handle discharges a remote
 // effect, and the entry function may leave it unhandled: the system does.
+// Must-use (EFFECTS.md §3, owner ruling of 16 November 2026 on §12.10 question 11): a
+// perform of a remote operation is the scrutinee of a match and nothing else, and the
+// type ["Remote", B] is written nowhere in an artifact: it is the type of that perform
+// node only. So an outcome exists only between a remote perform and the match that
+// takes it apart, and none is bound, passed, returned, stored, compared or dropped.
 import {decode,encode,decimal} from './canonical.mjs';
 export class InvalidPureCallArtifact extends Error {}
 export class PureCallValidationLimit extends Error {}
@@ -65,7 +70,7 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
   if(t[0]==='Arrow'&&t.length===4){type(t[1],depth+1);type(t[2],depth+1);effects(t[3]);return;}
   if(data&&t[0]==='Tuple'&&t.length>=2&&t.length<=9){for(const x of t.slice(1))type(x,depth+1);return;}
   if(data&&t[0]==='Data'&&t.length===2&&datatypes.has(t[1]))return;
-  if(remote&&t[0]==='Remote'&&t.length===2){type(t[1],depth+1);return;}
+  if(remote&&t[0]==='Remote')fail('The outcome type Remote cannot be written');
   fail('Type');
  }
  // Constructor table for one concrete type: declared datatypes, the TrapCode enum, or
@@ -111,6 +116,8 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
  // through the expression just visited. Children add into the enclosing count; if and
  // match, whose branches are alternatives, require equal counts and count one branch.
  let uses={};
+ // Must-use: the node a match is about to scrutinise. A remote perform must be that node.
+ let scrutinised=null;
  const sameUses=(a,b)=>{const keys=new Set([...Object.keys(a),...Object.keys(b)]);for(const k of keys)if((a[k]??0)!==(b[k]??0))return false;return true;};
  const discount=u=>{for(const [k,n] of Object.entries(u))uses[k]-=n;};
  const plainEnv=env=>new Map([...env].filter(([,t])=>!(Array.isArray(t)&&t[0]==='Resumption')));
@@ -140,7 +147,7 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
    const c=constructors(ty).find(c=>c.name===ctor);if(!c||operands.length!==c.fields.length)fail('Constructor');const rows=operands.map(v);if(rows.some((r,i)=>!same(r.type,c.fields[i])))fail('Constructor field type');t=ty;eff=union(rows);fv=free(rows);
   }
   else if(tag==='match'){
-   if(x.length<2)fail('Arity');const [scrutinee,...arms]=x,row=v(scrutinee),table=constructors(row.type);if(!table)fail('Match scrutinee type');
+   if(x.length<2)fail('Arity');const [scrutinee,...arms]=x;scrutinised=scrutinee;const row=v(scrutinee),table=constructors(row.type);if(!table)fail('Match scrutinee type');
    if(arms.length!==table.length)fail('Non-exhaustive or duplicate match arms');const seen=new Set(),rows=[row];let result;
    for(const arm of arms){array(arm);if(arm.length!==3)fail('Match arm');const [ctor,binders,body]=arm;text(ctor);const c=table.find(c=>c.name===ctor);if(!c||seen.has(ctor))fail('Non-exhaustive or duplicate match arms');seen.add(ctor);
     if(array(binders).length!==c.fields.length)fail('Match binders');const inner=new Map(env);binders.forEach((b,i)=>{fresh(b);inner.set(b,c.fields[i]);});
@@ -156,7 +163,8 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
    // A remote operation op : A -> B is performed with tuple(key, a), key : I64, or with a
    // alone when it is read-only, and yields one of the three outcomes: Remote B.
    arity(3);const [name,opName,operand]=x;text(name);text(opName);const d=declared.get(name),o=d?.operations.find(o=>o.name===opName);if(!o)fail('Unknown effect operation');
-   const far=d.class==='remote',wanted=far&&!o.read_only?['Tuple','I64',o.argument_type]:o.argument_type;
+   const far=d.class==='remote';if(far&&scrutinised!==e)fail('A remote outcome must be matched where it is performed');
+   const wanted=far&&!o.read_only?['Tuple','I64',o.argument_type]:o.argument_type;
    const row=v(operand);if(!same(row.type,wanted))fail('Perform argument');t=far?['Remote',o.result_type]:o.result_type;eff=union([row]);eff.add(name);fv=row.free;
   }
   else if(tag==='handle'&&handlers){

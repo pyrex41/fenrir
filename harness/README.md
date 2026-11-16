@@ -156,12 +156,14 @@ each with its negative control run first:
 | Row | Evidence class | Needs | Otherwise |
 | --- | --- | --- | --- |
 | remote-model | Model-level bounded exploration; no implementation is run | Ten systems explored with no property failing, every step kind taken, thirteen mutants killed, nineteen hand schedules passing, control failed as required | FAIL; a report with other counts is UNKNOWN |
-| remote-run | Observed histories on `spt` accepted by the model | 24 hand, 40 seeded and 4 free-running schedules all accepted, every step kind taken, eight defects killed, control failed as required | FAIL; no Erlang/OTP, no Solo5 build, or a caller source the frontend does not elaborate is BLOCKED; a supervisor that does not compile, or other counts, is UNKNOWN |
+| remote-run | Observed histories on `spt` accepted by the model | 26 hand, 40 seeded and 4 free-running schedules all accepted, every step kind taken, eight defects killed, control failed as required | FAIL; no Erlang/OTP, no Solo5 build, or a caller source the frontend does not elaborate is BLOCKED; a supervisor that does not compile, or other counts, is UNKNOWN |
 
-Those counts are the scope after Amendment 2 of the
+Those counts are the scope after Amendment 3 of the
 [registration record](../campaigns/tc1/TC1_GATE_REGISTRATION.md) (16 November
-2026); they were 6, 9, 9 and 13, 40, 3, 5 when the gate was registered, and 8,
-11, 14 and 19, 40, 4, 7 after Amendment 1.
+2026); they were 6, 9, 9 and 13, 40, 3, 5 when the gate was registered, 8,
+11, 14 and 19, 40, 4, 7 after Amendment 1, and 10, 13, 19 and 24, 40, 4, 8
+after Amendment 2. Amendment 3 changed one number, the hand schedules of the
+run check, from 24 to 26.
 
 The gate's toolchain row also requires that the Erlang/OTP found by
 [find-erlang.sh](find-erlang.sh), which the runner script uses too, is the
@@ -206,6 +208,35 @@ the same way:
   (`read-only-changes-nothing`, `read-reply-from-state`), two model systems
   (one with a peer that has no durable store), and a defect in each check, a
   read that writes.
+
+Four more rulings came later again that day (questions 11, 12, 14 and 16;
+EFFECTS.md draft 8). Two changed what is checked:
+
+- **The binding is in the system manifest** (question 14).
+  [examples/remote/ledger-system.json](../examples/remote/ledger-system.json)
+  lists the members, the declared connections and which member serves each
+  remote effect of each caller; the format is in
+  [supervisor/README.md](../supervisor/README.md). The image build reads the
+  caller's source, the connection and the binding from it and has no binding
+  of its own; the supervisor checks the manifest it is given at assembly. The
+  run check hands the supervisor the bindings the build read, except in two
+  new hand schedules, which are refusals with nothing started: the manifest
+  with no binding for `Ledger` (`unbound`) and with `Ledger` bound to a name
+  that is no member (`unknown-member`). The schedule that was already there,
+  `Ledger` bound to the peer with no connection declared, is the third
+  refusal about a binding. The model check is unchanged: the model has
+  connections, not effect names.
+- **Must-use** (question 11). A remote perform is accepted only as the
+  scrutinee of a `match`, and the type of an outcome cannot be written
+  (EFFECTS.md §3). The frontend and the validator each enforce it;
+  `tests/tc1/remote-artifact.test.mjs` (in the gate's unit-suite row) has the
+  validator's accept and reject cases, `sh frontend/test.sh` (not a row) the
+  frontend's. The caller program already had that shape: its artifact, the
+  two images and every number of the two remote rows other than the count of
+  hand schedules are what they were.
+
+Questions 12 and 16 were confirmations and changed no check. Questions 13
+and 15 are open.
 
 ### The generated family
 
@@ -287,7 +318,10 @@ process, reusing `common.shen`. `sh frontend/test.sh` is its test suite, which
 is not part of either gate. Since 16 November 2026 the TC1 gate's remote-run
 row uses the frontend to elaborate the one program of its caller image (see
 Remote perform above); a program that leaves a remote effect to the system is
-checked and emitted by the frontend, not run by it.
+checked and emitted by the frontend, not run by it. The frontend rejects a
+remote perform that is not the scrutinee of a match, with the position of the
+perform (must-use, EFFECTS.md §3); eleven of its rejected test programs are
+about that.
 
 ## What is still not Shen
 

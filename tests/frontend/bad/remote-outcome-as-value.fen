@@ -1,5 +1,5 @@
-\\ expect 8:21 operand 2 of + has type (Remote I64), but I64 is expected
-\\ The result of a remote perform is an outcome, not the operation's value.
+\\ expect 8:21 the outcome of this remote perform is not examined: a perform of Ledger.total may only be written as the value a match takes apart
+\\ Must-use: an outcome is not the operation's value, and cannot be an operand.
 
 (remote-effect Ledger
   (read-only total Unit --> I64))

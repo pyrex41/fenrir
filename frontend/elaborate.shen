@@ -14,6 +14,9 @@
 \\
 \\ Types are in artifact shape throughout: "I64", ["Tuple" T ...], ["Data" Name],
 \\ ["Arrow" A B [EffectName ...]], and ["Remote" B], the outcome of a remote perform.
+\\ ["Remote" B] is the type of a remote perform and of nothing else: the must-use
+\\ rule (EFFECTS.md section 3) lets such a perform stand only where a match takes
+\\ its outcome apart, and the type cannot be written in a program.
 \\
 \\ Elaborating an expression yields a row [Node Type Effects Uses]:
 \\   Node     the artifact expression
@@ -219,20 +222,20 @@
     (if (and (> (length Ts) 0) (< (length Ts) 9))
         ["Tuple" | (map (/. T (fe.type T)) Ts)]
         (fe.fail L C "a tuple type has 1 to 8 components"))
-  [list L C [[sym _ _ "Remote"] T]] ->
-    (if (empty? (value fe.*remote*))
-        (fe.fail L C "(Remote T) is the outcome of a remote operation, and this program declares no remote-effect")
-        ["Remote" (fe.type T)])
+  [list L C [[sym _ _ "Remote"] | _]] ->
+    (fe.fail L C "(Remote T) cannot be written as a type: the outcome of a remote perform exists only between the perform and the match that takes it apart, (match (perform Effect operation ...) ...), and is never bound, passed, returned or stored")
   [list _ _ [A [sym _ _ "-->"] B]] -> ["Arrow" (fe.type A) (fe.type B) []]
   [list _ _ [A [sym _ _ "-->"] B [sym _ _ "!"] E | Es]] ->
     ["Arrow" (fe.type A) (fe.type B) (fe.sort-names (map (/. X (fe.effect-name X)) [E | Es]))]
-  D -> (fe.reject D "a type is a type name, (Tuple T ...), (Remote T), (A --> B) or (A --> B ! Effect ...)"))
+  D -> (fe.reject D "a type is a type name, (Tuple T ...), (A --> B) or (A --> B ! Effect ...)"))
 
 \\ ---------- expected types ----------
 
 \\ What the context wants from an expression: any, or [want Type What Why], where
 \\ What names the expression's role and Why says where the expectation comes from.
-\\ Both only serve the message.
+\\ Both only serve the message. A third, scrutinee, is given by a match to a
+\\ perform that is written as its scrutinee, and to nothing else (fe.scrutinee):
+\\ it wants no type, and it is what allows a remote perform there.
 \\
 \\ While effect sets are still being computed (fe.*strict* false) a mismatch is
 \\ not an error yet: two function types may differ only because an effect set
@@ -249,6 +252,7 @@
 
 (define fe.conform
   _ _ Found any -> Found
+  _ _ Found scrutinee -> Found
   _ _ Found [want Found _ _] -> Found
   L C Found [want Expected What Why] ->
     (if (value fe.*strict*)
@@ -524,7 +528,7 @@
   "tuple" L C Args Env Want -> (fe.tuple L C Args Env Want)
   "project" L C [E [int IL IC Index]] Env Want -> (fe.project L C (fe.node L C) (fe.expr E Env any) IL IC Index Want)
   "project" L C _ _ _ -> (fe.fail L C "project is written (project tuple index), the index a literal counted from 0")
-  "match" L C [Scrutinee | Arms] Env Want -> (fe.match L C (fe.node L C) (fe.expr Scrutinee Env any) Scrutinee Arms Env Want)
+  "match" L C [Scrutinee | Arms] Env Want -> (fe.match L C (fe.node L C) (fe.scrutinee Scrutinee Env) Scrutinee Arms Env Want)
   "match" L C _ _ _ -> (fe.fail L C "match is written (match value (Constructor -> e) ((Constructor x ...) -> e) ...)")
   "lambda" L C [[list _ _ [X [sym _ _ ":"] T]] Body] Env Want -> (fe.lambda L C X (fe.type T) Body Env Want)
   "lambda" L C _ _ _ -> (fe.fail L C "lambda is written (lambda (x : Type) body)")
@@ -621,6 +625,13 @@
           (fe.reject E (make-string "emit needs a serializable value, but this has type ~A, which contains a function" (fe.show-type (fe.row-type Row)))))))
 
 \\ ---------- match ----------
+
+\\ The scrutinee of a match. A perform written there, itself and not inside
+\\ another expression, is told so: that is the one place a remote perform may stand.
+(define fe.scrutinee
+  [list L C [[sym _ _ "perform"] [sym EL EC Effect] [sym OL OC Op] | Args]] Env ->
+    (fe.perform L C Effect Op (fe.operation EL EC Effect OL OC Op) Args Env scrutinee)
+  Scrutinee Env -> (fe.expr Scrutinee Env any))
 
 \\ An arm is (Constructor -> e) or ((Constructor x ...) -> e): [Line Column Name Binders Body].
 (define fe.arm
@@ -733,9 +744,13 @@
 \\ performed with its request key first, (perform Effect op key a), which is the
 \\ one argument (tuple key a); a read-only operation has no key and takes a alone.
 \\ Either way the perform has the type (Remote B): one of the three outcomes.
+\\ Must-use: a remote perform is the scrutinee of a match, and nothing else.
 (define fe.perform
   L C Effect Op [A B] Args Env Want ->
     (let Mode (fe.remote-mode Effect Op)
+         Examined (if (or (= Mode ordinary) (= Want scrutinee)) true
+                      (fe.fail L C (make-string "the outcome of this remote perform is not examined: a perform of ~A.~A may only be written as the value a match takes apart, (match (perform ~A ~A ...) ((Reply x) -> e) (NotDelivered -> e) (TimedOut -> e)). An outcome cannot be bound, passed, returned, stored or dropped"
+                                                Effect Op Effect Op)))
          Node (fe.node L C)
          Arg (fe.argument L C Args Env
                [want (if (= Mode keyed) ["Tuple" "I64" A] A) (make-string "the argument of ~A.~A" Effect Op)
@@ -813,7 +828,7 @@
     (let Ops (fe.lookup Effect (value fe.*effects*))
          Known (if (= Ops none) (fe.fail EL EC (make-string "unknown effect ~A" Effect)) true)
          Local (if (= (fe.lookup Effect (value fe.*remote*)) none) true
-                   (fe.fail EL EC (make-string "effect ~A is remote and cannot be handled: its operations are carried out by the member the image's build binds it to, and no handler in the program takes their place" Effect)))
+                   (fe.fail EL EC (make-string "effect ~A is remote and cannot be handled: its operations are carried out by the member the system's manifest binds it to, and no handler in the program takes their place" Effect)))
          Node (fe.node L C)
          Body (fe.expr (fe.last Items) Env Want)
          Rows (fe.clauses (fe.but-last Items) Effect Ops (fe.row-type Body) (fe.block "a clause of another handler" Env) [] [])

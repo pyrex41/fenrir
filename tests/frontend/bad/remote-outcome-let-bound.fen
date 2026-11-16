@@ -1,0 +1,13 @@
+\\ expect 9:25 the outcome of this remote perform is not examined: a perform of Ledger.total may only be written as the value a match takes apart
+\\ Must-use: an outcome cannot be bound, not even to be matched on the next line.
+
+(remote-effect Ledger
+  (add I64 --> (Tuple I64 I64))
+  (read-only total Unit --> I64))
+
+(define main {I64 --> I64}
+  input -> (let outcome (perform Ledger total unit)
+             (match outcome
+               ((Reply n) -> n)
+               (NotDelivered -> -1)
+               (TimedOut -> -2))))

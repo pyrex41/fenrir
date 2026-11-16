@@ -4,7 +4,7 @@
 \\
 \\ Program [tc1 State Operations]: State is a tc1-state, Operations is
 \\ [[Effect Operation Peer Mode] ...], every operation of every remote effect the
-\\ program declares with the member the image's build binds its effect to; Mode
+\\ program declares with the member the system manifest binds its effect to; Mode
 \\ is "keyed" or "read-only". The build derives the list from the program's
 \\ remote-effect declarations (tools/solo5/remote-build.mjs).
 \\ A keyed operation op : A -> B is performed by the caller as

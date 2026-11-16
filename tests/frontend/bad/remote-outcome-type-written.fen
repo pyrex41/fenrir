@@ -1,0 +1,12 @@
+\\ expect 8:26 (Remote T) cannot be written as a type: the outcome of a remote perform exists only between the perform and the match that takes it apart
+\\ Must-use: the outcome type cannot be written, so no function, tuple or datatype can hold an outcome.
+
+(remote-effect Ledger
+  (add I64 --> (Tuple I64 I64))
+  (read-only total Unit --> I64))
+
+(define value-or {(Tuple (Remote I64) I64) --> I64}
+  outcome fallback -> fallback)
+
+(define main {I64 --> I64}
+  input -> input)

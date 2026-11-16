@@ -1,6 +1,6 @@
 # TC1 effect contract
 
-Draft 7 • 16 November 2026 • For owner review
+Draft 8 • 16 November 2026 • For owner review
 
 **Status.** Written together with its implementation, at the owner's request,
 so the text and the behaviour can be reviewed side by side. Both slices are
@@ -26,7 +26,13 @@ questions of §12.10, 7 and 9: a remote operation belongs to a fourth effect
 class, `remote`, declared in the source and typed (§1, §3, §8, §12.2); and a
 peer with no durable store is allowed only for operations declared read-only,
 which have no request key and a weaker guarantee for `reply` (§12.3, §12.4,
-§12.6). §12.10 now also lists six questions this draft raises.
+§12.6). It raised six questions, 11 to 16 of §12.10.
+Draft 8 records the owner's rulings of the same day on four of those six: the
+result of a remote perform must be examined, by a must-use rule (§3,
+question 11); each read-only perform is its own request (§12.3, question 12);
+which member serves a remote effect is stated in the system manifest and
+checked at assembly (§12.6, question 14); and a `handle` of a remote effect
+is rejected (§3, question 16). Questions 13 and 15 stay open.
 
 Owner decisions of 14 November 2026 are folded in: a clause may continue after
 `resume` returns (§7); performs of user effects are not observations (§5);
@@ -81,8 +87,8 @@ one spelling.
 | Expression | Type | Effects |
 | --- | --- | --- |
 | `perform(E, op, a)` with `op : A -> B`, E ordinary | B, given `a : A` | those of `a`, plus E |
-| `perform(E, op, (k, a))` with `op : A -> B`, E remote, `op` not read-only | `Remote B`, given `k : I64` and `a : A` | those of the argument, plus E |
-| `perform(E, op, a)` with `op : A -> B`, E remote, `op` read-only | `Remote B`, given `a : A` | those of `a`, plus E |
+| `perform(E, op, (k, a))` with `op : A -> B`, E remote, `op` not read-only | `Remote B`, given `k : I64` and `a : A`; allowed only as the scrutinee of a `match` (must-use, below) | those of the argument, plus E |
+| `perform(E, op, a)` with `op : A -> B`, E remote, `op` read-only | `Remote B`, given `a : A`; allowed only as the scrutinee of a `match` | those of `a`, plus E |
 | `handle(E, clauses, body)` with `body : T` | T | (body's effects minus E) plus every clause's effects |
 | a clause `op(x) => c` | `c : B` with `x : A` in scope | those of `c` |
 | call, apply | as in TC0-A | the callee's declared set |
@@ -100,16 +106,72 @@ one spelling.
   the meaning of a perform would depend on whether a handler happens to be in
   scope, the outcome type would have to be constructible by programs, and the
   declaration could no longer be read as "this image talks to that member".
-  It is question 16 of §12.10.
+  *Owner ruling of 16 November 2026 (§12.10 question 16):* the rejection is
+  confirmed. Both the frontend and the validator reject such a `handle`.
 - **`Remote B`** is the type of an outcome (§12.2): a closed sum with the three
-  constructors `reply(B)`, `not_delivered` and `timed_out`, in that order. It
-  is serializable when B is. A program cannot construct a value of it. The
-  one way to take it apart is `match`, and a match is exhaustive, so a
-  program that uses the operation's value has an arm for each of the three
-  outcomes. (`eq` compares two outcomes, as it compares any two serializable
-  values; with no way to make an outcome, that tells a program only whether
-  two performs ended alike.) A program may still pass an outcome on, return
-  it, or drop it unexamined (question 11 of §12.10).
+  constructors `reply(B)`, `not_delivered` and `timed_out`, in that order. A
+  program cannot construct a value of it. The one way to take it apart is
+  `match`, and a match is exhaustive, so there is an arm for each of the
+  three outcomes.
+- **Must-use: a remote outcome may not be ignored** (owner ruling of 16
+  November 2026, §12.10 question 11). The rule has two parts, and it is the
+  strictest form the ruling allows:
+
+  1. A perform of a remote operation is accepted in exactly one position: as
+     the scrutinee of a `match`, the perform node itself and not an
+     expression that contains or yields it.
+  2. The type `Remote B` cannot be written. It is the type of a remote
+     perform node and of nothing else: no function argument or result, no
+     lambda, no tuple component, no datatype field, no operation type and no
+     annotation names it.
+
+  So an outcome exists only between a remote perform and the match that
+  takes it apart, and that match has the three arms. What is accepted:
+
+  ```text
+  match perform(E, op, arg) { reply(x) => e1; not_delivered => e2; timed_out => e3 }
+  ```
+
+  with the arms in any order, anywhere an expression may stand: in a function
+  or lambda body, in an arm of another match, as an operand or an argument,
+  in a `let`. The arms are free: an arm may ignore `x` or return unit. That
+  is a decision written in the program for each outcome, which is what the
+  ruling asks; nothing can make an arm do something useful.
+
+  What is rejected, each by both the frontend (at the perform, with its
+  position) and the validator: an outcome bound by `let`, even when the next
+  thing is its match; one dropped in a sequence or bound and never used; one
+  stored in a tuple or a constructor; one returned from a function or a
+  lambda; one passed as an argument, to a call, an application, a primitive
+  (so `eq` on outcomes is gone), `emit` or another perform; a scrutinee that
+  is an `if`, a `let` or a `match` yielding an outcome; and any written
+  occurrence of the type, the entry function's argument included, so an
+  outcome cannot arrive as the program's input either.
+
+  *What this rejects that a looser rule would accept.* A program cannot name
+  an outcome and match it a line later, cannot write a helper that takes an
+  outcome (`value_or(outcome, fallback)`), and cannot return an outcome from
+  a function that wraps the perform for its caller to decide. All three are
+  sound: each outcome is still examined once. They are rejected because
+  telling them from a dropped outcome needs a count of uses along every path,
+  through calls. What programs do instead: the function that performs also
+  matches, and what is shared is what follows the match, written as functions
+  of the reply's value (the example of §12.11 does this with `settled`,
+  `undelivered` and `unknown`).
+
+  *The typed version, later.* `Remote B` becomes a writable type again, and
+  a linear one. Affine, at most one use, is not enough: it would let an
+  outcome be dropped. A binding of that type must be consumed exactly once on
+  every path, by a `match`, by being passed to a parameter of that type, or
+  by being returned; it may not be captured by a closure that can run more
+  than once, stored in a serializable value, compared, or left unused when
+  its scope ends. That is the discipline §7 already applies to a resumption
+  `k` (used exactly once on every path, never a value, out of reach inside a
+  lambda), extended across function boundaries, which is the part that needs
+  a type system rather than a count. Part 1 above is the special case in
+  which the binding has no name and its one use is immediate; a program
+  accepted today stays accepted.
+- **Where `Remote` lives.**
   In this slice `Remote` is built into the artifact (schema
   `tc1-handler-demo/3`, slice TC1-R1), because datatypes have no parameters.
   With parametric datatypes it becomes an ordinary declared sum,
@@ -305,8 +367,15 @@ they reject: a declaration without its class, or with one under an older
 schema; a `handle` of a remote effect; a keyed perform without its key and a
 read-only one with a key; an outcome used as the operation's value; a match on
 an outcome with an arm missing, doubled or foreign; an ordinary effect left at
-the entry beside a remote one; and a constructed outcome. The frontend rejects
-the same programs with a message and a position (SURFACE.md).
+the entry beside a remote one; and a constructed outcome. For the must-use
+rule of §3 they reject a remote perform that is bound by `let` (and matched
+next, or dropped), is the result of an `if` used as the scrutinee, is stored
+in a tuple, returned by a function or a lambda, passed to a call, compared,
+emitted, or the argument of another perform; and the type `Remote B` written
+as a function's argument or result, inside a tuple or function type, in a
+datatype field, in an operation's types, or as the type of the input. The
+frontend rejects the same programs with a message and a position
+(SURFACE.md).
 
 **TC0-A subset.** The JavaScript handler machine gives the same runs as the
 TC0-A implementation on all 5,774 TC0-A programs of the existing scopes, and
@@ -324,8 +393,8 @@ instruction, not a line-by-line review;
 [the registration record](../../campaigns/tc1/TC1_GATE_REGISTRATION.md) says
 what was registered, what the gate does not show, and how to revoke it; its
 Amendment 1 of 16 November 2026 records the changed scope of the two remote
-rows and the manifest's new hash, and its Amendment 2 of the same day does so
-again for draft 7. The
+rows and the manifest's new hash, its Amendment 2 of the same day does so
+again for draft 7, and its Amendment 3 for draft 8. The
 report now says `authority: owner-accepted, registered` and its
 `qualification` is its verdict. On a committed tree it gives verdict PASS on
 21 of 21 required rows. No run through the workflow controller on a supported
@@ -384,7 +453,8 @@ Open:
    sets here.
 3. Whether a clause that traps before using its resumption should be a
    validation error instead of an implicit abort.
-4. Questions 11 to 16 of §12.10, raised by draft 7.
+4. Questions 13 and 15 of §12.10, raised by draft 7. The other four it raised
+   have rulings (draft 8).
 
 ## 12 Remote perform (model, and a first implementation)
 
@@ -403,8 +473,11 @@ between its commit and its reply. On 16 November 2026 the owner ruled on five
 more: duplicates, the outcome now called `not_delivered`, a restart of the
 supervisor, a restarted caller, and a key reused with another argument; and
 later that day on the last two, the class of a remote effect and a peer with
-no durable store. All ten are marked in §12.10, which also lists the questions
-draft 7 raises. Both checks of this section are rows of the TC1 gate (§9).
+no durable store. All ten are marked in §12.10. Draft 7 raised six more; the
+owner ruled on four of them the same day (must-use, the identity of a
+read-only perform, the binding in the manifest, no handler for a remote
+effect), and two are open. Both checks of this section are rows of the TC1
+gate (§9).
 
 ### 12.1 Systems
 
@@ -429,8 +502,9 @@ A remote operation is an operation of an effect the program declares remote
 fourth of §8: no user handler discharges a remote effect, and none can stand
 in for it (§3). The declaration gives each operation the peer's own types,
 `op : A -> B`, and may mark it read-only (§12.3). The one thing the program
-does not say is which member carries the effect out: the image's build binds
-each remote effect to a peer. The caller writes
+does not say is which member carries the effect out: the system manifest
+binds each remote effect of a caller to a member (§12.6; owner ruling of 16
+November 2026, §12.10 question 14). The caller writes
 
 ```text
 perform(E, op, (key, a))        key : I64, a : A        result : Remote B
@@ -438,13 +512,15 @@ perform(E, op, a)               op read-only: no key    result : Remote B
 Remote B ::= reply(B) | not_delivered | timed_out
 ```
 
-- A and B are serializable (§1), so `Remote B` is.
+- A and B are serializable (§1). The perform stands only as the scrutinee of
+  a `match` (must-use, §3), so the outcome is examined where it arrives.
 - **How the outcome reaches the program, today.** The value of the perform is
   a data value of the name `RemoteResult` with the constructor `reply` and one
   field, or `not_delivered` or `timed_out` with none. The image's runtime
   makes it and gives it to the machine as the value of the perform; the
   machines are unchanged and have no notion of a remote effect. The validator
-  types the perform as `Remote B` (§3) and so requires the three arms. Until
+  types the perform as `Remote B` (§3), requires it to be the scrutinee of a
+  match, and so requires the three arms. Until
   draft 7 the program declared that datatype itself and nothing tied it to
   the operation.
 - **What the peer says is inside `reply`.** B is the operation's own result,
@@ -521,7 +597,9 @@ action of the peer could depend on.
   key, and the peer keeps no reply record for it. Each perform is its own
   request: where the rules of §12.4 and §12.5 speak of a request id, for a
   read-only perform that is the one attempt. A retry is a new perform and a
-  new request.
+  new request. *Owner ruling of 16 November 2026 (§12.10 question 12):*
+  confirmed. The alternative, one identity per caller and operation, was not
+  taken.
 - **Duplicates and retries are evaluated again.** A copy duplicated by the
   supervisor, a late copy, and a retry are each acted on by evaluating the
   operation on the peer's state at that moment. Two of them may give
@@ -637,26 +715,70 @@ performs on a connection it did not declare.
 §12.10 question 9). The connections of a caller image are not written by
 hand. They are the members its program's remote effects are bound to: one
 connection for every remote effect the program declares, taken from the
-declarations and the build's binding of each remote effect to a member. A
-remote effect the build binds to no member, and a binding for an effect the
-program does not declare remote, are errors of the build. The image also
+declarations and the manifest's binding of each remote effect to a member
+(below). The image also
 carries each remote operation it may perform with the member it goes to and
 whether it is keyed or read-only, and a peer image carries the operations it
 serves, each keyed or read-only, and whether it has a durable store.
 
-**Assembly refuses three things**, and starts no member if it finds one:
+**The system manifest, and the binding** (owner ruling of 16 November 2026,
+§12.10 question 14). One file describes a system: its members, its declared
+connections, and which member serves each remote effect of each caller.
+Until draft 7 the last of these was a constant of the build script. Now the
+build reads it from the manifest and holds none, and the supervisor's check
+at assembly uses the same manifest.
 
-1. a caller whose program declares a remote effect bound to a member with no
-   connection to it in the manifest (above);
-2. a peer image with no durable store that serves an operation which is not
-   read-only (§12.3; owner ruling, §12.10 question 7);
-3. a caller that uses an operation its peer's image does not serve, or serves
-   in the other mode: a caller that sends no key for an operation the peer
-   applies would defeat the peer's idempotence.
+```json
+{"schema": "fenrir.system-manifest/1",
+ "members": [{"name": "caller", "kind": "caller", "program": "examples/remote/ledger-caller.fen"},
+             {"name": "peer", "kind": "peer"}],
+ "connections": [["caller", "peer"]],
+ "bindings": [["caller", "Ledger", "peer"]]}
+```
 
-Only the first has a run-time backstop. The other two rest on what the images
-declare, which the build derives; an image that lies about itself is outside
-the contract (§12.9).
+- `members`: each has a name, unique in the system, and a kind. A caller
+  names its program, a source file. The manifest the supervisor is given is
+  this one with each member's image file in place of the program
+  (`"image"`); the build writes it.
+- `connections`: `[caller, member]`, the authority of this section: the
+  caller may send requests to that member. Both names are members.
+- `bindings`: `[caller, Effect, member]`: the operations of the remote effect
+  `Effect` that the program of `caller` performs are carried out by
+  `member`. At most one binding for a caller and an effect.
+
+A binding does not imply a connection, and a connection does not imply a
+binding. The binding says who serves; the connection says that the caller is
+allowed to reach that member. Both must be there. A manifest that is not of
+this shape, a binding for a member that is not a caller, two bindings of one
+effect for one caller, a binding for an effect the caller's program does not
+use, and a caller image that was built for another member than the manifest
+now binds its effect to, are errors of the manifest: nothing is built or
+started, and no refusal is reported.
+
+**Assembly refuses five things**, and starts no member if it finds one. The
+first three are about the binding and are told apart in the report:
+
+1. `unbound`: a caller's program uses a remote effect, and the manifest binds
+   it to no member;
+2. `unknown-member`: the manifest binds the effect to a name that is no
+   member of the system;
+3. the effect is bound to a member, and the manifest declares no connection
+   from the caller to it (the start-time check of the ruling on question 1,
+   above);
+4. `no-store`: a peer image with no durable store serves an operation which
+   is not read-only (§12.3; owner ruling, §12.10 question 7);
+5. `unserved`: a caller uses an operation that the member its effect is bound
+   to does not serve, or serves in the other mode: a caller that sends no key
+   for an operation the peer applies would defeat the peer's idempotence. A
+   member that is not a peer serves nothing.
+
+The build makes the same check, on the same manifest, before it compiles
+anything, so a system that would be refused is not built.
+
+Only the third has a run-time backstop: a request along a connection the
+manifest lacks is refused whatever else is true. The others rest on the
+manifest and on what the images declare, which the build derives; an image
+that lies about itself is outside the contract (§12.9).
 
 ### 12.7 Crash and restart
 
@@ -894,9 +1016,13 @@ which the implementation had to settle:
   reused key, and changing nothing in a read-only operation are assumed of
   peers, not enforced on them; the non-idempotent defect, the replaying
   defect and the writing read show what then fails.
-- **An image that misdeclares itself.** Two of the three assembly checks
+- **An image that misdeclares itself.** Four of the five assembly checks
   (§12.6) rest on what the images say, which the build derives; nothing ties
-  an image file to the build that made it.
+  an image file to the build that made it, or to the manifest it was built
+  from, beyond the member names in its line.
+- **Soundness of the must-use rule of §3.** It is two syntactic conditions,
+  checked by the frontend and the validator on tests. Nothing proves that no
+  outcome escapes them, and nothing says an arm does anything useful.
 - **Freshness of a read.** A read-only reply may be arbitrarily old when the
   program uses it, and nothing orders the replies of two reads.
 - **Digests.** A peer that compared real digests could take two different
@@ -920,9 +1046,10 @@ which the implementation had to settle:
 ### 12.10 Open questions for the owner
 
 Questions 1, 2 and 10 have owner rulings of 15 November 2026, and questions 3,
-4, 5, 6 and 8, and later the same day 7 and 9, of 16 November 2026. All were
-given by instruction in conversation, not by line review of this text. None
-of the first ten is open. Questions 11 to 16 are new with draft 7 and open.
+4, 5, 6 and 8, later the same day 7 and 9, and later again 11, 12, 14 and 16,
+of 16 November 2026. All were given by instruction in conversation, not by
+line review of this text. None of the first ten is open. Questions 11 to 16
+came with draft 7; 13 and 15 are open and are being taken up next.
 
 1. **Refusal.** An undeclared connection returns `not_delivered` here, because the
    guarantee is the same and the outcomes stay three. Alternatives: reject the
@@ -1019,36 +1146,69 @@ of the first ten is open. Questions 11 to 16 are new with draft 7 and open.
     can place the kill there and can find out afterwards that it happened
     (§12.11).
 
-Raised by draft 7, open:
+Raised by draft 7:
 
 11. **An outcome that is never examined.** The type `Remote B` forces the
     three arms on a program that wants the operation's value. It does not
     stop a program from dropping an outcome, or passing it on unmatched.
     Should the result of a remote perform have to be matched (or explicitly
     discarded)? That needs a must-use rule the language does not have.
+    **Owner ruling, 16 November 2026:** a remote outcome may not be ignored.
+    The result of a remote perform must be scrutinised by a `match`; it may
+    not be discarded, stored, returned or passed on. The ruling asked for the
+    simplest sound rule. Done as follows (§3): a remote perform is accepted
+    only as the scrutinee of a match, and the type `Remote B` cannot be
+    written, so no outcome is ever bound, held or moved; the frontend rejects
+    a wrong program at the perform, and the validator rejects a hand-made
+    artifact that tries the same. What the ruling left to this text: that a
+    `let` between the perform and its match is rejected too, though the
+    ruling would allow it; that the type becomes unwritable, which draft 7
+    allowed; that an arm may do nothing; and what the linear version looks
+    like (§3). The example program needed no change.
 12. **The identity of a read-only perform.** Here each perform is its own
     request, so `not_delivered` is decided per perform. The alternative, one
     identity per caller and operation, is also sound and makes
     `not_delivered` almost never available after the first read. Confirm.
+    **Owner ruling, 16 November 2026:** confirmed. Each read-only perform is
+    its own request (§12.3). Nothing changed in the model or the
+    implementation.
 13. **Who vouches for read-only.** The marker is in the caller's program. The
     peer's image says the same only because the build copies it there. When
     a peer is written in this language, read-only should be checked on the
     peer: a handler that performs no durable effect. Until then it is a
     promise, and a peer that breaks it is caught only on the histories run.
+    *Open.*
 14. **Where the binding of a remote effect to a member lives.** Today it is a
     constant of the build script. It could be in the manifest, in the source,
     or on the build's command line. The manifest would then be the one
     description of who talks to whom.
+    **Owner ruling, 16 November 2026:** in the system manifest, the file that
+    lists the members and the declared connections. The build reads it from
+    there, the supervisor's assembly check uses the same manifest, and an
+    effect with no binding, bound to a name that is no member, or bound to a
+    member with no declared connection from the caller is refused at
+    assembly, each with its own message. Done as §12.6 says. What the ruling
+    left to this text: the format; that a binding is per caller,
+    `[caller, Effect, member]`; that a binding and a connection are both
+    required and neither implies the other; and that a caller image built for
+    another member than the manifest binds is an error of the manifest, not a
+    refusal.
 15. **Operations a peer serves.** They are derived from the caller's
     declarations, because there is one caller and no peer program. With two
     callers that declare the same effect differently, something has to own
     the effect's signature: a shared declaration both programs import, which
     needs modules.
+    *Open.*
 16. **No handler for a remote effect.** Rejected here (§3). Allowing one that
     intercepts locally would let a caller program be run alone against a
     stub, at the price given in §3. Confirm the rejection, or say that
     testing against a stub should be a property of the build (bind the effect
     to a stub member) rather than of the program.
+    **Owner ruling, 16 November 2026:** confirmed: `handle` of a remote effect
+    is rejected. Nothing changed in the implementation; the frontend and the
+    validator each have a test that rejects one. With the binding in the
+    manifest (question 14), running a caller against a stub is a matter of
+    binding its effect to a stub member there.
 
 ### 12.11 First implementation
 
@@ -1071,10 +1231,17 @@ draft 6 the program was assembled by hand in a fixture, which is gone. It
 performs `Ledger.add` with key 7 and argument 5, once more with the same key
 and argument after `timed_out`, then with key 8, then with key 7 again and
 argument 6, a reuse of the key that the peer refuses if key 7 was applied with
-5; and then `Ledger.total`, once more after `timed_out`. The build binds
-`Ledger` to the peer and derives from the declarations what each image says of
-itself (§12.6): the caller's connections and operations, and the operations
-the peer serves; neither line is written by hand. The outcome becomes the
+5; and then `Ledger.total`, once more after `timed_out`. Every one of those
+performs is the scrutinee of a match (must-use, §3); the program was already
+written so and did not change with draft 8, and its artifact is the same
+bytes. The system is described by its manifest,
+[examples/remote/ledger-system.json](../../examples/remote/ledger-system.json)
+(§12.6), which binds `Ledger` of the caller to the peer. The build reads the
+source's name, the connection and the binding from it, and derives from the
+program's declarations what each image says of itself: the caller's
+connections and operations, and the operations the peer serves; neither line
+is written by hand, and the images are the same bytes as when the binding was
+the build's constant. The outcome becomes the
 value of the perform, and the frames stay in the image. The peer is the
 model's counter with its durable store in a file; each record keeps the
 argument it was made with, and `total` replies with the counter and writes
@@ -1104,7 +1271,7 @@ model's caller is the same program, read from the build.
 
 | Schedules | Number | Result |
 | --- | --- | --- |
-| Written by hand from this section | 24 | Accepted; the recorded steps are the schedule's and the outcomes the expected ones |
+| Written by hand from this section | 26 | Accepted; the recorded steps are the schedule's and the outcomes the expected ones |
 | Seeded (1 crash, 1 duplicate, 1 supervisor restart, until no step is enabled) | 40, 989 steps | Accepted. All forty take the supervisor restart, 34 act on a read-only request, 28 end a perform in `conflict`, 15 report `not_delivered`, 3 take the crash between commit and reply |
 | Free-running: one undisturbed, two with the peer killed from outside, one with a request the supervisor is told to lose | 4 | Accepted |
 
@@ -1120,8 +1287,14 @@ after `timed_out` discarded; a caller restarted from its beginning; key 7
 applied with one argument and then performed with another, `conflict`, the
 store unchanged, and a late copy of the first request still replayed; four
 schedules with a supervisor restart (below); an undeclared connection refused
-at start, and at run time with the start-time check off; and five that came
-with draft 7 (below). In every schedule that applies key 7 with argument 5,
+at start, and at run time with the start-time check off; five that came
+with draft 7 (below); and two that came with draft 8, both refusals at
+assembly with nothing started: the manifest given with no binding for
+`Ledger` (`unbound`), and with `Ledger` bound to a name that is no member
+(`unknown-member`). The undeclared connection refused at start is the third
+refusal about a binding: `Ledger` bound to the peer, and no connection
+declared from the caller to it. Every other run is given the bindings the
+build read from the manifest. In every schedule that applies key 7 with argument 5,
 the program's third keyed perform is the reuse of key 7 and ends in
 `reply(conflict)`, and every schedule that runs the program to its end ends
 with the read. Every step kind of the model occurs. Each scheduled run was
@@ -1230,6 +1403,9 @@ whole VM, are not covered. Seven defects are caught by (a), the fifth by (c)
 alone. Three free-running runs depend on the wall clock. The peer is not a
 program of this language, so what it serves is taken from the caller's
 declarations, and "read-only" is checked against its behaviour on these
-histories only. The frontend that elaborates the caller is development code
-with its own tests (`sh frontend/test.sh`), which are not a row of the gate.
+histories only. The supervisor's handling of a manifest's errors (a duplicate
+binding, a binding for an unused effect, an image built for another member)
+was tried by hand runs only; no schedule of this check and no unit test runs
+it. The build's own check of a manifest has unit tests. The frontend that
+elaborates the caller is development code with its own tests (`sh frontend/test.sh`), which are not a row of the gate.
 No `hvt` run and no proof.

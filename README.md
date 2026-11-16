@@ -47,7 +47,7 @@ store. The amendment changes no TC0 evidence.
   types, infer effect sets, check the one-shot rule and report errors with
   line and column. The syntax is S-expressions and is a draft
   ([spec/tc1/SURFACE.md](spec/tc1/SURFACE.md)). `sh frontend/test.sh` runs 12
-  programs to their stated results, checks 69 rejected programs, and shows 27
+  programs to their stated results, checks 89 rejected programs, and shows 27
   existing fixtures rewritten in surface syntax elaborate to the same program.
 - **Effects and handlers (TC1).** [spec/tc1/EFFECTS.md](spec/tc1/EFFECTS.md)
   is a draft effect contract: declared effects, `perform` and `handle`, finite
@@ -63,9 +63,13 @@ store. The amendment changes no TC0 evidence.
   workflow controller has been made, so it has no qualification receipt.
 - **Remote perform between images.** EFFECTS.md §12: a perform that crosses an
   image boundary returns `reply v`, `not_delivered` or `timed_out`. A remote
-  effect is declared in the source (`remote-effect`), its performs are typed
-  so that all three outcomes must be matched, and an operation may be marked
-  read-only. There is a
+  effect is declared in the source (`remote-effect`), a perform of it may
+  only be written as the value a `match` takes apart, with an arm for each of
+  the three outcomes, so no outcome is ignored, and an operation may be
+  marked read-only. Which member serves the effect is stated in the system
+  manifest
+  ([examples/remote/ledger-system.json](examples/remote/ledger-system.json))
+  and checked when the system is assembled. There is a
   Shen model, explored exhaustively on ten small systems, and a first
   implementation, an Erlang/OTP supervisor ([supervisor/](supervisor/README.md))
   relaying between two Solo5 `spt` guests through block-device mailboxes,
