@@ -6,12 +6,25 @@
 // plus effect declarations, handle and perform, with finite effect sets.
 // Schema tc1-handler-demo/2 adds explicit one-shot resumptions: clauses op(x,k),
 // resume(k,e) and discontinue(k), with k used exactly once on every path.
+// Schema tc1-handler-demo/3 (slice TC1-R1, EFFECTS.md §3, §8, §12.2) adds the remote
+// effect class: every effect declaration states its class, "ordinary" or "remote", and
+// every operation of a remote effect states read_only. A remote operation op : A -> B
+// is declared with the peer's own types. The caller's perform takes tuple(key, a) with
+// key : I64 (just a, when the operation is read-only) and has the type ["Remote", B],
+// a closed sum with the constructors reply(B), not_delivered and timed_out, in that
+// order, which only an exhaustive match takes apart. No handle discharges a remote
+// effect, and the entry function may leave it unhandled: the system does.
 import {decode,encode,decimal} from './canonical.mjs';
 export class InvalidPureCallArtifact extends Error {}
 export class PureCallValidationLimit extends Error {}
 export const PURE_CALL_SCHEMAS=Object.freeze(['tc0-a-pure-call-demo/1','tc0-a-pure-call-demo/2']);
 export const TC1_HANDLER_SCHEMA='tc1-handler-demo/1';
 export const TC1_RESUMPTION_SCHEMA='tc1-handler-demo/2';
+export const TC1_REMOTE_SCHEMA='tc1-handler-demo/3';
+export const EFFECT_CLASSES=Object.freeze(['ordinary','remote']);
+// The outcome of a remote perform: the datatype name its values carry, and its constructors.
+export const REMOTE_RESULT='RemoteResult';
+export const REMOTE_OUTCOMES=Object.freeze(['reply','not_delivered','timed_out']);
 export const RESERVED_EFFECTS=Object.freeze(['Emit','Task','Channel','Time','Resource']);
 export const TRAP_CODES=Object.freeze(['Overflow','DivZero','Bounds','InvalidDuration','TaskLimit','ChildFailed']);
 const fail=s=>{throw new InvalidPureCallArtifact(s);};
@@ -26,14 +39,11 @@ const ids=a=>[...a].sort((x,y)=>BigInt(x)<BigInt(y)?-1:BigInt(x)>BigInt(y)?1:0);
 const arities={add:2,sub:2,mul:2,div:2,neg:1,lt:2,le:2,gt:2,ge:2,not:1,bytes_length:1,bytes_index:2,bytes_concat:2,eq:2};
 const dataPrimitives=new Set(['bytes_length','bytes_index','bytes_concat','eq']);
 const dataTags=new Set(['bytes','tuple','project','construct','match']);
-// remoteEffects: declared effects the entry function may leave unhandled, because the
-// image's build binds them to a peer (spec/tc1/EFFECTS.md §12). Empty unless the caller
-// of this function is building such an image; their typing is not part of TC1 yet.
-export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,maxBytes=256,maxValueNodes=1000,remoteEffects=[]}={}){
+export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,maxBytes=256,maxValueNodes=1000}={}){
  for(const n of [maxNodes,maxDepth,maxBytes,maxValueNodes])if(!Number.isSafeInteger(n)||n<1)throw new TypeError('Invalid cap');
  const a=decode(bytes);object(a,['contract_version','schema_version','slice','module','datatypes','effects','functions','entry','input_schema','source_map']);
- const resumptions=a.schema_version===TC1_RESUMPTION_SCHEMA,handlers=resumptions||a.schema_version===TC1_HANDLER_SCHEMA;
- if(handlers?(a.contract_version!=='tc1-draft-1'||a.slice!==(resumptions?'TC1-H2':'TC1-H1')):(a.contract_version!=='0.2'||!PURE_CALL_SCHEMAS.includes(a.schema_version)||a.slice!=='TC0-A'))fail('Identity');text(a.module);
+ const remote=a.schema_version===TC1_REMOTE_SCHEMA,resumptions=remote||a.schema_version===TC1_RESUMPTION_SCHEMA,handlers=resumptions||a.schema_version===TC1_HANDLER_SCHEMA;
+ if(handlers?(a.contract_version!=='tc1-draft-1'||a.slice!==(remote?'TC1-R1':resumptions?'TC1-H2':'TC1-H1')):(a.contract_version!=='0.2'||!PURE_CALL_SCHEMAS.includes(a.schema_version)||a.slice!=='TC0-A'))fail('Identity');text(a.module);
  const data=handlers||a.schema_version==='tc0-a-pure-call-demo/2';
  if(array(a.effects).length&&!handlers)fail('Effect declarations unsupported');
  // Effect sets: at most Emit before TC1; under TC1 any declared effect or Emit, in
@@ -48,30 +58,36 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
  // Datatype table: closed declarations, unique names, constructors in declared order.
  const datatypes=new Map();
  if(a.datatypes.length>16)fail('Datatype count');
- for(const d of a.datatypes){object(d,['name','constructors']);identifier(d.name);if(['Unit','Bool','I64','Bytes','TrapCode'].includes(d.name)||datatypes.has(d.name))fail('Datatype name');if(!array(d.constructors).length||d.constructors.length>16)fail('Constructor count');const seen=new Set();for(const c of d.constructors){object(c,['name','fields']);identifier(c.name);if(seen.has(c.name))fail('Duplicate constructor');seen.add(c.name);if(array(c.fields).length>8)fail('Field count');}datatypes.set(d.name,d);}
+ for(const d of a.datatypes){object(d,['name','constructors']);identifier(d.name);if(['Unit','Bool','I64','Bytes','TrapCode'].includes(d.name)||(remote&&d.name===REMOTE_RESULT)||datatypes.has(d.name))fail('Datatype name');if(!array(d.constructors).length||d.constructors.length>16)fail('Constructor count');const seen=new Set();for(const c of d.constructors){object(c,['name','fields']);identifier(c.name);if(seen.has(c.name))fail('Duplicate constructor');seen.add(c.name);if(array(c.fields).length>8)fail('Field count');}datatypes.set(d.name,d);}
  const builtin=t=>['Unit','Bool','I64'].includes(t)||(data&&['Bytes','TrapCode'].includes(t));
  function type(t,depth=0){
   if(depth>16)throw new PureCallValidationLimit('Type depth');if(builtin(t))return;array(t);
   if(t[0]==='Arrow'&&t.length===4){type(t[1],depth+1);type(t[2],depth+1);effects(t[3]);return;}
   if(data&&t[0]==='Tuple'&&t.length>=2&&t.length<=9){for(const x of t.slice(1))type(x,depth+1);return;}
   if(data&&t[0]==='Data'&&t.length===2&&datatypes.has(t[1]))return;
+  if(remote&&t[0]==='Remote'&&t.length===2){type(t[1],depth+1);return;}
   fail('Type');
  }
- // Constructor table for one concrete type: declared datatypes or the TrapCode enum.
- const constructors=t=>t==='TrapCode'?TRAP_CODES.map(name=>({name,fields:[]})):Array.isArray(t)&&t[0]==='Data'?datatypes.get(t[1]).constructors:null;
+ // Constructor table for one concrete type: declared datatypes, the TrapCode enum, or
+ // the three outcomes of a remote perform.
+ const constructors=t=>t==='TrapCode'?TRAP_CODES.map(name=>({name,fields:[]})):Array.isArray(t)&&t[0]==='Data'?datatypes.get(t[1]).constructors:
+  Array.isArray(t)&&t[0]==='Remote'?REMOTE_OUTCOMES.map((name,i)=>({name,fields:i?[]:[t[1]]})):null;
+ const dataName=t=>t==='TrapCode'?'TrapCode':t[0]==='Remote'?REMOTE_RESULT:t[1];
  for(const d of a.datatypes)for(const c of d.constructors)for(const f of c.fields)type(f);
  // Serializable and equality-compatible coincide in this slice: both exclude
  // functions. Traverse declarations with cycle detection (recursive types).
  function plain(t,visiting=new Set()){
-  if(typeof t==='string')return true;if(t[0]==='Arrow')return false;if(t[0]==='Tuple')return t.slice(1).every(x=>plain(x,visiting));
+  if(typeof t==='string')return true;if(t[0]==='Arrow')return false;if(t[0]==='Tuple')return t.slice(1).every(x=>plain(x,visiting));if(t[0]==='Remote')return plain(t[1],visiting);
   if(visiting.has(t[1]))return true;visiting.add(t[1]);const ok=datatypes.get(t[1]).constructors.every(c=>c.fields.every(f=>plain(f,visiting)));visiting.delete(t[1]);return ok;
  }
  // Effect declarations: operations A -> B. In this slice A and B are serializable
  // types, so no closure crosses an operation boundary.
  if(a.effects.length>8)fail('Effect count');
- for(const d of a.effects){object(d,['name','operations']);identifier(d.name);if(RESERVED_EFFECTS.includes(d.name)||declared.has(d.name))fail('Effect name');
+ // Under schema /3 a declaration states its class, and an operation of a remote effect
+ // states whether it is read-only. Older schemas have ordinary effects only.
+ for(const d of a.effects){object(d,remote?['name','class','operations']:['name','operations']);if(remote&&!EFFECT_CLASSES.includes(d.class))fail('Effect class');const far=d.class==='remote';identifier(d.name);if(RESERVED_EFFECTS.includes(d.name)||declared.has(d.name))fail('Effect name');
   if(!array(d.operations).length||d.operations.length>8)fail('Operation count');const seen=new Set();
-  for(const o of d.operations){object(o,['name','argument_type','result_type']);identifier(o.name);if(seen.has(o.name))fail('Duplicate operation');seen.add(o.name);type(o.argument_type);type(o.result_type);if(!plain(o.argument_type)||!plain(o.result_type))fail('Operation types must be serializable');}
+  for(const o of d.operations){object(o,far?['name','argument_type','result_type','read_only']:['name','argument_type','result_type']);if(far&&typeof o.read_only!=='boolean')fail('Operation read_only');identifier(o.name);if(seen.has(o.name))fail('Duplicate operation');seen.add(o.name);type(o.argument_type);type(o.result_type);if(!plain(o.argument_type)||!plain(o.result_type))fail('Operation types must be serializable');}
   declared.set(d.name,d);}
  let valueCount=0;
  function value(v,t,depth=0){
@@ -80,14 +96,14 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
   if(t==='I64'&&v.length===2&&v[0]==='int'){try{decimal(v[1]);const n=BigInt(v[1]);if(n>=-(1n<<63n)&&n<(1n<<63n))return;}catch{}}
   if(t==='Bytes'&&v.length===2&&v[0]==='bytes'){hex(v[1]);if(v[1].length/2>maxBytes)throw new PureCallValidationLimit('Bytes cap');return;}
   if(Array.isArray(t)&&t[0]==='Tuple'&&v[0]==='tuple'&&v.length===t.length){t.slice(1).forEach((x,i)=>value(v[i+1],x,depth+1));return;}
-  const table=constructors(t);if(table&&v[0]==='data'&&v.length>=3&&same(v[1],t==='TrapCode'?'TrapCode':t[1])){const c=table.find(c=>c.name===v[2]);if(c&&v.length===3+c.fields.length){c.fields.forEach((f,i)=>value(v[i+3],f,depth+1));return;}}
+  const table=constructors(t);if(table&&v[0]==='data'&&v.length>=3&&same(v[1],dataName(t))){const c=table.find(c=>c.name===v[2]);if(c&&v.length===3+c.fields.length){c.fields.forEach((f,i)=>value(v[i+3],f,depth+1));return;}}
   fail('Value type/range');
  }
  const ID=new Set(),locations=new Set(),functions=new Map(),codes=[];let count=0;
  const fresh=(id,location=false)=>{unsigned(id);if(ID.has(id))fail('Duplicate ID');ID.add(id);if(location)locations.add(id);};
  if(!array(a.functions).length||a.functions.length>32)fail('Function count');
  for(const f of a.functions){object(f,['id','name','parameter_id','argument_type','result_type','effects','body']);fresh(f.id,true);fresh(f.parameter_id);text(f.name);if(functions.has(f.name))fail('Duplicate function name');type(f.argument_type);type(f.result_type);effects(f.effects);functions.set(f.name,f);}
- const entry=functions.get(a.entry);if(!entry)fail('Entry');if(entry.effects.some(k=>k!=='Emit'&&!remoteEffects.includes(k)))fail('Entry must handle every user effect');if(!plain(entry.argument_type)||!plain(entry.result_type))fail('Serializable entry');object(a.input_schema,['type']);if(!same(a.input_schema.type,entry.argument_type))fail('Input schema');value(input,entry.argument_type);
+ const entry=functions.get(a.entry);if(!entry)fail('Entry');if(entry.effects.some(k=>k!=='Emit'&&declared.get(k).class!=='remote'))fail('Entry must handle every user effect');if(!plain(entry.argument_type)||!plain(entry.result_type))fail('Serializable entry');object(a.input_schema,['type']);if(!same(a.input_schema.type,entry.argument_type))fail('Input schema');value(input,entry.argument_type);
  const union=rows=>new Set(rows.flatMap(r=>[...r.effects]));
  const free=rows=>new Set(rows.flatMap(r=>[...r.free]));
  const primitive={add:['I64','I64','I64'],sub:['I64','I64','I64'],mul:['I64','I64','I64'],div:['I64','I64','I64'],neg:['I64','I64'],lt:['I64','I64','Bool'],le:['I64','I64','Bool'],gt:['I64','I64','Bool'],ge:['I64','I64','Bool'],not:['Bool','Bool'],bytes_length:['Bytes','I64'],bytes_index:['Bytes','I64','I64'],bytes_concat:['Bytes','Bytes','Bytes']};
@@ -137,8 +153,11 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
   else if(tag==='apply'){arity(2);const rows=x.map(v),arrow=rows[0].type;if(!Array.isArray(arrow)||arrow[0]!=='Arrow'||!same(arrow[1],rows[1].type))fail('Apply type');t=arrow[2];eff=union(rows);for(const k of arrow[3])eff.add(k);fv=free(rows);}
   else if(tag==='call'){arity(2);text(x[0]);const f=functions.get(x[0]);if(!f)fail('Unknown function');const row=v(x[1]);if(!same(row.type,f.argument_type))fail('Call argument');t=f.result_type;eff=union([row]);for(const k of f.effects)eff.add(k);fv=row.free;}
   else if(tag==='perform'&&handlers){
-   arity(3);const [name,opName,operand]=x;text(name);text(opName);const o=declared.get(name)?.operations.find(o=>o.name===opName);if(!o)fail('Unknown effect operation');
-   const row=v(operand);if(!same(row.type,o.argument_type))fail('Perform argument');t=o.result_type;eff=union([row]);eff.add(name);fv=row.free;
+   // A remote operation op : A -> B is performed with tuple(key, a), key : I64, or with a
+   // alone when it is read-only, and yields one of the three outcomes: Remote B.
+   arity(3);const [name,opName,operand]=x;text(name);text(opName);const d=declared.get(name),o=d?.operations.find(o=>o.name===opName);if(!o)fail('Unknown effect operation');
+   const far=d.class==='remote',wanted=far&&!o.read_only?['Tuple','I64',o.argument_type]:o.argument_type;
+   const row=v(operand);if(!same(row.type,wanted))fail('Perform argument');t=far?['Remote',o.result_type]:o.result_type;eff=union([row]);eff.add(name);fv=row.free;
   }
   else if(tag==='handle'&&handlers){
    // One clause per declared operation. A clause sees the bindings in scope at the handle
@@ -149,6 +168,8 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
    //                    exactly once on every path. A clause cannot use an outer clause's k:
    //                    it may run any number of times.
    arity(3);const [name,clauses,bodyExpr]=x;text(name);const d=declared.get(name);if(!d)fail('Unknown effect');
+   // A remote effect is discharged by the system the image is assembled into, never by the program.
+   if(d.class==='remote')fail('A remote effect cannot be handled');
    const body=v(bodyExpr);
    if(array(clauses).length!==d.operations.length)fail('Handler clauses');const seen=new Set(),rows=[];
    for(const clause of clauses){array(clause);const explicit=clause.length===4;if(clause.length!==3&&!(explicit&&resumptions))fail('Handler clause');

@@ -40,8 +40,8 @@ function operands(e) {
   return [];
 }
 
-export function lowerProgram(program,input,prefix,options={}) {
-  const {artifact}=validatePureCallArtifact(encode(program),input,options);
+export function lowerProgram(program,input,prefix) {
+  const {artifact}=validatePureCallArtifact(encode(program),input);
   const functions=artifact.functions,index=new Map(functions.map((f,i)=>[f.name,i]));
   const rows=[],aux=[];
   const list=(kind,at,type,items)=>{if(!items.length)return '0';const symbol=`${prefix}_${kind}${at}`;aux.push(`static const ${type} ${symbol}[]={${items.join(',')}};`);return symbol;};
@@ -101,8 +101,8 @@ export function lowerProgram(program,input,prefix,options={}) {
 }
 
 // items: [{program, input}]. Returns {header, batch_sha256, artifact_sha256[]}.
-export function lowerBatch(items,options={}) {
-  const lowered=items.map((item,i)=>lowerProgram(item.program,item.input,`p${i}`,options));
+export function lowerBatch(items) {
+  const lowered=items.map((item,i)=>lowerProgram(item.program,item.input,`p${i}`));
   const batch=createHash('sha256').update(lowered.map(l=>l.artifact_sha256).join('\n')).digest('hex');
   const header=`/* Validated artifact DATA ONLY, not precomputed transitions. */\n#define PC_BATCH_SHA256 "${batch}"\n`+
     lowered.map(l=>l.text).join('\n')+`\nstatic const struct pc_program pc_programs[]={\n${lowered.map(l=>l.row).join(',\n')}\n};\n`+
