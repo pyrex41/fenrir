@@ -13,7 +13,8 @@
 \\
 \\ Loading prints a line per definition on standard output, so the result goes to
 \\ a file and the exit status says how to read it:
-\\   0 done   1 the program was rejected   2 a file could not be read or written
+\\   0 done   1 the program was rejected   2 a file could not be read or written,
+\\   or the program leaves a remote effect to the system and cannot run alone
 \\   3 a defect in the frontend            4 the step budget ran out
 \\
 \\ The stages are kept apart on purpose. The elaborator produces an artifact; the
@@ -134,11 +135,25 @@
   ["Trap" _] Steps Artifact -> (fe.position (fe.trap-node Steps) (map (/. R (fh.canon R)) (fh.field "source_map" Artifact)))
   _ _ _ -> "")
 
+\\ The remote effects the entry function leaves to the system (schema /3): the
+\\ entry's effect set without Emit. Empty for every program that can run alone.
+(define fe.entry-function
+  Name [F | Fs] -> (if (= (fh.field "name" F) Name) F (fe.entry-function Name Fs)))
+
+(define fe.left-to-the-system
+  Artifact -> (remove "Emit" (fh.field "effects" (fe.entry-function (fh.field "entry" Artifact) (fh.field "functions" Artifact)))))
+
 \\ Run the artifact decoded from Text and report emissions in order, the outcome
 \\ and the number of model steps. Entry input is the harness's fixed 0.
+\\ A program that leaves a remote effect to the system is not run here: the
+\\ outcome of a remote perform comes from a supervisor and a peer, and this
+\\ driver has neither.
 (define fe.execute
   Text Fuel ->
     (let Artifact (json.parse Text [[byte-limit 16777216]])
+         Far (fe.left-to-the-system Artifact)
+         Alone (if (empty? Far) true
+                   (fe.finish 2 (make-string "this program cannot be run alone: main performs the remote effect ~A, which only a system of images discharges (sh harness/run-tc1-remote-run.sh builds and runs one). check and emit work on it~%" (hd Far))))
          Run (fh.run (fh.state Artifact) Fuel 0 [])
          Steps (hd (tl Run))
       (if (= (hd Run) "Completed")

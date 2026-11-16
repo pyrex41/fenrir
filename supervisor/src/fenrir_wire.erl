@@ -1,11 +1,11 @@
-%% Fenrir remote perform, wire format version 2: the supervisor's side.
+%% Fenrir remote perform, wire format version 3: the supervisor's side.
 %% The format is specified in backends/solo5/remote/wire.h. Decoding is strict:
 %% anything that is not exactly a well-formed block is `malformed`.
 -module(fenrir_wire).
 -export([block/0, header/1, decode_header/1, record/1, decode_record/1,
-         call_payload/3, decode_call/1, decode_stored/1, outcome_payload/2, decode_result/2, name_ok/1]).
+         call_payload/2, call_payload/3, decode_call/1, decode_stored/1, outcome_payload/2, decode_result/2, name_ok/1]).
 
--define(VERSION, 2).
+-define(VERSION, 3).
 
 -define(BLOCK, 512).
 -define(RECORD, 16#31575246).
@@ -80,16 +80,22 @@ name_ok(Name) when is_binary(Name), byte_size(Name) >= 1, byte_size(Name) =< 15 
               binary_to_list(Name));
 name_ok(_) -> false.
 
-%% REQUEST and DELIVER payload: name[16], key i64, argument i64.
+%% REQUEST and DELIVER payload: name[16], mode u32 (1 keyed, 2 read-only), zero u32,
+%% key i64, argument i64. A read-only call has no key and a unit argument: both zero.
 call_payload(Name, Key, Value) ->
     true = name_ok(Name),
-    <<Name/binary, 0:((16 - byte_size(Name)) * 8), Key:64/little-signed, Value:64/little-signed>>.
+    <<Name/binary, 0:((16 - byte_size(Name)) * 8), 1:32/little, 0:32, Key:64/little-signed, Value:64/little-signed>>.
+call_payload(Name, read) ->
+    true = name_ok(Name),
+    <<Name/binary, 0:((16 - byte_size(Name)) * 8), 2:32/little, 0:32, 0:64, 0:64>>.
 
-decode_call(#{ref := 0, payload := <<Field:16/binary, Key:64/little-signed, Value:64/little-signed>>}) ->
+%% {ok, Name, Key, Argument} for a keyed call, {ok, Name, read} for a read-only one.
+decode_call(#{ref := 0, payload := <<Field:16/binary, Mode:32/little, 0:32, Key:64/little-signed, Value:64/little-signed>>}) ->
     [Name | Pad] = binary:split(Field, <<0>>),
     case name_ok(Name) andalso zero(iolist_to_binary(Pad)) of
-        true -> {ok, Name, Key, Value};
-        false -> malformed
+        true when Mode =:= 1 -> {ok, Name, Key, Value};
+        true when Mode =:= 2, Key =:= 0, Value =:= 0 -> {ok, Name, read};
+        _ -> malformed
     end;
 decode_call(_) -> malformed.
 
@@ -103,19 +109,22 @@ decode_stored(#{ref := 0, payload := <<Field:16/binary, Key:64/little-signed, Ar
 decode_stored(_) -> malformed.
 
 %% OUTCOME: kind u32 (1 reply, 2 not_delivered, 3 timed_out), status u32, value i64.
-%% A reply is {ok, Value} (status 0) or conflict (status 1, value 0).
+%% A reply is {ok, Value} (status 0), conflict (status 1, value 0), or, from a
+%% read-only operation, {read, Value} (status 0: there is no key to conflict on).
 outcome_payload(reply, {ok, Value}) -> <<1:32/little, 0:32/little, Value:64/little-signed>>;
+outcome_payload(reply, {read, Value}) -> <<1:32/little, 0:32/little, Value:64/little-signed>>;
 outcome_payload(reply, conflict) -> <<1:32/little, 1:32/little, 0:64>>;
 outcome_payload(not_delivered, none) -> <<2:32/little, 0:32, 0:64>>;
 outcome_payload(timed_out, none) -> <<3:32/little, 0:32, 0:64>>.
 
-%% REPLY: how u32 (1 applied, 2 replayed, 3 conflict), zero u32, value i64.
-%% {ok, How, {ok, Value} | conflict}
+%% REPLY: how u32 (1 applied, 2 replayed, 3 conflict, 4 read), zero u32, value i64.
+%% {ok, How, {ok, Value} | conflict | {read, Value}}
 decode_result(reply, #{ref := Ref, payload := <<N:32/little, 0:32, Value:64/little-signed>>}) when Ref > 0 ->
     case N of
         1 -> {ok, applied, {ok, Value}};
         2 -> {ok, replayed, {ok, Value}};
         3 when Value =:= 0 -> {ok, conflict, conflict};
+        4 -> {ok, read, {read, Value}};
         _ -> malformed
     end;
 decode_result(_, _) -> malformed.

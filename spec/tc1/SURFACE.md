@@ -1,15 +1,20 @@
 # Fenrir surface syntax
 
-Draft 1 • 15 November 2026 • For owner review
+Draft 2 • 16 November 2026 • For owner review
 
 **Status.** A first frontend, written in Shen, so that a Fenrir program can be
 written as text, run, and its result seen. Every choice of spelling below is a
 proposal for the owner to confirm or change (§8 lists them). Nothing here is
 qualified, and nothing here adds to the language: the frontend translates text
 into an artifact of schema `tc1-handler-demo/2` (contract
-[EFFECTS.md](EFFECTS.md), slice TC1-H2). What a program means is decided by the
-Shen model; whether an artifact is well formed is decided by the validator
-`tools/tc0/pure-call-artifact.mjs`.
+[EFFECTS.md](EFFECTS.md), slice TC1-H2), or of schema `tc1-handler-demo/3`
+(slice TC1-R1) when the program declares a remote effect. What a program means
+is decided by the Shen model; whether an artifact is well formed is decided by
+the validator `tools/tc0/pure-call-artifact.mjs`. Draft 2 adds the remote
+effect class of EFFECTS.md draft 7 (owner rulings of 16 November 2026 on
+questions 7 and 9 of its §12.10): `remote-effect`, `read-only`, the type
+`(Remote T)` and its three outcomes. Nothing else changed, and a program
+without a remote effect elaborates to the same bytes as before.
 
 ```sh
 sh frontend/fenrir.sh check FILE.fen           # elaborate and validate
@@ -37,10 +42,15 @@ steps: 74
 program  ::= form...
 form     ::= (datatype Name constructor...)            constructor ::= Name | (Name type...)
            | (effect Name (operation type --> type)...)
+           | (remote-effect Name remote-operation...)
            | (define name {type --> type} parameter... -> e)
+
+remote-operation ::= (operation type --> type)             keyed: performed with a request key
+                   | (read-only operation type --> type)   no key; changes nothing at the peer
 
 type     ::= Unit | Bool | I64 | Bytes | TrapCode | Name      a declared datatype
            | (Tuple type...)                                  1 to 8 components
+           | (Remote type)                                    the outcome of a remote operation
            | (type --> type)                                  a function with no effects
            | (type --> type ! Effect...)                      a function with exactly these effects
 
@@ -52,6 +62,7 @@ e        ::= unit | true | false | 42 | -7 | #x68ff | "text"
            | (if e e e)
            | (tuple e...)   | (project e index)    index a literal, from 0
            | (match e arm...)                      arm ::= (Name -> e) | ((Name name...) -> e)
+                                                   on (Remote T): ((Reply x) -> e) (NotDelivered -> e) (TimedOut -> e)
            | (lambda (name : type) e)
            | (name e...)                           call a function, or apply a variable
            | (e e...)                              apply the value of an expression
@@ -60,7 +71,7 @@ e        ::= unit | true | false | 42 | -7 | #x68ff | "text"
            | (< e e) | (<= e e) | (> e e) | (>= e e) | (= e e) | (not e)
            | (bytes-length e) | (bytes-index e e) | (bytes-concat e e)
            | (emit "label" e)
-           | (perform Effect operation e...)
+           | (perform Effect operation e...)       remote and keyed: (perform Effect operation key e)
            | (handle Effect clause... e)           clause ::= ((operation name) -> e)
                                                             | ((operation name k) -> e)
            | (resume k e) | (discontinue k)
@@ -73,7 +84,8 @@ uppercase letter and continues with letters, digits or `_`: datatypes,
 constructors and effects. `name` starts with a lowercase letter or `_`:
 functions and variables, which may also contain `-`, and operations, which
 may not. `_` alone is a binder that names nothing. The words of the grammar
-(`let`, `if`, `handle`, `unit`, `not`, ...) cannot be used as names.
+(`let`, `if`, `handle`, `unit`, `not`, `remote-effect`, `read-only`, ...) cannot
+be used as names.
 
 ## 2 What the forms mean
 
@@ -99,6 +111,11 @@ them. There is no other meaning.
 | `(handle E clause... body)` | `handle(E, [clause]..., body)`, clauses in the order written |
 | `((op x) -> e)` | the tail-resumptive clause `op(x) => e` |
 | `((op x k) -> e)` | the clause `op(x, k) => e` with its one-shot resumption |
+| `(remote-effect E (op A --> B) (read-only op2 C --> D))` | an effect declaration of class `remote`, with `read_only` false on `op` and true on `op2`; every `(effect ...)` of the same program gets class `ordinary` |
+| `(perform E op k a)`, E remote, `op` keyed | `perform(E, op, tuple(k, a))`: the request key is the first argument |
+| `(perform E op2 a)`, `op2` read-only | `perform(E, op2, a)`: no key |
+| `(Remote T)` | the type `["Remote", T]` |
+| `Reply`, `NotDelivered`, `TimedOut` in a match arm | the constructors `reply`, `not_delivered`, `timed_out` |
 
 Operands are written, and evaluated, left to right. Arithmetic is checked I64:
 a result out of range traps `Overflow`, division by zero traps `DivZero`, a bad
@@ -113,9 +130,40 @@ constructors of the built-in `TrapCode` (`Overflow`, `DivZero`, `Bounds`,
 `InvalidDuration`, `TaskLimit`, `ChildFailed`) are always declared.
 
 **Entry.** The program runs `main`, which must have type `{I64 --> T}` with `T`
-serializable, with input 0 (the harness's fixed input). Every user effect must
-be handled by the time control reaches `main`'s caller: `main`'s effect set may
-contain only `Emit`.
+serializable, with input 0 (the harness's fixed input). Every ordinary effect
+must be handled by the time control reaches `main`'s caller: `main`'s effect
+set may contain only `Emit` and remote effects.
+
+**Remote effects** (EFFECTS.md §3, §12.2). `(remote-effect Ledger (add I64 -->
+(Tuple I64 I64)) (read-only total Unit --> I64))` declares an effect whose
+operations another image carries out. The types written are the peer's: `add`
+takes an `I64` and gives a `(Tuple I64 I64)`.
+
+- A perform of a remote operation has the type `(Remote B)`, B being the
+  operation's result type: one of three outcomes, which a `match` takes apart
+  with the arms `((Reply x) -> e)`, `(NotDelivered -> e)` and `(TimedOut -> e)`,
+  in any order. As for every match, all arms are required: a program that
+  wants the operation's value deals with all three outcomes. Nothing else
+  takes an outcome apart, and a program cannot make one: `Reply`,
+  `NotDelivered` and `TimedOut` are not constructors a program can apply.
+  They are resolved by the type of what is matched, so a program may have
+  constructors of its own with these names.
+- An operation that is not read-only is performed with its request key first:
+  `(perform Ledger add 7 5)` is key 7, argument 5, by the rule that several
+  arguments are one tuple. A read-only operation has no key:
+  `(perform Ledger total unit)`.
+- `(handle Ledger ...)` is rejected: no handler discharges a remote effect.
+- `main` may leave a remote effect unhandled. Such a program is not run by
+  `sh frontend/fenrir.sh run`, which has no peer to ask and says so with exit
+  status 2; `check` and `emit` work, and
+  [examples/remote/ledger-caller.fen](../../examples/remote/ledger-caller.fen)
+  is the program of the caller image of `sh harness/run-tc1-remote-run.sh`,
+  built from that file.
+- `(Remote T)` is a type only in a program that declares a remote effect, and
+  such a program cannot declare a datatype named `RemoteResult`, the name the
+  outcome values carry.
+- Which member an effect's operations go to is not in the source: the build
+  of the image binds each remote effect to a member (EFFECTS.md §12.6).
 
 **Identity.** Every expression node and every function gets a decimal ID in
 source order and a source-map row with the file as named on the command line
@@ -130,7 +178,8 @@ Written by the programmer:
 
 - the argument and result type of every `define`;
 - the parameter type of every `lambda`;
-- field types of constructors and the argument and result type of operations;
+- field types of constructors and the argument and result type of operations,
+  and for an operation of a remote effect whether it is read-only;
 - the effect set of a function *type*, wherever a type is written: `(A --> B)`
   means no effects, `(A --> B ! E F)` means exactly `E` and `F`.
 
@@ -201,21 +250,28 @@ every message):
 | Types | `WHAT has type FOUND, but EXPECTED is expected`, where WHAT is the role (the condition of if, operand 2 of +, the argument of f, field 1 of Some, the body of f, the else branch, this match arm, the clause for E.op, the value resumed with), followed where useful by where the expectation comes from |
 | Arity | operands of an operator, fields of a constructor, binders of a match arm, parameters against a tuple type, a call with no argument |
 | Data | `project` of a non-tuple or with an index out of range; `match` on a non-datatype; a match that is not exhaustive (naming the missing constructors), has two arms for one constructor, or an arm for a constructor of another type; `=` or `emit` on a value containing a function |
-| Effects | an effect that reaches `main` unhandled, at the perform, call or application it comes from; a handler with a clause missing or given twice; an effect in a lambda whose wanted type does not allow it; an operation type that is not serializable |
+| Effects | an ordinary effect that reaches `main` unhandled, at the perform, call or application it comes from; a handler with a clause missing or given twice; an effect in a lambda whose wanted type does not allow it; an operation type that is not serializable |
+| Remote effects | a `handle` of a remote effect; a keyed operation performed without its key, or a read-only one with a key (as a type mismatch that says why); an outcome used where the operation's value is wanted (a type mismatch naming `(Remote T)`); a match on an outcome without all three arms; `Reply`, `NotDelivered` or `TimedOut` used to make a value; `(Remote T)` in a program with no remote effect; `read-only` in an ordinary effect; a datatype named `RemoteResult` beside a remote effect |
 | Resumptions | never used; used twice on a path (at the second use); branches that disagree; used as a value; used inside a lambda or another handler's clause; `resume` or `discontinue` of something that is not a resumption |
 | Entry | no `main`; `main` not taking `I64`; `main` returning a function |
 | Size | the validator's caps: 200 expression nodes, nesting depth 64, 256 octets in a bytes literal. This message has no position |
 
-Other exit statuses: 2 for usage or an unreadable file, 3 for a defect in the
+Other exit statuses: 2 for usage, an unreadable file, or `run` of a program
+that leaves a remote effect to the system, 3 for a defect in the
 frontend (including a validator rejection of what the elaborator accepted), 4
 when a run exhausts its step budget (`FENRIR_FUEL`, default 100000). A trap is
 an outcome, with status 0.
 
 ## 6 Not supported
 
-- Anything outside schema `tc1-handler-demo/2`: tasks, scopes, channels, time,
+- Anything outside schemas `tc1-handler-demo/2` and `/3`: tasks, scopes, channels, time,
   resources, multi-shot resumption, polymorphism, effect-row polymorphism,
   modules and imports.
+- Running a program that performs a remote operation: there is no peer here.
+  A stub for one would need either a handler for the remote effect, which the
+  contract rejects, or a build that binds the effect to a stub member.
+- Naming the member a remote effect is bound to; operations of a remote
+  effect that share a declaration between two programs (no modules).
 - Patterns beyond one constructor per arm: no wildcard arm, no nested
   patterns, no literal patterns, no tuple patterns (use `project`, or several
   parameters on a `define`).
@@ -240,7 +296,13 @@ an outcome, with status 0.
 - 12 accepted programs (8 under `examples/`, 4 under
   `tests/frontend/programs/`) elaborate, pass the validator, run on the model
   and give the outcome and emissions written in their headers.
-- 69 wrong programs under `tests/frontend/bad/` are each rejected with the
+- 3 programs that declare a remote effect (1 under `examples/remote/`, 2 under
+  `tests/frontend/remote/`) check, and elaborate twice to the same bytes of
+  schema `tc1-handler-demo/3`. One performs nothing remote and runs to the
+  outcome in its header; the other two leave their remote effect to the
+  system, and `run` refuses them with status 2.
+- 80 wrong programs under `tests/frontend/bad/`, 11 of them about remote
+  effects, are each rejected with the
   stated message at the stated line and column. The positions were recorded
   from the elaborator's output after reading each one against its program;
   they are regression expectations, not independent predictions (two were
@@ -281,3 +343,16 @@ elaborator, its tests and this document have one author.
 11. Symbols for arithmetic and comparison (`+`, `<=`, `=`), words for the rest.
 12. `main : {I64 --> T}` as the entry, with input 0.
 13. One error per run.
+14. `(remote-effect Name ...)` as a form of its own, beside `effect`. The
+    alternative is a marker inside `effect`.
+15. `read-only` as a prefix word inside the operation, `(read-only total Unit
+    --> I64)`.
+16. The declaration states the peer's types and the key is not part of them:
+    `(add I64 --> ...)` is performed as `(perform Ledger add key argument)`.
+    The alternative writes the caller's view, `(add (Tuple I64 I64) --> ...)`.
+17. `(Remote T)` as the outcome type, and `Reply`, `NotDelivered`, `TimedOut`
+    as the names of the outcomes in a match, capitalised like every
+    constructor; the artifact and the machines say `reply`, `not_delivered`,
+    `timed_out`.
+18. `run` refuses a program that leaves a remote effect to the system, with
+    status 2, and does not offer a stub.

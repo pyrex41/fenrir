@@ -24,9 +24,14 @@
 %%   late-reply-accepted        a reply for an attempt that timed out is given to the caller
 %%   relay-undeclared           requests are carried whatever the manifest says
 %%   forgetful-supervisor-restart   after its restart the relay takes nothing as handed over
-%% Three more are switches of the peer image, passed on its command line:
-%%   non-idempotent-peer, reply-before-commit, replay-different-argument
-%%   (backends/solo5/remote/peer.c)
+%% Four more are switches of the peer image, passed on its command line:
+%%   non-idempotent-peer, reply-before-commit, replay-different-argument,
+%%   read-only-writes (backends/solo5/remote/peer.c)
+%%
+%% A read-only operation (EFFECTS.md §12.3) has no request key. Each perform of
+%% one is its own request: the relay names it read-N, N being the number of the
+%% attempt it becomes, and keeps it in its records like a key. Its argument is
+%% the atom read.
 -module(fenrir_relay).
 -behaviour(gen_server).
 -export([start_link/0, assemble/1, enabled/0, step/1, observe/0, inject_kill/1, arm_kill_in_act/2, report/0, shutdown/0]).
@@ -191,61 +196,125 @@ store_report(Name, Other) -> #{member => Name, error => atom_to_binary(Other)}.
 
 int(N) -> [<<"int">>, integer_to_binary(N)].
 
-%% A reply value, as the caller's program sees it: (status, value).
+%% A reply value, as the caller's program sees it: (status, value) from a keyed
+%% operation, the value itself from a read-only one.
+value({read, N}) -> int(N);
 value({ok, N}) -> [<<"tuple">>, int(0), int(N)];
 value(conflict) -> [<<"tuple">>, int(1), int(0)].
 
 %% ---------- assembling the system ----------
 
-%% What an image declares about itself: the members it is built to call.
+%% What an image says about itself: one line in the image file, which the build
+%% derived from the remote-effect declarations of the caller's program and its
+%% binding of each remote effect to a member (tools/solo5/remote-build.mjs).
+%%   caller  FENRIR-REMOTE-DECL/2 connects=<peers> uses=<peer>/<Effect>.<op>/<mode>,...
+%%   peer    FENRIR-REMOTE-SERVES/1 store=yes|no operations=<Effect>.<op>/<mode>,...
+%% {ok, {caller, Peers, [{Peer, Operation, Mode}]}} | {ok, {peer, HasStore, [{Operation, Mode}]}}
+%% | {ok, none} | {error, Reason}
 declaration(Image) ->
     case file:read_file(Image) of
         {ok, Bytes} ->
-            Marker = <<"\nFENRIR-REMOTE-DECL/1 connects=">>,
-            case binary:matches(Bytes, Marker) of
-                [{At, Size}] ->
-                    Rest = binary:part(Bytes, At + Size, min(256, byte_size(Bytes) - At - Size)),
-                    case binary:split(Rest, <<"\n">>) of
-                        [List, _] ->
-                            Names = [N || N <- binary:split(List, <<",">>, [global]), N =/= <<>>],
-                            case lists:all(fun fenrir_wire:name_ok/1, Names) of
-                                true -> {ok, Names};
-                                false -> {error, bad_declaration}
-                            end;
-                        _ -> {error, bad_declaration}
-                    end;
-                [] -> {ok, none};
+            case {line(Bytes, <<"\nFENRIR-REMOTE-DECL/2 ">>), line(Bytes, <<"\nFENRIR-REMOTE-SERVES/1 ">>)} of
+                {{ok, Line}, none} -> caller_declaration(fields(Line));
+                {none, {ok, Line}} -> peer_declaration(fields(Line));
+                {none, none} -> {ok, none};
                 _ -> {error, ambiguous_declaration}
             end;
         _ -> {error, unreadable_image}
     end.
 
+line(Bytes, Marker) ->
+    case binary:matches(Bytes, Marker) of
+        [{At, Size}] ->
+            Rest = binary:part(Bytes, At + Size, min(1024, byte_size(Bytes) - At - Size)),
+            case binary:split(Rest, <<"\n">>) of
+                [Line, _] -> {ok, Line};
+                _ -> ambiguous
+            end;
+        [] -> none;
+        _ -> ambiguous
+    end.
+
+%% "key=a,b key=c" as [{Key, [Item]}].
+fields(Line) ->
+    [case binary:split(Field, <<"=">>) of
+         [Key, List] -> {Key, [I || I <- binary:split(List, <<",">>, [global]), I =/= <<>>]};
+         _ -> {Field, bad}
+     end || Field <- binary:split(Line, <<" ">>, [global])].
+
+mode_ok(Mode) -> Mode =:= <<"keyed">> orelse Mode =:= <<"read-only">>.
+
+caller_declaration([{<<"connects">>, Peers}, {<<"uses">>, Items}]) when is_list(Peers), is_list(Items) ->
+    Uses = [case binary:split(I, <<"/">>, [global]) of
+                [Peer, Operation, Mode] -> {Peer, Operation, Mode};
+                _ -> bad
+            end || I <- Items],
+    Ok = lists:all(fun fenrir_wire:name_ok/1, Peers) andalso
+         lists:all(fun({Peer, _, Mode}) -> lists:member(Peer, Peers) andalso mode_ok(Mode); (bad) -> false end, Uses) andalso
+         lists:all(fun(Peer) -> lists:keymember(Peer, 1, Uses) end, Peers),
+    case Ok of
+        true -> {ok, {caller, Peers, Uses}};
+        false -> {error, bad_declaration}
+    end;
+caller_declaration(_) -> {error, bad_declaration}.
+
+peer_declaration([{<<"store">>, [Store]}, {<<"operations">>, Items}]) when is_list(Items) ->
+    Serves = [case binary:split(I, <<"/">>, [global]) of
+                  [Operation, Mode] -> {Operation, Mode};
+                  _ -> bad
+              end || I <- Items],
+    Ok = lists:member(Store, [<<"yes">>, <<"no">>]) andalso
+         lists:all(fun({_, Mode}) -> mode_ok(Mode); (bad) -> false end, Serves),
+    case Ok of
+        true -> {ok, {peer, Store =:= <<"yes">>, Serves}};
+        false -> {error, bad_declaration}
+    end;
+peer_declaration(_) -> {error, bad_declaration}.
+
+%% The assembly check. Nothing is started unless it passes. Three refusals:
+%%   [Caller, Peer]                         the caller's program declares a connection the
+%%                                          manifest lacks (the start-time check, which
+%%                                          start_check => false switches off for the harness)
+%%   [Peer, <<"no-store">>, Operation]      a peer image without a durable store serves an
+%%                                          operation that is not read-only (EFFECTS.md §12.3)
+%%   [Caller, Peer, <<"unserved">>, Operation]  the caller uses an operation the peer's
+%%                                          image does not serve in that mode
+%% The last two are never switched off: nothing at run time stands behind them.
 assemble_system(Spec = #{members := Members, connections := Edges}) ->
     Names = [maps:get(name, M) || M <- Members],
     Declared = [{maps:get(name, M), maps:get(kind, M), declaration(maps:get(image, M))} || M <- Members],
     Bad = [{N, E} || {N, _, {error, E}} <- Declared] ++
-          [{N, caller_image_without_declaration} || {N, caller, {ok, none}} <- Declared] ++
+          [{N, caller_image_without_declaration} || {N, caller, {ok, D}} <- Declared, D =:= none orelse element(1, D) =/= caller] ++
+          [{N, peer_image_without_declaration} || {N, peer, {ok, D}} <- Declared, D =:= none orelse element(1, D) =/= peer] ++
           [{N, bad_name} || N <- Names, not fenrir_wire:name_ok(N)] ++
           [{N, duplicate_name} || N <- Names -- lists:usort(Names)] ++
           [{E, bad_connection} || E = [A, B] <- Edges, not (lists:member(A, Names) andalso lists:member(B, Names))],
-    Wanted = [[N, P] || {N, _, {ok, Peers}} <- Declared, is_list(Peers), P <- Peers],
-    Refusals = [E || E <- Wanted, not lists:member(E, Edges)],
-    Base = #{assembled => false, declared => Wanted, refusals => Refusals},
+    Wanted = [[N, P] || {N, caller, {ok, {caller, Peers, _}}} <- Declared, P <- Peers],
+    Missing = [E || E <- Wanted, not lists:member(E, Edges)],
+    Serves = maps:from_list([{N, S} || {N, peer, {ok, {peer, _, S}}} <- Declared]),
+    Storeless = [[N, <<"no-store">>, Operation]
+                 || {N, peer, {ok, {peer, false, S}}} <- Declared, {Operation, Mode} <- S, Mode =/= <<"read-only">>],
+    Unserved = [[N, P, <<"unserved">>, Operation]
+                || {N, caller, {ok, {caller, _, Uses}}} <- Declared, {P, Operation, Mode} <- Uses,
+                   is_map_key(P, Serves), not lists:member({Operation, Mode}, maps:get(P, Serves))],
+    Stores = maps:from_list([{N, case D of {ok, {peer, HasStore, _}} -> HasStore; _ -> false end} || {N, _, D} <- Declared]),
+    Refusals = case map_get(start_check, Spec) of true -> Missing; false -> [] end ++ Storeless ++ Unserved,
+    Base = #{assembled => false, declared => Wanted, refusals => Missing ++ Storeless ++ Unserved},
     if
         Bad =/= [] -> {{error, {manifest, Bad}}, Base};
-        %% The start-time check: a member whose program declares a connection the
-        %% manifest lacks is not started, and neither is anything else.
-        Refusals =/= [] andalso map_get(start_check, Spec) -> {{refused, Refusals}, Base};
-        true -> start_members(Spec, Base#{refusals := []})
+        Refusals =/= [] -> {{refused, Refusals}, Base#{refusals := Refusals}};
+        true -> start_members(Spec#{stores => Stores}, Base#{refusals := []})
     end.
 
-start_members(Spec = #{members := Members, connections := Edges, defects := Defects}, Base) ->
+start_members(Spec = #{members := Members, connections := Edges, defects := Defects, stores := Stores}, Base) ->
     Has = fun(Defect) -> lists:member(Defect, Defects) end,
     Options = fun(peer) ->
-                      case {Has(<<"non-idempotent-peer">>), Has(<<"reply-before-commit">>), Has(<<"replay-different-argument">>)} of
-                          {true, _, _} -> " non-idempotent";
-                          {_, true, _} -> " reply-before-commit";
-                          {_, _, true} -> " replay-different-argument";
+                      case {Has(<<"non-idempotent-peer">>), Has(<<"reply-before-commit">>), Has(<<"replay-different-argument">>),
+                            Has(<<"read-only-writes">>)} of
+                          {true, _, _, _} -> " non-idempotent";
+                          {_, true, _, _} -> " reply-before-commit";
+                          {_, _, true, _} -> " replay-different-argument";
+                          {_, _, _, true} -> " read-only-writes";
                           _ -> ""
                       end;
                  (caller) -> ""
@@ -254,7 +323,8 @@ start_members(Spec = #{members := Members, connections := Edges, defects := Defe
              [begin
                   {ok, Pid} = supervisor:start_child(fenrir_member_sup,
                                 [M#{tender => maps:get(tender, Spec), dir => maps:get(dir, Spec),
-                                    life_ms => maps:get(life_ms, Spec), options => Options(maps:get(kind, M))}]),
+                                    life_ms => maps:get(life_ms, Spec), options => Options(maps:get(kind, M)),
+                                    store => maps:get(maps:get(name, M), Stores)}]),
                   {maps:get(name, M), Pid}
               end || M <- Members]),
     Order = [maps:get(name, M) || M <- Members],
@@ -298,6 +368,11 @@ settle([Name | Names], S = #{members := Members, pids := Pids}) ->
                     case fenrir_wire:decode_call(Record) of
                         {ok, Peer, Key, Argument} ->
                             Next = {request, Peer, integer_to_binary(Key), Argument, maps:get(seq, Record)},
+                            settle(Names, S#{members := Members#{Name := M#{next := Next}}});
+                        {ok, Peer, read} ->
+                            %% No key: the request is this one attempt, named after the number it will get.
+                            Rid = <<"read-", (integer_to_binary(maps:get(Name, maps:get(tags, S))))/binary>>,
+                            Next = {request, Peer, Rid, read, maps:get(seq, Record)},
                             settle(Names, S#{members := Members#{Name := M#{next := Next}}});
                         malformed -> {{error, {malformed_request, Name}}, S}
                     end;
@@ -352,8 +427,11 @@ enabled_steps(S = #{order := Order, members := Members, net := Net, budget := {C
     Crash = [{crash, Name} || Name <- Order, Up(Name), Crashes > 0],
     %% A kill between a peer's commit and its reply: where acting would apply,
     %% which is read from the peer's durable store, not from the event log.
+    %% A read-only request commits nothing, so there is no such place in acting on one.
     CommitCrash = [{crash_after_commit, Name, Tag}
-                   || Crashes > 0, {act, Name, Tag} <- Act, not recorded(Name, hd(maps:get(inbox, maps:get(Name, Members))), S)],
+                   || Crashes > 0, {act, Name, Tag} <- Act,
+                      Entry <- [hd(maps:get(inbox, maps:get(Name, Members)))], element(4, Entry) =/= read,
+                      not recorded(Name, Entry, S)],
     Restart = [{restart, Name} || Name <- Order, Down(Name)],
     Program ++ Link ++ Act ++ Waiting ++ Crash ++ CommitCrash ++ Restart ++ [{supervisor_restart} || Restarts > 0].
 
@@ -442,7 +520,10 @@ take_step({deliver, Message = {req, Tag, Caller, Peer, Rid, Argument}}, S = #{ne
     %% The hand-over is recorded before the request is written to the peer's
     %% inbox: from here on the supervisor cannot know whether the peer acted.
     S1 = S#{net := Net -- [Message], handed := lists:usort([{Caller, Peer, Rid} | Handed])},
-    Payload = fenrir_wire:call_payload(Caller, binary_to_integer(Rid), Argument),
+    Payload = case Argument of
+                  read -> fenrir_wire:call_payload(Caller, read);
+                  _ -> fenrir_wire:call_payload(Caller, binary_to_integer(Rid), Argument)
+              end,
     case fenrir_member:put(pid(Peer, S), deliver, 0, Payload, hold) of
         {ok, Seq} ->
             M = #{inbox := Inbox} = member(Peer, S1),

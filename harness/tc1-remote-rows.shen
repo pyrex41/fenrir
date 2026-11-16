@@ -5,7 +5,9 @@
 \\   remote-run    the real system, an Erlang/OTP supervisor and two Solo5 guests on
 \\                 the spt tender, under schedules, each recorded run judged by the
 \\                 model (harness/tc1-remote-run.shen, as
-\\                 harness/run-tc1-remote-run.sh runs it).
+\\                 harness/run-tc1-remote-run.sh runs it). The caller image is
+\\                 built from the source file examples/remote/ledger-caller.fen
+\\                 through the frontend (tools/solo5/remote-build.mjs).
 \\ Also the Erlang half of the gate's toolchain row. Load after gate-core.shen.
 \\ Each check runs as its own process. In both rows the negative control runs
 \\ first and its result is handed to the check, which passes only if the control
@@ -17,13 +19,13 @@
 \\ check. A report with other numbers is not this gate's check: UNKNOWN. The
 \\ manifest's acceptance text states the same numbers.
 
-(define fh.remote-model-systems -> 8)
-(define fh.remote-model-mutants -> 11)
-(define fh.remote-model-hand -> 14)
-(define fh.remote-run-hand -> 19)
+(define fh.remote-model-systems -> 10)
+(define fh.remote-model-mutants -> 13)
+(define fh.remote-model-hand -> 19)
+(define fh.remote-run-hand -> 24)
 (define fh.remote-run-seeds -> 40)
 (define fh.remote-run-free -> 4)
-(define fh.remote-run-defects -> 7)
+(define fh.remote-run-defects -> 8)
 
 \\ ---------- Erlang/OTP ----------
 
@@ -160,7 +162,7 @@
     (let Out (fh.subdir "tc1-remote-run")
          Images (fh.exec "node" [(cn (value fh.*root*) "tools/solo5/remote-build.mjs") "--out" (cn Out "/images")] 900)
       (if (not (= (hd Images) 0))
-          (fh.row "BLOCKED" ["The remote-perform images could not be built (is build/vendor/solo5 built at the pinned commit?)"] [] Memo)
+          (fh.row "BLOCKED" ["The remote-perform images could not be built (is build/vendor/solo5 built at the pinned commit? does the frontend elaborate examples/remote/ledger-caller.fen?)"] [] Memo)
           (let Compiled (fh.exec "sh" [(cn (value fh.*root*) "supervisor/build.sh") Erlc (cn Out "/ebin")] 600)
             (if (not (= (hd Compiled) 0))
                 (fh.row "UNKNOWN" ["The supervisor did not compile with the Erlang/OTP found"] [["erlc" Erlc]] Memo)
@@ -193,6 +195,10 @@
                                  ["negative_control" Control]
                                  ["solo5_commit" (fh.member "solo5_commit" Report)]
                                  ["tender_sha256" (fh.member "tender_sha256" Report)]
+                                 ["caller_source" (fh.member "caller_source" Report)]
+                                 ["caller_source_sha256" (fh.member "caller_source_sha256" Report)]
+                                 ["caller_declaration" (fh.member "caller_declaration" Report)]
+                                 ["peer_declaration" (fh.member "peer_declaration" Report)]
                                  ["caller_sha256" (fh.member "caller_sha256" Report)]
                                  ["peer_sha256" (fh.member "peer_sha256" Report)]
                                  ["erl" Erl]]

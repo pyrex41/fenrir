@@ -126,6 +126,7 @@
 (define fh.state-tag
   "tc1-handler-demo/1" -> tc1-state
   "tc1-handler-demo/2" -> tc1-state
+  "tc1-handler-demo/3" -> tc1-state
   _ -> pure-call-state)
 
 (define fh.model-step

@@ -59,12 +59,31 @@
 \\ key-bound-to-argument: if the reply is ok, the record was made with this
 \\ attempt's argument; if it is conflict, the record was made with another.
 \\ Both are judged against the store, not against any record of who saw the peer act.
+\\ read-reply-from-state: an observed reply to a read-only perform is a value the
+\\ peer's state had at some time between the issue of that attempt and the
+\\ reply. The state is the counter, which never decreases, so: not less than
+\\ the count when the attempt was issued (kept with the attempt), and not more
+\\ than the count now. There is no record to judge it against, and none is asked for.
 (define fr.attempt-violations
   S [] -> []
+  S [[Tag Caller Peer Rid Fate Outcomes [read-only _ Low]] | Attempts] ->
+    (append (if (> (length Outcomes) 1) ["single-outcome"] [])
+            (fr.read-violations Low (remote.count-of (remote.find-member Peer (remote.members S))) Outcomes)
+            (fr.attempt-violations S Attempts))
   S [[Tag Caller Peer Rid Fate Outcomes Arg] | Attempts] ->
     (append (if (> (length Outcomes) 1) ["single-outcome"] [])
             (fr.reply-violations (fr.record-of S Caller Peer Rid) Arg Outcomes)
             (fr.attempt-violations S Attempts)))
+
+(define fr.read-violations
+  _ _ [] -> []
+  Low High [[reply V] | Outcomes] -> (append (fr.read-check Low High V) (fr.read-violations Low High Outcomes))
+  Low High [_ | Outcomes] -> (fr.read-violations Low High Outcomes))
+
+(define fr.read-check
+  Low High [int N] -> (let Value (tc0.i64.small N)
+                        (if (and (>= Value Low) (<= Value High)) [] ["read-reply-from-state"]))
+  _ _ _ -> ["read-reply-from-state"])
 
 (define fr.reply-violations
   _ _ [] -> []
@@ -201,9 +220,30 @@
   [] _ -> true
   [X | Xs] Ys -> (and (element? X Ys) (fr.every-in? Xs Ys)))
 
+\\ read-only-changes-nothing: acting on a read-only request leaves the peer's
+\\ durable store exactly as it was, the count and every record; and the peer
+\\ says read of a read-only request and of no other.
+(define fr.read-act-violations
+  M How Post -> (let ReadOnly (remote.read-only? (nth 4 (hd (fr.inbox M))))
+                     Same (= (fr.durable M) (fr.durable (fr.member-of (hd M) Post)))
+                  (if (and ReadOnly (= How read) Same) [] ["read-only-changes-nothing"])))
+
+(define fr.read-act?
+  M How -> (or (= How read) (remote.read-only? (nth 4 (hd (fr.inbox M))))))
+
+\\ read-reply-from-state, at the step that gives the caller the reply: the value
+\\ is not more than the peer's count at that moment.
+(define fr.read-delivery-violations
+  [Tag Caller Peer Rid Fate Outcomes [read-only _ Low]] V Pre ->
+    (fr.read-check Low (remote.count-of (remote.find-member Peer (remote.members Pre))) V)
+  _ _ _ -> [])
+
 (define fr.check-step
   Config Pre [crash Name] Post -> (fr.isolation Name Pre Post)
   Config Pre [restart Name] Post -> (fr.isolation Name Pre Post)
+  Config Pre [act Name _ How] Post -> (fr.read-act-violations (fr.member-of Name Pre) How Post)
+    where (fr.read-act? (fr.member-of Name Pre) How)
+  Config Pre [deliver-reply Tag V] Post -> (fr.read-delivery-violations (remote.attempt Tag (hd (remote.ghost Pre))) V Pre)
   Config Pre [act Name _ How] Post -> (fr.act-violations (fr.member-of Name Pre) How Post)
   Config Pre [supervisor-restart] Post -> (fr.supervisor-restart-violations Pre Post)
   Config Pre [crash-after-commit Name _] Post -> (fr.commit-crash-violations Name (fr.member-of Name Pre) Pre Post)

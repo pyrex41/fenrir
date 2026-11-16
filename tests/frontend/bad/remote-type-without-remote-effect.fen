@@ -1,0 +1,8 @@
+\\ expect 4:16 (Remote T) is the outcome of a remote operation, and this program declares no remote-effect
+\\ The outcome type exists only where a remote effect is declared.
+
+(define value {(Remote I64) --> I64}
+  outcome -> 0)
+
+(define main {I64 --> I64}
+  input -> input)

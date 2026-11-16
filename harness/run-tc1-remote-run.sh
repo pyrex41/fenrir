@@ -1,7 +1,9 @@
 #!/bin/sh
 # TC1 remote perform (spec/tc1/EFFECTS.md §12): the real system against the model.
 # Builds the caller and peer images for the Solo5 spt tender
-# (tools/solo5/remote-build.mjs), compiles the Erlang/OTP supervisor
+# (tools/solo5/remote-build.mjs; the caller's program is the source file
+# examples/remote/ledger-caller.fen, elaborated by frontend/fenrir.sh), compiles
+# the Erlang/OTP supervisor
 # (supervisor/), and hands both to harness/tc1-remote-run.shen, which runs the
 # system under a set of schedules and judges every recorded run with the model
 # models/tc1/remote-system.shen. See that file for what is checked.

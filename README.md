@@ -62,11 +62,15 @@ store. The amendment changes no TC0 evidence.
   ([record](campaigns/tc1/TC1_GATE_REGISTRATION.md)); no run through the
   workflow controller has been made, so it has no qualification receipt.
 - **Remote perform between images.** EFFECTS.md §12: a perform that crosses an
-  image boundary returns `reply v`, `not_delivered` or `timed_out`. There is a
-  Shen model, explored exhaustively on eight small systems, and a first
+  image boundary returns `reply v`, `not_delivered` or `timed_out`. A remote
+  effect is declared in the source (`remote-effect`), its performs are typed
+  so that all three outcomes must be matched, and an operation may be marked
+  read-only. There is a
+  Shen model, explored exhaustively on ten small systems, and a first
   implementation, an Erlang/OTP supervisor ([supervisor/](supervisor/README.md))
   relaying between two Solo5 `spt` guests through block-device mailboxes,
-  whose recorded runs the model accepts. Both checks are rows of the TC1 gate.
+  whose recorded runs the model accepts; the caller image is built from
+  [examples/remote/ledger-caller.fen](examples/remote/ledger-caller.fen). Both checks are rows of the TC1 gate.
   That is bounded exploration of a model and observed histories of one small
   system: no `hvt` run and no proof.
 - **Service model.** [verification/service/](verification/service/) is a Rocq

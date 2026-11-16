@@ -11,7 +11,9 @@
 # model steps of a run (default 100000). Shen/JIT: see harness/jit.sh.
 # Exit status: 0 done (a trap is an outcome, not a failure), 1 the program was
 # rejected, 2 usage or a file problem, 3 a defect in the frontend, 4 the step
-# budget ran out.
+# budget ran out. A program whose main leaves a remote effect to the system
+# (spec/tc1/SURFACE.md) is checked and emitted, but run refuses it with status 2:
+# it needs a peer, which only a system of images has.
 set -eu
 usage() {
   sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//' >&2

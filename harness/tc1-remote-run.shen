@@ -3,8 +3,9 @@
 \\
 \\ The system under check is real: the Erlang/OTP supervisor of supervisor/
 \\ running two Solo5 guests as OS processes under the spt tender, a caller image
-\\ (the TC1 program of fixtures/tc1/remote-caller.mjs on the C machine) and the
-\\ counter peer image, built by tools/solo5/remote-build.mjs. For each schedule
+\\ (the TC1 program of the source file examples/remote/ledger-caller.fen,
+\\ elaborated by the frontend, on the C machine) and the counter peer image,
+\\ built by tools/solo5/remote-build.mjs. For each schedule
 \\ this file starts that system, lets the supervisor follow the schedule, and
 \\ then judges what was recorded:
 \\   (a) the supervisor's event log is replayed through the model, step by step:
@@ -17,7 +18,11 @@
 \\       per incarnation; the peer's actions and the store it found at each boot;
 \\       and the peer's store file at the end must be the model's durable store.
 \\ The model's caller is the same program, read from the build's program.json
-\\ and run by models/tc1/handler-machine.shen (models/tc1/remote-tc1-caller.shen).
+\\ and run by models/tc1/handler-machine.shen (models/tc1/remote-tc1-caller.shen),
+\\ with the operations the build derived from its remote-effect declarations.
+\\ What each image declares of itself is derived the same way, and two schedules
+\\ are refusals at assembly: a connection the manifest lacks, and a peer image
+\\ with no durable store that serves an operation which is not read-only.
 \\ Every scheduled run is made twice and the two recordings must be equal.
 \\ Then each defect switch of the supervisor or the peer must be killed: its
 \\ recorded run must fail (a), (b) or (c). A run that ends in an error is
@@ -75,9 +80,11 @@
 (define fx.tag [C N] -> [C (fx.number N)])
 (define fx.tag-json [C N] -> [C (str N)])
 
-\\ A reply value in wire format version 2: (status, value), both I64.
+\\ A reply value in wire format version 3: (status, value), both I64, from a keyed
+\\ operation; the I64 value itself from a read-only one.
 (define fx.val
   ["tuple" ["int" S] ["int" N]] -> [tuple [int S] [int N]]
+  ["int" N] -> [int N]
   V -> (error "harness: unexpected value ~S" V))
 
 (define fx.label
@@ -94,6 +101,7 @@
   ["act" N T "applied"] -> [act N (fx.tag T) applied]
   ["act" N T "replayed"] -> [act N (fx.tag T) replayed]
   ["act" N T "conflict"] -> [act N (fx.tag T) conflict]
+  ["act" N T "read"] -> [act N (fx.tag T) read]
   ["timeout" T] -> [timeout (fx.tag T)]
   ["not-delivered" T] -> [not-delivered (fx.tag T)]
   ["crash" N] -> [crash N]
@@ -171,9 +179,9 @@
 \\ ---------- the model of the system that was built ----------
 
 \\ The caller's program is the artifact the caller image was lowered from, and
-\\ its bindings are the image's. The peer is the model's counter.
+\\ its remote operations are the image's. The peer is the model's counter.
 (define fx.config
-  Edges Mutant -> [remote-config [["caller" [tc1 (fh.state (value fx.*program*)) (fh.field "bindings" (value fx.*info*))] [none]]
+  Edges Mutant -> [remote-config [["caller" [tc1 (fh.state (value fx.*program*)) (fh.field "operations" (value fx.*info*))] [none]]
                                   ["peer" [script []] [counter]]]
                                  Edges Mutant])
 
@@ -260,10 +268,20 @@
   M [[member M E] | Es] -> [(fh.event E) | (fx.model-events M Es)]
   M [_ | Es] -> (fx.model-events M Es))
 
+\\ A request as an image can name it: its key, or "read" for a read-only one.
+\\ The supervisor's name for a read-only request, "read-N", has the number of
+\\ the attempt in it, which no image knows.
+(define fx.request-name
+  (@s "read-" _) -> "read"
+  Rid -> Rid)
+
+(define fx.frame-key
+  F -> (let Key (fh.member "key" F) (if (= Key []) "read" Key)))
+
 (define fx.model-requests
   M [] -> []
-  M [[issued _ M P R] | Es] -> [[P R] | (fx.model-requests M Es)]
-  M [[refused _ M P R] | Es] -> [[P R] | (fx.model-requests M Es)]
+  M [[issued _ M P R] | Es] -> [[P (fx.request-name R)] | (fx.model-requests M Es)]
+  M [[refused _ M P R] | Es] -> [[P (fx.request-name R)] | (fx.model-requests M Es)]
   M [_ | Es] -> (fx.model-requests M Es))
 
 (define fx.model-finished?
@@ -281,7 +299,7 @@
   M Attempts [[acted _ M committed _] | Es] -> (fx.model-acts M Attempts Es)
   M Attempts [[acted Tag M How V] | Es] ->
     (let A (remote.attempt Tag Attempts)
-      [[(hd (tl A)) (hd (tl (tl (tl A)))) (str How) (fh.value V)] | (fx.model-acts M Attempts Es)])
+      [[(hd (tl A)) (fx.request-name (hd (tl (tl (tl A))))) (str How) (fh.value V)] | (fx.model-acts M Attempts Es)])
   M Attempts [_ | Es] -> (fx.model-acts M Attempts Es))
 
 \\ ---------- what the images printed ----------
@@ -348,7 +366,7 @@
   M I Segment Frames ->
     (let Hello (fx.of-kind "Hello" Frames)
          Outcomes (map (/. F (fh.field "outcome" F)) (fx.of-kind "Outcome" Frames))
-         Requests (map (/. F [(fh.field "peer" F) (fh.field "key" F)]) (fx.of-kind "Remote" Frames))
+         Requests (map (/. F [(fh.field "peer" F) (fx.frame-key F)]) (fx.of-kind "Remote" Frames))
          Events (fx.guest-events (fx.of-kind "Step" Frames))
          ModelEvents (fx.model-events M Segment)
          Where (make-string "~A incarnation ~A: " M I)
@@ -367,7 +385,7 @@
 (define fx.peer-incarnation
   M I Segment Frames Attempts Durable ->
     (let Hello (fx.of-kind "Hello" Frames)
-         Acts (map (/. F [(fh.field "caller" F) (fh.field "key" F) (fh.field "how" F) (fh.field "value" F)]) (fx.of-kind "Act" Frames))
+         Acts (map (/. F [(fh.field "caller" F) (fx.frame-key F) (fh.field "how" F) (fh.field "value" F)]) (fx.of-kind "Act" Frames))
          Where (make-string "~A incarnation ~A: " M I)
       (append
         (fx.differ (and (= (length Hello) 1) (= (fh.field "incarnation" (hd Hello)) (str I)) (= (fh.field "role" (hd Hello)) "peer"))
@@ -485,9 +503,13 @@
 
 \\ ---------- running the real system ----------
 
+\\ Which of the build's peer images the member peer is given: "peer", or for
+\\ one refusal at assembly "peer_without_store".
+(set fx.*peer-image* "peer")
+
 (define fx.manifest
   Edges -> [object ["members" [[object ["name" "caller"] ["kind" "caller"] ["image" (fh.field "caller" (value fx.*info*))]]
-                              [object ["name" "peer"] ["kind" "peer"] ["image" (fh.field "peer" (value fx.*info*))]]]]
+                              [object ["name" "peer"] ["kind" "peer"] ["image" (fh.field (value fx.*peer-image*) (value fx.*info*))]]]]
                    ["connections" Edges]])
 
 \\ One run of the supervisor: the decoded result.json, or an error record.
@@ -531,6 +553,12 @@
 \\ ExpectedOutcomes: what the caller's program must be given, in order, over all
 \\ its incarnations. The recorded log must be exactly Steps (or, when the status
 \\ is step-not-enabled, Steps without the last one).
+\\ A refusal at assembly that is not a missing connection has two more fields:
+\\ the build's peer image to use, and the refusals the supervisor must report.
+\\ The program (examples/remote/ledger-caller.fen): key 7 with argument 5, once
+\\ more after timed_out; key 8 with 5; key 7 with 6; then the read-only total,
+\\ once more after timed_out. A read-only request has no key: the supervisor
+\\ names it "read-N", N being the number of the attempt.
 (define fx.hand
   -> (let C "caller"
           P "peer"
@@ -544,50 +572,59 @@
           RC ["reply" (fh.value Conflict)]
           TO ["timed_out"]
           ND ["not_delivered"]
-          \\ the rest of the program once key 7 has been applied with argument 5: key 8 as attempt N,
-          \\ applied; then key 7 again with argument 6 as attempt N+1, refused as a conflict
-          Rest (/. N [[issue C P "8"] [deliver-request (T N)] [act P (T N) applied] [deliver-reply (T N) Two]
-                      [issue C P "7"] [deliver-request (T (+ N 1))] [act P (T (+ N 1)) conflict] [deliver-reply (T (+ N 1)) Conflict]
-                      [finish C]])
+          \\ the read-only total: the supervisor's name for the request of attempt N, and the reply value
+          Read (/. N (cn "read-" (str N)))
+          Total (/. N [int (str N)])
+          RD1 ["reply" (fh.value (Total 1))]
+          RD2 ["reply" (fh.value (Total 2))]
+          \\ key 8 as attempt N, applied second; then key 7 again with argument 6, refused as a conflict
+          Keys (/. N [[issue C P "8"] [deliver-request (T N)] [act P (T N) applied] [deliver-reply (T N) Two]
+                      [issue C P "7"] [deliver-request (T (+ N 1))] [act P (T (+ N 1)) conflict] [deliver-reply (T (+ N 1)) Conflict]])
+          \\ the total read as attempt N with two applications in the store, and the end of the program
+          Reading (/. N [[issue C P (Read N)] [deliver-request (T N)] [act P (T N) read] [deliver-reply (T N) (Total 2)] [finish C]])
+          \\ the rest of the program once key 7 has been applied with argument 5
+          Rest (/. N (append (Keys N) (Reading (+ N 2))))
+          \\ the three keyed performs with nothing going wrong: attempts 1, 2 and 3
+          Plain (append [[issue C P "7"] [deliver-request (T 1)] [act P (T 1) applied] [deliver-reply (T 1) One]] (Keys 2))
        [["plain-reply" (fx.declared) true
          (append [[issue C P "7"] [deliver-request (T 1)] [act P (T 1) applied] [deliver-reply (T 1) One]] (Rest 2))
-         "completed" [R1 R2 RC] 2
+         "completed" [R1 R2 RC RD2] 2
          "a request is handed over, applied, and its reply is the outcome; key 7 performed again with another argument is refused as a conflict, inside the reply, and nothing is applied for it"]
         ["request-dropped-timeout-retry" (fx.declared) true
          (append [[issue C P "7"] [drop request (T 1)] [timeout (T 1)]
                   [issue C P "7"] [deliver-request (T 2)] [act P (T 2) applied] [deliver-reply (T 2) One]] (Rest 3))
-         "completed" [TO R1 R2 RC] 2
+         "completed" [TO R1 R2 RC RD2] 2
          "the request is lost; timed-out; the retry with the same key is applied"]
         ["reply-dropped-timeout-retry-replayed" (fx.declared) true
          (append [[issue C P "7"] [deliver-request (T 1)] [act P (T 1) applied] [drop reply (T 1) One] [timeout (T 1)]
                   [issue C P "7"] [deliver-request (T 2)] [act P (T 2) replayed] [deliver-reply (T 2) One]] (Rest 3))
-         "completed" [TO R1 R2 RC] 2
+         "completed" [TO R1 R2 RC RD2] 2
          "the reply is lost; timed-out; the retry is answered from the record and applied once"]
         ["peer-killed-before-handover" (fx.declared) true
          [[crash P] [issue C P "7"] [not-delivered (T 1)] [issue C P "8"] [not-delivered (T 2)] [issue C P "7"] [not-delivered (T 3)]
-          [finish C] [restart P]]
-         "completed" [ND ND ND] 0
+          [issue C P (Read 4)] [not-delivered (T 4)] [finish C] [restart P]]
+         "completed" [ND ND ND ND] 0
          "the peer is down and nothing was handed over: not-delivered, and the peer never acts"]
         ["not-delivered-while-the-peer-is-up" (fx.declared) true
          [[issue C P "7"] [duplicate request (T 1)] [drop request (T 1)] [not-delivered (T 1)]
           [issue C P "8"] [deliver-request (T 2)] [act P (T 2) applied] [deliver-reply (T 2) One]
-          [issue C P "7"] [deliver-request (T 3)] [act P (T 3) applied] [deliver-reply (T 3) Two] [finish C]]
-         "completed" [ND R1 R2] 2
+          [issue C P "7"] [deliver-request (T 3)] [act P (T 3) applied] [deliver-reply (T 3) Two] | (Reading 4)]
+         "completed" [ND R1 R2 RD2] 2
          "the supervisor drops a request before hand-over while the peer is up and reports not-delivered: the copy it still held is destroyed and the peer never sees key 7 with argument 5; key 7 with argument 6 is then the key's first application"]
         ["peer-killed-after-handover-before-acting" (fx.declared) true
          (append [[issue C P "7"] [deliver-request (T 1)] [crash P] [timeout (T 1)] [restart P]
                   [issue C P "7"] [deliver-request (T 2)] [act P (T 2) applied] [deliver-reply (T 2) One]] (Rest 3))
-         "completed" [TO R1 R2 RC] 2
+         "completed" [TO R1 R2 RC RD2] 2
          "killed with the request in its inbox: only timed-out; after the restart the retry is applied"]
         ["peer-killed-after-acting-store-intact" (fx.declared) true
          (append [[issue C P "7"] [deliver-request (T 1)] [act P (T 1) applied] [crash P] [drop reply (T 1) One] [timeout (T 1)] [restart P]
                   [issue C P "7"] [deliver-request (T 2)] [act P (T 2) replayed] [deliver-reply (T 2) One]] (Rest 3))
-         "completed" [TO R1 R2 RC] 2
+         "completed" [TO R1 R2 RC RD2] 2
          "killed after it applied: timed-out; the restarted peer has its record and replays it"]
         ["peer-killed-between-commit-and-reply" (fx.declared) true
          (append [[issue C P "7"] [deliver-request (T 1)] [crash-after-commit P (T 1)] [timeout (T 1)] [restart P]
                   [issue C P "7"] [deliver-request (T 2)] [act P (T 2) replayed] [deliver-reply (T 2) One]] (Rest 3))
-         "completed" [TO R1 R2 RC] 2
+         "completed" [TO R1 R2 RC RD2] 2
          "killed after its durable commit and before its reply: nothing in flight, only timed-out; the restarted peer finds the record in its store and the retry gets the committed value; applied once"]
         ["no-not-delivered-after-handover" (fx.declared) true
          [[issue C P "7"] [deliver-request (T 1)] [crash P] [not-delivered (T 1)]]
@@ -596,27 +633,27 @@
         ["duplicate-applied-once" (fx.declared) true
          (append [[issue C P "7"] [duplicate request (T 1)] [deliver-request (T 1)] [deliver-request (T 1)]
                   [act P (T 1) applied] [act P (T 1) replayed] [deliver-reply (T 1) One] [discard-reply (T 1) One]] (Rest 2))
-         "completed" [R1 R2 RC] 2
+         "completed" [R1 R2 RC RD2] 2
          "two copies of one request are handed over: applied once, replayed once; the second reply is stale"]
         ["late-reply-discarded" (fx.declared) true
          (append [[issue C P "7"] [deliver-request (T 1)] [act P (T 1) applied] [timeout (T 1)]
                   [issue C P "7"] [discard-reply (T 1) One]
                   [deliver-request (T 2)] [act P (T 2) replayed] [deliver-reply (T 2) One]] (Rest 3))
-         "completed" [TO R1 R2 RC] 2
+         "completed" [TO R1 R2 RC RD2] 2
          "the reply arrives after timed-out, while the caller waits in its retry: discarded, not shown"]
         ["caller-restarts-from-the-beginning" (fx.declared) true
          (append [[issue C P "7"] [deliver-request (T 1)] [act P (T 1) applied] [crash C] [restart C]
                   [issue C P "7"] [discard-reply (T 1) One]
                   [deliver-request (T 2)] [act P (T 2) replayed] [deliver-reply (T 2) One]] (Rest 3))
-         "completed" [R1 R2 RC] 2
+         "completed" [R1 R2 RC RD2] 2
          "a caller that crashed while waiting gets no outcome; restarted, it performs again and is answered from the record"]
         ["key-reused-with-another-argument" (fx.declared) true
          [[issue C P "7"] [duplicate request (T 1)] [deliver-request (T 1)] [act P (T 1) applied] [deliver-reply (T 1) One]
           [issue C P "8"] [deliver-request (T 2)] [act P (T 2) applied] [deliver-reply (T 2) Two]
           [issue C P "7"] [deliver-request (T 3)] [act P (T 3) conflict]
           [deliver-request (T 1)] [act P (T 1) replayed]
-          [deliver-reply (T 3) Conflict] [discard-reply (T 1) One] [finish C]]
-         "completed" [R1 R2 RC] 2
+          [deliver-reply (T 3) Conflict] [discard-reply (T 1) One] | (Reading 4)]
+         "completed" [R1 R2 RC RD2] 2
          "key 7 is applied with argument 5 and then performed with argument 6: the reply is conflict, the store keeps the first record and nothing more, and a late copy of the first request is still answered from that record"]
         ["supervisor-restart-then-no-not-delivered" (fx.declared) true
          [[issue C P "7"] [deliver-request (T 1)] [act P (T 1) applied] [supervisor-restart] [not-delivered (T 1)]]
@@ -625,26 +662,56 @@
         ["supervisor-restart-loses-the-reply-in-flight" (fx.declared) true
          (append [[issue C P "7"] [deliver-request (T 1)] [act P (T 1) applied] [supervisor-restart] [timeout (T 1)]
                   [issue C P "7"] [deliver-request (T 2)] [act P (T 2) replayed] [deliver-reply (T 2) One]] (Rest 3))
-         "completed" [TO R1 R2 RC] 2
+         "completed" [TO R1 R2 RC RD2] 2
          "the supervisor restarts with a reply in flight: the reply is lost, the caller still waits and is timed out; the retry is answered from the peer's record"]
         ["supervisor-restart-request-in-the-inbox-is-answered" (fx.declared) true
          (append [[issue C P "7"] [deliver-request (T 1)] [supervisor-restart] [act P (T 1) applied] [deliver-reply (T 1) One]] (Rest 2))
-         "completed" [R1 R2 RC] 2
+         "completed" [R1 R2 RC RD2] 2
          "the supervisor restarts while the request is in the peer's inbox and the caller waits: both images keep running, the peer acts, and the reply is the outcome of the pending perform"]
         ["issued-before-supervisor-restart-counts-as-handed-over" (fx.declared) true
          [[issue C P "7"] [supervisor-restart] [timeout (T 1)] [issue C P "7"] [timeout (T 2)]
           [issue C P "8"] [not-delivered (T 3)]
-          [issue C P "7"] [deliver-request (T 4)] [act P (T 4) applied] [deliver-reply (T 4) One] [finish C]]
-         "completed" [TO TO ND R1] 1
+          [issue C P "7"] [deliver-request (T 4)] [act P (T 4) applied] [deliver-reply (T 4) One]
+          [issue C P (Read 5)] [deliver-request (T 5)] [act P (T 5) read] [deliver-reply (T 5) (Total 1)] [finish C]]
+         "completed" [TO TO ND R1 RD1] 1
          "the supervisor restarts with key 7 issued and never handed over: the copy in flight is lost and key 7 counts as handed over, in that attempt and every later one, so only timed-out; key 8, first issued after the restart, can still be not-delivered"]
         ["undeclared-refused-at-start" [] true
          []
          "refused-at-start" [] none
          "the caller's program declares a connection the manifest lacks: nothing is started"]
         ["undeclared-refused-at-run-time" [] false
-         [[refuse C P "7"] [refuse C P "8"] [refuse C P "7"] [finish C]]
-         "completed" [ND ND ND] 0
-         "the backstop, with the start-time check switched off: nothing in flight, not-delivered at once"]]))
+         [[refuse C P "7"] [refuse C P "8"] [refuse C P "7"] [refuse C P (Read 4)] [finish C]]
+         "completed" [ND ND ND ND] 0
+         "the backstop, with the start-time check switched off: nothing in flight, not-delivered at once"]
+        ["storeless-peer-refused-at-start" (fx.declared) true
+         []
+         "refused-at-start" [] none
+         "the peer image has no durable store and serves Ledger.add, which is not read-only: nothing is started (EFFECTS.md section 12.3, ruling on question 7)"
+         "peer_without_store" [["peer" "no-store" "Ledger.add"]]]
+        ["read-retried-across-a-peer-restart" (fx.declared) true
+         (append Plain [[issue C P (Read 4)] [deliver-request (T 4)] [crash P] [timeout (T 4)] [restart P]
+                        [issue C P (Read 5)] [deliver-request (T 5)] [act P (T 5) read] [deliver-reply (T 5) (Total 2)] [finish C]])
+         "completed" [R1 R2 RC TO RD2] 2
+         "a read-only request is handed to a peer that is killed before acting: only timed-out; the retry is a new request, and the restarted peer, another incarnation, answers it from the store it found; nothing is recorded for either"]
+        ["read-duplicate-evaluated-again" (fx.declared) true
+         (append Plain [[issue C P (Read 4)] [duplicate request (T 4)] [deliver-request (T 4)] [deliver-request (T 4)]
+                        [act P (T 4) read] [act P (T 4) read] [deliver-reply (T 4) (Total 2)] [discard-reply (T 4) (Total 2)] [finish C]])
+         "completed" [R1 R2 RC RD2] 2
+         "two copies of a read-only request are handed over: each is evaluated, no record is consulted or made, and the store is as it was; the second reply is stale"]
+        ["read-not-delivered-while-the-peer-is-up" (fx.declared) true
+         (append Plain [[issue C P (Read 4)] [not-delivered (T 4)] [finish C]])
+         "completed" [R1 R2 RC ND] 2
+         "a read-only request that was never handed over is reported not-delivered with the peer up, though earlier requests of this caller were handed over: each read is its own request"]
+        ["read-sees-a-later-state-than-at-issue" (fx.declared) true
+         [[issue C P "7"] [deliver-request (T 1)] [act P (T 1) applied] [deliver-reply (T 1) One]
+          [issue C P "8"] [timeout (T 2)]
+          [issue C P "7"] [deliver-request (T 3)] [act P (T 3) conflict] [deliver-reply (T 3) Conflict]
+          [issue C P (Read 4)]
+          [deliver-request (T 2)] [act P (T 2) applied]
+          [deliver-request (T 4)] [act P (T 4) read] [deliver-reply (T 4) (Total 2)]
+          [discard-reply (T 2) Two] [finish C]]
+         "completed" [R1 TO RC RD2] 2
+         "the read is issued when the total is 1; a late copy of key 8 is applied before the peer acts on the read, and the reply is 2: a value the state had between issue and reply, not the value at issue"]]))
 
 (define fx.drop-last
   [_] -> []
@@ -657,8 +724,11 @@
 
 \\ Failures of one hand schedule, as text; [] when it passes. Result [Json Failures Labels].
 (define fx.run-hand
-  Defects [Name Edges StartCheck Steps Status Outcomes Applications Why] ->
-    (let T (fx.twice Name Edges (fx.list-schedule Steps) Defects StartCheck)
+  Defects [Name Edges StartCheck Steps Status Outcomes Applications Why | Extra] ->
+    (let Image (set fx.*peer-image* (if (cons? Extra) (hd Extra) "peer"))
+         Refusals (if (cons? Extra) (hd (tl Extra)) (fx.declared))
+         T (fx.twice Name Edges (fx.list-schedule Steps) Defects StartCheck)
+         Usual (set fx.*peer-image* "peer")
          R (hd T)
          J (fx.judge Edges none R)
          Info (hd (tl (tl J)))
@@ -673,10 +743,10 @@
                                 (fx.differ (= (hd (tl Info)) Outcomes) (make-string "outcomes ~S, expected ~S" (hd (tl Info)) Outcomes)))
                         [])
                     (fx.differ (= (fx.applications R) Applications) (make-string "applications ~S, expected ~S" (fx.applications R) Applications))
-                    \\ refused at start: the missing connection is named and no image was started
+                    \\ refused at start: what is refused is named and no image was started
                     (fx.differ (or (not Refused)
-                                   (and (= (fh.field "refusals" R) (fx.declared)) (empty? (fh.field "consoles" R)) (empty? (fh.field "events" R))))
-                               "a refusal at start must name the connection and start nothing")
+                                   (and (= (fh.field "refusals" R) Refusals) (empty? (fh.field "consoles" R)) (empty? (fh.field "events" R))))
+                               "a refusal at start must name what is refused and start nothing")
                     \\ not enabled: the refused step is the last one, and the model does not enable it either
                     (fx.differ (or (not (= Status "step-not-enabled")) (not (= (fh.field "status" R) Status))
                                    (= (fh.field "step" (fh.field "not_enabled" R)) (fx.label-json (hd (reverse Steps)))))
@@ -750,7 +820,14 @@
           [issue C P "8"] [deliver-request (T 2)] [act P (T 2)] [deliver-reply (T 2)]
           [issue C P "7"] [deliver-request (T 3)] [act P (T 3)]]
          replay-on-different-argument "key-bound-to-argument"
-         "the peer image answers a key from its record whatever the argument: a key reused with another argument is replayed, not refused"]]))
+         "the peer image answers a key from its record whatever the argument: a key reused with another argument is replayed, not refused"]
+        ["read-only-writes" (fx.declared) true
+         [[issue C P "7"] [deliver-request (T 1)] [act P (T 1)] [deliver-reply (T 1)]
+          [issue C P "8"] [deliver-request (T 2)] [act P (T 2)] [deliver-reply (T 2)]
+          [issue C P "7"] [deliver-request (T 3)] [act P (T 3)] [deliver-reply (T 3)]
+          [issue C P "read-4"] [deliver-request (T 4)] [act P (T 4)] [deliver-reply (T 4)]]
+         read-only-writes "read-only-changes-nothing"
+         "the peer image's read-only operation adds one to the counter and commits it: an operation declared read-only changes the store"]]))
 
 \\ A schedule as commands: the supervisor reports what happened, so a command
 \\ may leave out the end of a label.
@@ -825,14 +902,16 @@
   -> (let R1 ["reply" (fh.value (remote.ok [int "1"]))]
           R2 ["reply" (fh.value (remote.ok [int "2"]))]
           RC ["reply" (fh.value (remote.conflict))]
+          \\ the read-only total at the end of the program, with two applications in the store
+          RD ["reply" ["int" "2"]]
        [["free" [object ["mode" "free"] ["timeout_ms" "2000"] ["deadline_ms" "20000"]]
-         [R1 R2 RC] [act-conflict]]
+         [R1 R2 RC RD] [act-conflict act-read]]
         ["free-peer-killed" [object ["mode" "free"] ["timeout_ms" "300"] ["deadline_ms" "20000"] ["kill" [["peer" "2"]]]]
-         [["timed_out"] R1 R2 RC] [crash restart timeout]]
+         [["timed_out"] R1 R2 RC RD] [crash restart timeout]]
         ["free-peer-killed-after-commit" [object ["mode" "free"] ["timeout_ms" "300"] ["deadline_ms" "20000"] ["kill_in_act" [["peer" "1"]]]]
-         [["timed_out"] R1 R2 RC] [crash-after-commit restart timeout]]
+         [["timed_out"] R1 R2 RC RD] [crash-after-commit restart timeout]]
         ["free-request-lost" [object ["mode" "free"] ["timeout_ms" "300"] ["deadline_ms" "20000"] ["lose" [["caller" "1"]]]]
-         [["not_delivered"] R1 R2] [drop not-delivered]]]))
+         [["not_delivered"] R1 R2 RD] [drop not-delivered]]]))
 
 \\ Result [Passed Json Labels].
 (define fx.free
@@ -852,7 +931,7 @@
 
 (define fx.required-kinds
   -> [issue refuse finish deliver-request deliver-reply discard-reply drop duplicate act-applied act-replayed
-      act-conflict crash-after-commit timeout not-delivered crash restart supervisor-restart])
+      act-conflict act-read crash-after-commit timeout not-delivered crash restart supervisor-restart])
 
 (define fx.tally
   [] Acc -> Acc
@@ -906,9 +985,13 @@
                          ["harness" "Shen"]
                          ["shen" (make-string "~A ~A ~A" (value *implementation*) (value *port*) (version))]
                          ["mode" (value fx.*mode*)]
-                         ["system" "Erlang/OTP supervisor (supervisor/) with two Solo5 guests under the tender: caller = TC1 program on the C machine, peer = counter with a durable store; transport: block-device mailboxes, wire format 2"]
+                         ["system" "Erlang/OTP supervisor (supervisor/) with two Solo5 guests under the tender: caller = the TC1 program of a source file, elaborated by the frontend, on the C machine; peer = counter with a durable store, one keyed and one read-only operation; transport: block-device mailboxes, wire format 3"]
+                         ["caller_source" (fh.field "source" (value fx.*info*))]
+                         ["caller_source_sha256" (fh.field "source_sha256" (value fx.*info*))]
+                         ["caller_declaration" (fh.field "caller_declaration" (value fx.*info*))]
+                         ["peer_declaration" (fh.field "peer_declaration" (value fx.*info*))]
                          ["system_under_check" (if Control "the non-idempotent peer image in place of the peer" "as built")]
-                         ["model" "models/tc1/remote-system.shen with models/tc1/remote-tc1-caller.shen; the caller is the program the image was built from"]
+                         ["model" "models/tc1/remote-system.shen with models/tc1/remote-tc1-caller.shen; the caller is the program the image was built from, with the operations derived from its remote-effect declarations"]
                          ["abi" (fh.field "abi" (value fx.*info*))]
                          ["solo5_commit" (fh.field "solo5_commit" (value fx.*info*))]
                          ["tender_sha256" (fh.field "tender_sha256" (value fx.*info*))]
@@ -916,7 +999,8 @@
                          ["peer_sha256" (fh.field "peer_sha256" (value fx.*info*))]
                          ["program_sha256" (fh.field "program_sha256" (value fx.*info*))]
                          ["properties" ["single-outcome" "resolved-at-termination" "reply-implies-acted" "not-delivered-not-handed" "not-delivered-sealed"
-                                        "applied-at-most-once" "key-bound-to-argument" "declared-edges-only" "crash-isolation"]]
+                                        "applied-at-most-once" "key-bound-to-argument" "declared-edges-only" "crash-isolation"
+                                        "read-only-changes-nothing" "read-reply-from-state"]]
                          ["schedules_accepted" (str Accepted)]
                          ["hand_schedules" (str (length Hand))]
                          ["hand_schedules_failed" (map (/. H (fh.field "schedule" (hd H))) HandFailed)]
@@ -928,6 +1012,7 @@
                          ["seeded_schedules_with_a_crash_after_commit" (str (length (fx.keep (/. S (fr.any? (/. L (= (hd L) crash-after-commit)) (nth 3 S))) Seeds)))]
                          ["seeded_schedules_with_a_supervisor_restart" (str (length (fx.keep (/. S (fr.any? (/. L (= (hd L) supervisor-restart)) (nth 3 S))) Seeds)))]
                          ["seeded_schedules_with_a_conflict" (str (length (fx.keep (/. S (fr.any? (/. L (= (fx.kind-of L) act-conflict)) (nth 3 S))) Seeds)))]
+                         ["seeded_schedules_with_a_read" (str (length (fx.keep (/. S (fr.any? (/. L (= (fx.kind-of L) act-read)) (nth 3 S))) Seeds)))]
                          ["seeded_schedules_with_not_delivered" (str (length (fx.keep (/. S (fr.any? (/. L (= (hd L) not-delivered)) (nth 3 S))) Seeds)))]
                          ["seeded_ran_until_no_step_was_enabled" (str (length (fx.keep (/. S (nth 4 S)) Seeds)))]
                          ["free_runs" (map (/. F (hd (tl F))) Free)]

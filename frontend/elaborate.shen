@@ -1,5 +1,6 @@
 \\ Fenrir frontend, elaborator: the reader's S-expressions to an artifact of schema
-\\ tc1-handler-demo/2 (contract spec/tc1/EFFECTS.md), in decoded-JSON shape:
+\\ tc1-handler-demo/2, or tc1-handler-demo/3 when the program declares a remote
+\\ effect (contract spec/tc1/EFFECTS.md), in decoded-JSON shape:
 \\ strings, lists, and [object [Key Value] ...] with keys in canonical order.
 \\ Load after reader.shen. The surface syntax is specified in spec/tc1/SURFACE.md.
 \\
@@ -12,7 +13,7 @@
 \\ the validator's bare reason.
 \\
 \\ Types are in artifact shape throughout: "I64", ["Tuple" T ...], ["Data" Name],
-\\ ["Arrow" A B [EffectName ...]].
+\\ ["Arrow" A B [EffectName ...]], and ["Remote" B], the outcome of a remote perform.
 \\
 \\ Elaborating an expression yields a row [Node Type Effects Uses]:
 \\   Node     the artifact expression
@@ -29,6 +30,7 @@
 (set fe.*datatype-names* [])   \\ declared datatype names
 (set fe.*datatypes* [])        \\ [[Name [[Constructor [FieldType ...]] ...]] ...], TrapCode first
 (set fe.*effects* [])          \\ [[Name [[Operation ArgumentType ResultType] ...]] ...]
+(set fe.*remote* [])           \\ [[Name [ReadOnlyOperation ...]] ...]: the remote effects among them
 (set fe.*functions* [])        \\ [[Name [ArgumentType ResultType]] ...]
 (set fe.*table* [])            \\ [[FunctionName Effects] ...], the current estimate
 (set fe.*strict* true)         \\ false while effect sets are still being computed
@@ -131,7 +133,7 @@
 
 \\ Words with a meaning of their own, which no function or variable may take.
 (define fe.reserved?
-  Name -> (element? Name ["define" "datatype" "effect" "let" "if" "do" "tuple" "project" "match" "lambda" "type"
+  Name -> (element? Name ["define" "datatype" "effect" "remote-effect" "read-only" "let" "if" "do" "tuple" "project" "match" "lambda" "type"
                           "emit" "perform" "handle" "resume" "discontinue" "unit" "true" "false"
                           "not" "neg" "bytes-length" "bytes-index" "bytes-concat" "_"]))
 
@@ -162,6 +164,7 @@
 
 \\ The constructor table of a type, or none when it is not a datatype.
 (define fe.constructors-of
+  ["Remote" B] -> [["Reply" [B]] ["NotDelivered" []] ["TimedOut" []]]
   "TrapCode" -> (fe.lookup "TrapCode" (value fe.*datatypes*))
   ["Data" Name] -> (fe.lookup Name (value fe.*datatypes*))
   _ -> none)
@@ -174,8 +177,18 @@
 
 \\ Serializable, which in this slice is also equality-compatible: no function
 \\ anywhere inside. Visiting holds the datatypes being traversed (recursive types).
+\\ The three outcomes of a remote perform, as the artifact and the machines name them.
+(define fe.outcome-name
+  "Reply" -> "reply"
+  "NotDelivered" -> "not_delivered"
+  "TimedOut" -> "timed_out")
+
+(define fe.outcome?
+  Name -> (element? Name ["Reply" "NotDelivered" "TimedOut"]))
+
 (define fe.plain?
   ["Arrow" | _] _ -> false
+  ["Remote" B] Visiting -> (fe.plain? B Visiting)
   ["Tuple" | Ts] Visiting -> (fe.all? (/. T (fe.plain? T Visiting)) Ts)
   ["Data" Name] Visiting -> true where (element? Name Visiting)
   ["Data" Name] Visiting -> (fe.all? (/. Constructor (fe.all? (/. T (fe.plain? T [Name | Visiting])) (hd (tl Constructor))))
@@ -185,6 +198,7 @@
 \\ A type in surface syntax, for messages.
 (define fe.show-type
   ["Data" Name] -> Name
+  ["Remote" B] -> (make-string "(Remote ~A)" (fe.show-type B))
   ["Tuple" | Ts] -> (cn "(Tuple" (cn (fe.spaced (map (/. T (fe.show-type T)) Ts)) ")"))
   ["Arrow" A B []] -> (make-string "(~A --> ~A)" (fe.show-type A) (fe.show-type B))
   ["Arrow" A B Es] -> (make-string "(~A --> ~A !~A)" (fe.show-type A) (fe.show-type B) (fe.spaced Es))
@@ -205,10 +219,14 @@
     (if (and (> (length Ts) 0) (< (length Ts) 9))
         ["Tuple" | (map (/. T (fe.type T)) Ts)]
         (fe.fail L C "a tuple type has 1 to 8 components"))
+  [list L C [[sym _ _ "Remote"] T]] ->
+    (if (empty? (value fe.*remote*))
+        (fe.fail L C "(Remote T) is the outcome of a remote operation, and this program declares no remote-effect")
+        ["Remote" (fe.type T)])
   [list _ _ [A [sym _ _ "-->"] B]] -> ["Arrow" (fe.type A) (fe.type B) []]
   [list _ _ [A [sym _ _ "-->"] B [sym _ _ "!"] E | Es]] ->
     ["Arrow" (fe.type A) (fe.type B) (fe.sort-names (map (/. X (fe.effect-name X)) [E | Es]))]
-  D -> (fe.reject D "a type is a type name, (Tuple T ...), (A --> B) or (A --> B ! Effect ...)"))
+  D -> (fe.reject D "a type is a type name, (Tuple T ...), (Remote T), (A --> B) or (A --> B ! Effect ...)"))
 
 \\ ---------- expected types ----------
 
@@ -397,6 +415,8 @@
     where (not (= (fe.lookup Name (value fe.*functions*)) none))
   L C Name [] _ -> (fe.fail L C (make-string "~A is a keyword and needs its operands: write (~A ...)" Name Name))
     where (or (fe.form? Name) (fe.reserved? Name) (not (= (fe.primitive Name) none)))
+  L C Name [] _ -> (fe.fail L C (make-string "~A is an outcome of a remote perform: a program takes outcomes apart with match and cannot make one" Name))
+    where (fe.outcome? Name)
   L C Name [] _ -> (fe.fail L C (make-string "unknown name ~A: no variable, function or constructor of that name is in scope" Name)))
 
 \\ (Name Arg ...): application of a local function value, a constructor, or a call.
@@ -418,6 +438,9 @@
                    (fe.union-rows Rows) (fe.sum-rows Rows) Want))
         (fe.fail L C (make-string "constructor ~A of ~A takes ~A, but ~A given here" Name Type
                                   (fe.plural (length Fields) "field") (fe.given (length Args)))))
+  _ _ HL HC Name [] none _ _ _ ->
+    (fe.fail HL HC (make-string "~A is an outcome of a remote perform: a program takes outcomes apart with match and cannot make one" Name))
+    where (fe.outcome? Name)
   _ _ HL HC Name [] none _ _ _ ->
     (fe.fail HL HC (make-string "unknown name ~A: no function, constructor or variable of that name is in scope" Name))
   L C _ _ Name [] [ArgumentType ResultType] Args Env Want ->
@@ -637,6 +660,12 @@
   [] _ -> []
   [[Name | _] | Rest] Seen -> (if (element? Name Seen) (fe.missing Rest Seen) [Name | (fe.missing Rest Seen)]))
 
+\\ An arm as the artifact has it. The outcomes of a remote perform are written
+\\ Reply, NotDelivered and TimedOut, and are reply, not_delivered and timed_out there.
+(define fe.arm-node
+  ["Remote" _] [Name Ids Body] -> [(fe.outcome-name Name) Ids Body]
+  _ Arm -> Arm)
+
 (define fe.match
   L C Node Subject Scrutinee Arms Env Want ->
     (let Table (fe.constructors-of (fe.row-type Subject))
@@ -650,7 +679,7 @@
                         (fe.fail L C (make-string "this match on ~A is not exhaustive: there is no arm for ~A" TypeName (fe.listed Missing))))
          Bodies (map (/. R (hd (tl R))) Rows)
          Uses (fe.branch-uses L C "match" (fe.row-uses (hd Bodies)) (map (/. B (fe.row-uses B)) (tl Bodies)))
-      [["match" Node (fe.row-node Subject) | (map (/. R (hd R)) Rows)] (fe.row-type (fe.last Bodies))
+      [["match" Node (fe.row-node Subject) | (map (/. R (fe.arm-node (fe.row-type Subject) (hd R))) Rows)] (fe.row-type (fe.last Bodies))
        (fe.union-rows [Subject | Bodies]) (fe.sum (fe.row-uses Subject) Uses)]))
 
 \\ ---------- lambda ----------
@@ -695,11 +724,26 @@
           (fe.fail OL OC (make-string "effect ~A has no operation ~A: its operations are ~A" Effect Op (fe.listed (fe.keys Ops))))
           (tl Types))))
 
+\\ ordinary, or for an operation of a remote effect keyed or read-only.
+(define fe.remote-mode
+  Effect Op -> (let ReadOnly (fe.lookup Effect (value fe.*remote*))
+                 (if (= ReadOnly none) ordinary (if (element? Op ReadOnly) read-only keyed))))
+
+\\ A remote operation op : A --> B is declared with the peer's types. It is
+\\ performed with its request key first, (perform Effect op key a), which is the
+\\ one argument (tuple key a); a read-only operation has no key and takes a alone.
+\\ Either way the perform has the type (Remote B): one of the three outcomes.
 (define fe.perform
   L C Effect Op [A B] Args Env Want ->
-    (let Node (fe.node L C)
-         Arg (fe.argument L C Args Env [want A (make-string "the argument of ~A.~A" Effect Op) ""])
-      (fe.done L C ["perform" Node Effect Op (fe.row-node Arg)] B (fe.union (fe.row-effects Arg) [[Effect L C "this perform"]]) (fe.row-uses Arg) Want)))
+    (let Mode (fe.remote-mode Effect Op)
+         Node (fe.node L C)
+         Arg (fe.argument L C Args Env
+               [want (if (= Mode keyed) ["Tuple" "I64" A] A) (make-string "the argument of ~A.~A" Effect Op)
+                     (if (= Mode keyed)
+                         (make-string " (~A is a remote effect and ~A is not read-only, so it is performed with its request key first: (perform ~A ~A key argument))" Effect Op Effect Op)
+                         (if (= Mode read-only) (make-string " (~A.~A is read-only: it is performed without a request key)" Effect Op) ""))])
+      (fe.done L C ["perform" Node Effect Op (fe.row-node Arg)] (if (= Mode ordinary) B ["Remote" B])
+               (fe.union (fe.row-effects Arg) [[Effect L C "this perform"]]) (fe.row-uses Arg) Want)))
 
 \\ [Id OperationResultType HandleType] of a usable resumption.
 (define fe.resumption
@@ -768,6 +812,8 @@
   L C [sym EL EC Effect] Items Env Want ->
     (let Ops (fe.lookup Effect (value fe.*effects*))
          Known (if (= Ops none) (fe.fail EL EC (make-string "unknown effect ~A" Effect)) true)
+         Local (if (= (fe.lookup Effect (value fe.*remote*)) none) true
+                   (fe.fail EL EC (make-string "effect ~A is remote and cannot be handled: its operations are carried out by the member the image's build binds it to, and no handler in the program takes their place" Effect)))
          Node (fe.node L C)
          Body (fe.expr (fe.last Items) Env Want)
          Rows (fe.clauses (fe.but-last Items) Effect Ops (fe.row-type Body) (fe.block "a clause of another handler" Env) [] [])
@@ -783,12 +829,17 @@
 \\ ---------- declarations ----------
 
 (define fe.kind
-  [list _ _ [[sym _ _ K] | _]] -> K where (element? K ["datatype" "effect" "define"])
-  D -> (fe.reject D "a program is a sequence of (datatype ...), (effect ...) and (define ...) forms"))
+  [list _ _ [[sym _ _ K] | _]] -> K where (element? K ["datatype" "effect" "remote-effect" "define"])
+  D -> (fe.reject D "a program is a sequence of (datatype ...), (effect ...), (remote-effect ...) and (define ...) forms"))
 
 (define fe.of-kind
   _ [] -> []
   K [F | Fs] -> (if (= (fe.kind F) K) [F | (fe.of-kind K Fs)] (fe.of-kind K Fs)))
+
+\\ Effect declarations of both classes, in source order.
+(define fe.effect-forms
+  [] -> []
+  [F | Fs] -> (if (element? (fe.kind F) ["effect" "remote-effect"]) [F | (fe.effect-forms Fs)] (fe.effect-forms Fs)))
 
 \\ The declared name of each form, checked, with no name twice.
 (define fe.declared
@@ -799,6 +850,9 @@
           (fe.fail L C (make-string "~A ~A is declared twice" What Name))
           (fe.declared What Check Forms [Name | Seen])))
   What _ [F | _] _ -> (fe.reject F (make-string "this ~A declaration has no name" What)))
+
+(define fe.declared-name
+  [list _ _ [_ [sym _ _ Name] | _]] -> Name)
 
 (define fe.datatype-name
   [sym L C Name] -> (fe.fail L C (make-string "~A is a built-in type and cannot be declared" Name))
@@ -843,12 +897,26 @@
         (fe.fail L C (make-string "datatype ~A must declare 1 to 16 constructors" Name))))
 
 (define fe.operation-declaration
+  Effect _ [list L C [[sym _ _ "read-only"] | _]] ->
+    (fe.fail L C (make-string "read-only marks an operation of a remote-effect, and ~A is an ordinary effect" Effect))
+    where (= (fe.lookup Effect (value fe.*remote*)) none)
   Effect Seen [list _ _ [[sym L C Op] A [sym _ _ "-->"] B]] ->
     (let Named (if (fe.operation-name? Op) true
                    (fe.fail L C (make-string "~A is not a valid operation name: it must start with a lowercase letter or _ and continue with letters, digits or _" Op)))
          Once (if (element? Op Seen) (fe.fail L C (make-string "effect ~A declares operation ~A twice" Effect Op)) true)
       [Op (fe.serializable A "argument" Effect Op) (fe.serializable B "result" Effect Op)])
-  _ _ D -> (fe.reject D "an operation is written (name ArgumentType --> ResultType)"))
+  Effect _ D -> (fe.reject D (if (= (fe.lookup Effect (value fe.*remote*)) none)
+                                 "an operation is written (name ArgumentType --> ResultType)"
+                                 "an operation of a remote-effect is written (name ArgumentType --> ResultType), or (read-only name ArgumentType --> ResultType) when it changes nothing")))
+
+\\ An operation of a remote effect: [Declaration ReadOnly?].
+(define fe.remote-operation
+  Effect Seen [list L C [[sym _ _ "read-only"] Op | Rest]] -> [(fe.operation-declaration Effect Seen [list L C [Op | Rest]]) true]
+  Effect Seen D -> [(fe.operation-declaration Effect Seen D) false])
+
+(define fe.remote-operations
+  _ [] Acc -> (reverse Acc)
+  Effect [D | Ds] Acc -> (fe.remote-operations Effect Ds [(fe.remote-operation Effect (map (/. O (hd (hd O))) Acc) D) | Acc]))
 
 (define fe.serializable
   D Role Effect Op -> (let T (fe.type D)
@@ -859,11 +927,19 @@
   _ [] Acc -> (reverse Acc)
   Effect [D | Ds] Acc -> (fe.operations Effect Ds [(fe.operation-declaration Effect (fe.keys Acc) D) | Acc]))
 
+\\ [Name Operations Class ReadOnlyOperationNames].
 (define fe.effect
-  [list L C [_ [sym _ _ Name] | Operations]] ->
+  [list L C [[sym _ _ Kind] [sym _ _ Name] | Operations]] ->
     (if (and (> (length Operations) 0) (< (length Operations) 9))
-        [Name (fe.operations Name Operations [])]
+        (if (= Kind "effect")
+            [Name (fe.operations Name Operations []) "ordinary" []]
+            (let Ops (fe.remote-operations Name Operations [])
+              [Name (map (/. O (hd O)) Ops) "remote" (map (/. O (hd (hd O))) (fe.keep-if (/. O (hd (tl O))) Ops))]))
         (fe.fail L C (make-string "effect ~A must declare 1 to 8 operations" Name))))
+
+(define fe.keep-if
+  _ [] -> []
+  F [X | Xs] -> (if (F X) [X | (fe.keep-if F Xs)] (fe.keep-if F Xs)))
 
 \\ (define name {A --> B} parameter ... -> body): [Name A B Line Column Parameters Body].
 (define fe.parameters
@@ -969,10 +1045,12 @@
   [["main" | _] | _] [[_ Effects] | _] -> Effects
   [_ | Fs] [_ | Rs] -> (fe.entry-effects Fs Rs))
 
-\\ Only Emit may remain at the entry: every user effect is handled inside the program.
+\\ Only Emit and remote effects may remain at the entry: every ordinary effect is
+\\ handled inside the program, and a remote effect is discharged by the system.
 (define fe.check-handled
   [] -> true
   [["Emit" | _] | Rest] -> (fe.check-handled Rest)
+  [[Name | _] | Rest] -> (fe.check-handled Rest) where (not (= (fe.lookup Name (value fe.*remote*)) none))
   [[Name L C Cause] | _] ->
     (fe.fail L C (make-string "effect ~A is not handled: it comes from ~A, and no (handle ~A ...) encloses that on the way from the entry function main" Name Cause Name)))
 
@@ -984,9 +1062,16 @@
 (define fe.datatype-object
   [Name Constructors] -> [object ["constructors" (map (/. K [object ["fields" (hd (tl K))] ["name" (hd K)]]) Constructors)] ["name" Name]])
 
+\\ Schema /2: a name and operations. Schema /3 (Remote true): the class as well,
+\\ and read_only on each operation of a remote effect.
 (define fe.effect-object
-  [Name Ops] -> [object ["name" Name]
-                        ["operations" (map (/. O [object ["argument_type" (nth 2 O)] ["name" (hd O)] ["result_type" (nth 3 O)]]) Ops)]])
+  false [Name Ops _ _] -> [object ["name" Name]
+                                  ["operations" (map (/. O [object ["argument_type" (nth 2 O)] ["name" (hd O)] ["result_type" (nth 3 O)]]) Ops)]]
+  true [Name Ops "ordinary" _] -> [object ["class" "ordinary"] ["name" Name]
+                                          ["operations" (map (/. O [object ["argument_type" (nth 2 O)] ["name" (hd O)] ["result_type" (nth 3 O)]]) Ops)]]
+  true [Name Ops "remote" ReadOnly] ->
+    [object ["class" "remote"] ["name" Name]
+            ["operations" (map (/. O [object ["argument_type" (nth 2 O)] ["name" (hd O)] ["read_only" (element? (hd O) ReadOnly)] ["result_type" (nth 3 O)]]) Ops)]])
 
 (define fe.limit
   Forms What Max -> (if (> (length Forms) Max)
@@ -999,16 +1084,25 @@
   File Module Octets ->
     (let Forms (fe.read Octets)
          DatatypeForms (fe.of-kind "datatype" Forms)
-         EffectForms (fe.of-kind "effect" Forms)
+         EffectForms (fe.effect-forms Forms)
+         RemoteForms (fe.of-kind "remote-effect" Forms)
          FunctionForms (fe.of-kind "define" Forms)
          Limits [(fe.limit DatatypeForms "datatypes" 16) (fe.limit EffectForms "effects" 8) (fe.limit FunctionForms "functions" 32)]
          \\ Names first, so that declarations may refer to each other in any order.
          Reset (set fe.*datatypes* [["TrapCode" (map (/. K [K []]) ["Overflow" "DivZero" "Bounds" "InvalidDuration" "TaskLimit" "ChildFailed"])]])
          Names (set fe.*datatype-names* (fe.declared "datatype" (/. D (fe.datatype-name D)) DatatypeForms []))
          EffectNames (set fe.*effects* (map (/. N [N []]) (fe.declared "effect" (/. D (fe.user-effect-name D)) EffectForms [])))
+         RemoteNames (set fe.*remote* (map (/. F [(fe.declared-name F) []]) RemoteForms))
          Datatypes (fe.datatypes DatatypeForms (value fe.*datatypes*))
          SetDatatypes (set fe.*datatypes* Datatypes)
-         Effects (set fe.*effects* (map (/. F (fe.effect F)) EffectForms))
+         Declared (map (/. F (fe.effect F)) EffectForms)
+         Effects (set fe.*effects* (map (/. E [(hd E) (hd (tl E))]) Declared))
+         Remote (set fe.*remote* (map (/. E [(hd E) (nth 4 E)]) (fe.keep-if (/. E (= (nth 3 E) "remote")) Declared)))
+         Far (cons? Remote)
+         Clash (map (/. F (if (and Far (= (fe.declared-name F) "RemoteResult"))
+                              (fe.reject F "RemoteResult names the outcomes of a remote perform and cannot be declared in a program that has a remote-effect")
+                              true))
+                    DatatypeForms)
          Functions (map (/. F (fe.signature F)) FunctionForms)
          Unique (fe.declared "function" (/. D true) FunctionForms [])
          Parameters (map (/. F (fe.check-parameters F)) Functions)
@@ -1021,11 +1115,11 @@
          Entry (fe.check-entry Functions Results)
       [object ["contract_version" "tc1-draft-1"]
               ["datatypes" (map (/. D (fe.datatype-object D)) (tl Datatypes))]
-              ["effects" (map (/. E (fe.effect-object E)) Effects)]
+              ["effects" (map (/. E (fe.effect-object Far E)) Declared)]
               ["entry" "main"]
               ["functions" (map (/. R (hd R)) Results)]
               ["input_schema" [object ["type" "I64"]]]
               ["module" Module]
-              ["schema_version" "tc1-handler-demo/2"]
-              ["slice" "TC1-H2"]
+              ["schema_version" (if Far "tc1-handler-demo/3" "tc1-handler-demo/2")]
+              ["slice" (if Far "TC1-R1" "TC1-H2")]
               ["source_map" (fe.source-map File (value fe.*locations*) [])]]))

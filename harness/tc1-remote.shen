@@ -164,10 +164,12 @@
   -> [tc1 (remote.tc1-initial
             [handle "1" "Note" [["note" "2" [var "3" "2"]]]
               (fr.tc1-attempt 10 (fr.tc1-attempt 30 [emit "50" "unknown" [unit "51"]]))])
-          [["Ledger" p]]])
+          [["Ledger" "add" p "keyed"]]])
 
 (define fr.payload -> [int "5"])
 (define fr.other-payload -> [int "6"])
+\\ The payload of a perform of a read-only operation; its script entry has read for a key.
+(define fr.read -> [read-only [unit]])
 
 \\ [Name Config Crashes Duplicates SupervisorRestarts Description]
 (define fr.systems
@@ -196,7 +198,13 @@
        "caller c, peer p; one request, retried once after timed-out; 1 crash, 1 duplicate, 1 supervisor restart"]
       ["two-members-key-reuse"
        [remote-config [[c [script [[p "1" (fr.payload) 0] [p "1" (fr.other-payload) 0]]] [none]] [p [script []] [counter]]] [[c p]] none] 1 1 0
-       "caller c, peer p; key 1 performed with one argument and then with another; 1 crash, 1 duplicate"]])
+       "caller c, peer p; key 1 performed with one argument and then with another; 1 crash, 1 duplicate"]
+      ["two-members-read-alongside"
+       [remote-config [[c [script [[p "1" (fr.payload) 0] [p read (fr.read) 0]]] [none]] [p [script []] [counter]]] [[c p]] none] 1 1 0
+       "caller c, peer p; a request that changes state, then a read-only one; 1 crash, 1 duplicate"]
+      ["storeless-peer-read-only"
+       [remote-config [[c [script [[m read (fr.read) 1]]] [none]] [m [script []] [meter]]] [[c m]] none] 1 1 0
+       "caller c, peer m with no durable store; one read-only request, retried once after timed-out; 1 crash, 1 duplicate"]])
 
 (define fr.system
   Name [[Name | Rest] | _] -> [Name | Rest]
@@ -249,7 +257,9 @@
       [no-timeout "two-members-one-request" "resolved-at-termination"]
       [reply-before-commit "two-members-one-request" "reply-implies-acted"]
       [forgetful-supervisor-restart "two-members-supervisor-restart" "not-delivered-not-handed"]
-      [replay-on-different-argument "two-members-key-reuse" "key-bound-to-argument"]])
+      [replay-on-different-argument "two-members-key-reuse" "key-bound-to-argument"]
+      [read-only-writes "two-members-read-alongside" "read-only-changes-nothing"]
+      [read-ignores-state "two-members-read-alongside" "read-reply-from-state"]])
 
 (define fr.aimed
   Expected [] -> []
@@ -288,6 +298,11 @@
           T (nth 2 (fr.system "tc1-caller" (fr.systems)))
           B (nth 2 (fr.system "two-members-two-requests" (fr.systems)))
           K (nth 2 (fr.system "two-members-key-reuse" (fr.systems)))
+          D (nth 2 (fr.system "two-members-read-alongside" (fr.systems)))
+          \\ the same system with one retry of the read: too large to explore whole, used by hand schedules only
+          DR [remote-config [[c [script [[p "1" (fr.payload) 0] [p read (fr.read) 1]]] [none]] [p [script []] [counter]]] [[c p]] none]
+          M (nth 2 (fr.system "storeless-peer-read-only" (fr.systems)))
+          Applied [[issue c p "1"] [deliver-request [c 1]] [act p [c 1] applied] [deliver-reply [c 1] (remote.ok [int "1"])]]
           One (remote.ok [int "1"])
           Record1 [1 [[[c "1"] [[int "5"] [int "1"]]]]]
        (append
@@ -408,6 +423,69 @@
                              [deliver-reply [c 2] One]])
                      (and (= (fr.durable (fr.member-of p (hd R))) [1 [[[c "1"] [[int "6"] [int "1"]]]]])
                           (element? [outcome [c 2] [reply One]] (hd (tl R)))))))
+         \\ a read-only request: no key, the reply is the value itself, and the store is left exactly as it
+         \\ was; a duplicate is evaluated again and records nothing either; no crash between commit and reply
+         \\ is offered for it, there being no commit
+         (fr.hand "read-only-records-nothing"
+           (freeze (let R1 (remote.run D (remote.initial D 1 1) (append Applied [[issue c p "read-2"] [duplicate request [c 2]] [deliver-request [c 2]]]))
+                        Ls (fr.labels D (hd R1))
+                        R2 (remote.run D (hd R1) [[act p [c 2] read] [deliver-reply [c 2] [int "1"]]])
+                        R3 (remote.run D (hd R2) [[deliver-request [c 2]] [act p [c 2] read]])
+                     (and (element? [act p [c 2] read] Ls)
+                          (not (element? [crash-after-commit p [c 2]] Ls))
+                          (element? [crash p] Ls)
+                          (= (fr.durable (fr.member-of p (hd R1))) Record1)
+                          (= (fr.durable (fr.member-of p (hd R2))) Record1)
+                          (element? [outcome [c 2] [reply [int "1"]]] (hd (tl R2)))
+                          (= (fr.durable (fr.member-of p (hd R3))) Record1)
+                          (element? [rep [c 2] c p "read-2" [int "1"]] (remote.net (hd R3)))
+                          (= (hd (tl (remote.ghost (hd R3)))) [[[p c "1"] 1]])))))
+         \\ a read handed over to a peer that is then killed: only timed-out; the retry is a new request,
+         \\ and the restarted peer, another incarnation, answers it from the store it found
+         (fr.hand "read-retried-across-a-peer-restart"
+           (freeze (let R1 (remote.run DR (remote.initial DR 1 0) (append Applied [[issue c p "read-2"] [deliver-request [c 2]] [crash p]]))
+                        Ls (fr.labels DR (hd R1))
+                        R2 (remote.run DR (hd R1) [[timeout [c 2]] [restart p] [issue c p "read-3"] [deliver-request [c 3]] [act p [c 3] read]
+                                                  [deliver-reply [c 3] [int "1"]]])
+                     (and (element? [timeout [c 2]] Ls) (not (element? [not-delivered [c 2]] Ls))
+                          (= (fr.durable (fr.member-of p (hd R2))) Record1)
+                          (element? [outcome [c 2] [timed-out]] (hd (tl R2)))
+                          (element? [outcome [c 3] [reply [int "1"]]] (hd (tl R2)))
+                          (empty? (fr.labels DR (hd R2)))))))
+         \\ each perform of a read-only operation is its own request: one that was handed over can only time
+         \\ out, and the next one, never handed over, can still be reported not-delivered
+         (fr.hand "read-not-delivered-is-per-perform"
+           (freeze (let R1 (remote.run DR (remote.initial DR 0 0) (append Applied [[issue c p "read-2"] [deliver-request [c 2]]]))
+                        First (fr.labels DR (hd R1))
+                        R2 (remote.run DR (hd R1) [[timeout [c 2]] [issue c p "read-3"]])
+                        Second (fr.labels DR (hd R2))
+                        R3 (remote.run DR (hd R2) [[not-delivered [c 3]]])
+                     (and (not (element? [not-delivered [c 2]] First))
+                          (element? [not-delivered [c 3]] Second)
+                          (element? [outcome [c 3] [not-delivered]] (hd (tl R3)))
+                          (not (fr.any? (/. Message (remote.request-for? c p "read-3" Message)) (remote.net (hd R3))))
+                          (= (fr.durable (fr.member-of p (hd R3))) Record1)))))
+         \\ a peer with no durable store serves a read-only operation, before and after it is killed, and
+         \\ has nothing durable at any time
+         (fr.hand "storeless-peer-serves-reads"
+           (freeze (let R (remote.run M (remote.initial M 1 0)
+                            [[issue c m "read-1"] [deliver-request [c 1]] [crash m] [timeout [c 1]] [restart m]
+                             [issue c m "read-2"] [deliver-request [c 2]] [act m [c 2] read] [deliver-reply [c 2] [int "0"]]])
+                     (and (= (fr.durable (fr.member-of m (hd R))) [0 []])
+                          (element? [outcome [c 2] [reply [int "0"]]] (hd (tl R)))
+                          (empty? (remote.assembly-refusals M))
+                          (empty? (remote.assembly-refusals D))
+                          (empty? (remote.assembly-refusals DR))))))
+         \\ a peer with no durable store and a request that is not read-only: refused when the system is
+         \\ assembled, and so is a connection the manifest lacks; the model has no step for either system
+         (fr.hand "storeless-peer-with-a-keyed-operation-is-refused-at-assembly"
+           (freeze (let Bad [remote-config [[c [script [[m read (fr.read) 0] [m "1" (fr.payload) 0]]] [none]] [m [script []] [meter]]] [[c m]] none]
+                     (and (= (remote.assembly-refusals Bad) [[m no-store c]])
+                          (= (remote.assembly-refusals U) [[c q]])
+                          (= (trap-error (remote.run Bad (remote.initial Bad 0 0)
+                                           [[issue c m "read-1"] [timeout [c 1]] [issue c m "1"] [deliver-request [c 2]] [act m [c 2] applied]])
+                                         (/. E refused))
+                             refused)))))
          \\ an undeclared connection: nothing in flight, not-delivered at once
          (fr.hand "undeclared-is-refused"
            (freeze (let R (remote.run U (remote.initial U 0 0) [[issue c p "1"] [timeout [c 1]] [refuse c q "2"]])
@@ -437,7 +515,7 @@
 
 (define fr.required-kinds
   -> [issue refuse finish deliver-request deliver-reply discard-reply drop duplicate act-applied act-replayed
-      act-conflict crash-after-commit timeout not-delivered crash restart supervisor-restart
+      act-conflict act-read crash-after-commit timeout not-delivered crash restart supervisor-restart
       outcome-reply outcome-not-delivered outcome-timed-out])
 
 (define fr.merge-kinds
@@ -485,11 +563,12 @@
                          ["model_under_check" (if Control "mutant non-idempotent-peer in place of the model" "models/tc1/remote-system.shen")]
                          ["bounds" "whole reachable graph of each system; bounded by its scripts, retries and its crash, duplicate and supervisor-restart budgets; drop, timeout, not-delivered, member restart and reordering unbounded"]
                          ["properties" ["single-outcome" "resolved-at-termination" "reply-implies-acted" "not-delivered-not-handed" "not-delivered-sealed"
-                                        "applied-at-most-once" "key-bound-to-argument" "declared-edges-only" "crash-isolation"]]
+                                        "applied-at-most-once" "key-bound-to-argument" "declared-edges-only" "crash-isolation"
+                                        "read-only-changes-nothing" "read-reply-from-state"]]
                          ["systems" (map (/. B (hd B)) Baselines)]
                          ["step_kinds_not_exercised" Missing]
                          ["hand_schedules_failed" Hand]
-                         ["hand_schedules" (if Control "0" "14")]
+                         ["hand_schedules" (if Control "0" "19")]
                          ["mutants" (map (/. M (hd (tl M))) Mutants)]
                          ["mutants_not_killed" (map (/. M (fh.field "mutant" M)) NotKilled)]
                          ["negative_control" (value fr.*control*)]]

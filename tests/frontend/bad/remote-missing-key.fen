@@ -1,0 +1,11 @@
+\\ expect 8:39 the argument of Ledger.add has type I64, but (Tuple I64 I64) is expected (Ledger is a remote effect and add is not read-only, so it is performed with its request key first
+\\ An operation that changes the peer's state needs a request key.
+
+(remote-effect Ledger
+  (add I64 --> (Tuple I64 I64)))
+
+(define main {I64 --> I64}
+  input -> (match (perform Ledger add 5)
+             ((Reply r) -> (project r 1))
+             (NotDelivered -> -1)
+             (TimedOut -> -2)))

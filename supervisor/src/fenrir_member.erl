@@ -31,9 +31,11 @@ wait_exit(Pid, TimeoutMs) -> gen_server:call(Pid, {wait_exit, TimeoutMs}, Timeou
 info(Pid) -> gen_server:call(Pid, info, 20000).
 store(Pid) -> gen_server:call(Pid, store, 20000).
 
-init(#{name := Name, kind := Kind, image := Image, tender := Tender, dir := Dir, life_ms := Life, options := Options}) ->
+%% store: whether the image has a durable store, which is what its declaration
+%% says (fenrir_relay). A caller has none.
+init(#{name := Name, kind := Kind, image := Image, tender := Tender, dir := Dir, life_ms := Life, options := Options, store := HasStore}) ->
     process_flag(trap_exit, true),
-    {ok, #{name => Name, kind => Kind, image => Image, tender => Tender, dir => Dir, life_ms => Life,
+    {ok, #{name => Name, kind => Kind, store => HasStore, image => Image, tender => Tender, dir => Dir, life_ms => Life,
            options => Options, incarnation => 0, port => none, os_pid => none, exit => none,
            console => [], consoles => [], count => 0, grant => 0, hold => 0, taken => 0, inbox => none, outbox => none}}.
 
@@ -51,8 +53,8 @@ handle_call(boot, _From, S0 = #{port := none}) ->
              console := [], exit := none},
     ok = write_header(S2),
     Devices = ["--block:inbox=" ++ path(S2, "inbox"), "--block:outbox=" ++ path(S2, "outbox")] ++
-        case maps:get(kind, S2) of
-            peer ->
+        case maps:get(store, S2) of
+            true ->
                 Store = path(S2, "store"),
                 case filelib:is_regular(Store) of
                     true -> ok;
@@ -62,7 +64,7 @@ handle_call(boot, _From, S0 = #{port := none}) ->
                         ok = file:write_file(Store, <<Header/binary, Rest/binary>>)
                 end,
                 ["--block:store=" ++ Store];
-            caller -> []
+            false -> []
         end,
     Cmdline = "life=" ++ integer_to_list(maps:get(life_ms, S2)) ++ maps:get(options, S2),
     Port = open_port({spawn_executable, maps:get(tender, S2)},
@@ -220,7 +222,7 @@ waiting(S, Deadline, Torn) ->
 
 %% ---- the durable store, read for the run report ----
 
-read_store(S = #{kind := peer}) ->
+read_store(S = #{store := true}) ->
     case file:read_file(path(S, "store")) of
         {ok, <<Header:512/binary, Rest/binary>>} ->
             case fenrir_wire:decode_header(Header) of

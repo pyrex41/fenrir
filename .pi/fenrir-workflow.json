@@ -61,7 +61,8 @@
         "tests/tc0/sandbox.test.mjs",
         "tests/tc1/handler-artifact.test.mjs",
         "tests/tc1/handler-enumeration.test.mjs",
-        "tests/tc1/gate-manifest.test.mjs"
+        "tests/tc1/gate-manifest.test.mjs",
+        "tests/tc1/remote-artifact.test.mjs"
       ],
       "timeoutSeconds": 120,
       "authorityPaths": []
@@ -132,6 +133,8 @@
         "tools/solo5/freerun.mjs",
         "tools/solo5/pure-call",
         "tools/solo5/remote-build.mjs",
+        "frontend",
+        "examples/remote",
         "backends/solo5/pure-call",
         "backends/solo5/remote",
         "supervisor",

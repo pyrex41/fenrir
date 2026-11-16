@@ -1,5 +1,5 @@
 /* ISC: freely use/copy/modify/distribute; AS IS without warranty or liability.
- * Wire format version 2: encoding and strict decoding. See wire.h. No I/O. */
+ * Wire format version 3: encoding and strict decoding. See wire.h. No I/O. */
 #include "wire.h"
 static void put16(uint8_t *p,uint16_t v) {p[0]=(uint8_t)v;p[1]=(uint8_t)(v>>8);}
 static void put32(uint8_t *p,uint32_t v) {for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(v>>(8*i));}
@@ -88,13 +88,18 @@ int frw_name_same(const char a[FRW_NAME],const char b[FRW_NAME]) {
 void frw_put_call(const struct frw_call *c,struct frw_record *r,uint16_t type) {
     for(unsigned i=0;i<FRW_PAYLOAD_MAX;i++)r->payload[i]=0;
     for(unsigned i=0;i<FRW_NAME;i++)r->payload[i]=(uint8_t)c->name[i];
-    put64(r->payload+16,(uint64_t)c->key);put64(r->payload+24,(uint64_t)c->value);
-    r->type=type;r->ref=0;r->length=32;
+    put32(r->payload+16,c->mode);
+    put64(r->payload+24,(uint64_t)c->key);put64(r->payload+32,(uint64_t)c->value);
+    r->type=type;r->ref=0;r->length=40;
 }
 int frw_get_call(const struct frw_record *r,struct frw_call *c) {
-    if((r->type!=FRW_REQUEST && r->type!=FRW_DELIVER) || r->ref || r->length!=32)return 0;
+    if((r->type!=FRW_REQUEST && r->type!=FRW_DELIVER) || r->ref || r->length!=40)return 0;
     for(unsigned i=0;i<FRW_NAME;i++)c->name[i]=(char)r->payload[i];
-    c->key=(int64_t)get64(r->payload+16);c->value=(int64_t)get64(r->payload+24);
+    c->mode=get32(r->payload+16);
+    c->key=(int64_t)get64(r->payload+24);c->value=(int64_t)get64(r->payload+32);
+    if(get32(r->payload+20) || (c->mode!=FRW_KEYED && c->mode!=FRW_READ_ONLY))return 0;
+    /* A read-only request has no key, and its argument is unit. */
+    if(c->mode==FRW_READ_ONLY && (c->key || c->value))return 0;
     return frw_name_ok(c->name);
 }
 void frw_put_stored(const struct frw_stored *c,struct frw_record *r) {
@@ -122,7 +127,7 @@ int frw_get_result(const struct frw_record *r,struct frw_result *x) {
         if(x->code!=FRW_REPLIED && (x->value || x->status))return 0;
         if(x->status!=FRW_OK && (x->status!=FRW_KEY_CONFLICT || x->value))return 0;
     } else {
-        if(x->status || x->code<FRW_APPLIED || x->code>FRW_CONFLICT)return 0;
+        if(x->status || x->code<FRW_APPLIED || x->code>FRW_READ)return 0;
         if(x->code==FRW_CONFLICT && x->value)return 0;
     }
     return 1;

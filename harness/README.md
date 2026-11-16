@@ -139,7 +139,7 @@ has the numbers. In short:
 
 ```sh
 sh harness/run-tc1-remote.sh        # the model of remote perform, explored exhaustively on small systems
-sh harness/run-tc1-remote-run.sh    # the real system (Erlang/OTP supervisor, two Solo5 spt guests) against that model, ~40 s
+sh harness/run-tc1-remote-run.sh    # the real system (Erlang/OTP supervisor, two Solo5 spt guests) against that model, ~45 s
 ```
 
 Contract and numbers: EFFECTS.md §12 (§12.8 for the model, §12.11 for the
@@ -155,12 +155,13 @@ each with its negative control run first:
 
 | Row | Evidence class | Needs | Otherwise |
 | --- | --- | --- | --- |
-| remote-model | Model-level bounded exploration; no implementation is run | Eight systems explored with no property failing, every step kind taken, eleven mutants killed, fourteen hand schedules passing, control failed as required | FAIL; a report with other counts is UNKNOWN |
-| remote-run | Observed histories on `spt` accepted by the model | 19 hand, 40 seeded and 4 free-running schedules all accepted, every step kind taken, seven defects killed, control failed as required | FAIL; no Erlang/OTP or no Solo5 build is BLOCKED; a supervisor that does not compile, or other counts, is UNKNOWN |
+| remote-model | Model-level bounded exploration; no implementation is run | Ten systems explored with no property failing, every step kind taken, thirteen mutants killed, nineteen hand schedules passing, control failed as required | FAIL; a report with other counts is UNKNOWN |
+| remote-run | Observed histories on `spt` accepted by the model | 24 hand, 40 seeded and 4 free-running schedules all accepted, every step kind taken, eight defects killed, control failed as required | FAIL; no Erlang/OTP, no Solo5 build, or a caller source the frontend does not elaborate is BLOCKED; a supervisor that does not compile, or other counts, is UNKNOWN |
 
-Those counts are the scope after Amendment 1 of the
+Those counts are the scope after Amendment 2 of the
 [registration record](../campaigns/tc1/TC1_GATE_REGISTRATION.md) (16 November
-2026); they were 6, 9, 9 and 13, 40, 3, 5 when the gate was registered.
+2026); they were 6, 9, 9 and 13, 40, 3, 5 when the gate was registered, and 8,
+11, 14 and 19, 40, 4, 7 after Amendment 1.
 
 The gate's toolchain row also requires that the Erlang/OTP found by
 [find-erlang.sh](find-erlang.sh), which the runner script uses too, is the
@@ -188,6 +189,23 @@ seeded schedules:
 - A key reused with another argument is answered `conflict`, inside `reply`:
   the act step has a third result beside applied and replayed, and the peer's
   store file is compared record by record, argument included.
+
+Two more came later that day (questions 7 and 9), and are in both checks in
+the same way:
+
+- **The remote effect class.** The caller image's program is a source file,
+  [examples/remote/ledger-caller.fen](../examples/remote/ledger-caller.fen),
+  which declares `Ledger` with `remote-effect`. The image build runs the
+  frontend on it; the artifact (schema `tc1-handler-demo/3`) is what the model
+  runs. What each image declares of itself is derived from those declarations,
+  and two hand schedules are refusals at assembly. The remote-run row
+  therefore depends on `frontend/`, which is now evaluator authority of the
+  gate's workflow check; the frontend's own tests are still not a row.
+- **Read-only operations.** A fourth result of the act step, `read`: no key,
+  no record, the store untouched. Two properties are new
+  (`read-only-changes-nothing`, `read-reply-from-state`), two model systems
+  (one with a peer that has no durable store), and a defect in each check, a
+  read that writes.
 
 ### The generated family
 
@@ -265,8 +283,11 @@ Not done for TC1: an exhaustive scope above 7 nodes, and strict replay.
 `sh frontend/fenrir.sh run FILE` elaborates a program written in the surface
 syntax ([spec/tc1/SURFACE.md](../spec/tc1/SURFACE.md), draft), has the
 JavaScript validator check the artifact, and runs it on the model in the same
-process, reusing `common.shen`. `sh frontend/test.sh` is its test suite. It is
-not part of either gate.
+process, reusing `common.shen`. `sh frontend/test.sh` is its test suite, which
+is not part of either gate. Since 16 November 2026 the TC1 gate's remote-run
+row uses the frontend to elaborate the one program of its caller image (see
+Remote perform above); a program that leaves a remote effect to the system is
+checked and emitted by the frontend, not run by it.
 
 ## What is still not Shen
 

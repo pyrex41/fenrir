@@ -13,6 +13,11 @@
 #               the elaborated artifact has the fixture's outcome and emissions,
 #               and the artifact is the fixture's program up to a renaming of IDs
 #   stable      elaborating twice gives the same bytes
+#   remote      every program under examples/remote/ and tests/frontend/remote/
+#               declares a remote effect: it checks, elaborates twice to the same
+#               bytes of schema tc1-handler-demo/3, and either runs alone and
+#               prints its header's lines, or, when main leaves the remote effect
+#               to the system (no "\\ > " lines), run refuses it with status 2
 #   Solo5       the examples, elaborated, run in the Solo5 guest and agree with
 #               the model step for step (harness/solo5-pure-call.shen). Skipped,
 #               and said so, when FENRIR_SOLO5 is not set and build/vendor/solo5
@@ -96,6 +101,35 @@ for file in examples/*.fen; do
   if [ ! -s "$work/$name.json" ] || ! cmp -s "$work/$name.json" "$work/again.json"; then fail "$file" "two elaborations differ"; fi
 done
 
+remote=0
+for file in examples/remote/*.fen tests/frontend/remote/*.fen; do
+  remote=$((remote + 1))
+  sed -n 's/^\\\\ > //p' "$file" > "$work/expected"
+  status=0
+  sh "$fenrir" check "$file" > "$work/out" 2> "$work/err" || status=$?
+  if [ "$status" -ne 0 ]; then fail "$file" "check: status $status" "$(cat "$work/err")"; continue; fi
+  sh "$fenrir" emit "$file" "$work/remote.json" > /dev/null 2>&1
+  sh "$fenrir" emit "$file" "$work/again.json" > /dev/null 2>&1
+  if [ ! -s "$work/remote.json" ] || ! cmp -s "$work/remote.json" "$work/again.json"; then fail "$file" "two elaborations differ"; fi
+  if ! grep -q '"schema_version":"tc1-handler-demo/3","slice":"TC1-R1"' "$work/remote.json"; then fail "$file" "the artifact is not of schema tc1-handler-demo/3"; fi
+  status=0
+  sh "$fenrir" run "$file" > "$work/out" 2> "$work/err" || status=$?
+  if [ -s "$work/expected" ]; then
+    observed "$work/out" > "$work/observed"
+    if [ "$status" -ne 0 ] || ! cmp -s "$work/expected" "$work/observed"; then
+      fail "$file" "status $status; expected:" "$(cat "$work/expected")" "got:" "$(cat "$work/out" "$work/err")"
+    fi
+  else
+    case $(cat "$work/err") in
+      *"cannot be run alone: main performs the remote effect"*) refused=yes ;;
+      *) refused=no ;;
+    esac
+    if [ "$status" -ne 2 ] || [ "$refused" = no ] || [ -s "$work/out" ]; then
+      fail "$file" "run must refuse a program that leaves a remote effect to the system, with status 2" "status $status; got:" "$(cat "$work/out" "$work/err")"
+    fi
+  fi
+done
+
 # The guest and the harness both stop at 200 steps, so longer programs are
 # compared over their first 200 steps only.
 if [ -n "${FENRIR_SOLO5:-}" ] || [ -x "$root/build/vendor/solo5/tenders/spt/solo5-spt" ]; then
@@ -115,6 +149,6 @@ else
   solo5="skipped (FENRIR_SOLO5 is not set and build/vendor/solo5 is not built)"
 fi
 
-printf 'frontend tests: %s accepted programs, %s rejected programs, %s round trips, %s stable artifacts; Solo5: %s; failures: %s\n' \
-  "$accepted" "$rejected" "$roundtrips" "$stable" "$solo5" "$failures"
+printf 'frontend tests: %s accepted programs, %s rejected programs, %s round trips, %s stable artifacts, %s remote programs; Solo5: %s; failures: %s\n' \
+  "$accepted" "$rejected" "$roundtrips" "$stable" "$remote" "$solo5" "$failures"
 [ "$failures" -eq 0 ]

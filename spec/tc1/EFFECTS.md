@@ -1,6 +1,6 @@
 # TC1 effect contract
 
-Draft 6 • 16 November 2026 • For owner review
+Draft 7 • 16 November 2026 • For owner review
 
 **Status.** Written together with its implementation, at the owner's request,
 so the text and the behaviour can be reviewed side by side. Both slices are
@@ -21,6 +21,12 @@ on questions 3, 4, 5, 6 and 8 of §12.10: the outcome `peer_down` is renamed
 `not_delivered` and may be reported while the peer is up (§12.4); a restart
 of the supervisor is a step of the contract (§12.7); and a key reused with
 another argument is refused as `conflict`, inside `reply` (§12.2, §12.3).
+Draft 7 records the owner's rulings of the same day on the last two open
+questions of §12.10, 7 and 9: a remote operation belongs to a fourth effect
+class, `remote`, declared in the source and typed (§1, §3, §8, §12.2); and a
+peer with no durable store is allowed only for operations declared read-only,
+which have no request key and a weaker guarantee for `reply` (§12.3, §12.4,
+§12.6). §12.10 now also lists six questions this draft raises.
 
 Owner decisions of 14 November 2026 are folded in: a clause may continue after
 `resume` returns (§7); performs of user effects are not observations (§5);
@@ -38,7 +44,14 @@ each with an argument type A and a result type B.
 ```text
 effect Ask  { ask : I64 -> I64 }
 effect Cell { get : Unit -> I64; put : I64 -> Unit }
+remote effect Ledger { add : I64 -> (I64, I64); read-only total : Unit -> I64 }
 ```
+
+- A declaration has a **class**: *ordinary*, as the first two, or *remote*
+  (owner ruling of 16 November 2026, §12.10 question 9; the classes are in
+  §8). An operation of a remote effect is carried out by another image
+  (§12.2), and is declared with that image's own types A and B. It may be
+  marked **read-only** (§12.3).
 
 - Effect names are identifiers, unique, and not one of the reserved runtime
   effect names `Emit`, `Task`, `Channel`, `Time`, `Resource`.
@@ -67,16 +80,42 @@ one spelling.
 
 | Expression | Type | Effects |
 | --- | --- | --- |
-| `perform(E, op, a)` with `op : A -> B` | B, given `a : A` | those of `a`, plus E |
+| `perform(E, op, a)` with `op : A -> B`, E ordinary | B, given `a : A` | those of `a`, plus E |
+| `perform(E, op, (k, a))` with `op : A -> B`, E remote, `op` not read-only | `Remote B`, given `k : I64` and `a : A` | those of the argument, plus E |
+| `perform(E, op, a)` with `op : A -> B`, E remote, `op` read-only | `Remote B`, given `a : A` | those of `a`, plus E |
 | `handle(E, clauses, body)` with `body : T` | T | (body's effects minus E) plus every clause's effects |
 | a clause `op(x) => c` | `c : B` with `x : A` in scope | those of `c` |
 | call, apply | as in TC0-A | the callee's declared set |
 
 - A clause is checked in the bindings in scope at its `handle` node plus its
   binder.
-- The entry function's effect set may contain only `Emit`: every user effect
-  must be handled inside the program. An unhandled effect in a validated
-  program is an implementation defect, not a trap.
+- The entry function's effect set may contain only `Emit` and remote effects:
+  every ordinary effect must be handled inside the program. An unhandled
+  ordinary effect in a validated program is an implementation defect, not a
+  trap. A remote effect that reaches the entry is discharged by the system the
+  image is assembled into (§12).
+- **No `handle` names a remote effect.** A program cannot intercept, replace
+  or simulate a remote operation: `handle(E, ...)` with E remote is rejected.
+  The other choice, a handler that intercepts locally, was not taken: with it
+  the meaning of a perform would depend on whether a handler happens to be in
+  scope, the outcome type would have to be constructible by programs, and the
+  declaration could no longer be read as "this image talks to that member".
+  It is question 16 of §12.10.
+- **`Remote B`** is the type of an outcome (§12.2): a closed sum with the three
+  constructors `reply(B)`, `not_delivered` and `timed_out`, in that order. It
+  is serializable when B is. A program cannot construct a value of it. The
+  one way to take it apart is `match`, and a match is exhaustive, so a
+  program that uses the operation's value has an arm for each of the three
+  outcomes. (`eq` compares two outcomes, as it compares any two serializable
+  values; with no way to make an outcome, that tells a program only whether
+  two performs ended alike.) A program may still pass an outcome on, return
+  it, or drop it unexamined (question 11 of §12.10).
+  In this slice `Remote` is built into the artifact (schema
+  `tc1-handler-demo/3`, slice TC1-R1), because datatypes have no parameters.
+  With parametric datatypes it becomes an ordinary declared sum,
+  `RemoteResult B ::= reply(B) | not_delivered | timed_out`, with the same
+  constructors and the same exhaustive match, and nothing else changes; the
+  values already carry the name `RemoteResult`.
 - The surface language will infer effect rows and allow row polymorphism. The
   core keeps explicit finite sets; the elaboration between them is a separate
   contract, not written yet.
@@ -204,11 +243,18 @@ Recorded now so that the concurrency slice is designed against it:
   outlive those regions.
 - A transaction or an exclusive borrow may not be held across a perform whose
   handler can suspend the task.
-- Three kinds of effect are distinguished: **ordinary** effects, handled by
+- Four classes of effect are distinguished: **ordinary** effects, handled by
   user handlers as above; **runtime** effects (tasks, channels, time,
   resources, emit), discharged by the runtime and not replaceable by a user
-  handler; and **durable** effects (transaction, durable job, durable inbox),
-  discharged only by a handler that carries a storage contract.
+  handler; **durable** effects (transaction, durable job, durable inbox),
+  discharged only by a handler that carries a storage contract; and
+  **remote** effects, declared by the program, discharged by the system of
+  images and its supervisor, and not replaceable by a user handler (owner
+  ruling of 16 November 2026, §12.10 question 9). Ordinary and remote effects
+  are implemented; the other two are not, beyond `emit`. A remote effect
+  differs from a runtime effect in three ways: its name and operations are the
+  program's, not reserved; its performs can fail, and say so in their type;
+  and what discharges it is outside the image.
 
 ## 9 What is checked today
 
@@ -253,7 +299,14 @@ hand traces alone and by the exhaustive traces alone.
 
 **Validation.** Unit tests reject, for the stated reason, a resumption used
 zero times, twice, or on one path only; read as a value; captured by a
-closure; used by an inner clause; and resumed with the wrong type.
+closure; used by an inner clause; and resumed with the wrong type. For the
+remote class (schema `tc1-handler-demo/3`, `tests/tc1/remote-artifact.test.mjs`)
+they reject: a declaration without its class, or with one under an older
+schema; a `handle` of a remote effect; a keyed perform without its key and a
+read-only one with a key; an outcome used as the operation's value; a match on
+an outcome with an arm missing, doubled or foreign; an ordinary effect left at
+the entry beside a remote one; and a constructed outcome. The frontend rejects
+the same programs with a message and a position (SURFACE.md).
 
 **TC0-A subset.** The JavaScript handler machine gives the same runs as the
 TC0-A implementation on all 5,774 TC0-A programs of the existing scopes, and
@@ -271,7 +324,8 @@ instruction, not a line-by-line review;
 [the registration record](../../campaigns/tc1/TC1_GATE_REGISTRATION.md) says
 what was registered, what the gate does not show, and how to revoke it; its
 Amendment 1 of 16 November 2026 records the changed scope of the two remote
-rows and the manifest's new hash. The
+rows and the manifest's new hash, and its Amendment 2 of the same day does so
+again for draft 7. The
 report now says `authority: owner-accepted, registered` and its
 `qualification` is its verdict. On a committed tree it gives verdict PASS on
 21 of 21 required rows. No run through the workflow controller on a supported
@@ -318,6 +372,9 @@ not by line review:
 Settled by the owner on 16 November 2026, in the same way:
 
 7. Questions 3, 4, 5, 6 and 8 of §12.10, as stated there.
+8. Later that day, questions 7 and 9 of §12.10, as stated there: the remote
+   effect class (§3, §8), and read-only operations as the only ones a peer
+   without a durable store may serve (§12.3).
 
 Open:
 
@@ -327,6 +384,7 @@ Open:
    sets here.
 3. Whether a clause that traps before using its resumption should be a
    validation error instead of an implicit abort.
+4. Questions 11 to 16 of §12.10, raised by draft 7.
 
 ## 12 Remote perform (model, and a first implementation)
 
@@ -343,9 +401,10 @@ the owner ruled on three of the choices this section had made beyond them:
 refusal of undeclared connections, who chooses the key, and a peer killed
 between its commit and its reply. On 16 November 2026 the owner ruled on five
 more: duplicates, the outcome now called `not_delivered`, a restart of the
-supervisor, a restarted caller, and a key reused with another argument. All
-are marked in §12.10; questions 7 and 9 there are still open. Both checks of
-this section are rows of the TC1 gate (§9).
+supervisor, a restarted caller, and a key reused with another argument; and
+later that day on the last two, the class of a remote effect and a peer with
+no durable store. All ten are marked in §12.10, which also lists the questions
+draft 7 raises. Both checks of this section are rows of the TC1 gate (§9).
 
 ### 12.1 Systems
 
@@ -365,16 +424,29 @@ which request ids it has handed over. It can restart and lose both (§12.7).
 
 ### 12.2 The operation
 
-A remote operation is an operation of an effect that the image's build binds
-to a peer. It is a runtime effect (§8): no user handler discharges it, and it
-is not replaceable by one. For `op : A -> B` on the peer, the caller writes
+A remote operation is an operation of an effect the program declares remote
+(§1; owner ruling of 16 November 2026, §12.10 question 9). The class is the
+fourth of §8: no user handler discharges a remote effect, and none can stand
+in for it (§3). The declaration gives each operation the peer's own types,
+`op : A -> B`, and may mark it read-only (§12.3). The one thing the program
+does not say is which member carries the effect out: the image's build binds
+each remote effect to a peer. The caller writes
 
 ```text
-perform(E, op, (key, a))        key : I64, a : A        result : RemoteResult B
-RemoteResult B ::= reply(B) | not_delivered | timed_out
+perform(E, op, (key, a))        key : I64, a : A        result : Remote B
+perform(E, op, a)               op read-only: no key    result : Remote B
+Remote B ::= reply(B) | not_delivered | timed_out
 ```
 
-- A and B are serializable (§1), so `RemoteResult B` is.
+- A and B are serializable (§1), so `Remote B` is.
+- **How the outcome reaches the program, today.** The value of the perform is
+  a data value of the name `RemoteResult` with the constructor `reply` and one
+  field, or `not_delivered` or `timed_out` with none. The image's runtime
+  makes it and gives it to the machine as the value of the perform; the
+  machines are unchanged and have no notion of a remote effect. The validator
+  types the perform as `Remote B` (§3) and so requires the three arms. Until
+  draft 7 the program declared that datatype itself and nothing tied it to
+  the operation.
 - **What the peer says is inside `reply`.** B is the operation's own result,
   and it is where a peer refuses a key reused with another argument (§12.3).
   That refusal is a value of the application, not a fourth outcome of the
@@ -383,7 +455,9 @@ RemoteResult B ::= reply(B) | not_delivered | timed_out
   operation's value `v`, and `(1, 0)` is *conflict*. Below, `reply(ok v)` and
   `reply(conflict)` stand for these. Once datatypes cross the boundary the
   pair becomes a sum declared with the effect, `op : A -> Applied B'` with
-  `Applied B' ::= ok(B') | conflict`, and nothing else changes.
+  `Applied B' ::= ok(B') | conflict`, and nothing else changes. A read-only
+  operation has no key and so nothing to conflict on: its B is the value
+  itself, here an I64.
 - The perform always returns, with exactly one of the three. A failure is a
   value. It is never a trap and never a resumption that does not happen.
 - **No continuation crosses the boundary.** The suspended segment stays in the
@@ -394,6 +468,9 @@ RemoteResult B ::= reply(B) | not_delivered | timed_out
   (§5), together with its outcome.
 
 ### 12.3 Request ids
+
+What follows is for an operation that is not read-only: a *keyed* operation.
+Read-only operations are at the end of this section.
 
 The *request id* is (caller, key). The key is chosen by the caller program.
 One execution of a perform is an *attempt*; the supervisor gives each attempt
@@ -435,11 +512,47 @@ attempt for the same request id; that is what a retry is.
   and nothing else: not what the supervisor saw, and not its record of events
   (owner ruling, §12.10 question 10).
 
+**Read-only operations** (owner ruling of 16 November 2026, §12.10 question
+7). An operation may be declared read-only. That is a promise about the peer:
+acting on it changes nothing the peer keeps, durable or not, that any later
+action of the peer could depend on.
+
+- **No key, no record.** A read-only operation is performed without a request
+  key, and the peer keeps no reply record for it. Each perform is its own
+  request: where the rules of §12.4 and §12.5 speak of a request id, for a
+  read-only perform that is the one attempt. A retry is a new perform and a
+  new request.
+- **Duplicates and retries are evaluated again.** A copy duplicated by the
+  supervisor, a late copy, and a retry are each acted on by evaluating the
+  operation on the peer's state at that moment. Two of them may give
+  different values. Nothing is replayed, because nothing was recorded, and
+  nothing needs to be: evaluating again changes nothing.
+- **There is no commit**, so no crash between a commit and a reply (§12.7). A
+  peer killed while acting on a read-only request has done nothing.
+- **A peer with no durable store** is allowed, and serves read-only operations
+  only. Every operation that is not read-only requires a store, because its
+  idempotence across the peer's restarts is the reply record (above). A system
+  in which a peer without a store serves a keyed operation is refused when it
+  is assembled (§12.6). What a storeless peer reads is what its image has: its
+  constants and whatever it has computed since it started, none of which
+  survives a crash.
+- **What is weaker** is the guarantee of `reply`, stated in §12.4. In short:
+  some incarnation of the peer computed the value from its state at some time
+  between the issue of the perform and the reply. It may be out of date when
+  the program sees it, and a retry may return another.
+- **What a declaration can and cannot promise.** The marker is written in the
+  caller's program, and the build derives from it what the peer's image says
+  it serves (§12.6). Nothing checks that the peer's code keeps the promise:
+  no peer is written in this language yet. A peer that writes in a read-only
+  operation is a defect, exercised as one in §12.8 and §12.11 (question 13 of
+  §12.10).
+
 ### 12.4 Outcomes
 
 | Outcome | May be produced | What the caller may conclude |
 | --- | --- | --- |
-| `reply(v)` | Only by giving the caller a reply message the peer produced by acting on this request id, while the caller is still suspended in the attempt whose tag the message carries | The peer has a durable record for the request id. `ok v`: the peer applied the request, once, with this argument, and `v` is the value in the record; it may have been applied for an earlier attempt. `conflict`: the record was made with another argument, and this attempt applied nothing |
+| `reply(v)`, keyed operation | Only by giving the caller a reply message the peer produced by acting on this request id, while the caller is still suspended in the attempt whose tag the message carries | The peer has a durable record for the request id. `ok v`: the peer applied the request, once, with this argument, and `v` is the value in the record; it may have been applied for an earlier attempt. `conflict`: the record was made with another argument, and this attempt applied nothing |
+| `reply(v)`, read-only operation | Only by giving the caller a reply message a peer produced by evaluating the operation for a copy of this attempt's request, while the caller is still suspended in that attempt | Some incarnation of the peer evaluated the operation, at some time after this attempt was issued and before the reply was given to the caller, and `v` is the result on that incarnation's state at that time. No record of it exists. Not that `v` is the state now; not which incarnation; not that another perform, even an earlier one, would have given the same |
 | `not_delivered` | (a) For a request id that does not *count as handed over* (§12.5): no copy of any attempt of it was ever handed to the peer, in any of its incarnations, and it was not issued before the supervisor's latest restart (§12.7). The peer may be up or down. The supervisor first destroys every copy of the request id it still holds. (b) At once, when the connection is not in the manifest (§12.6) | No copy of any attempt of this request id was ever handed to the peer, and none will be until this caller performs it again. So the peer has not acted on it. Nothing about whether the peer is up or down |
 | `timed_out` | At any time while the caller waits | Nothing. The peer may have acted, may not have, and may still act later: copies can remain in flight |
 
@@ -462,12 +575,24 @@ attempt for the same request id; that is what a retry is.
   incarnation) is discarded and is not shown to the program.
 - A caller that crashes while waiting gets no outcome: the attempt belonged to
   the image that was lost.
+- **A read-only perform** has the same three outcomes. Its request id is the
+  attempt itself (§12.3), so `not_delivered` says that this perform's request
+  was never handed over and never will be, and says nothing about any other
+  read; `timed_out` again says nothing. Neither matters for the peer's state,
+  which a read does not change: the two differ only in what the supervisor
+  knows. The guarantee of its `reply` is weaker than the keyed one in exactly
+  this: there is no record, so the value is tied to a moment and not to the
+  request. For a peer whose state only grows, as the counter's does, "between
+  issue and reply" bounds the value from both sides, and §12.8 checks that
+  bound; for any other peer it says only that the value was once the state.
 
 ### 12.5 The supervisor
 
 A request id *counts as handed over* when the supervisor has handed a copy of
 any attempt of it to the peer, or when it was issued before the supervisor's
-latest restart. It never stops counting.
+latest restart. It never stops counting. A read-only perform is its own
+request id (§12.3): the supervisor keeps it in the same records, under a name
+made from the attempt's number, and applies the same rules to it.
 
 May: deliver messages in any order; delay a message without bound; drop any
 message; duplicate any message; report `timed_out` at any time; report
@@ -508,6 +633,31 @@ because it does not depend on what an image says about itself. A system that
 passed the start-time check never takes a `refuse` step unless an image
 performs on a connection it did not declare.
 
+**What an image carries is derived** (owner ruling of 16 November 2026,
+§12.10 question 9). The connections of a caller image are not written by
+hand. They are the members its program's remote effects are bound to: one
+connection for every remote effect the program declares, taken from the
+declarations and the build's binding of each remote effect to a member. A
+remote effect the build binds to no member, and a binding for an effect the
+program does not declare remote, are errors of the build. The image also
+carries each remote operation it may perform with the member it goes to and
+whether it is keyed or read-only, and a peer image carries the operations it
+serves, each keyed or read-only, and whether it has a durable store.
+
+**Assembly refuses three things**, and starts no member if it finds one:
+
+1. a caller whose program declares a remote effect bound to a member with no
+   connection to it in the manifest (above);
+2. a peer image with no durable store that serves an operation which is not
+   read-only (§12.3; owner ruling, §12.10 question 7);
+3. a caller that uses an operation its peer's image does not serve, or serves
+   in the other mode: a caller that sends no key for an operation the peer
+   applies would defeat the peer's idempotence.
+
+Only the first has a run-time backstop. The other two rest on what the images
+declare, which the build derives; an image that lies about itself is outside
+the contract (§12.9).
+
 ### 12.7 Crash and restart
 
 Any member that is up may crash at any time. The crash loses its volatile
@@ -536,7 +686,8 @@ with that gap. It adds no reachable state: the state after it is the state
 after acting, losing the reply, and crashing. What it adds is a way to get
 there in which no reply ever existed, which is what an implementation does
 when the kill lands there. Where acting would only replay, a crash before the
-reply changes nothing durable and is the ordinary crash.
+reply changes nothing durable and is the ordinary crash. The same holds where
+the request is read-only: nothing is committed, so there is no such place.
 
 **A restarted caller starts from the beginning** (confirmed by the owner on
 16 November 2026, §12.10 question 6). It keeps its durable store and nothing
@@ -580,8 +731,8 @@ modelled (§12.9).
 ### 12.8 Events, and what is checked today
 
 The program observes only its outcomes. The supervisor's record has, per
-step: issued, refused, handed, acted (applied, replayed or conflict, with the
-value), outcome, stale-reply, dropped, duplicated, crashed, restarted,
+step: issued, refused, handed, acted (applied, replayed, conflict or read, with
+the value), outcome, stale-reply, dropped, duplicated, crashed, restarted,
 supervisor-restarted. As in amendment
 §14, one member's events are ordered; events of different members are not.
 
@@ -596,7 +747,7 @@ side. A later `replayed` is justified by the store, whatever the record says.
 sh harness/run-tc1-remote.sh       # explores the model, its mutants, and a negative control
 ```
 
-`harness/tc1-remote.shen` explores the whole reachable state graph of eight
+`harness/tc1-remote.shen` explores the whole reachable state graph of ten
 small systems, breadth first, and checks every state and every step. A system
 is bounded by its scripts, their retries, and a budget of crash, duplicate and
 supervisor-restart steps; drops, timeouts, `not_delivered`, member restarts
@@ -612,14 +763,22 @@ and reordering are not bounded.
 | Caller is a tc1 handler-machine program with one retry; peer | 1, 1, 0 | 48,531 | 229,264 | 97,146,773,747,921 |
 | Caller, peer; one request, one retry; the supervisor may restart | 1, 1, 1 | 87,427 | 419,263 | 30,144,991,211,636 |
 | Caller, peer; one key performed with one argument, then with another | 1, 1, 0 | 66,229 | 300,603 | 8,067,873,152,396 |
+| Caller, peer; a keyed request, then a read-only one | 1, 1, 0 | 140,837 | 671,912 | 8,545,748,518,405 |
+| Caller, peer with no durable store; one read-only request, one retry | 1, 1, 0 | 54,186 | 246,562 | 8,345,522,833,044 |
 
-A schedule is a maximal path; the longest has 34 steps. In all 834,783 states
-and 3,931,593 transitions, no property below fails. The first six systems are
-those of draft 5, which had 633,517 states and 3,013,418 transitions; they now
-have 681,127 and 3,211,727, the difference being `not_delivered` with the peer
-up. Of the transitions, 20,120 report `not_delivered` other than as a refusal,
-32,783 are supervisor restarts, 22,603 are conflicts, and 2,218 are the crash
-between commit and reply (§12.7).
+A schedule is a maximal path; the longest has 34 steps. In all 1,029,806
+states and 4,850,067 transitions, no property below fails. The first eight
+systems are those of draft 6, and their numbers are as they were: 834,783
+states and 3,931,593 transitions. (The first six are those of draft 5, which
+had 633,517 states and 3,013,418 transitions; they have had 681,127 and
+3,211,727 since draft 6, the difference being `not_delivered` with the peer
+up.) Of the transitions, 42,331 report `not_delivered` other than as a
+refusal, 32,783 are supervisor restarts, 22,603 are conflicts, 2,293 are the
+crash between commit and reply (§12.7), and 84,651 are acts on a read-only
+request. The ninth system with one retry of its read was too large to explore
+whole within the checker's limit of 1,500,000 states; the retry of a read is
+explored in the tenth, where the peer's state never changes, and with a
+changing state only by hand schedules.
 
 | Property | Statement |
 | --- | --- |
@@ -632,8 +791,15 @@ between commit and reply (§12.7).
 | key-bound-to-argument | An observed `ok` belongs to a record made with that attempt's argument, and an observed `conflict` to a record made with another. A peer says `conflict` only where such a record exists, and then leaves the store unchanged; it replays only a record made with the same argument |
 | declared-edges-only | Everything in a member's inbox or record came along a declared connection |
 | crash-isolation | A crash or restart changes no other member, not the member's durable store, and nothing in flight. A crash after a commit changes no other member and nothing in flight: no reply is emitted. A restart of the supervisor changes no member and puts nothing in flight |
+| read-only-changes-nothing | Acting on a read-only request leaves the peer's durable store exactly as it was, the count and every record; and a peer says `read` of a read-only request and of no other |
+| read-reply-from-state | An observed `reply(v)` of a read-only perform is a value the peer's state had between the issue of that attempt and the reply: `v` is not less than the peer's count when the attempt was issued, and not more than its count when the reply is given. This uses that the counter never decreases; it is the reading of §12.4 for this peer, not a general one |
 
-Eleven defects, each a switch on the model, are each caught on the property
+The first nine properties are those of draft 6, unchanged, and hold in the two
+systems that have read-only requests as in the others: a read-only delivery
+adds no application and no record, so the guarantees of keyed operations are
+judged on the same store as before.
+
+Thirteen defects, each a switch on the model, are each caught on the property
 they are aimed at. The schedule shown is a shortest one.
 
 | Defect | Caught by | Shortest schedule |
@@ -649,14 +815,17 @@ they are aimed at. The schedule shown is a shortest one.
 | Peer replies first and commits afterwards | reply-implies-acted | issue, hand over, act (reply sent, nothing committed), deliver reply |
 | A restarted supervisor takes nothing as handed over | not-delivered-not-handed | issue, supervisor restart, not-delivered. With a hand-over and an act before the restart, the same step tells the caller the peer has not acted when it has; §12.11 runs that one |
 | Peer replays a record whatever the argument | key-bound-to-argument | issue key 1 with 5, timeout, issue key 1 with 6, hand over the second, act (applied with 6), hand over the first, act: replayed, though its argument is 5 |
+| A read-only operation writes: acting on it adds one to the count | read-only-changes-nothing | issue key 1, not-delivered, issue the read, hand over, act: the store's count is 1 and nothing was applied |
+| A read-only operation ignores the state: it answers 0 | read-reply-from-state | issue key 1, hand over, act (applied), deliver reply, issue the read, hand over, act, deliver reply: 0, when the count has been 1 since before the read was issued |
 
 The ninth was added with the crash between commit and reply: it is the order
 of the two parts of acting, which §12.3 fixes. In that defect the caller
 holds a reply for which the store has no record, at once, and for good if the
-peer then crashes. The last two came with draft 6.
+peer then crashes. The tenth and eleventh came with draft 6, the last two with
+draft 7.
 
 A defective run that raises an error would be reported as crashed and not as
-caught; none does. Fourteen hand-written schedules, with expectations taken from
+caught; none does. Nineteen hand-written schedules, with expectations taken from
 this text, pass. One is the crash between commit and reply, the timeout, the
 restart, and the retry answered from the record with one application. Five
 came with draft 6: `not_delivered` with the peer up and nothing handed over;
@@ -665,12 +834,24 @@ whether the peer is up or down, no member changed, and the request in the
 peer's inbox still answered; a supervisor restart before any hand-over, with
 the old key never `not_delivered` again and a new key still able to be; a key
 reused with another argument refused as `conflict` with the store unchanged;
-and the same reuse applied when the first perform was `not_delivered`. As a negative control, the same checker run with the
+and the same reuse applied when the first perform was `not_delivered`. Five
+more came with draft 7: a read-only request and its duplicate, each
+evaluated, the reply the bare value, the store and the count of applications
+untouched, and no crash between commit and reply offered; a read handed to a
+peer that is then killed, timed out, and its retry, a new request, answered
+by the restarted peer from the store it found; `not_delivered` for a read
+never handed over, after an earlier read that was; a peer with no durable
+store serving a read before and after it is killed; and the refusal at
+assembly of a storeless peer that is sent a keyed request, and of an
+undeclared connection (`remote.assembly-refusals`: the model has no step for
+either system). As a negative control, the same checker run with the
 non-idempotent peer in place of the model reports failure and exits with
 status 1; the runner requires that.
 
 The model's members are abstract: a caller is a script of requests, a peer
-adds one to a counter and replies with it, or with `conflict`. One system uses a real tc1 program
+adds one to a counter and replies with it, or with `conflict`, and answers a
+read-only request with the counter. A peer with no durable store answers
+read-only requests only. One system uses a real tc1 program
 as the caller (`models/tc1/remote-tc1-caller.shen`): the handler machine runs
 to a perform of a bound effect that no frame handles, keeps its frames, and is
 given the outcome as the value of that perform.
@@ -709,9 +890,15 @@ which the implementation had to settle:
   restart keeps (the attempt numbering and the set of accepted request ids)
   is assumed never lost; its messages are assumed uncorrupted; and a restart
   in the middle of a step is not modelled.
-- **A peer that breaks its obligation.** Idempotence and the refusal of a
-  reused key are assumed of peers, not enforced on them; the non-idempotent
-  defect and the replaying defect show what then fails.
+- **A peer that breaks its obligation.** Idempotence, the refusal of a
+  reused key, and changing nothing in a read-only operation are assumed of
+  peers, not enforced on them; the non-idempotent defect, the replaying
+  defect and the writing read show what then fails.
+- **An image that misdeclares itself.** Two of the three assembly checks
+  (§12.6) rest on what the images say, which the build derives; nothing ties
+  an image file to the build that made it.
+- **Freshness of a read.** A read-only reply may be arbitrarily old when the
+  program uses it, and nothing orders the replies of two reads.
 - **Digests.** A peer that compared real digests could take two different
   arguments for the same one. Here the argument is its own digest.
 - **External effects of a peer's action.** Applied once means one durable
@@ -719,8 +906,13 @@ which the implementation had to settle:
 - **Time.** A timeout has no clock here; it may fire at once.
 - **Several tasks in one image** performing concurrently, bounded mailboxes
   and overload.
-- **Peers written in tc1,** typing of remote effects (§3 still says the entry
-  function's set may contain only `Emit`), and the surface syntax for a key.
+- **Peers written in tc1.** The peer is hand-written C; so a read-only
+  declaration is checked against no peer code, and the operations a peer
+  serves are derived from the caller's program. Remote operation types beyond
+  what the wire carries (§12.11), and more than one keyed and one read-only
+  operation per peer.
+- **Soundness of the typing of §3 for remote effects.** It is checked by the
+  validator and the frontend on tests, not proved.
 - Systems larger than those listed; any proof. The contract, the model, the
   defects and the checker share one author lineage, and the checker reads
   history variables that the model's own steps maintain.
@@ -728,8 +920,9 @@ which the implementation had to settle:
 ### 12.10 Open questions for the owner
 
 Questions 1, 2 and 10 have owner rulings of 15 November 2026, and questions 3,
-4, 5, 6 and 8 of 16 November 2026. All were given by instruction in
-conversation, not by line review of this text. Questions 7 and 9 are open.
+4, 5, 6 and 8, and later the same day 7 and 9, of 16 November 2026. All were
+given by instruction in conversation, not by line review of this text. None
+of the first ten is open. Questions 11 to 16 are new with draft 7 and open.
 
 1. **Refusal.** An undeclared connection returns `not_delivered` here, because the
    guarantee is the same and the outcomes stay three. Alternatives: reject the
@@ -772,6 +965,19 @@ conversation, not by line review of this text. Questions 7 and 9 are open.
    resumption belongs to durable workflows (amendment §14), not to actors.
 7. **A peer with no durable store** can be idempotent only within one
    incarnation. Allowed, and with what guarantee for `reply`?
+   **Owner ruling, 16 November 2026:** allowed only for operations declared
+   read-only; any operation that changes state requires a store. Done as
+   follows: an operation of a remote effect may be marked read-only in its
+   declaration (§1); it has no request key and no reply record, and
+   duplicates and retries are evaluated again (§12.3); its `reply` says that
+   some incarnation of the peer computed the value from its state at some
+   time between issue and reply, and no more (§12.4); a peer image without a
+   store that serves an operation which is not read-only is refused at
+   assembly (§12.6). What the ruling left to this text: that a read-only
+   perform is its own request for the supervisor's rules (question 12); that
+   read-only is a promise about the peer which nothing checks on the peer
+   (question 13); and the reading of "between issue and reply" that the
+   model checks, which is exact only for a state that never decreases.
 8. **A key reused with a different argument:** refuse, as the service example
    does with `Conflict`, or unspecified?
    **Owner ruling, 16 November 2026:** refused, and reported inside `reply` as
@@ -782,6 +988,21 @@ conversation, not by line review of this text. Questions 7 and 9 are open.
    crosses the boundary, and a sum `ok(v) | conflict` later (§12.2).
 9. **Naming and class.** Is a remote operation a runtime effect with a reserved
    name, or a fourth class beside ordinary, runtime and durable (§8)?
+   **Owner ruling, 16 November 2026:** a fourth class, `remote`, declared in
+   the source. Done as follows: effect declarations carry their class, in a
+   new artifact schema, `tc1-handler-demo/3`, for programs that declare a
+   remote effect (§1); the validator's option that admitted an unhandled
+   effect is gone, and the entry function may leave exactly the remote
+   effects unhandled (§3); a perform of a remote operation has the type
+   `Remote B`, which only an exhaustive match takes apart (§3, §12.2); an
+   image's connections are derived from its program's declarations and the
+   build's binding of effect to member (§12.6); and the caller image of
+   §12.11 is built from a source file. What the ruling left to this text: a
+   `handle` of a remote effect is rejected, not given a local meaning
+   (question 16); the outcome type is built in until datatypes take
+   parameters (§3); the declaration states the peer's types, and the key is
+   the first component of the caller's argument (§12.2); and the surface
+   spelling (SURFACE.md).
 10. **The supervisor's record of `acted`** (raised by the implementation). In
     the model a peer's action, its record and the sending of the reply are one
     step. In an implementation the durable commit comes first and the reply
@@ -798,6 +1019,37 @@ conversation, not by line review of this text. Questions 7 and 9 are open.
     can place the kill there and can find out afterwards that it happened
     (§12.11).
 
+Raised by draft 7, open:
+
+11. **An outcome that is never examined.** The type `Remote B` forces the
+    three arms on a program that wants the operation's value. It does not
+    stop a program from dropping an outcome, or passing it on unmatched.
+    Should the result of a remote perform have to be matched (or explicitly
+    discarded)? That needs a must-use rule the language does not have.
+12. **The identity of a read-only perform.** Here each perform is its own
+    request, so `not_delivered` is decided per perform. The alternative, one
+    identity per caller and operation, is also sound and makes
+    `not_delivered` almost never available after the first read. Confirm.
+13. **Who vouches for read-only.** The marker is in the caller's program. The
+    peer's image says the same only because the build copies it there. When
+    a peer is written in this language, read-only should be checked on the
+    peer: a handler that performs no durable effect. Until then it is a
+    promise, and a peer that breaks it is caught only on the histories run.
+14. **Where the binding of a remote effect to a member lives.** Today it is a
+    constant of the build script. It could be in the manifest, in the source,
+    or on the build's command line. The manifest would then be the one
+    description of who talks to whom.
+15. **Operations a peer serves.** They are derived from the caller's
+    declarations, because there is one caller and no peer program. With two
+    callers that declare the same effect differently, something has to own
+    the effect's signature: a shared declaration both programs import, which
+    needs modules.
+16. **No handler for a remote effect.** Rejected here (§3). Allowing one that
+    intercepts locally would let a caller program be run alone against a
+    stub, at the price given in §3. Confirm the rejection, or say that
+    testing against a stub should be a property of the build (bind the effect
+    to a stub member) rather than of the program.
+
 ### 12.11 First implementation
 
 ```sh
@@ -809,19 +1061,33 @@ The smallest system, for real: an Erlang/OTP supervisor
 step, on a recommendation that is not yet an owner ruling), a caller image and
 a peer image, each a Solo5 guest run as an OS process under the `spt` tender.
 The caller is a TC1 program on the C machine of `backends/solo5/pure-call`,
-unchanged: it performs `Ledger.add` with key 7 and argument 5, once more with
-the same key and argument after `timed_out`, then with key 8, then with key 7
-again and argument 6, a reuse of the key that the peer refuses if key 7 was
-applied with 5. The build binds `Ledger` to the peer, the
-outcome becomes the value of the perform, and the frames stay in the image.
-The validator admits the program only through an option, because the typing of
-remote effects is open (§12.9). The peer is the model's counter with its
-durable store in a file; each record keeps the argument it was made with.
-Messages go through block-device files used as mailboxes, which need no
-privileges, not through the network device; an argument is an I64 and a reply
-is a status and an I64 (§12.2). The wire format is version 2: version 1 had no
-status, no `conflict` and no argument in a store record. The code of the
-outcome now called `not_delivered` is the one `peer_down` had. The
+unchanged. Since draft 7 the program is a source file,
+[examples/remote/ledger-caller.fen](../../examples/remote/ledger-caller.fen),
+and the build elaborates it with the frontend
+([SURFACE.md](SURFACE.md)) to an artifact of schema `tc1-handler-demo/3`, which
+the validator admits with no option: the program declares `Ledger` as a remote
+effect with a keyed operation `add` and a read-only operation `total`. Until
+draft 6 the program was assembled by hand in a fixture, which is gone. It
+performs `Ledger.add` with key 7 and argument 5, once more with the same key
+and argument after `timed_out`, then with key 8, then with key 7 again and
+argument 6, a reuse of the key that the peer refuses if key 7 was applied with
+5; and then `Ledger.total`, once more after `timed_out`. The build binds
+`Ledger` to the peer and derives from the declarations what each image says of
+itself (§12.6): the caller's connections and operations, and the operations
+the peer serves; neither line is written by hand. The outcome becomes the
+value of the perform, and the frames stay in the image. The peer is the
+model's counter with its durable store in a file; each record keeps the
+argument it was made with, and `total` replies with the counter and writes
+nothing. Messages go through block-device files used as mailboxes, which need
+no privileges, not through the network device. The wire format is version 3.
+It carries what this one system needs and no more: a keyed operation takes an
+I64 and replies a status and an I64 (§12.2); a read-only one takes unit and
+replies an I64; a request says which of the two modes it is, and not the
+operation's name, so a peer serves one operation of each mode; the build
+rejects a program whose remote operations are otherwise. Version 2 had no mode
+and no `read`; version 1 had no status, no `conflict` and no argument in a
+store record. The code of the outcome now called `not_delivered` is the one
+`peer_down` had. The
 supervisor's README has the wire format, what is trusted, and what is not
 shown.
 
@@ -838,8 +1104,8 @@ model's caller is the same program, read from the build.
 
 | Schedules | Number | Result |
 | --- | --- | --- |
-| Written by hand from this section | 19 | Accepted; the recorded steps are the schedule's and the outcomes the expected ones |
-| Seeded (1 crash, 1 duplicate, 1 supervisor restart, until no step is enabled) | 40, 791 steps | Accepted. All forty take the supervisor restart, 28 end a perform in `conflict`, 7 report `not_delivered`, 3 take the crash between commit and reply |
+| Written by hand from this section | 24 | Accepted; the recorded steps are the schedule's and the outcomes the expected ones |
+| Seeded (1 crash, 1 duplicate, 1 supervisor restart, until no step is enabled) | 40, 989 steps | Accepted. All forty take the supervisor restart, 34 act on a read-only request, 28 end a perform in `conflict`, 15 report `not_delivered`, 3 take the crash between commit and reply |
 | Free-running: one undisturbed, two with the peer killed from outside, one with a request the supervisor is told to lose | 4 | Accepted |
 
 The hand schedules cover: plain reply; request dropped, timeout, retry applied;
@@ -854,10 +1120,27 @@ after `timed_out` discarded; a caller restarted from its beginning; key 7
 applied with one argument and then performed with another, `conflict`, the
 store unchanged, and a late copy of the first request still replayed; four
 schedules with a supervisor restart (below); an undeclared connection refused
-at start, and at run time with the start-time check off. In every schedule
-that applies key 7 with argument 5, the program's last perform is the reuse of
-key 7 and ends in `reply(conflict)`. Every step kind of the model occurs. Each
-scheduled run was made twice with equal recordings.
+at start, and at run time with the start-time check off; and five that came
+with draft 7 (below). In every schedule that applies key 7 with argument 5,
+the program's third keyed perform is the reuse of key 7 and ends in
+`reply(conflict)`, and every schedule that runs the program to its end ends
+with the read. Every step kind of the model occurs. Each scheduled run was
+made twice with equal recordings.
+
+*Read-only, and assembly, for real.* The five: the read handed to the peer,
+the peer killed before it acts, `timed_out`, the peer restarted, and the
+retry, a new request, answered 2 by the new incarnation from the store it
+found; two copies of one read handed over, each evaluated, the second reply
+stale, the store as it was; a read never handed over reported `not_delivered`
+with the peer up, after three keyed requests of the same caller that were
+handed over; a read issued when the total is 1, a late copy of key 8 applied
+before the peer acts on the read, and the reply 2, which is the weaker
+guarantee of §12.4 seen from outside; and a peer image built without a store
+device, declaring that it serves `Ledger.add`, refused at assembly with
+nothing started. That last image is not part of any system: the build makes
+it, beside the real peer, so that the refusal can be exercised, and the
+build's own copy of the assembly check names the same refusal. No run has a storeless peer that is
+accepted: that would need a second caller program which only reads.
 
 *The supervisor's restart, for real.* The step machine and the two things the
 contract says are lost, the record of hand-overs and the messages in flight,
@@ -912,11 +1195,17 @@ record. Before draft 5 that run ended in an error.
 | Peer image replies first and commits afterwards | (c): the peer's store file has no application where the model has one | issue, hand over, crash between commit and reply, deliver reply |
 | Restarted supervisor takes nothing as handed over | (a): the model has only `timeout` there | issue, hand over, act, supervisor restart, not-delivered: the caller is told the peer has not acted, and it has applied the request |
 | Peer image replays a record whatever the argument | (a): the model has only `conflict` there | key 7 with argument 5 and key 8, each issued, handed over, acted on and replied to; then key 7 with argument 6 issued, handed over, act: replayed |
+| Peer image's read-only operation adds one to the counter and commits it | (a): the reply the supervisor carries is 3, and the model has only the reply 2 there | the three keyed performs, each issued, handed over, acted on and replied to; then the read issued, handed over, acted on, deliver reply |
 
 In the fifth, the kill finds a reply and no commit. The supervisor records what
 it saw, an act by the reply and then the crash, and the caller is given the
 reply. (a) and (b) accept that log: by the log the peer acted. Only the store
 says otherwise, which is the point of the ruling on question 10.
+
+In the eighth, the act itself is a step of the model: the supervisor cannot see
+that the image wrote. The value gives it away one step later, and the store
+file, with three applications where the model has two, would by (c) if the
+schedule stopped at the act.
 
 Each of these recordings, replayed through the corresponding model mutant, is
 accepted and violates the property that mutant is aimed at in §12.8. A run
@@ -937,6 +1226,10 @@ the middle of the store's two writes, or between the reply's two) is not
 placed and not exercised. The supervisor's restart is taken between steps
 only, never in the free-running mode, and what survives it is in the memory of
 another Erlang process: a relay killed inside a step, and the loss of the
-whole VM, are not covered. Six defects are caught by (a), the fifth by (c)
-alone. Three free-running runs depend on the wall clock. No `hvt` run and no
-proof.
+whole VM, are not covered. Seven defects are caught by (a), the fifth by (c)
+alone. Three free-running runs depend on the wall clock. The peer is not a
+program of this language, so what it serves is taken from the caller's
+declarations, and "read-only" is checked against its behaviour on these
+histories only. The frontend that elaborates the caller is development code
+with its own tests (`sh frontend/test.sh`), which are not a row of the gate.
+No `hvt` run and no proof.

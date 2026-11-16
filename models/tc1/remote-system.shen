@@ -34,7 +34,9 @@
 \\                             Tags: next attempt number per member;
 \\                             Issued: set of [Caller Peer Rid] ever accepted
 \\   Ghost   [Attempts Applied Sealed Given Old]   history variables, read only by the checker
-\\             Attempt [Tag Caller Peer Rid Fate Outcomes Argument], Fate open/closed/orphaned
+\\             Attempt [Tag Caller Peer Rid Fate Outcomes Argument], Fate open/closed/orphaned;
+\\                     for a read-only request Argument is [read-only A Low], Low being
+\\                     the peer's Count when the attempt was issued
 \\             Applied [[Peer Caller Rid] N]   real applications per request id
 \\             Sealed  [Caller Peer Rid]       not-delivered reported, not issued since
 \\             Given   [Caller Peer Rid]       a copy really was handed to the peer
@@ -74,13 +76,30 @@
 \\ pending performs and their inboxes are untouched, and the attempt numbering
 \\ and the set of issued request ids survive.
 \\
+\\ Read-only operations (owner ruling of 16 November 2026, EFFECTS.md §12.10
+\\ question 7). A request whose payload is [read-only Argument] is a perform of
+\\ an operation declared read-only. It has no request key: each perform is its
+\\ own request, and the supervisor names it "read-N", N being the number of the
+\\ attempt, where a keyed request has its key. A program asks for one with the
+\\ symbol read in the place of the Rid. The peer answers from its state and
+\\ records nothing: the reply value is the value itself, [int Count], with no
+\\ status, since there is no key to conflict on; a duplicate, or a retry, which
+\\ is a new request, is evaluated again. There is no commit, so no crash
+\\ between a commit and a reply. A peer with no durable store may serve
+\\ read-only operations and nothing else.
+\\
 \\ Programs. A member's program is behind two functions, remote.next and
 \\ remote.resume. [script Entries] is the abstract caller: Entries are
 \\ [Peer Rid Payload Retries]; it performs them in order and performs an entry
 \\ again, with the same Rid, while it sees timed-out and has retries left.
-\\ Handlers. [counter] applies a request by adding one to Count and replies with
-\\ the new Count, replays its record for a request id it has applied with the
-\\ same argument, and replies conflict for one it has applied with another;
+\\ Handlers. [counter] applies a keyed request by adding one to Count and
+\\ replies with the new Count, replays its record for a request id it has
+\\ applied with the same argument, and replies conflict for one it has applied
+\\ with another; it answers a read-only request with Count and changes
+\\ nothing. [meter] is a peer with no durable store: it answers a read-only
+\\ request the same way (its Count is never anything but 0), and a system that
+\\ hands it a keyed request is not one that may be assembled
+\\ (remote.assembly-refusals): acting on it is an error of the model.
 \\ [none] ignores requests.
 \\
 \\ How a tc1 machine plugs in. A remote operation is a runtime effect: no user
@@ -108,6 +127,8 @@
 \\   forgetful-supervisor-restart   a restarted supervisor takes nothing as handed over
 \\   replay-on-different-argument   the peer answers a reused key from its record
 \\                                  although the argument differs
+\\   read-only-writes           acting on a read-only request adds one to Count
+\\   read-ignores-state         a read-only request is answered 0 whatever Count is
 
 \\ ---------- a total order on terms, for canonical sets ----------
 
@@ -312,11 +333,32 @@
   _ _ _ _ _ [halted] -> []
   Config S Name Durable Inbox [halt Program Events] ->
     [[[finish Name] (remote.member-events Name Events) (remote.set-member [Name up Durable [Program [] Inbox]] S)]]
-  Config S Name Durable Inbox [request Peer Rid Payload Program Events] ->
+  Config S Name Durable Inbox [request Peer Asked Payload Program Events] ->
     (let Fresh (remote.next-tag Name (hd (tl (remote.sup S))))
+         Rid (remote.request-id Asked (hd Fresh))
       [(if (remote.declared? Config Name Peer)
            (remote.issue S Name Durable Inbox Peer Rid Payload Program Events (hd Fresh) (hd (tl Fresh)))
            (remote.refuse S Name Durable Inbox Peer Rid Payload Program Events (hd Fresh) (hd (tl Fresh))))]))
+
+\\ A keyed request is named by its key. A read-only request has none: it is
+\\ this one attempt, and is named after the attempt's number.
+(define remote.request-id
+  read [_ N] -> (cn "read-" (str N))
+  Rid _ -> Rid)
+
+(define remote.read-only?
+  [read-only | _] -> true
+  _ -> false)
+
+\\ What the checker keeps of an attempt's argument: for a read-only request,
+\\ also the peer's Count at the time of issue.
+(define remote.ghost-argument
+  [read-only Arg] Peer Members -> [read-only Arg (remote.count-of (remote.find-member Peer Members))]
+  Payload _ _ -> Payload)
+
+(define remote.count-of
+  [[_ _ [Count _] _]] -> Count
+  [] -> 0)
 
 \\ The supervisor accepts the request: one copy is in flight and the image waits.
 (define remote.issue
@@ -326,7 +368,7 @@
      [(remote.replace-member [Name up Durable [Program [Tag Peer Rid] Inbox]] Members)
       (remote.insert [req Tag Name Peer Rid Payload] Net)
       [Handed Tags (remote.insert-set [Name Peer Rid] Issued)]
-      [(remote.insert [Tag Name Peer Rid open [] Payload] Attempts) Applied (remote.remove-all [Name Peer Rid] Sealed) Given Old]
+      [(remote.insert [Tag Name Peer Rid open [] (remote.ghost-argument Payload Peer Members)] Attempts) Applied (remote.remove-all [Name Peer Rid] Sealed) Given Old]
       Budget]])
 
 \\ The connection is not in the manifest: nothing is put in flight and the perform
@@ -338,7 +380,7 @@
      [(remote.replace-member [Name up Durable [(remote.resume Program [not-delivered]) [] Inbox]] Members)
       Net
       [Handed Tags Issued]
-      [(remote.insert [Tag Name Peer Rid closed [[not-delivered]] Payload] Attempts) | Ghost]
+      [(remote.insert [Tag Name Peer Rid closed [[not-delivered]] (remote.ghost-argument Payload Peer Members)] Attempts) | Ghost]
       Budget]])
 
 \\ ---------- steps of the link: deliver, drop, duplicate ----------
@@ -433,6 +475,16 @@
 (define remote.act-on
   Config S Name Count Log Volatile Tag Caller Rid Payload [none] _ ->
     [[[act Name Tag ignored] [[acted Tag Name ignored]] (remote.set-member [Name up [Count Log] Volatile] S)]]
+  \\ A read-only request: answered from the state, as it is now. Nothing is
+  \\ committed and nothing recorded, with or without a durable store.
+  Config S Name Count Log Volatile Tag Caller Rid [read-only _] Handler _ ->
+    (let After (if (remote.mutant? Config read-only-writes) (+ Count 1) Count)
+         Value [int (str (if (remote.mutant? Config read-ignores-state) 0 After))]
+      [[[act Name Tag read] [[acted Tag Name read Value]]
+        (remote.send-reply [rep Tag Caller Name Rid Value] (remote.set-member [Name up [After Log] Volatile] S))]])
+    where (element? Handler [[counter] [meter]])
+  Config S Name Count Log Volatile Tag Caller Rid Payload [meter] _ ->
+    (error "remote: ~A has no durable store and was handed a request that is not read-only" Name)
   \\ Mutant only: the second half of a reply sent before its commit.
   Config S Name Count Log Volatile Tag Caller Rid [uncommitted Value Arg] [counter] _ ->
     [[[act Name Tag committed] [[acted Tag Name committed (remote.ok Value)]]
@@ -494,6 +546,7 @@
               (remote.applied [Name Caller Rid] S))))]])
     where (and (> (hd (remote.budget S)) 0)
                (= (remote.handler Config Name) [counter])
+               (not (remote.read-only? Payload))
                (not (remote.mutant? Config reply-before-commit))
                (= (remote.assoc [Caller Rid] Log) []))
   _ _ _ -> [])
@@ -616,6 +669,32 @@
        [Crashes Duplicates (- Restarts 1)]]]]
     where (> Restarts 0)
   _ _ -> [])
+
+\\ ---------- assembly ----------
+
+\\ What must hold of a system before any member is started (EFFECTS.md §12.6),
+\\ as far as a configuration of abstract callers shows it. Result: the refusals,
+\\ [] when the system may be assembled.
+\\   [Caller Peer]            a script performs on a connection the manifest lacks
+\\   [Peer no-store Caller]   a script sends a request that is not read-only to a
+\\                            peer with no durable store
+\\ A tc1 caller's requests are not listed here: its image's declaration is
+\\ derived from its program by the build, and checked by the real supervisor.
+(define remote.assembly-refusals
+  Config -> (remote.concat (map (/. Spec (remote.script-refusals Config (hd Spec) (hd (tl Spec)))) (remote.specs Config))))
+
+(define remote.script-refusals
+  Config Name [script Entries] -> (remote.distinct-list (remote.concat (map (/. E (remote.entry-refusals Config Name E)) Entries)) [])
+  _ _ _ -> [])
+
+(define remote.entry-refusals
+  Config Name [Peer _ Payload _] ->
+    (append (if (element? [Name Peer] (remote.edges Config)) [] [[Name Peer]])
+            (if (and (= (remote.handler Config Peer) [meter]) (not (remote.read-only? Payload))) [[Peer no-store Name]] [])))
+
+(define remote.distinct-list
+  [] Acc -> (reverse Acc)
+  [X | Xs] Acc -> (remote.distinct-list Xs (if (element? X Acc) Acc [X | Acc])))
 
 \\ ---------- the step relation ----------
 

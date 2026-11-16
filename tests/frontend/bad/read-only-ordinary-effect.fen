@@ -1,0 +1,8 @@
+\\ expect 5:3 read-only marks an operation of a remote-effect, and Log is an ordinary effect
+\\ Only a remote effect has read-only operations.
+
+(effect Log
+  (read-only size Unit --> I64))
+
+(define main {I64 --> I64}
+  input -> input)
