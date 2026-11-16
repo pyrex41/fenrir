@@ -7,6 +7,7 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {MUTANTS} from '../../tools/tc1/handler-defects.mjs';
 import {enumerateHandlers} from '../../tools/tc1/handler-enumerate.mjs';
+import {HAND,GENERATED,PROGRAMS} from '../../tools/tc1/peer-requests.mjs';
 const json=path=>JSON.parse(readFileSync(path,'utf8'));
 const manifest=json('spec/tc1/tc1-requirements.json'),evaluator=readFileSync('harness/tc1-gate.shen','utf8');
 
@@ -37,7 +38,7 @@ test('the required rows are the ones the gate was specified with', () => {
   const required=manifest.rows.filter(r=>r.required).map(r=>r.check);
   assert.deepEqual(required,['source-identity','toolchain-pinned','unit-suite','tc0-a-gate','tc1-handlers','tc1-exhaustive',
     ...Object.keys(MUTANTS).map(key=>'tc1-defect:'+key),'tc1-guest-hand','tc1-guest-exhaustive',
-    'tc1-random','tc1-guest-random','tc1-random-control','tc1-reduction','tc1-reduced-replay','tc1-remote-model','tc1-remote-run']);
+    'tc1-random','tc1-guest-random','tc1-random-control','tc1-reduction','tc1-reduced-replay','tc1-remote-model','tc1-remote-run','tc1-remote-peer']);
   // An optional row is never among a claim's rows or the prerequisites.
   const optional=manifest.rows.filter(r=>!r.required).map(r=>r.id);
   for(const rows of [...Object.values(manifest.claims),manifest.claim_prerequisites])assert.ok(!rows.some(id=>optional.includes(id)));
@@ -82,12 +83,14 @@ test('the gate is registered by the rule the TC0-A gate uses, and the workflow p
   const paths=new Set(check.authorityPaths);
   for(const path of workflow.checks['tc0-a-qualification'].authorityPaths)assert.ok(paths.has(path),path);
   for(const path of ['supervisor','backends/solo5/remote','tools/solo5/remote-build.mjs','models/tc1','spec/tc1','harness','campaigns/tc1','flake.nix','flake.lock'])assert.ok(paths.has(path),path);
-  // The caller image is built from a source file through the frontend: both are what the remote-run row depends on.
-  for(const path of ['frontend','examples/remote'])assert.ok(paths.has(path),path);
+  // The caller image and the peer image are built from source files through the frontend: all of it is what the remote rows depend on,
+  // with the test peers and the peer of another signature under tests/remote.
+  for(const path of ['frontend','examples/remote','tests/remote','tools/tc1','runtime/tc1'])assert.ok(paths.has(path),path);
   const build=readFileSync('tools/solo5/remote-build.mjs','utf8');
   // The build takes the source's name from the system manifest, which is under examples/remote too.
   assert.ok(build.includes("MANIFEST='examples/remote/ledger-system.json'")&&build.includes("'frontend/fenrir.sh'"));
   assert.equal(json('examples/remote/ledger-system.json').members[0].program,'examples/remote/ledger-caller.fen');
+  assert.equal(json('examples/remote/ledger-system.json').members[1].program,'examples/remote/ledger-peer.fen');
   // The workflow's completion condition is still the TC0-A slice's: this record does not change it.
   assert.deepEqual(workflow.requiredChecks,['tc0-a-qualification']);
 });
@@ -106,13 +109,21 @@ test('the remote rows, the manifest and the checks state the same scope', () => 
     text('remote-model').includes(`${number('remote-model-hand')} hand schedules`)&&text('remote-model').includes('Model-level bounded exploration'));
   // Run check: hand schedules, seeds, free runs, defect switches.
   assert.equal(count(run,'(define fx.hand\n','(define fx.drop-last',/^ +\[?\["[a-z0-9-]+" \(?(fx\.declared\)|\[\]) (true|false)$/gm),number('remote-run-hand'));
-  assert.equal(Number(run.match(/\(set fx\.\*seeds\* (\d+)\)/)[1]),number('remote-run-seeds'));
+  // Seeded schedules of the ledger system and of the rates system, whose peer has no durable store.
+  assert.equal(Number(run.match(/\(set fx\.\*seeds\* (\d+)\)/)[1])+Number(run.match(/\(set fx\.\*rates-seeds\* (\d+)\)/)[1]),number('remote-run-seeds'));
   assert.equal(count(run,'(define fx.free-runs','(define fx.free\n',/\["free[a-z-]*" \[object/g),number('remote-run-free'));
   assert.equal(count(run,'(define fx.defects','(define fx.command\n',/^ +\[?\["[a-z0-9-]+" \(?(fx\.declared\)|\[\]) (true|false)$/gm),number('remote-run-defects'));
   assert.ok(text('remote-run').includes(`${number('remote-run-hand')} hand schedules, ${number('remote-run-seeds')} seeded schedules and ${number('remote-run-free')} free-running runs`)&&
     text('remote-run').includes(`${number('remote-run-defects')} defect switches`)&&text('remote-run').includes('Observed histories on spt accepted by the model'));
-  // The two claims say what kind of evidence they are, and rest on these rows only.
-  assert.deepEqual(manifest.claim_evidence,{'remote-perform-model-properties-bounded':'model-level bounded exploration','remote-perform-observed-histories-spt':'observed histories on spt accepted by the model'});
+  // Peer check: hand cases and generated cases, as the tool makes them.
+  assert.equal(HAND.length,number('remote-peer-hand'));
+  assert.equal(GENERATED,number('remote-peer-generated'));
+  assert.ok(text('remote-peer').includes(`${number('remote-peer-hand')} hand cases and ${number('remote-peer-generated')} generated cases`)&&text('remote-peer').includes('Agreement of three implementations on listed cases'));
+  for(const program of PROGRAMS)assert.ok(text('remote-peer').includes(program),program);
+  // The three claims say what kind of evidence they are, and rest on these rows only.
+  assert.deepEqual(manifest.claim_evidence,{'remote-perform-model-properties-bounded':'model-level bounded exploration','remote-perform-observed-histories-spt':'observed histories on spt accepted by the model',
+    'remote-peer-request-three-machine-agreement':'agreement of three implementations on listed cases'});
+  assert.deepEqual(manifest.claims['remote-peer-request-three-machine-agreement'],['toolchain-pinned','remote-peer']);
   assert.deepEqual(manifest.claims['remote-perform-model-properties-bounded'],['toolchain-pinned','remote-model']);
   assert.deepEqual(manifest.claims['remote-perform-observed-histories-spt'],['toolchain-pinned','remote-model','remote-run']);
   // One Erlang lookup, used by the runner and by the gate row.
@@ -121,28 +132,34 @@ test('the remote rows, the manifest and the checks state the same scope', () => 
 
 test('the registration record carries its amendments, and the remote checks agree on names, properties and the wire version', () => {
   const record=readFileSync('campaigns/tc1/TC1_GATE_REGISTRATION.md','utf8');
-  const first=record.indexOf('## Amendment 1, 2026-11-16'),second=record.indexOf('## Amendment 2, 2026-11-16'),third=record.indexOf('## Amendment 3, 2026-11-16'),amendment=record.slice(third);
+  const first=record.indexOf('## Amendment 1, 2026-11-16'),second=record.indexOf('## Amendment 2, 2026-11-16'),third=record.indexOf('## Amendment 3, 2026-11-16'),
+    fourth=record.indexOf('## Amendment 4, 2026-11-16'),amendment=record.slice(fourth);
   // The amendments are at the end, in order, by instruction and not by line review; the last is the part that names the manifest as it is now.
   const instructed=/given in\s+conversation, not line\s+review/;
-  assert.ok(first>0&&second>first&&third>second&&instructed.test(record.slice(first,second))&&instructed.test(record.slice(second,third))&&instructed.test(amendment));
+  assert.ok(first>0&&second>first&&third>second&&fourth>third&&instructed.test(record.slice(first,second))&&instructed.test(record.slice(second,third))&&
+    instructed.test(record.slice(third,fourth))&&instructed.test(amendment));
   const hash=createHash('sha256').update(readFileSync('spec/tc1/tc1-requirements.json')).digest('hex');
-  assert.ok(amendment.includes(hash)&&!record.slice(0,third).includes(hash));
+  assert.ok(amendment.includes(hash)&&!record.slice(0,fourth).includes(hash));
   assert.match(manifest.review,/Amended on 2026-11-16 a second time \(Amendment 2/);
   assert.match(manifest.review,/Amended on 2026-11-16 a third time \(Amendment 3/);
-  assert.match(manifest.contract,/draft 8/);
-  assert.match(readFileSync('spec/tc1/EFFECTS.md','utf8'),/^Draft 8 /m);
-  // Questions 13 and 15 of the contract are open, and the record does not say otherwise.
-  assert.match(amendment,/Questions 13 and 15[^.]*open/);
+  assert.match(manifest.review,/Amended on 2026-11-16 a fourth time \(Amendment 4/);
+  assert.match(manifest.contract,/draft 9/);
+  assert.match(readFileSync('spec/tc1/EFFECTS.md','utf8'),/^Draft 9 /m);
+  // Questions 13 and 15 of the contract were open at the third amendment and have rulings at the fourth.
+  assert.match(record.slice(third,fourth),/Questions 13 and 15[^.]*open/);
+  assert.match(amendment,/gave rulings\s+on questions 13 and 15/);
   // The outcome renamed on 16 November 2026 is not left under its old name in anything that runs.
   const sources=['models/tc1/remote-system.shen','models/tc1/remote-tc1-caller.shen','harness/tc1-remote.shen','harness/tc1-remote-properties.shen',
     'harness/tc1-remote-run.shen','harness/tc1-remote-rows.shen','supervisor/src/fenrir_relay.erl','supervisor/src/fenrir_run.erl','supervisor/src/fenrir_main.erl',
-    'supervisor/src/fenrir_wire.erl','backends/solo5/remote/caller.c','backends/solo5/remote/peer.c','backends/solo5/remote/wire.c','examples/remote/ledger-caller.fen','tools/solo5/remote-build.mjs'];
+    'supervisor/src/fenrir_wire.erl','backends/solo5/remote/caller.c','backends/solo5/remote/peer.c','backends/solo5/remote/wire.c','backends/solo5/remote/serve.c',
+    'backends/solo5/remote/check.c','examples/remote/ledger-caller.fen','examples/remote/ledger-peer.fen','models/tc1/remote-tc1-peer.shen','harness/tc1-peer-requests.shen',
+    'tools/solo5/remote-build.mjs','tools/tc1/peer-requests.mjs'];
   for(const file of sources)assert.ok(!/peer[-_]down/i.test(readFileSync(file,'utf8')),file);
   // Both checks report the same properties, and every model mutant is aimed at one of them.
   const model=readFileSync('harness/tc1-remote.shen','utf8'),run=readFileSync('harness/tc1-remote-run.shen','utf8');
   const properties=source=>source.match(/\["properties" \[([^\]]*)\]\]/)[1].match(/"[a-z-]+"/g);
   assert.deepEqual(properties(model),properties(run));
-  assert.equal(properties(model).length,11);
+  assert.equal(properties(model).length,13);
   const aimed=model.slice(model.indexOf('(define fr.mutants'),model.indexOf('(define fr.aimed')).match(/"[a-z-]+"\]/g).map(s=>s.slice(0,-1));
   for(const property of aimed)assert.ok(properties(model).includes(property),property);
   // Every defect switch the run check uses is one the supervisor accepts.

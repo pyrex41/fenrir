@@ -8,7 +8,8 @@ import {encode} from '../../tools/tc0/canonical.mjs';
 import {validatePureCallArtifact,InvalidPureCallArtifact,TC1_REMOTE_SCHEMA,REMOTE_OUTCOMES} from '../../tools/tc0/pure-call-artifact.mjs';
 import {HandlerMachine} from '../../runtime/tc1/handler-machine.mjs';
 import {cases} from '../../fixtures/tc1/handler-hand-cases.mjs';
-import {remoteOperations,wireProblems,callerDeclaration,peerDeclaration,assemblyProblems,checkManifest,readManifest,MANIFEST} from '../../tools/solo5/remote-build.mjs';
+import {createHash} from 'node:crypto';
+import {remoteOperations,servedOperations,signatureDigest,wireProblems,callerDeclaration,peerDeclaration,assemblyProblems,checkManifest,readManifest,MANIFEST} from '../../tools/solo5/remote-build.mjs';
 
 const check=p=>validatePureCallArtifact(encode(p),['int','0']);
 const clone=p=>JSON.parse(JSON.stringify(p));
@@ -150,6 +151,9 @@ test('the JavaScript machine runs a schema /3 program that performs no remote op
 
 const BOUND=[['caller','Ledger','peer']];
 const operations=()=>remoteOperations(check(program()).artifact,'caller',BOUND);
+// The Ledger declaration of the program above, as a peer's program has it; and a digest for each side.
+const LEDGER=()=>program().effects[0];
+const SIGNED=()=>({Ledger:signatureDigest(LEDGER())});
 test('the operations of an image are derived from the declarations and the manifest\'s bindings, and from nothing else', () => {
   assert.deepEqual(operations().map(o=>[o.effect,o.operation,o.peer,o.mode]),[['Ledger','add','peer','keyed'],['Ledger','total','peer','read-only']]);
   const {artifact}=check(program());
@@ -159,79 +163,130 @@ test('the operations of an image are derived from the declarations and the manif
   assert.throws(()=>remoteOperations(artifact,'caller',[...BOUND,['caller','Note','peer']]),/does not declare it as a remote effect/);
   assert.throws(()=>remoteOperations(artifact,'caller',[...BOUND,['caller','Ledger','other']]),/bound twice/);
   assert.throws(()=>remoteOperations(cases[0].program,'caller',[]),/schema tc1-handler-demo\/3/);
+  // What a peer serves comes from the peer's own program, which is of another schema.
+  assert.throws(()=>servedOperations(artifact),/schema tc1-handler-demo\/4/);
   assert.deepEqual(wireProblems(operations()),[]);
   const wide=operations();wide[1].argument_type='I64';assert.equal(wireProblems(wide).length,1);
-  const two=operations();two.push({...two[1],operation:'count'});assert.equal(wireProblems(two).length,2);
+  // A request names its operation (wire format 4): a second operation of a mode is no problem.
+  const two=operations();two.push({...two[1],operation:'count'});assert.deepEqual(wireProblems(two),[]);
+  const long=operations();long[0].operation='a'.repeat(60);assert.equal(wireProblems(long).length,1);
+});
+test('the digest of a signature covers names, types and read-only markers, and not the order of declaration', () => {
+  const digest=signatureDigest(LEDGER());
+  assert.match(digest,/^[0-9a-f]{64}$/);
+  // The encoding is the canonical one, of exactly this object.
+  const expected=createHash('sha256').update(encode({effect:'Ledger',operations:[
+    {argument_type:'I64',name:'add',read_only:false,result_type:['Tuple','I64','I64']},
+    {argument_type:'Unit',name:'total',read_only:true,result_type:'I64'}],schema:'fenrir.remote-signature/1'})).digest('hex');
+  assert.equal(digest,expected);
+  const reordered=LEDGER();reordered.operations.reverse();assert.equal(signatureDigest(reordered),digest);
+  const edit=change=>{const e=LEDGER();change(e);return signatureDigest(e);};
+  for(const other of [edit(e=>{e.operations[1].read_only=false;}),edit(e=>{e.operations[0].argument_type='Unit';}),edit(e=>{e.operations[0].result_type='I64';}),
+    edit(e=>{e.operations[1].name='sum';}),edit(e=>{e.name='Book';}),edit(e=>{e.operations.push({name:'entries',argument_type:'Unit',result_type:'I64',read_only:true});})])
+    assert.notEqual(other,digest);
+  assert.throws(()=>signatureDigest(program().effects[1]),/remote effect/);
+  // The two programs of the example include one declarations file, so their digests are one.
+  const text=name=>readFileSync('examples/remote/'+name,'utf8');
+  for(const name of ['ledger-caller.fen','ledger-peer.fen'])assert.match(text(name),/^\(include "ledger\.decl\.fen"\)$/m);
+  assert.match(text('ledger.decl.fen'),/^\(remote-effect Ledger\n  \(add I64 --> \(Tuple I64 I64\)\)\n  \(read-only total Unit --> I64\)\)$/m);
+  assert.ok(!/remote-effect/.test(text('ledger-caller.fen').replace(/^\\\\.*$/gm,'')+text('ledger-peer.fen').replace(/^\\\\.*$/gm,'')));
 });
 test('the declarations the images carry are spelled as the supervisor reads them', () => {
-  assert.equal(callerDeclaration(operations()),'FENRIR-REMOTE-DECL/2 connects=peer uses=peer/Ledger.add/keyed,peer/Ledger.total/read-only');
-  assert.equal(peerDeclaration(operations(),'peer',true),'FENRIR-REMOTE-SERVES/1 store=yes operations=Ledger.add/keyed,Ledger.total/read-only');
-  assert.equal(peerDeclaration(operations(),'peer',false),'FENRIR-REMOTE-SERVES/1 store=no operations=Ledger.add/keyed,Ledger.total/read-only');
+  const serves=operations().map(({effect,operation,mode})=>({effect,operation,mode})),d=SIGNED().Ledger;
+  assert.equal(callerDeclaration(operations(),SIGNED()),'FENRIR-REMOTE-DECL/3 connects=peer uses=peer/Ledger.add/keyed,peer/Ledger.total/read-only signatures=Ledger:'+d);
+  assert.equal(peerDeclaration(serves,true,true,SIGNED()),'FENRIR-REMOTE-SERVES/2 store=yes writes=yes operations=Ledger.add/keyed,Ledger.total/read-only signatures=Ledger:'+d);
+  assert.equal(peerDeclaration(serves,false,false,SIGNED()),'FENRIR-REMOTE-SERVES/2 store=no writes=no operations=Ledger.add/keyed,Ledger.total/read-only signatures=Ledger:'+d);
   const relay=readFileSync('supervisor/src/fenrir_relay.erl','utf8');
-  for(const marker of ['FENRIR-REMOTE-DECL/2 ','FENRIR-REMOTE-SERVES/1 '])assert.ok(relay.includes(`<<"\\n${marker}">>`),marker);
-  for(const refusal of ['<<"no-store">>','<<"unserved">>','<<"unbound">>','<<"unknown-member">>'])assert.ok(relay.includes(refusal),refusal);
-  // The hand-written marker is gone: the caller's line comes from data.h, the peer's from the build's command line.
+  for(const marker of ['FENRIR-REMOTE-DECL/3 ','FENRIR-REMOTE-SERVES/2 '])assert.ok(relay.includes(`<<"\\n${marker}">>`),marker);
+  for(const refusal of ['<<"no-store">>','<<"unserved">>','<<"unbound">>','<<"unknown-member">>','<<"signature">>','<<"StoreWrite">>'])assert.ok(relay.includes(refusal),refusal);
+  // No marker is written by hand: each line comes from data.h, which the build writes.
   assert.ok(!/FENRIR-REMOTE/.test(readFileSync('backends/solo5/remote/caller.c','utf8')+readFileSync('backends/solo5/remote/peer.c','utf8')));
 });
-test('assembly refuses a declared remote effect with no manifest connection, and a storeless peer that serves a keyed operation', () => {
+test('assembly refuses a declared remote effect with no manifest connection, and a storeless peer that serves a keyed operation or whose program writes', () => {
   const serves=operations().map(({effect,operation,mode})=>({effect,operation,mode})),edge=[['caller','peer']];
-  const caller={name:'caller',kind:'caller',operations:serves},peer=store=>({name:'peer',kind:'peer',store,serves});
+  const caller={name:'caller',kind:'caller',operations:serves,signatures:SIGNED()},peer=(store,writes=true)=>({name:'peer',kind:'peer',store,writes,serves,signatures:SIGNED()});
   assert.deepEqual(assemblyProblems([caller,peer(true)],edge,BOUND),[]);
   assert.deepEqual(assemblyProblems([caller,peer(true)],[],BOUND),[['caller','peer']]);
   assert.deepEqual(assemblyProblems([caller,peer(true)],[['peer','caller']],BOUND),[['caller','peer']]);
-  assert.deepEqual(assemblyProblems([caller,peer(false)],edge,BOUND),[['peer','no-store','Ledger.add']]);
-  // A peer without a store is allowed for read-only operations, and only for them.
-  const reader={name:'caller',kind:'caller',operations:serves.filter(o=>o.mode==='read-only')};
-  const meter={name:'peer',kind:'peer',store:false,serves:serves.filter(o=>o.mode==='read-only')};
-  assert.deepEqual(assemblyProblems([reader,meter],edge,BOUND),[]);
-  assert.deepEqual(assemblyProblems([caller,meter],edge,BOUND),[['caller','peer','unserved','Ledger.add']]);
+  assert.deepEqual(assemblyProblems([caller,peer(false)],edge,BOUND),[['peer','no-store','Ledger.add'],['peer','no-store','StoreWrite']]);
+  assert.deepEqual(assemblyProblems([caller,peer(false,false)],edge,BOUND),[['peer','no-store','Ledger.add']]);
+  // A peer without a store is allowed for read-only operations, and only for them; and only if its program does not mention the write effect.
+  const reads=serves.filter(o=>o.mode==='read-only');
+  const reader={name:'caller',kind:'caller',operations:reads,signatures:SIGNED()};
+  const meter=writes=>({name:'peer',kind:'peer',store:false,writes,serves:reads,signatures:SIGNED()});
+  assert.deepEqual(assemblyProblems([reader,meter(false)],edge,BOUND),[]);
+  assert.deepEqual(assemblyProblems([reader,meter(true)],edge,BOUND),[['peer','no-store','StoreWrite']]);
+  assert.deepEqual(assemblyProblems([caller,meter(false)],edge,BOUND),[['caller','peer','unserved','Ledger.add']]);
   // A caller that takes an operation for read-only when the peer does not serve it so is refused too.
-  const mistaken={name:'caller',kind:'caller',operations:serves.map(o=>({...o,mode:'read-only'}))};
+  const mistaken={name:'caller',kind:'caller',operations:serves.map(o=>({...o,mode:'read-only'})),signatures:SIGNED()};
   assert.deepEqual(assemblyProblems([mistaken,peer(true)],edge,BOUND),[['caller','peer','unserved','Ledger.add']]);
+});
+test('assembly refuses a caller and a peer whose digests of an effect\'s signature differ', () => {
+  const serves=operations().map(({effect,operation,mode})=>({effect,operation,mode})),edge=[['caller','peer']];
+  const caller={name:'caller',kind:'caller',operations:serves,signatures:SIGNED()};
+  // The peer was built from a declaration with one operation more: it serves all the caller uses, in the right modes.
+  const wider=LEDGER();wider.operations.push({name:'entries',argument_type:'Unit',result_type:'I64',read_only:true});
+  const other={name:'peer',kind:'peer',store:true,writes:true,serves:[...serves,{effect:'Ledger',operation:'entries',mode:'read-only'}],signatures:{Ledger:signatureDigest(wider)}};
+  assert.deepEqual(assemblyProblems([caller,other],edge,BOUND),[['caller','peer','signature','Ledger']]);
+  // A member that does not serve the effect at all is unserved, not mismatched.
+  const idle={name:'peer',kind:'peer',store:true,writes:false,serves:[],signatures:{}};
+  assert.deepEqual(assemblyProblems([caller,idle],edge,BOUND),[['caller','peer','unserved','Ledger.add'],['caller','peer','unserved','Ledger.total']]);
 });
 test('assembly takes the member of a remote effect from the manifest\'s bindings, and refuses each way a binding can fail with its own message', () => {
   const serves=operations().map(({effect,operation,mode})=>({effect,operation,mode})),edge=[['caller','peer']];
-  const caller={name:'caller',kind:'caller',operations:serves},peer={name:'peer',kind:'peer',store:true,serves};
+  const caller={name:'caller',kind:'caller',operations:serves,signatures:SIGNED()},peer={name:'peer',kind:'peer',store:true,writes:true,serves,signatures:SIGNED()};
   // No binding: the effect is used and the manifest says nothing of who serves it. Another caller's binding does not count.
   assert.deepEqual(assemblyProblems([caller,peer],edge,[]),[['caller','unbound','Ledger']]);
   assert.deepEqual(assemblyProblems([caller,peer],edge,[['other','Ledger','peer']]),[['caller','unbound','Ledger']]);
   // Bound to a name that is no member of the system.
   assert.deepEqual(assemblyProblems([caller,peer],edge,[['caller','Ledger','ledger']]),[['caller','unknown-member','Ledger','ledger']]);
   // Bound to a member the manifest declares no connection to from the caller: a connection the other way is not one.
-  const spare={name:'spare',kind:'peer',store:true,serves};
+  const spare={...peer,name:'spare'};
   assert.deepEqual(assemblyProblems([caller,peer,spare],edge,[['caller','Ledger','spare']]),[['caller','spare']]);
   assert.deepEqual(assemblyProblems([caller,peer],[['peer','caller']],BOUND),[['caller','peer']]);
   // The member an operation goes to is the bound one, whatever else is in the system; a caller serves nothing.
-  const idle={name:'spare',kind:'peer',store:true,serves:[]};
+  const idle={name:'spare',kind:'peer',store:true,writes:false,serves:[],signatures:{}};
   assert.deepEqual(assemblyProblems([caller,peer,idle],[['caller','spare']],[['caller','Ledger','spare']]),[['caller','spare','unserved','Ledger.add'],['caller','spare','unserved','Ledger.total']]);
-  const second={name:'second',kind:'caller',operations:[]};
+  const second={name:'second',kind:'caller',operations:[],signatures:{}};
   assert.deepEqual(assemblyProblems([caller,second],[['caller','second']],[['caller','Ledger','second']]),[['caller','second','unserved','Ledger.add'],['caller','second','unserved','Ledger.total']]);
 });
-test('the build reads the system from its manifest: the source of the caller, the connections and the bindings; it holds no binding itself', () => {
+test('the build reads the system from its manifest: the source of every member, the connections and the bindings; it holds no binding itself', () => {
   assert.equal(MANIFEST,'examples/remote/ledger-system.json');
   const manifest=readManifest(MANIFEST);
-  assert.deepEqual(manifest,{schema:'fenrir.system-manifest/1',members:[{name:'caller',kind:'caller',program:'examples/remote/ledger-caller.fen'},{name:'peer',kind:'peer'}],
-    connections:[['caller','peer']],bindings:[['caller','Ledger','peer']]});
-  const source=readFileSync(manifest.members[0].program,'utf8');
-  assert.match(source,/^\(remote-effect Ledger\n  \(add I64 --> \(Tuple I64 I64\)\)\n  \(read-only total Unit --> I64\)\)$/m);
+  assert.deepEqual(manifest,{schema:'fenrir.system-manifest/2',members:[{name:'caller',kind:'caller',program:'examples/remote/ledger-caller.fen'},
+    {name:'peer',kind:'peer',program:'examples/remote/ledger-peer.fen',store:true}],connections:[['caller','peer']],bindings:[['caller','Ledger','peer']]});
+  // The second system: a caller that only reads, and a peer with no durable store.
+  const rates=readManifest('examples/remote/rates-system.json');
+  assert.deepEqual(rates.members,[{name:'caller',kind:'caller',program:'examples/remote/rates-caller.fen'},{name:'peer',kind:'peer',program:'examples/remote/rates-peer.fen',store:false}]);
+  assert.ok(!/StoreWrite|StoreRead/.test(readFileSync('examples/remote/rates-peer.fen','utf8').replace(/^\\\\.*$/gm,'')));
+  // The peer is a program: it has a serve form, and the hand-written counter is gone from the peer's C.
+  assert.match(readFileSync(manifest.members[1].program,'utf8'),/^\(serve Ledger$/m);
+  const peer=readFileSync('backends/solo5/remote/peer.c','utf8');
+  assert.ok(peer.includes('serve_request(')&&!/applications/.test(peer));
   assert.throws(()=>readFileSync('fixtures/tc1/remote-caller.mjs'));
-  // Neither the effect's name nor the source's is in the build script: both come from the manifest.
+  // Neither the effect's name nor a member's source is in the build script: both come from the manifest.
   const build=readFileSync('tools/solo5/remote-build.mjs','utf8');
-  assert.ok(!/Ledger|ledger-caller|BINDINGS/.test(build)&&build.includes("MANIFEST='examples/remote/ledger-system.json'"));
+  assert.ok(!/Ledger|ledger-caller|ledger-peer\.fen|BINDINGS/.test(build)&&build.includes("MANIFEST='examples/remote/ledger-system.json'"));
   // The supervisor takes the bindings from the manifest it is given, and the harness from what the build read.
   assert.ok(readFileSync('supervisor/src/fenrir_main.erl','utf8').includes('maps:get(<<"bindings">>, Manifest, [])'));
-  assert.ok(readFileSync('harness/tc1-remote-run.shen','utf8').includes('(set fx.*bindings* (fh.field "bindings" (value fx.*info*)))'));
+  assert.ok(readFileSync('harness/tc1-remote-run.shen','utf8').includes('(set fx.*bindings* (fh.field "bindings" Info))'));
   assert.ok(!/"Ledger" "peer"/.test(readFileSync('harness/tc1-remote-run.shen','utf8')));
 });
 test('a system manifest is closed and well formed, or the build does not start', () => {
   const good=()=>JSON.parse(readFileSync(MANIFEST,'utf8')),bad=(edit,pattern)=>{const m=good();edit(m);assert.throws(()=>checkManifest(m),pattern);};
   assert.ok(checkManifest(good()));
-  bad(m=>{delete m.bindings;},/schema fenrir.system-manifest\/1/);
-  bad(m=>{m.schema='fenrir.system-manifest/2';},/schema fenrir.system-manifest\/1/);
-  bad(m=>{m.extra=1;},/schema fenrir.system-manifest\/1/);
+  bad(m=>{delete m.bindings;},/schema fenrir.system-manifest\/2/);
+  bad(m=>{m.schema='fenrir.system-manifest/1';},/schema fenrir.system-manifest\/2/);
+  bad(m=>{m.extra=1;},/schema fenrir.system-manifest\/2/);
   bad(m=>{m.members[1].kind='store';},/a member is/);
   bad(m=>{delete m.members[0].program;},/a member is/);
+  // A peer names its program and says whether it has a durable store.
+  bad(m=>{delete m.members[1].program;},/a member is/);
+  bad(m=>{delete m.members[1].store;},/a member is/);
+  bad(m=>{m.members[1].store='yes';},/whether it has a durable store/);
+  bad(m=>{m.members[0].store=false;},/a member is/);
   bad(m=>{m.members[0].program='/etc/passwd';},/relative to the repository/);
+  bad(m=>{m.members[1].program='';},/relative to the repository/);
   bad(m=>{m.members[1].name='caller';},/listed twice/);
   bad(m=>{m.members[1].name='Peer';},/member name/);
   bad(m=>{m.connections=[['caller','ledger']];},/does not join two members/);

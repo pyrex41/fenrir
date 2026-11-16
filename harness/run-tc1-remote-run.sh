@@ -2,7 +2,9 @@
 # TC1 remote perform (spec/tc1/EFFECTS.md §12): the real system against the model.
 # Builds the caller and peer images for the Solo5 spt tender
 # (tools/solo5/remote-build.mjs; the caller's program is the source file
-# examples/remote/ledger-caller.fen, elaborated by frontend/fenrir.sh), compiles
+# examples/remote/ledger-caller.fen and the peer's examples/remote/ledger-peer.fen,
+# both elaborated by frontend/fenrir.sh; and the same for the rates system,
+# examples/remote/rates-system.json, whose peer has no durable store), compiles
 # the Erlang/OTP supervisor
 # (supervisor/), and hands both to harness/tc1-remote-run.shen, which runs the
 # system under a set of schedules and judges every recorded run with the model
@@ -23,6 +25,8 @@ out="$root/build/remote-run/$(date +%s)-$$"
 mkdir -p "$out/ebin" "$out/control" "$out/check"
 sh "$root/supervisor/build.sh" "$erlc" "$out/ebin" >&2
 timeout 600 node "$root/tools/solo5/remote-build.mjs" --out "$out/images" >/dev/null
+# The second system: a caller that only reads and a peer with no durable store.
+timeout 600 node "$root/tools/solo5/remote-build.mjs" --manifest examples/remote/rates-system.json --out "$out/images-rates" >/dev/null
 run() {
   timeout "$1" "$jit/bin/shen-jit" script "$root/harness/tc1-remote-run.shen" "$jit/lib" "$root" \
     "$out/images" "$out/ebin" "$erl" "$out/$2" "$3" ${4:+"$4"} 2>&1 < /dev/null

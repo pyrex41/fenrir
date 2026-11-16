@@ -122,8 +122,8 @@ has the numbers. In short:
   if the batch differs from it.
 - **[tc1-coverage.shen](tc1-coverage.shen):** all fifteen handler step kinds of
   the contract's step table are exercised.
-- **[tc1-gate.shen](tc1-gate.shen):** a separate gate for TC1 with twenty-one
-  required rows. One is a passing TC0-A gate on the same commit; two are the
+- **[tc1-gate.shen](tc1-gate.shen):** a separate gate for TC1 with twenty-two
+  required rows. One is a passing TC0-A gate on the same commit; three are the
   checks of remote perform below. It was registered on 15 November 2026 by the
   owner's instruction, as the check `tc1-qualification` with the manifest
   `spec/tc1/tc1-requirements.json` (status `owner-accepted`); the
@@ -131,39 +131,51 @@ has the numbers. In short:
   what basis, what the gate does not show, and how to revoke it. Its report
   says `authority: owner-accepted, registered` and its `qualification` is its
   verdict, by the rule the TC0-A gate uses. On a committed tree the verdict is
-  PASS on 21 of 21 required rows. That was a direct run, not a run through the
+  PASS on 22 of 22 required rows. That was a direct run, not a run through the
   workflow controller on a supported runner, so there is no qualification
   receipt.
 
 ### Remote perform
 
 ```sh
-sh harness/run-tc1-remote.sh        # the model of remote perform, explored exhaustively on small systems
-sh harness/run-tc1-remote-run.sh    # the real system (Erlang/OTP supervisor, two Solo5 spt guests) against that model, ~45 s
+sh harness/run-tc1-remote.sh          # the model of remote perform, explored exhaustively on small systems, ~90 s
+sh harness/run-tc1-remote-run.sh      # the real system (Erlang/OTP supervisor, two Solo5 spt guests) against that model, ~70 s
+sh harness/run-tc1-peer-requests.sh   # one request served by a peer's program, on three machines, a few seconds
 ```
 
 Contract and numbers: EFFECTS.md §12 (§12.8 for the model, §12.11 for the
-implementation). **[tc1-remote-run.shen](tc1-remote-run.shen)** starts the
+implementation, §12.12 for peers written in the language). **[tc1-remote-run.shen](tc1-remote-run.shen)** starts the
 supervisor of [supervisor/](../supervisor/README.md) once per schedule,
 replays the event log it recorded through the model, checks the properties of
 [tc1-remote-properties.shen](tc1-remote-properties.shen) on the replay, and
 compares the guests' console frames and the peer's store with what the model
-says.
+says. **[tc1-peer-requests.shen](tc1-peer-requests.shen)** takes single
+requests, each a peer program, an operation, an input and a store, and
+requires the Shen model, the JavaScript machine
+(`runtime/tc1/peer-request.mjs`) and the C machine in a Solo5 guest
+(`backends/solo5/remote/check.c`, with the peer image's store code) to agree
+on every step, every store perform, the outcome and the writes;
+[tools/tc1/peer-requests.mjs](../tools/tc1/peer-requests.mjs) makes the cases
+and builds the guest.
+[tc1-remote-programs.shen](tc1-remote-programs.shen) is how the model check
+gets its peers: it elaborates their source files with the frontend, in
+process, and has the validator admit the artifacts.
 
-Both are rows of the TC1 gate ([tc1-remote-rows.shen](tc1-remote-rows.shen)),
-each with its negative control run first:
+All three are rows of the TC1 gate ([tc1-remote-rows.shen](tc1-remote-rows.shen)),
+the first two each with its negative control run first:
 
 | Row | Evidence class | Needs | Otherwise |
 | --- | --- | --- | --- |
-| remote-model | Model-level bounded exploration; no implementation is run | Ten systems explored with no property failing, every step kind taken, thirteen mutants killed, nineteen hand schedules passing, control failed as required | FAIL; a report with other counts is UNKNOWN |
-| remote-run | Observed histories on `spt` accepted by the model | 26 hand, 40 seeded and 4 free-running schedules all accepted, every step kind taken, eight defects killed, control failed as required | FAIL; no Erlang/OTP, no Solo5 build, or a caller source the frontend does not elaborate is BLOCKED; a supervisor that does not compile, or other counts, is UNKNOWN |
+| remote-model | Model-level bounded exploration; no image and no supervisor is run | Ten systems explored with no property failing, every step kind taken, seventeen mutants killed, twenty-three hand schedules passing, control failed as required | FAIL; a report with other counts is UNKNOWN |
+| remote-run | Observed histories on `spt` accepted by the model | 31 hand, 50 seeded and 5 free-running schedules all accepted, every step kind taken, twelve defects killed, control failed as required | FAIL; no Erlang/OTP, no Solo5 build, or a source the frontend does not elaborate is BLOCKED; a supervisor that does not compile, or other counts, is UNKNOWN |
+| remote-peer | Agreement of three implementations on listed cases | 22 hand cases and 400 generated ones on which the model, the JavaScript machine and the Solo5 guest agree; the model meets every hand expectation; the stale-reads defect detected in the JavaScript and in the C store code | FAIL; no Solo5 build, or a peer program the frontend does not elaborate is BLOCKED; other counts are UNKNOWN |
 
-Those counts are the scope after Amendment 3 of the
+Those counts are the scope after Amendment 4 of the
 [registration record](../campaigns/tc1/TC1_GATE_REGISTRATION.md) (16 November
-2026); they were 6, 9, 9 and 13, 40, 3, 5 when the gate was registered, 8,
-11, 14 and 19, 40, 4, 7 after Amendment 1, and 10, 13, 19 and 24, 40, 4, 8
-after Amendment 2. Amendment 3 changed one number, the hand schedules of the
-run check, from 24 to 26.
+2026); for the first two rows they were 6, 9, 9 and 13, 40, 3, 5 when the
+gate was registered, 8, 11, 14 and 19, 40, 4, 7 after Amendment 1, 10, 13, 19
+and 24, 40, 4, 8 after Amendment 2, and 10, 13, 19 and 26, 40, 4, 8 after
+Amendment 3. Amendment 4 added the third row.
 
 The gate's toolchain row also requires that the Erlang/OTP found by
 [find-erlang.sh](find-erlang.sh), which the runner script uses too, is the
@@ -235,8 +247,46 @@ EFFECTS.md draft 8). Two changed what is checked:
   two images and every number of the two remote rows other than the count of
   hand schedules are what they were.
 
-Questions 12 and 16 were confirmations and changed no check. Questions 13
-and 15 are open.
+Questions 12 and 16 were confirmations and changed no check.
+
+The last two, questions 13 and 15, came as a direction to build their answers
+(EFFECTS.md draft 9, §12.12). That changed all three checks:
+
+- **The peer is a program.**
+  [examples/remote/ledger-peer.fen](../examples/remote/ledger-peer.fen)
+  serves `Ledger` and reaches the peer's store through `StoreRead` and
+  `StoreWrite`; the peer image is that program on the C machine and a runtime
+  in C that keeps transport, the store and the commit. The model's peer is
+  the same program on the model's machine. The hand-written counter is gone,
+  so replies carry the ledger's total (5, then 10) where they carried a count.
+  The ten model systems have the states and transitions they had.
+- **A request is a transaction.** A request's writes and its reply record are
+  committed in one step. Two properties are new (`commit-atomic`,
+  `reads-see-own-writes`), four model mutants and four defect switches of
+  the real peer's runtime (a commit without its record, one without its
+  writes, one a kill leaves in part, reads that do not see their own
+  writes). Two hand schedules of the run check place a kill inside the
+  commit: the schedule says `[crash-in-commit peer]`, the supervisor records
+  the step `crash`, and its report must list the records it saw written and
+  not counted.
+- **Read-only is checked on the peer's program**, by the frontend and the
+  validator (`tests/tc1/serving-artifact.test.mjs`, in the unit-suite row;
+  `sh frontend/test.sh`, not a row). The defect of a read that writes is kept
+  as a switch of the peer's runtime, which no type checker sees.
+- **One declaration, and a digest.** The caller's program and the peer's
+  both include
+  [examples/remote/ledger.decl.fen](../examples/remote/ledger.decl.fen);
+  every image carries a digest of each remote effect's signature, and one
+  hand schedule is the refusal at assembly of a peer built from another
+  declaration ([tests/remote/ledger-peer-other-signature.fen](../tests/remote/ledger-peer-other-signature.fen)).
+- **A storeless peer runs.** A second system,
+  [examples/remote/rates-system.json](../examples/remote/rates-system.json),
+  has a caller that only reads and a peer with no durable store: two hand
+  schedules, ten seeded ones and one free-running run are of it.
+- **The row remote-peer** is new: the store effects have the same treatment
+  in the three machines, and this row is where that is compared.
+
+Questions 17 to 24 of EFFECTS.md §12.10, raised by that step, are open.
 
 ### The generated family
 

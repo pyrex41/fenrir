@@ -1,0 +1,5 @@
+\\ expect missing.fen:2:1 the included file tests/frontend/include/nowhere.decl.fen ca
+(include "nowhere.decl.fen")
+
+(define main {I64 --> I64}
+  input -> input)

@@ -5,13 +5,18 @@
 \\   remote-run    the real system, an Erlang/OTP supervisor and two Solo5 guests on
 \\                 the spt tender, under schedules, each recorded run judged by the
 \\                 model (harness/tc1-remote-run.shen, as
-\\                 harness/run-tc1-remote-run.sh runs it). The caller image is
-\\                 built from the source file examples/remote/ledger-caller.fen
-\\                 through the frontend (tools/solo5/remote-build.mjs).
+\\                 harness/run-tc1-remote-run.sh runs it). The caller image and
+\\                 the peer image are each built from a source file through the
+\\                 frontend (tools/solo5/remote-build.mjs): the ledger system
+\\                 and the rates system, whose peer has no durable store.
+\\   remote-peer   one request served by a peer's program, on the Shen model, the
+\\                 JavaScript machine and the C machine in a Solo5 guest
+\\                 (harness/tc1-peer-requests.shen, as
+\\                 harness/run-tc1-peer-requests.sh runs it).
 \\ Also the Erlang half of the gate's toolchain row. Load after gate-core.shen.
-\\ Each check runs as its own process. In both rows the negative control runs
-\\ first and its result is handed to the check, which passes only if the control
-\\ failed, with a failure exit status.
+\\ Each check runs as its own process. In the first two rows the negative control
+\\ runs first and its result is handed to the check, which passes only if the
+\\ control failed, with a failure exit status.
 
 \\ ---------- the scope the gate requires ----------
 \\ The numbers of systems explored, model mutants and hand schedules of the model
@@ -20,12 +25,14 @@
 \\ manifest's acceptance text states the same numbers.
 
 (define fh.remote-model-systems -> 10)
-(define fh.remote-model-mutants -> 13)
-(define fh.remote-model-hand -> 19)
-(define fh.remote-run-hand -> 26)
-(define fh.remote-run-seeds -> 40)
-(define fh.remote-run-free -> 4)
-(define fh.remote-run-defects -> 8)
+(define fh.remote-model-mutants -> 17)
+(define fh.remote-model-hand -> 23)
+(define fh.remote-run-hand -> 31)
+(define fh.remote-run-seeds -> 50)
+(define fh.remote-run-free -> 5)
+(define fh.remote-run-defects -> 12)
+(define fh.remote-peer-hand -> 22)
+(define fh.remote-peer-generated -> 400)
 
 \\ ---------- Erlang/OTP ----------
 
@@ -116,7 +123,8 @@
                     (fh.row "UNKNOWN" ["The model check did not cover the required systems, mutants and hand schedules"] [] Memo)
                     (if (= Status "development-pass")
                         (fh.row "PASS" []
-                                [["evidence" "model-level bounded exploration; no implementation is run"]
+                                [["evidence" "model-level bounded exploration; no image and no supervisor is run"]
+                                 ["peers" (fh.member "peers" Report)]
                                  ["systems" (fh.remote-states (fh.member "systems" Report))]
                                  ["mutants_killed" (str (length (fh.member "mutants" Report)))]
                                  ["hand_schedules" (fh.member "hand_schedules" Report)]
@@ -161,8 +169,11 @@
   [Erl Erlc] Memo ->
     (let Out (fh.subdir "tc1-remote-run")
          Images (fh.exec "node" [(cn (value fh.*root*) "tools/solo5/remote-build.mjs") "--out" (cn Out "/images")] 900)
-      (if (not (= (hd Images) 0))
-          (fh.row "BLOCKED" ["The remote-perform images could not be built (is build/vendor/solo5 built at the pinned commit? does the frontend elaborate examples/remote/ledger-caller.fen?)"] [] Memo)
+         \\ The second system: a caller that only reads and a peer with no durable store.
+         Rates (fh.exec "node" [(cn (value fh.*root*) "tools/solo5/remote-build.mjs") "--manifest" "examples/remote/rates-system.json"
+                                "--out" (cn Out "/images-rates")] 900)
+      (if (not (and (= (hd Images) 0) (= (hd Rates) 0)))
+          (fh.row "BLOCKED" ["The remote-perform images could not be built (is build/vendor/solo5 built at the pinned commit? does the frontend elaborate the programs of examples/remote/ledger-system.json and examples/remote/rates-system.json?)"] [] Memo)
           (let Compiled (fh.exec "sh" [(cn (value fh.*root*) "supervisor/build.sh") Erlc (cn Out "/ebin")] 600)
             (if (not (= (hd Compiled) 0))
                 (fh.row "UNKNOWN" ["The supervisor did not compile with the Erlang/OTP found"] [["erlc" Erlc]] Memo)
@@ -189,6 +200,8 @@
                                  ["hand_schedules" (fh.member "hand_schedules" Report)]
                                  ["seeded_schedules" (fh.member "seeded_schedules" Report)]
                                  ["seeded_steps" (fh.member "seeded_steps" Report)]
+                                 ["seeded_schedules_storeless" (fh.member "seeded_schedules_storeless" Report)]
+                                 ["kills_inside_a_commit" (fh.member "kills_inside_a_commit" Report)]
                                  ["free_runs" (str (length (fh.member "free_runs" Report)))]
                                  ["defects_killed" (str (length (fh.member "defects" Report)))]
                                  ["steps_by_kind" (json.stringify (fh.member "steps_by_kind" Report) [])]
@@ -198,9 +211,66 @@
                                  ["caller_source" (fh.member "caller_source" Report)]
                                  ["caller_source_sha256" (fh.member "caller_source_sha256" Report)]
                                  ["caller_declaration" (fh.member "caller_declaration" Report)]
+                                 ["peer_source" (fh.member "peer_source" Report)]
+                                 ["peer_source_sha256" (fh.member "peer_source_sha256" Report)]
                                  ["peer_declaration" (fh.member "peer_declaration" Report)]
+                                 ["storeless_peer_source" (fh.member "storeless_peer_source" Report)]
+                                 ["storeless_peer_declaration" (fh.member "storeless_peer_declaration" Report)]
                                  ["caller_sha256" (fh.member "caller_sha256" Report)]
                                  ["peer_sha256" (fh.member "peer_sha256" Report)]
                                  ["erl" Erl]]
                                 Memo)
                         (fh.row "UNKNOWN" ["The remote-perform run check did not report a status"] [] Memo))))))))
+
+\\ ---------- remote-peer ----------
+
+(define fh.remote-peer-reasons
+  Report ->
+    (append (if (= (fh.member "javascript_differing" Report) "0") [] [(cn "Cases on which the JavaScript machine differs from the model: " (fh.member "javascript_differing" Report))])
+            (if (= (fh.member "guest_differing" Report) "0") [] [(cn "Cases on which the Solo5 guest differs from the model: " (fh.member "guest_differing" Report))])
+            (fh.remote-listed "Hand cases whose expectation the model does not meet: " (fh.member "expectations_failed" Report))
+            (if (= (fh.member "javascript-stale-reads" (fh.member "defects_detected" Report)) "0") ["The stale-reads defect of the JavaScript store code was detected on no case"] [])
+            (if (= (fh.member "guest-stale-reads" (fh.member "defects_detected" Report)) "0") ["The stale-reads defect of the C store code was detected on no case"] [])))
+
+(define fh.remote-peer-scope?
+  Report -> (and (= (fh.member "hand_cases" Report) (str (fh.remote-peer-hand)))
+                 (= (fh.member "generated_cases" Report) (str (fh.remote-peer-generated)))
+                 (= (fh.member "cases" Report) (str (+ (fh.remote-peer-hand) (fh.remote-peer-generated))))
+                 (= (fh.member "expectations_checked" Report) (str (fh.remote-peer-hand)))
+                 (= (fh.member "abi" Report) "spt")))
+
+\\ The guest cannot be built (no Solo5 at the pinned commit, or a peer program the
+\\ frontend does not elaborate): BLOCKED, as the guest rows are without Solo5.
+(define fh.tc1-remote-peer
+  Memo ->
+    (let Out (fh.subdir "tc1-remote-peer")
+         Built (fh.exec "node" [(cn (value fh.*root*) "tools/tc1/peer-requests.mjs") "--out" (cn Out "/cases")] 900)
+      (if (not (= (hd Built) 0))
+          (fh.row "BLOCKED" ["The cases and the guest of the peer-request check could not be built (is build/vendor/solo5 built at the pinned commit? does the frontend elaborate the peer programs?)"] [] Memo)
+          (let Report (fh.harness "tc1-peer-requests.shen" [(cn Out "/cases")] 1800)
+               Status (fh.member "status" Report)
+            (if (or (= Report []) (not (= (fh.member "schema" Report) "fenrir.harness.tc1-peer-requests/1")))
+                (fh.row "UNKNOWN" ["The peer-request check did not report"] [] Memo)
+                (let Reasons (fh.remote-peer-reasons Report)
+                  (if (or (= Status "development-fail") (not (empty? Reasons)))
+                      (fh.row "FAIL" (if (empty? Reasons) ["The peer-request check reports failure"] Reasons)
+                              [["failures" (json.stringify (fh.member "failures" Report) [])]] Memo)
+                      (if (not (fh.remote-peer-scope? Report))
+                          (fh.row "UNKNOWN" ["The peer-request check did not cover the required hand and generated cases on the spt tender"] [] Memo)
+                          (if (= Status "development-pass")
+                              (fh.row "PASS" []
+                                      [["evidence" "agreement of three implementations on listed cases; the commit and the reply record are not exercised here"]
+                                       ["cases" (fh.member "cases" Report)]
+                                       ["hand_cases" (fh.member "hand_cases" Report)]
+                                       ["generated_cases" (fh.member "generated_cases" Report)]
+                                       ["generated_seed" (fh.member "generated_seed" Report)]
+                                       ["model_steps" (fh.member "model_steps" Report)]
+                                       ["store_performs" (fh.member "store_performs" Report)]
+                                       ["outcomes" (json.stringify (fh.member "outcomes" Report) [])]
+                                       ["defects_detected" (json.stringify (fh.member "defects_detected" Report) [])]
+                                       ["programs" (json.stringify (fh.member "programs" Report) [])]
+                                       ["solo5_commit" (fh.member "solo5_commit" Report)]
+                                       ["tender_sha256" (fh.member "tender_sha256" Report)]
+                                       ["guest_sha256" (fh.member "guest_sha256" Report)]]
+                                      Memo)
+                              (fh.row "UNKNOWN" ["The peer-request check did not report a status"] [] Memo))))))))))

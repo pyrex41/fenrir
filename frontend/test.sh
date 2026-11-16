@@ -17,7 +17,16 @@
 #               declares a remote effect: it checks, elaborates twice to the same
 #               bytes of schema tc1-handler-demo/3, and either runs alone and
 #               prints its header's lines, or, when main leaves the remote effect
-#               to the system (no "\\ > " lines), run refuses it with status 2
+#               to the system (no "\\ > " lines), run refuses it with status 2.
+#               A program that serves an effect (a peer's program, with a
+#               (serve ...) form) elaborates to schema tc1-handler-demo/4 and is
+#               refused by run in the same way. Files named *.decl.fen hold
+#               declarations for other files to include and are not programs.
+#   include     every program under tests/frontend/include/ (not its *.decl.fen
+#               files) either says "\\ ok" on its first line and runs to the
+#               lines of its header, or says "\\ expect FILE:LINE:COLUMN TEXT" and
+#               is rejected there, FILE being the file of that directory the
+#               problem is in: the program, or a file it includes
 #   Solo5       the examples, elaborated, run in the Solo5 guest and agree with
 #               the model step for step (harness/solo5-pure-call.shen). Skipped,
 #               and said so, when FENRIR_SOLO5 is not set and build/vendor/solo5
@@ -103,7 +112,10 @@ done
 
 remote=0
 for file in examples/remote/*.fen tests/frontend/remote/*.fen; do
+  case $file in *.decl.fen) continue ;; esac
   remote=$((remote + 1))
+  if grep -q '^(serve ' "$file"; then schema='"schema_version":"tc1-handler-demo/4","serves":'; alone='cannot be run alone: it serves a remote effect'
+  else schema='"schema_version":"tc1-handler-demo/3","slice":"TC1-R1"'; alone='cannot be run alone: main performs the remote effect'; fi
   sed -n 's/^\\\\ > //p' "$file" > "$work/expected"
   status=0
   sh "$fenrir" check "$file" > "$work/out" 2> "$work/err" || status=$?
@@ -111,7 +123,7 @@ for file in examples/remote/*.fen tests/frontend/remote/*.fen; do
   sh "$fenrir" emit "$file" "$work/remote.json" > /dev/null 2>&1
   sh "$fenrir" emit "$file" "$work/again.json" > /dev/null 2>&1
   if [ ! -s "$work/remote.json" ] || ! cmp -s "$work/remote.json" "$work/again.json"; then fail "$file" "two elaborations differ"; fi
-  if ! grep -q '"schema_version":"tc1-handler-demo/3","slice":"TC1-R1"' "$work/remote.json"; then fail "$file" "the artifact is not of schema tc1-handler-demo/3"; fi
+  if ! grep -q "$schema" "$work/remote.json"; then fail "$file" "the artifact is not of the expected schema ($schema)"; fi
   status=0
   sh "$fenrir" run "$file" > "$work/out" 2> "$work/err" || status=$?
   if [ -s "$work/expected" ]; then
@@ -121,12 +133,44 @@ for file in examples/remote/*.fen tests/frontend/remote/*.fen; do
     fi
   else
     case $(cat "$work/err") in
-      *"cannot be run alone: main performs the remote effect"*) refused=yes ;;
+      *"$alone"*) refused=yes ;;
       *) refused=no ;;
     esac
     if [ "$status" -ne 2 ] || [ "$refused" = no ] || [ -s "$work/out" ]; then
-      fail "$file" "run must refuse a program that leaves a remote effect to the system, with status 2" "status $status; got:" "$(cat "$work/out" "$work/err")"
+      fail "$file" "run must refuse a program that leaves a remote effect to the system, or serves one, with status 2" "status $status; got:" "$(cat "$work/out" "$work/err")"
     fi
+  fi
+done
+# The example's caller and peer include one declarations file.
+for file in examples/remote/ledger-caller.fen examples/remote/ledger-peer.fen; do
+  grep -q '^(include "ledger.decl.fen")$' "$file" || fail "$file" "does not include examples/remote/ledger.decl.fen"
+done
+
+included=0
+for file in tests/frontend/include/*.fen; do
+  case $file in *.decl.fen) continue ;; esac
+  included=$((included + 1))
+  status=0
+  if [ "$(sed -n 1p "$file")" = '\\ ok' ]; then
+    sed -n 's/^\\\\ > //p' "$file" > "$work/expected"
+    sh "$fenrir" run "$file" > "$work/out" 2> "$work/err" || status=$?
+    observed "$work/out" > "$work/observed"
+    if [ "$status" -ne 0 ] || [ ! -s "$work/expected" ] || ! cmp -s "$work/expected" "$work/observed"; then
+      fail "$file" "status $status; expected:" "$(cat "$work/expected")" "got:" "$(cat "$work/out" "$work/err")"
+    fi
+    continue
+  fi
+  position=$(sed -n '1s/^\\\\ expect \([^ ]*\) .*/\1/p' "$file")
+  text=$(sed -n '1s/^\\\\ expect [^ ]* //p' "$file")
+  prefix="tests/frontend/include/$position: error: "
+  sh "$fenrir" check "$file" > "$work/out" 2> "$work/err" || status=$?
+  message=$(cat "$work/err")
+  case $message in
+    "$prefix"*"$text"*) matched=yes ;;
+    *) matched=no ;;
+  esac
+  if [ "$status" -ne 1 ] || [ -z "$text" ] || [ -z "$position" ] || [ "$matched" = no ] || [ -s "$work/out" ]; then
+    fail "$file" "status $status; expected: $prefix...$text" "got: $message"
   fi
 done
 
@@ -149,6 +193,6 @@ else
   solo5="skipped (FENRIR_SOLO5 is not set and build/vendor/solo5 is not built)"
 fi
 
-printf 'frontend tests: %s accepted programs, %s rejected programs, %s round trips, %s stable artifacts, %s remote programs; Solo5: %s; failures: %s\n' \
-  "$accepted" "$rejected" "$roundtrips" "$stable" "$remote" "$solo5" "$failures"
+printf 'frontend tests: %s accepted programs, %s rejected programs, %s round trips, %s stable artifacts, %s remote programs, %s programs with includes; Solo5: %s; failures: %s\n' \
+  "$accepted" "$rejected" "$roundtrips" "$stable" "$remote" "$included" "$solo5" "$failures"
 [ "$failures" -eq 0 ]

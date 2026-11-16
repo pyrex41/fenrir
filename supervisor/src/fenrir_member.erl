@@ -4,7 +4,7 @@
 %% It decides nothing: fenrir_relay tells it what to do.
 -module(fenrir_member).
 -behaviour(gen_server).
--export([start_link/1, boot/1, kill/1, put/5, grant/1, grant_hold/1, take/2, wait_exit/2, info/1, store/1]).
+-export([start_link/1, boot/1, kill/1, put/5, grant/1, grant_hold/2, take/2, wait_exit/2, info/1, store/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -define(BLOCKS, 64).
@@ -21,10 +21,12 @@ kill(Pid) -> gen_server:call(Pid, kill, 20000).
 put(Pid, Type, Ref, Payload, Grant) -> gen_server:call(Pid, {put, Type, Ref, Payload, Grant}, 20000).
 %% Let the image consume one more inbox record.
 grant(Pid) -> gen_server:call(Pid, {grant, false}, 20000).
-%% The same, and the image is to stop just before it replies to that record,
-%% without exiting (the inbox header's hold, wire.h): the place for a kill
-%% between a peer's commit and its reply.
-grant_hold(Pid) -> gen_server:call(Pid, {grant, true}, 20000).
+%% The same, and the image is to stop at a point of its work on that record,
+%% without exiting (the inbox header's hold and where, wire.h). Where is reply:
+%% just before it replies, the place for a kill between a peer's commit and its
+%% reply; or commit: inside the commit, with every record of it written and the
+%% store header that would count them not yet.
+grant_hold(Pid, Where) when Where =:= reply; Where =:= commit -> gen_server:call(Pid, {grant, Where}, 20000).
 %% The next outbox record: {ok, Record} | timeout | {exited, Status} | {malformed, Why}.
 take(Pid, TimeoutMs) -> gen_server:call(Pid, {take, TimeoutMs}, TimeoutMs + 20000).
 wait_exit(Pid, TimeoutMs) -> gen_server:call(Pid, {wait_exit, TimeoutMs}, TimeoutMs + 20000).
@@ -37,7 +39,7 @@ init(#{name := Name, kind := Kind, image := Image, tender := Tender, dir := Dir,
     process_flag(trap_exit, true),
     {ok, #{name => Name, kind => Kind, store => HasStore, image => Image, tender => Tender, dir => Dir, life_ms => Life,
            options => Options, incarnation => 0, port => none, os_pid => none, exit => none,
-           console => [], consoles => [], count => 0, grant => 0, hold => 0, taken => 0, inbox => none, outbox => none}}.
+           console => [], consoles => [], count => 0, grant => 0, hold => 0, where => reply, taken => 0, inbox => none, outbox => none}}.
 
 path(#{dir := Dir, name := Name}, What) -> filename:join(Dir, binary_to_list(Name) ++ "." ++ What).
 
@@ -49,7 +51,7 @@ handle_call(boot, _From, S0 = #{port := none}) ->
     ok = file:write_file(path(S1, "outbox"), Empty),
     {ok, In} = file:open(path(S1, "inbox"), [read, write, raw, binary]),
     {ok, Out} = file:open(path(S1, "outbox"), [read, raw, binary]),
-    S2 = S1#{incarnation := Inc, count := 0, grant := 0, hold := 0, taken := 0, inbox := In, outbox := Out,
+    S2 = S1#{incarnation := Inc, count := 0, grant := 0, hold := 0, where := reply, taken := 0, inbox := In, outbox := Out,
              console := [], exit := none},
     ok = write_header(S2),
     Devices = ["--block:inbox=" ++ path(S2, "inbox"), "--block:outbox=" ++ path(S2, "outbox")] ++
@@ -94,7 +96,10 @@ handle_call({put, Type, Ref, Payload, Grant}, _From, S = #{inbox := In, count :=
     {reply, {ok, Seq}, S1};
 handle_call({put, _, _, _, _}, _From, S) -> {reply, {error, inbox_full}, S};
 handle_call({grant, Hold}, _From, S = #{grant := Grant, count := Count}) when Grant < Count ->
-    S1 = S#{grant := Grant + 1, hold := case Hold of true -> Grant + 1; false -> maps:get(hold, S) end},
+    S1 = case Hold of
+             false -> S#{grant := Grant + 1};
+             Where -> S#{grant := Grant + 1, hold := Grant + 1, where := Where}
+         end,
     ok = write_header(S1),
     {reply, ok, S1};
 handle_call({grant, _}, _From, S) -> {reply, {error, nothing_to_grant}, S};
@@ -160,9 +165,9 @@ close_files(S = #{inbox := In, outbox := Out}) ->
     [file:close(F) || F <- [In, Out], F =/= none],
     S#{inbox := none, outbox := none}.
 
-write_header(#{inbox := In, incarnation := Inc, count := Count, grant := Grant, hold := Hold}) ->
+write_header(#{inbox := In, incarnation := Inc, count := Count, grant := Grant, hold := Hold, where := Where}) ->
     file:pwrite(In, 0, fenrir_wire:header(#{magic => mailbox, kind => inbox, incarnation => Inc, count => Count, grant => Grant,
-                                            hold => Hold})).
+                                            hold => Hold, where => case Hold of 0 -> reply; _ -> Where end})).
 
 %% The image may be writing its header while it is read here: a block that does
 %% not decode is read again until the deadline before it counts as malformed.
@@ -220,17 +225,37 @@ waiting(S, Deadline, Torn) ->
         _ -> timer:sleep(?POLL_MS), take_record(S, Deadline, Torn)
     end.
 
-%% ---- the durable store, read for the run report ----
+%% ---- the durable store, read from its file ----
+
+%% The store is a log (backends/solo5/remote/wire.h): the header counts its
+%% records, and a record the header does not count does not exist.
+%%   #{cells := [{Key, Value}], in ascending key order: the latest CELL record of each key;
+%%     records := [{Caller, Key, Operation, Argument, Value}], the latest STORED record of each request id;
+%%     tail := the well-formed records in the blocks just after the counted ones,
+%%             [{cell, Key, Value} | {stored, Caller, Key, Operation, Argument, Value}]:
+%%             a commit in progress, or what is left of one that never happened}
+%% | malformed | absent | none (the member has no store).
+%% The image may be writing while this reads: a caller that gets malformed
+%% during an act reads again.
 
 read_store(S = #{store := true}) ->
     case file:read_file(path(S, "store")) of
         {ok, <<Header:512/binary, Rest/binary>>} ->
             case fenrir_wire:decode_header(Header) of
-                {ok, #{kind := store, count := Count, grant := Applications}} when Count * 512 =< byte_size(Rest) ->
-                    Records = [decode_stored(binary:part(Rest, I * 512, 512), I + 1) || I <- lists:seq(0, Count - 1)],
-                    case lists:member(malformed, Records) of
+                {ok, #{kind := store, count := Count, grant := Stored}} when Count * 512 =< byte_size(Rest) ->
+                    Log = [log_record(binary:part(Rest, I * 512, 512), I + 1) || I <- lists:seq(0, Count - 1)],
+                    case lists:member(malformed, Log) orelse length([R || R <- Log, element(1, R) =:= stored]) =/= Stored of
                         true -> malformed;
-                        false -> #{applications => Applications, records => Records}
+                        false ->
+                            Cells = lists:foldl(fun({cell, K, V}, Acc) -> lists:keystore(K, 1, Acc, {K, V}); (_, Acc) -> Acc end, [], Log),
+                            Records = lists:foldl(fun({stored, C, K, O, A, V}, Acc) ->
+                                                          case [X || X = {C1, K1, _, _, _} <- Acc, C1 =:= C, K1 =:= K] of
+                                                              [] -> Acc ++ [{C, K, O, A, V}];
+                                                              [Old] -> [case X of Old -> {C, K, O, A, V}; _ -> X end || X <- Acc]
+                                                          end;
+                                                     (_, Acc) -> Acc
+                                                  end, [], Log),
+                            #{cells => lists:keysort(1, Cells), records => Records, tail => tail(Rest, Count)}
                     end;
                 _ -> malformed
             end;
@@ -238,12 +263,20 @@ read_store(S = #{store := true}) ->
     end;
 read_store(_) -> none.
 
-decode_stored(Block, Seq) ->
+log_record(Block, Seq) ->
     case fenrir_wire:decode_record(Block) of
-        {ok, Record = #{type := stored, seq := Seq, incarnation := 0}} ->
-            case fenrir_wire:decode_stored(Record) of
-                {ok, Caller, Key, Argument, Value} -> {Caller, Key, Argument, Value};
-                malformed -> malformed
+        {ok, Record = #{seq := Seq, incarnation := 0}} ->
+            case {fenrir_wire:decode_cell(Record), fenrir_wire:decode_stored(Record)} of
+                {{ok, Key, Value}, _} -> {cell, Key, Value};
+                {_, {ok, Caller, Key, Operation, Argument, Value}} -> {stored, Caller, Key, Operation, Argument, Value};
+                _ -> malformed
             end;
         _ -> malformed
     end.
+
+tail(Rest, At) when (At + 1) * 512 =< byte_size(Rest) ->
+    case log_record(binary:part(Rest, At * 512, 512), At + 1) of
+        malformed -> [];
+        Record -> [Record | tail(Rest, At + 1)]
+    end;
+tail(_, _) -> [].

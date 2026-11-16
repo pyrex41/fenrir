@@ -35,7 +35,7 @@ void *memcpy(void *dest,const void *source,size_t count);
 struct mailbox {
     solo5_handle_t inbox,outbox;
     uint64_t inbox_blocks,outbox_blocks;
-    uint32_t incarnation,count,grant,hold,consumed,sent;
+    uint32_t incarnation,count,grant,hold,where,consumed,sent;
     solo5_time_t deadline;
 };
 /* 1 ok; otherwise an EXIT_ code, negated. mailbox_open reads the inbox header,
@@ -49,9 +49,10 @@ int mailbox_send(struct mailbox *,struct frw_record *);
 /* Waits for the next granted inbox record. 1 ok; -EXIT_LIFETIME when the
  * lifetime ran out; -EXIT_MALFORMED; -EXIT_DEVICE. */
 int mailbox_receive(struct mailbox *,struct frw_record *);
-/* 1 if the supervisor asked for the image to stop before replying to record seq
- * (the inbox header's hold, as last read by mailbox_receive). */
-int mailbox_held(const struct mailbox *,uint32_t seq);
+/* 1 if the supervisor asked for the image to stop at that point of its work on
+ * record seq: FRW_BEFORE_REPLY or FRW_IN_COMMIT (the inbox header's hold and
+ * where, as last read by mailbox_receive). */
+int mailbox_held(const struct mailbox *,uint32_t seq,uint32_t where);
 /* Stops here without exiting, until killed or until the lifetime runs out;
  * then returns -EXIT_LIFETIME. */
 int mailbox_hold(struct mailbox *);

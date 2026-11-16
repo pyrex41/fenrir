@@ -138,6 +138,7 @@
         "backends/solo5/pure-call",
         "backends/solo5/remote",
         "supervisor",
+        "tests/remote",
         "tests/tc1",
         "tests/tc0",
         "campaigns/tc0/s3",

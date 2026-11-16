@@ -27,9 +27,9 @@
 \\ tools/solo5/remote-build.mjs builds the caller image of
 \\ harness/run-tc1-remote-run.sh from this file.
 
-(remote-effect Ledger
-  (add I64 --> (Tuple I64 I64))
-  (read-only total Unit --> I64))
+\\ Ledger is declared in a file this program shares with the peer's program,
+\\ ledger-peer.fen: the system is assembled only if both have the same signature.
+(include "ledger.decl.fen")
 
 (effect Note
   (note I64 --> I64))

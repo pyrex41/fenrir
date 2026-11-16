@@ -14,6 +14,7 @@
  * declarations. No handler frame can handle a remote effect in a validated
  * program; the search below is kept as the machine's own rule.
  *
+ * The request names its operation, "Effect.operation" (wire format 4).
  *   keyed:      perform(E, op, tuple(key, a))   key : I64, a : I64 in this version
  *               result reply((I64, I64)) | not_delivered | timed_out
  *   read-only:  perform(E, op, unit)            no key; unit in this version
@@ -83,6 +84,7 @@ static int remote(const struct remote_operation *op) {
     const struct pc_value *argument=machine.ready[0];
     struct frw_record r;struct frw_call call;struct frw_result result;int e;
     if(!frw_name_set(call.name,op->peer))return fault("peer name",EXIT_MACHINE);
+    if(!frw_operation_set(call.operation,op->wire))return fault("operation name",EXIT_MACHINE);
     if(op->read_only){
         if(!argument || argument->tag!=PV_UNIT)return fault("read-only remote argument is not unit",EXIT_MACHINE);
         call.mode=FRW_READ_ONLY;call.key=0;call.value=0;
@@ -132,7 +134,7 @@ int solo5_app_main(const struct solo5_start_info *info) {
     uint64_t life;const char *rest;int e;
     if(!parse_life(info->cmdline,&life,&rest) || *rest)return EXIT_USAGE;
     if((e=mailbox_open(&box,life))!=1)return fault("cannot open the mailboxes",-e);
-    out_begin();out_text("{\"kind\":\"Hello\",\"role\":\"caller\",\"wire\":\"3\",\"incarnation\":\"");out_natural(box.incarnation);
+    out_begin();out_text("{\"kind\":\"Hello\",\"role\":\"caller\",\"wire\":\"4\",\"incarnation\":\"");out_natural(box.incarnation);
     out_text("\",\"program_sha256\":\"" PC_BATCH_SHA256 "\",\"connects\":[");
     for(unsigned i=0;i<remote_peer_count;i++){if(i)out_text(",");out_text("\"");out_text(remote_peers[i]);out_text("\"");}
     out_text("]}");frame_end();

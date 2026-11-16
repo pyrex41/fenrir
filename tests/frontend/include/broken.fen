@@ -1,0 +1,5 @@
+\\ expect broken.decl.fen:1:1 this ( is never closed
+(include "broken.decl.fen")
+
+(define main {I64 --> I64}
+  input -> input)

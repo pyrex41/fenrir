@@ -15,7 +15,7 @@
 \\ This file holds the TC1 row checks and the registration rule. The TC0-A rows are
 \\ not restated: the TC0-A evaluator is run as one prerequisite row. The rows for the
 \\ generated family, its reduction and its replay are in harness/tc1-random-rows.shen;
-\\ the two rows for remote perform, and the Erlang half of the toolchain row, are in
+\\ the three rows for remote perform, and the Erlang half of the toolchain row, are in
 \\ harness/tc1-remote-rows.shen.
 
 (set fh.*lib* (cn (hd (tl (value *argv*))) "/"))
@@ -160,6 +160,7 @@
   "tc1-reduced-replay" Memo -> (fh.tc1-reduced-replay Memo)
   "tc1-remote-model" Memo -> (fh.tc1-remote-model Memo)
   "tc1-remote-run" Memo -> (fh.tc1-remote-run Memo)
+  "tc1-remote-peer" Memo -> (fh.tc1-remote-peer Memo)
   Name Memo -> (fh.row "UNKNOWN" [(cn "The evaluator has no check named " Name)] [] Memo))
 
 \\ Registered: the manifest is owner-accepted and the workflow has a tc1-qualification

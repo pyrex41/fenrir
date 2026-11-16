@@ -55,7 +55,7 @@ run(SpecFile) ->
     Defects = maps:get(<<"defects">>, Spec, []),
     Known = [<<"not-delivered-after-handover">>, <<"late-reply-accepted">>, <<"relay-undeclared">>, <<"non-idempotent-peer">>,
              <<"reply-before-commit">>, <<"forgetful-supervisor-restart">>, <<"replay-different-argument">>,
-             <<"read-only-writes">>],
+             <<"read-only-writes">>, <<"writes-without-record">>, <<"record-without-writes">>, <<"torn-commit">>, <<"stale-reads">>],
     [] = Defects -- Known,
     Members = [#{name => maps:get(<<"name">>, M),
                  kind => case maps:get(<<"kind">>, M) of <<"caller">> -> caller; <<"peer">> -> peer end,

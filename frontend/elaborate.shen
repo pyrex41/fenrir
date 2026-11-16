@@ -1,6 +1,7 @@
 \\ Fenrir frontend, elaborator: the reader's S-expressions to an artifact of schema
 \\ tc1-handler-demo/2, or tc1-handler-demo/3 when the program declares a remote
-\\ effect (contract spec/tc1/EFFECTS.md), in decoded-JSON shape:
+\\ effect, or tc1-handler-demo/4 when it serves one (contract spec/tc1/EFFECTS.md),
+\\ in decoded-JSON shape:
 \\ strings, lists, and [object [Key Value] ...] with keys in canonical order.
 \\ Load after reader.shen. The surface syntax is specified in spec/tc1/SURFACE.md.
 \\
@@ -34,6 +35,8 @@
 (set fe.*datatypes* [])        \\ [[Name [[Constructor [FieldType ...]] ...]] ...], TrapCode first
 (set fe.*effects* [])          \\ [[Name [[Operation ArgumentType ResultType] ...]] ...]
 (set fe.*remote* [])           \\ [[Name [ReadOnlyOperation ...]] ...]: the remote effects among them
+(set fe.*serving* false)       \\ true when the program has a (serve ...) form: a peer's program
+(set fe.*served* [])           \\ [[FunctionName Effect Operation ReadOnly?] ...]: the served operations
 (set fe.*functions* [])        \\ [[Name [ArgumentType ResultType]] ...]
 (set fe.*table* [])            \\ [[FunctionName Effects] ...], the current estimate
 (set fe.*strict* true)         \\ false while effect sets are still being computed
@@ -136,7 +139,7 @@
 
 \\ Words with a meaning of their own, which no function or variable may take.
 (define fe.reserved?
-  Name -> (element? Name ["define" "datatype" "effect" "remote-effect" "read-only" "let" "if" "do" "tuple" "project" "match" "lambda" "type"
+  Name -> (element? Name ["define" "datatype" "effect" "remote-effect" "read-only" "include" "serve" "let" "if" "do" "tuple" "project" "match" "lambda" "type"
                           "emit" "perform" "handle" "resume" "discontinue" "unit" "true" "false"
                           "not" "neg" "bytes-length" "bytes-index" "bytes-concat" "_"]))
 
@@ -748,6 +751,9 @@
 (define fe.perform
   L C Effect Op [A B] Args Env Want ->
     (let Mode (fe.remote-mode Effect Op)
+         Local (if (and (value fe.*serving*) (not (= Mode ordinary)))
+                   (fe.fail L C (make-string "a program that serves does not perform remote operations: ~A.~A would be a request to another member from inside a request, which is not supported" Effect Op))
+                   true)
          Examined (if (or (= Mode ordinary) (= Want scrutinee)) true
                       (fe.fail L C (make-string "the outcome of this remote perform is not examined: a perform of ~A.~A may only be written as the value a match takes apart, (match (perform ~A ~A ...) ((Reply x) -> e) (NotDelivered -> e) (TimedOut -> e)). An outcome cannot be bound, passed, returned, stored or dropped"
                                                 Effect Op Effect Op)))
@@ -829,6 +835,9 @@
          Known (if (= Ops none) (fe.fail EL EC (make-string "unknown effect ~A" Effect)) true)
          Local (if (= (fe.lookup Effect (value fe.*remote*)) none) true
                    (fe.fail EL EC (make-string "effect ~A is remote and cannot be handled: its operations are carried out by the member the system's manifest binds it to, and no handler in the program takes their place" Effect)))
+         Provided (if (and (value fe.*serving*) (fe.store-effect? Effect))
+                      (fe.fail EL EC (make-string "effect ~A is the peer's store and cannot be handled: its operations are carried out by the peer's runtime, inside the request's transaction" Effect))
+                      true)
          Node (fe.node L C)
          Body (fe.expr (fe.last Items) Env Want)
          Rows (fe.clauses (fe.but-last Items) Effect Ops (fe.row-type Body) (fe.block "a clause of another handler" Env) [] [])
@@ -844,8 +853,187 @@
 \\ ---------- declarations ----------
 
 (define fe.kind
-  [list _ _ [[sym _ _ K] | _]] -> K where (element? K ["datatype" "effect" "remote-effect" "define"])
-  D -> (fe.reject D "a program is a sequence of (datatype ...), (effect ...), (remote-effect ...) and (define ...) forms"))
+  [list _ _ [[sym _ _ K] | _]] -> K where (element? K ["datatype" "effect" "remote-effect" "define" "serve"])
+  D -> (fe.reject D "a program is a sequence of (include ...), (datatype ...), (effect ...), (remote-effect ...), (define ...) and (serve ...) forms"))
+
+\\ ---------- include ----------
+
+\\ (include "file") splices the declarations of another file in at that place
+\\ (EFFECTS.md section 12.6, owner ruling of 16 November 2026 on question 15:
+\\ include, not import). The file is named relative to the directory of the
+\\ file the include is written in, with / between components; it may not be
+\\ absolute and may not have a component . or .. . An included file may contain
+\\ only declarations, (datatype ...), (effect ...) and (remote-effect ...), and
+\\ includes of its own. A file that includes itself, directly or through
+\\ others, is rejected. Every position inside an included file carries the
+\\ file, so a problem there is reported there.
+
+\\ File up to and including its last /, or "".
+(define fe.directory
+  File -> (fe.directory-of (fe.codes File) [] []))
+
+(define fe.directory-of
+  [] _ Kept -> (fe.string-of (reverse Kept))
+  [47 | Bs] Word Kept -> (fe.directory-of Bs [] (append [47 | Word] Kept))
+  [B | Bs] Word Kept -> (fe.directory-of Bs [B | Word] Kept))
+
+\\ The components of a path, split at /.
+(define fe.components
+  [] Word Acc -> (reverse [(reverse Word) | Acc])
+  [47 | Bs] Word Acc -> (fe.components Bs [] [(reverse Word) | Acc])
+  [B | Bs] Word Acc -> (fe.components Bs [B | Word] Acc))
+
+(define fe.include-path
+  L C Octets File ->
+    (if (and (cons? Octets) (fe.all? (/. B (and (> B 32) (< B 127) (not (= B 92)))) Octets)
+             (fe.all? (/. Part (not (element? Part [[] [46] [46 46]]))) (fe.components Octets [] [])))
+        (cn (fe.directory File) (fe.string-of Octets))
+        (fe.fail L C "an included file is named relative to the directory of this file, with / between components: no absolute path, no . or .. component, no spaces")))
+
+(define fe.retag
+  File [list L C Items] -> [list [at-file File L] C (map (/. I (fe.retag File I)) Items)]
+  File [brace L C Items] -> [brace [at-file File L] C (map (/. I (fe.retag File I)) Items)]
+  File [Kind L C X] -> [Kind [at-file File L] C X])
+
+\\ The data of an included file. A problem the reader finds is reported at that file.
+(define fe.read-included
+  Path Octets ->
+    (map (/. D (fe.retag Path D))
+         (trap-error (fe.read Octets)
+                     (/. E (let D (value fe.*diagnostic*)
+                             (if (= (length D) 3)
+                                 (do (set fe.*diagnostic* (append D [Path])) (error "fenrir diagnostic"))
+                                 (error (error-to-string E))))))))
+
+\\ Stack: the files being read, innermost first; the program's own file is the last.
+(define fe.included
+  Path L C Stack ->
+    (if (element? Path Stack)
+        (fe.fail L C (make-string "include cycle: ~A is already being read (~A)" Path (fe.listed (reverse Stack))))
+        (let Octets (trap-error (read-file-as-bytelist Path)
+                                (/. E (fe.fail L C (make-string "the included file ~A cannot be read" Path))))
+          (fe.expand (map (/. F (fe.declaration-only Path F)) (fe.read-included Path Octets)) Path [Path | Stack]))))
+
+(define fe.declaration-only
+  Path [list L C [[sym SL SC K] | Rest]] -> [list L C [[sym SL SC K] | Rest]] where (element? K ["datatype" "effect" "remote-effect" "include"])
+  Path D -> (fe.reject D "an included file may contain only declarations: (datatype ...), (effect ...), (remote-effect ...) and (include ...). Functions and (serve ...) belong to a program"))
+
+\\ The forms of File with every include replaced by the declarations it names.
+(define fe.expand
+  [] _ _ -> []
+  [[list L C [[sym _ _ "include"] [str SL SC Octets]]] | Forms] File Stack ->
+    (append (fe.included (fe.include-path SL SC Octets File) L C Stack) (fe.expand Forms File Stack))
+  [[list L C [[sym _ _ "include"] | _]] | _] _ _ -> (fe.fail L C "include is written (include c#34;file.fenc#34;), the file named relative to the directory of this one")
+  [F | Forms] File Stack -> [F | (fe.expand Forms File Stack)])
+
+\\ ---------- the store, and serving ----------
+
+\\ A program that serves a remote effect is a peer's program (EFFECTS.md
+\\ section 12.12). It reaches the peer's durable store through two effects that
+\\ the peer's runtime provides, of the durable class of section 8: they are not
+\\ declared, cannot be declared and cannot be handled.
+(define fe.store-effects
+  -> [["StoreRead" [["get" "I64" "I64"]]] ["StoreWrite" [["put" ["Tuple" "I64" "I64"] "Unit"]]]])
+
+(define fe.store-effect?
+  Name -> (element? Name ["StoreRead" "StoreWrite"]))
+
+\\ (serve Effect ((operation x ...) -> e) ...): one implementation for each
+\\ operation of the remote effect. Each becomes a function named
+\\ Effect.operation, which no program can call: the peer's runtime runs it once
+\\ for each request. An operation op : A --> B that is not read-only is written
+\\ ((op key a) -> e), key being the request key the caller performed it with,
+\\ and is the function {(Tuple I64 A) --> B}; a read-only one is ((op a) -> e),
+\\ the function {A --> B}.
+\\ Result: signatures as fe.signature gives them, [Name A B Line Column Parameters Body].
+(define fe.serve-clause
+  Effect Ops ReadOnly Seen [list L C [[list _ _ [[sym OL OC Op] | Binders]] [sym _ _ "->"] Body]] ->
+    (let Declared (fe.binding Op Ops)
+         Known (if (= Declared none)
+                   (fe.fail OL OC (make-string "effect ~A has no operation ~A: its operations are ~A" Effect Op (fe.listed (fe.keys Ops))))
+                   true)
+         Once (if (element? Op Seen) (fe.fail L C (make-string "this serve has two implementations of ~A.~A" Effect Op)) true)
+         Quiet (element? Op ReadOnly)
+         Wanted (if Quiet 1 2)
+         Counted (if (= (length Binders) Wanted) true
+                     (fe.fail L C (if Quiet
+                                      (make-string "~A.~A is read-only and has no request key: its implementation is written ((~A argument) -> e)" Effect Op Op)
+                                      (make-string "~A.~A is not read-only, so its implementation takes the request key and then the argument: ((~A key argument) -> e)" Effect Op Op))))
+      [(cn Effect (cn "." Op)) (if Quiet (nth 2 Declared) ["Tuple" "I64" (nth 2 Declared)]) (nth 3 Declared) L C Binders Body Effect Op Quiet])
+  _ _ _ _ D -> (fe.reject D "an implementation is written ((operation key argument) -> e), or ((operation argument) -> e) for a read-only operation"))
+
+(define fe.serve-clauses
+  _ _ _ [] Acc -> (reverse Acc)
+  Effect Ops ReadOnly [Clause | Clauses] Acc ->
+    (fe.serve-clauses Effect Ops ReadOnly Clauses [(fe.serve-clause Effect Ops ReadOnly (map (/. S (nth 9 S)) Acc) Clause) | Acc]))
+
+(define fe.serve
+  [list L C [_ [sym EL EC Effect] Clause | Clauses]] ->
+    (let Ops (fe.lookup Effect (value fe.*effects*))
+         Known (if (= Ops none) (fe.fail EL EC (make-string "unknown effect ~A" Effect)) true)
+         ReadOnly (fe.lookup Effect (value fe.*remote*))
+         Far (if (= ReadOnly none)
+                 (fe.fail EL EC (make-string "~A is not a remote effect: serve gives the implementations of the operations of a remote-effect, for other members to perform; an ordinary effect is handled with (handle ~A ...)" Effect Effect))
+                 true)
+         Rows (fe.serve-clauses Effect Ops ReadOnly [Clause | Clauses] [])
+         Missing (fe.missing Ops (map (/. S (nth 9 S)) Rows))
+         Complete (if (empty? Missing) true
+                      (fe.fail L C (make-string "this serve of ~A has no implementation of ~A: a program that serves an effect implements each of its operations" Effect (fe.listed Missing))))
+      Rows)
+  D -> (fe.reject D "serve is written (serve Effect ((operation key argument) -> e) ... ), with ((operation argument) -> e) for a read-only operation"))
+
+\\ The signatures of every function of the program, in source order: each
+\\ define, and each implementation of each serve.
+(define fe.signatures
+  [] -> []
+  [F | Forms] -> (let K (fe.kind F)
+                   (if (= K "define")
+                       [(fe.signature F) | (fe.signatures Forms)]
+                       (if (= K "serve")
+                           (append (fe.serve F) (fe.signatures Forms))
+                           (fe.signatures Forms)))))
+
+(define fe.served-twice
+  [] _ -> true
+  [[list _ _ [_ [sym L C Effect] | _]] | Forms] Seen ->
+    (if (element? Effect Seen)
+        (fe.fail L C (make-string "effect ~A is served twice: one (serve ~A ...) holds all its implementations" Effect Effect))
+        (fe.served-twice Forms [Effect | Seen]))
+  [_ | Forms] Seen -> (fe.served-twice Forms Seen))
+
+\\ What a served operation's implementation may leave unhandled: Emit and the
+\\ store. A read-only operation may not write (EFFECTS.md section 12.3; owner
+\\ ruling of 16 November 2026 on section 12.10 question 13: the type checker
+\\ vouches for read-only): StoreWrite may not be among its effects, whether it
+\\ comes from a perform, a call or an application.
+(define fe.check-served
+  _ _ [] -> true
+  Served Quiet [["Emit" | _] | Rest] -> (fe.check-served Served Quiet Rest)
+  Served Quiet [["StoreRead" | _] | Rest] -> (fe.check-served Served Quiet Rest)
+  Served false [["StoreWrite" | _] | Rest] -> (fe.check-served Served false Rest)
+  Served true [["StoreWrite" L C Cause] | _] ->
+    (fe.fail L C (make-string "~A is declared read-only, but its implementation can write the store: effect StoreWrite comes from ~A. A read-only operation changes nothing the peer keeps" Served Cause))
+  Served _ [[Name L C Cause] | _] ->
+    (fe.fail L C (make-string "effect ~A is not handled: it comes from ~A, and no (handle ~A ...) encloses that on the way from the served operation ~A" Name Cause Name Served)))
+
+(define fe.check-serving
+  [] [] -> true
+  [["main" _ _ L C | _] | _] _ ->
+    (fe.fail L C "a program that serves has no main: it does not run from an entry, it runs one implementation for each request")
+  [[Name _ _ _ _ _ _ Effect Op Quiet] | Fs] [[_ Effects] | Rs] -> (do (fe.check-served Name Quiet Effects) (fe.check-serving Fs Rs))
+  [_ | Fs] [_ | Rs] -> (fe.check-serving Fs Rs))
+
+\\ The artifact's record of what is served: for each served effect, the function
+\\ of each operation, in the order of the effect's declaration.
+(define fe.serves-object
+  Functions [Effect Ops] ->
+    [object ["effect" Effect]
+            ["operations" (map (/. O [object ["function" (cn Effect (cn "." (hd O)))] ["name" (hd O)]]) Ops)]])
+
+(define fe.served-effects
+  [] Acc -> (reverse Acc)
+  [[_ _ _ _ _ _ _ Effect _ _] | Fs] Acc -> (fe.served-effects Fs (if (element? Effect Acc) Acc [Effect | Acc]))
+  [_ | Fs] Acc -> (fe.served-effects Fs Acc))
 
 (define fe.of-kind
   _ [] -> []
@@ -877,6 +1065,8 @@
 (define fe.user-effect-name
   [sym L C Name] -> (fe.fail L C (make-string "~A is a reserved runtime effect and cannot be declared" Name))
     where (element? Name ["Emit" "Task" "Channel" "Time" "Resource"])
+  [sym L C Name] -> (fe.fail L C (make-string "~A is the peer's store, which the runtime provides to a program that serves, and cannot be declared there" Name))
+    where (and (value fe.*serving*) (fe.store-effect? Name))
   D -> (fe.check-capital "effect" D))
 
 \\ Constructor names are unique across the whole program, TrapCode's included:
@@ -973,7 +1163,7 @@
 
 \\ Several parameters name the components of a tuple argument.
 (define fe.check-parameters
-  [Name A _ L C Parameters _] ->
+  [Name A _ L C Parameters _ | _] ->
     (let Distinct (fe.distinct Parameters [])
          N (length Parameters)
       (if (or (= N 1) (and (cons? A) (= (hd A) "Tuple") (= (length (tl A)) N)))
@@ -999,7 +1189,7 @@
 
 \\ [FunctionObject Effects], the effects being what the body may perform.
 (define fe.function
-  [Name A B L C Parameters Body] ->
+  [Name A B L C Parameters Body | _] ->
     (let Id (fe.node L C)
          P (fe.fresh)
          Want [want B (cn "the body of " Name) " (its declared result type)"]
@@ -1097,7 +1287,8 @@
 \\ name; Octets are the source. Returns the artifact.
 (define fe.elaborate
   File Module Octets ->
-    (let Forms (fe.read Octets)
+    (let Forms (fe.expand (fe.read Octets) File [File])
+         Serving (set fe.*serving* (cons? (fe.of-kind "serve" Forms)))
          DatatypeForms (fe.of-kind "datatype" Forms)
          EffectForms (fe.effect-forms Forms)
          RemoteForms (fe.of-kind "remote-effect" Forms)
@@ -1118,16 +1309,29 @@
                               (fe.reject F "RemoteResult names the outcomes of a remote perform and cannot be declared in a program that has a remote-effect")
                               true))
                     DatatypeForms)
-         Functions (map (/. F (fe.signature F)) FunctionForms)
+         Store (if Serving (set fe.*effects* (append Effects (fe.store-effects))) Effects)
+         Once (fe.served-twice (fe.of-kind "serve" Forms) [])
+         Functions (fe.signatures Forms)
          Unique (fe.declared "function" (/. D true) FunctionForms [])
          Parameters (map (/. F (fe.check-parameters F)) Functions)
-         SetFunctions (set fe.*functions* (map (/. F [(hd F) [(nth 2 F) (nth 3 F)]]) Functions))
+         \\ Only a define can be called: an implementation of a served operation is run by the peer's runtime.
+         SetFunctions (set fe.*functions* (map (/. F [(hd F) [(nth 2 F) (nth 3 F)]]) (fe.keep-if (/. F (= (length F) 7)) Functions)))
          \\ Effect sets, then the pass that produces the artifact.
          Start (do (set fe.*strict* false) (set fe.*table* (map (/. F [(hd F) []]) Functions)))
          Settled (fe.fixed-point Functions)
          Strict (do (set fe.*strict* true) (set fe.*next* 0) (set fe.*locations* []))
          Results (fe.pass Functions)
-         Entry (fe.check-entry Functions Results)
+         Entry (if Serving (fe.check-serving Functions Results) (fe.check-entry Functions Results))
+      (if Serving
+          [object ["contract_version" "tc1-draft-1"]
+                  ["datatypes" (map (/. D (fe.datatype-object D)) (tl Datatypes))]
+                  ["effects" (map (/. E (fe.effect-object Far E)) Declared)]
+                  ["functions" (map (/. R (hd R)) Results)]
+                  ["module" Module]
+                  ["schema_version" "tc1-handler-demo/4"]
+                  ["serves" (map (/. Name (fe.serves-object Functions [Name (fe.lookup Name Effects)])) (fe.served-effects Functions []))]
+                  ["slice" "TC1-P1"]
+                  ["source_map" (fe.source-map File (value fe.*locations*) [])]]
       [object ["contract_version" "tc1-draft-1"]
               ["datatypes" (map (/. D (fe.datatype-object D)) (tl Datatypes))]
               ["effects" (map (/. E (fe.effect-object Far E)) Declared)]
@@ -1137,4 +1341,4 @@
               ["module" Module]
               ["schema_version" (if Far "tc1-handler-demo/3" "tc1-handler-demo/2")]
               ["slice" (if Far "TC1-R1" "TC1-H2")]
-              ["source_map" (fe.source-map File (value fe.*locations*) [])]]))
+              ["source_map" (fe.source-map File (value fe.*locations*) [])]])))

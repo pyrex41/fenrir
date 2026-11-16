@@ -1,14 +1,15 @@
 # Fenrir surface syntax
 
-Draft 3 • 16 November 2026 • For owner review
+Draft 4 • 16 November 2026 • For owner review
 
 **Status.** A first frontend, written in Shen, so that a Fenrir program can be
 written as text, run, and its result seen. Every choice of spelling below is a
 proposal for the owner to confirm or change (§8 lists them). Nothing here is
 qualified, and nothing here adds to the language: the frontend translates text
 into an artifact of schema `tc1-handler-demo/2` (contract
-[EFFECTS.md](EFFECTS.md), slice TC1-H2), or of schema `tc1-handler-demo/3`
-(slice TC1-R1) when the program declares a remote effect. What a program means
+[EFFECTS.md](EFFECTS.md), slice TC1-H2), of schema `tc1-handler-demo/3`
+(slice TC1-R1) when the program declares a remote effect, or of schema
+`tc1-handler-demo/4` (slice TC1-P1) when it serves one. What a program means
 is decided by the Shen model; whether an artifact is well formed is decided by
 the validator `tools/tc0/pure-call-artifact.mjs`. Draft 2 adds the remote
 effect class of EFFECTS.md draft 7 (owner rulings of 16 November 2026 on
@@ -21,6 +22,13 @@ rejection of `(handle E ...)` for a remote effect is confirmed; and the
 member an effect goes to is stated in the system manifest. Every program
 that was accepted and is still accepted elaborates to the same bytes as
 before; one test program that passed outcomes around is now rejected.
+Draft 4 follows EFFECTS.md draft 9 (owner direction of the same day on
+questions 13 and 15 of its §12.10): `(include "file")` splices in the
+declarations of another file; `(serve Effect ...)` makes a program a peer's
+program, which reaches the peer's store through `StoreRead` and `StoreWrite`;
+and the implementation of a read-only operation is rejected if it can write
+the store. Every program of draft 3 elaborates to the same bytes as before,
+the example caller included, which now includes its declaration of `Ledger`.
 
 ```sh
 sh frontend/fenrir.sh check FILE.fen           # elaborate and validate
@@ -50,6 +58,11 @@ form     ::= (datatype Name constructor...)            constructor ::= Name | (N
            | (effect Name (operation type --> type)...)
            | (remote-effect Name remote-operation...)
            | (define name {type --> type} parameter... -> e)
+           | (include "file")                          the declarations of another file, at this place
+           | (serve Effect implementation...)          Effect remote: this program is a peer's
+
+implementation ::= ((operation key argument) -> e)     an operation that is not read-only
+                 | ((operation argument) -> e)         a read-only operation
 
 remote-operation ::= (operation type --> type)             keyed: performed with a request key
                    | (read-only operation type --> type)   no key; changes nothing at the peer
@@ -78,6 +91,8 @@ e        ::= unit | true | false | 42 | -7 | #x68ff | "text"
            | (bytes-length e) | (bytes-index e e) | (bytes-concat e e)
            | (emit "label" e)
            | (perform Effect operation e...)       Effect ordinary. Remote: only as above; keyed: (perform Effect operation key e)
+           | (perform StoreRead get e)             in a program that serves: the value of a cell of the peer's store
+           | (perform StoreWrite put e e)          in a program that serves: key, then value
            | (handle Effect clause... e)           clause ::= ((operation name) -> e)
                                                             | ((operation name k) -> e)
            | (resume k e) | (discontinue k)
@@ -90,8 +105,8 @@ uppercase letter and continues with letters, digits or `_`: datatypes,
 constructors and effects. `name` starts with a lowercase letter or `_`:
 functions and variables, which may also contain `-`, and operations, which
 may not. `_` alone is a binder that names nothing. The words of the grammar
-(`let`, `if`, `handle`, `unit`, `not`, `remote-effect`, `read-only`, ...) cannot
-be used as names.
+(`let`, `if`, `handle`, `unit`, `not`, `remote-effect`, `read-only`, `include`,
+`serve`, ...) cannot be used as names.
 
 ## 2 What the forms mean
 
@@ -122,6 +137,9 @@ them. There is no other meaning.
 | `(perform E op2 a)`, `op2` read-only | `perform(E, op2, a)`: no key |
 | `(match (perform E op ...) arms)`, E remote | `match` with the `perform` node as its scrutinee; the perform has the type `["Remote", B]`, which is written nowhere |
 | `Reply`, `NotDelivered`, `TimedOut` in a match arm | the constructors `reply`, `not_delivered`, `timed_out` |
+| `(include "f")` | nothing of its own: the forms of the file `f` stand in its place |
+| `(serve E ((op k a) -> e) ((op2 a) -> e2))` | schema `tc1-handler-demo/4`: a function `E.op` of type `{(Tuple I64 A) --> B}` with parameters `k` and `a`, a function `E.op2` of type `{A2 --> B2}`, and `serves`, which names the function of each operation; no `entry` |
+| `(perform StoreRead get k)`, `(perform StoreWrite put k v)` | `perform` nodes of the effects `StoreRead` and `StoreWrite`, which the artifact does not declare; `put` takes `tuple(k, v)` |
 
 Operands are written, and evaluated, left to right. Arithmetic is checked I64:
 a result out of range traps `Overflow`, division by zero traps `DivZero`, a bad
@@ -185,6 +203,60 @@ takes an `I64` and gives a `(Tuple I64 I64)`.
 - Which member an effect's operations go to is not in the source: the system
   manifest binds each remote effect of a caller to a member (EFFECTS.md
   §12.6; owner ruling of 16 November 2026).
+
+**Include** (EFFECTS.md §12.12; owner ruling of 16 November 2026: include,
+not import). `(include "ledger.decl.fen")` at the top level stands for the
+forms of that file. It is textual: no namespace, no interface, and a name
+declared twice is an error wherever the two declarations are written.
+
+- The file is named relative to the directory of the file the include is
+  written in, with `/` between components. An absolute path, a `.` or `..`
+  component and a space in the name are rejected.
+- An included file may contain only declarations, `(datatype ...)`,
+  `(effect ...)` and `(remote-effect ...)`, and includes of its own. A
+  `define` or a `serve` there is rejected, at that form.
+- A file that includes itself, directly or through others, is rejected, at
+  the include that closes the cycle, with the files being read.
+- A problem inside an included file is reported with that file's name, line
+  and column, whether the reader or the elaborator finds it.
+- A file of declarations is not a program: it has no `main`. The examples
+  name such files `*.decl.fen`; the name means nothing to the frontend.
+- Declarations make no expression nodes, so including a declaration instead
+  of writing it changes nothing in the artifact but, where lines move, the
+  source map. [examples/remote/ledger-caller.fen](../../examples/remote/ledger-caller.fen)
+  and [examples/remote/ledger-peer.fen](../../examples/remote/ledger-peer.fen)
+  include one [ledger.decl.fen](../../examples/remote/ledger.decl.fen).
+
+**Serving, and the store** (EFFECTS.md §12.12; owner ruling of 16 November
+2026 on its §12.10 question 13). `(serve Ledger ((add key amount) -> e)
+((total u) -> e))` gives one implementation for each operation of the remote
+effect `Ledger`, and makes the program a peer's program.
+
+- An operation that is not read-only is implemented with two binders, the
+  request key and the argument, as its caller performs it; a read-only one
+  with one, the argument. The body has the operation's result type. Every
+  operation is implemented exactly once, and an effect is served by one
+  `serve`.
+- A program that serves has no `main` and is not run by `sh frontend/fenrir.sh
+  run`, which says so with exit status 2: a peer image runs one implementation
+  for each request. `check` and `emit` work. An implementation is not a
+  function a program can call.
+- Such a program is given the peer's store: `(perform StoreRead get cell)`
+  has type `I64`, and is 0 for a cell never written;
+  `(perform StoreWrite put cell value)` has type `Unit`. The two effects are
+  not declared, cannot be declared in a program that serves, and cannot be
+  handled. They appear in inferred effect sets and may be written in a
+  function type, `(I64 --> Unit ! StoreWrite)`. In a program that does not
+  serve they are unknown effects.
+- An implementation may leave unhandled `Emit` and the two store effects,
+  and nothing else: an ordinary effect is handled inside it, as at `main`.
+- **Read-only is checked.** The implementation of an operation declared
+  `read-only` is rejected if `StoreWrite` is among its effects, whether it
+  comes from a perform, from a function it calls, or from a function value
+  it applies. The message is at the place the effect comes from and names
+  that cause.
+- A program that serves performs no remote operation: a peer does not call
+  onward.
 
 **Identity.** Every expression node and every function gets a decimal ID in
 source order and a source-map row with the file as named on the command line
@@ -274,6 +346,8 @@ every message):
 | Effects | an ordinary effect that reaches `main` unhandled, at the perform, call or application it comes from; a handler with a clause missing or given twice; an effect in a lambda whose wanted type does not allow it; an operation type that is not serializable |
 | Remote effects | a `handle` of a remote effect; a keyed operation performed without its key, or a read-only one with a key (as a type mismatch that says why); a remote perform that is not the scrutinee of a match (must-use: bound, dropped, stored, returned, passed, compared, or reached through an `if`), at the perform; `(Remote T)` written as a type; a match on an outcome without all three arms; `Reply`, `NotDelivered` or `TimedOut` used to make a value; `read-only` in an ordinary effect; a datatype named `RemoteResult` beside a remote effect |
 | Resumptions | never used; used twice on a path (at the second use); branches that disagree; used as a value; used inside a lambda or another handler's clause; `resume` or `discontinue` of something that is not a resumption |
+| Include | `include` not followed by one string; a name that is absolute or has a `.` or `..` component; a file that cannot be read; a form in an included file that is not a declaration or an include; a cycle. Problems inside an included file carry that file's name |
+| Serving | `serve` of an effect that is unknown or not remote; an effect served twice; an operation with no implementation, with two, or unknown; the wrong number of binders for the operation's mode; a body of another type than the operation's result; an ordinary effect left unhandled by an implementation; **a read-only operation whose implementation can write the store**; a remote perform; `main` beside `serve`; `StoreRead` or `StoreWrite` declared or handled; an implementation called as a function |
 | Entry | no `main`; `main` not taking `I64`; `main` returning a function |
 | Size | the validator's caps: 200 expression nodes, nesting depth 64, 256 octets in a bytes literal. This message has no position |
 
@@ -285,15 +359,16 @@ an outcome, with status 0.
 
 ## 6 Not supported
 
-- Anything outside schemas `tc1-handler-demo/2` and `/3`: tasks, scopes, channels, time,
+- Anything outside schemas `tc1-handler-demo/2`, `/3` and `/4`: tasks, scopes, channels, time,
   resources, multi-shot resumption, polymorphism, effect-row polymorphism,
-  modules and imports.
+  modules and imports. `include` is not a module: it has no names of its own
+  and exports nothing.
+- Running a program that serves: it needs a peer image, a store and a
+  request. A peer that calls onward. A store other than I64 to I64.
 - Running a program that performs a remote operation: there is no peer here.
   A stub for one would need either a handler for the remote effect, which the
   contract rejects, or a manifest that binds the effect to a stub member.
 - Naming the member a remote effect is bound to: that is the manifest's.
-  Operations of a remote effect that share a declaration between two
-  programs (no modules).
 - An outcome as a value: naming one, passing it to a helper, returning it.
   EFFECTS.md §3 says what a linear type for outcomes would allow later.
 - Patterns beyond one constructor per arm: no wildcard arm, no nested
@@ -320,17 +395,30 @@ an outcome, with status 0.
 - 12 accepted programs (8 under `examples/`, 4 under
   `tests/frontend/programs/`) elaborate, pass the validator, run on the model
   and give the outcome and emissions written in their headers.
-- 3 programs that declare a remote effect (1 under `examples/remote/`, 2 under
-  `tests/frontend/remote/`) check, and elaborate twice to the same bytes of
-  schema `tc1-handler-demo/3`. One performs nothing remote and runs to the
-  outcome in its header; the other two leave their remote effect to the
-  system, and `run` refuses them with status 2. One of those two,
+- 6 programs that declare a remote effect (4 under `examples/remote/`, 2 under
+  `tests/frontend/remote/`) check, and elaborate twice to the same bytes: 4
+  of schema `tc1-handler-demo/3`, and the 2 that serve an effect,
+  `ledger-peer.fen` and `rates-peer.fen`, of schema `tc1-handler-demo/4`. One
+  performs nothing remote and runs to the outcome in its header; `run`
+  refuses the other five with status 2, three because they leave their
+  remote effect to the system and two because they serve one. The two
+  programs of the ledger example each include `ledger.decl.fen`. One of those two,
   `outcomes-matched-in-place.fen`, has a remote perform matched in a
   function, in a lambda's callee, in a `do`, in an arm of another match and
   as an operand, with arms that do nothing. The example of
   `examples/remote/` elaborates to the bytes it had before the must-use rule.
-- 89 wrong programs under `tests/frontend/bad/`, 20 of them about remote
-  effects, are each rejected with the
+- 13 programs under `tests/frontend/include/`: 3 that include declarations
+  (one file, a file that includes another, a file in a subdirectory that
+  includes a file beside itself) run to the outcome in their headers; 10 are
+  rejected at the stated file, line and column, 5 of them in an included
+  file (a cycle, a function, an unclosed bracket, an unknown type, a
+  declaration made twice) and 5 in the program (a missing file, an absolute
+  name, a `..`, a program that includes itself, an include without a
+  string).
+- 106 wrong programs under `tests/frontend/bad/`, 20 of them about remote
+  effects and 17 about serving and the store (3 of those a read-only
+  operation whose implementation writes: directly, through a call, and
+  through a function value), are each rejected with the
   stated message at the stated line and column. The positions were recorded
   from the elaborator's output after reading each one against its program;
   they are regression expectations, not independent predictions (two were
@@ -401,6 +489,20 @@ elaborator, its tests and this document have one author.
     rejected though the ruling would allow it, and an arm may do nothing,
     `(TimedOut -> unit)`.
 
+20. New with draft 4: `(include "file")`, the file named relative to the
+    including file's directory, declarations only, nested includes allowed.
+21. New with draft 4: `(serve Effect ((operation key argument) -> e) ...)`,
+    shaped like `handle`'s clauses, with the request key as the first binder
+    of an operation that is not read-only; a program that serves has no
+    `main`. The alternative was designated functions with a marker.
+22. New with draft 4: the store as two effects with reserved names,
+    `StoreRead` with `get` and `StoreWrite` with `put`, performed like any
+    effect; one effect with both operations would not let a function's type
+    say that it only reads.
+23. New with draft 4: a cell never written reads 0 (EFFECTS.md §12.10
+    question 17).
+
 Items 14, 15 and 16 are not touched by the rulings of 16 November 2026 on
 questions 11, 12, 14 and 16 and stay as listed. Question 12 (each read-only
-perform is its own request) has no surface spelling.
+perform is its own request) has no surface spelling. The direction on
+questions 13 and 15 is carried out by items 20 to 23.

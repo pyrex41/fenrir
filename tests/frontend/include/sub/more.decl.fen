@@ -1,0 +1,2 @@
+\\ Named relative to this file's own directory, not the program's.
+(include "leaf.decl.fen")

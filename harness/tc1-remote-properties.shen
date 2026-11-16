@@ -61,19 +61,22 @@
 \\ Both are judged against the store, not against any record of who saw the peer act.
 \\ read-reply-from-state: an observed reply to a read-only perform is a value the
 \\ peer's state had at some time between the issue of that attempt and the
-\\ reply. The state is the counter, which never decreases, so: not less than
-\\ the count when the attempt was issued (kept with the attempt), and not more
-\\ than the count now. There is no record to judge it against, and none is asked for.
+\\ reply. What the operation answers is read by running the peer's program on
+\\ the store (remote.reading). For the peers checked here that answer never
+\\ decreases (a ledger's total with amounts that are not negative, a constant),
+\\ so: not less than the answer when the attempt was issued (kept with the
+\\ attempt), and not more than the answer now. There is no record to judge it
+\\ against, and none is asked for.
 (define fr.attempt-violations
-  S [] -> []
-  S [[Tag Caller Peer Rid Fate Outcomes [read-only _ Low]] | Attempts] ->
+  Config S [] -> []
+  Config S [[Tag Caller Peer Rid Fate Outcomes [read-only Op A Low]] | Attempts] ->
     (append (if (> (length Outcomes) 1) ["single-outcome"] [])
-            (fr.read-violations Low (remote.count-of (remote.find-member Peer (remote.members S))) Outcomes)
-            (fr.attempt-violations S Attempts))
-  S [[Tag Caller Peer Rid Fate Outcomes Arg] | Attempts] ->
+            (fr.read-violations Low (remote.reading Config Peer Op A (remote.find-member Peer (remote.members S))) Outcomes)
+            (fr.attempt-violations Config S Attempts))
+  Config S [[Tag Caller Peer Rid Fate Outcomes Arg] | Attempts] ->
     (append (if (> (length Outcomes) 1) ["single-outcome"] [])
             (fr.reply-violations (fr.record-of S Caller Peer Rid) Arg Outcomes)
-            (fr.attempt-violations S Attempts)))
+            (fr.attempt-violations Config S Attempts)))
 
 (define fr.read-violations
   _ _ [] -> []
@@ -81,8 +84,9 @@
   Low High [_ | Outcomes] -> (fr.read-violations Low High Outcomes))
 
 (define fr.read-check
-  Low High [int N] -> (let Value (tc0.i64.small N)
+  Low High [int N] -> (let Value (remote.small N)
                         (if (and (>= Value Low) (<= Value High)) [] ["read-reply-from-state"]))
+    where (and (number? Low) (number? High))
   _ _ _ -> ["read-reply-from-state"])
 
 (define fr.reply-violations
@@ -90,7 +94,7 @@
   Record Arg [[reply V] | Outcomes] -> (append (fr.reply-check V Arg Record) (fr.reply-violations Record Arg Outcomes))
   Record Arg [_ | Outcomes] -> (fr.reply-violations Record Arg Outcomes))
 
-\\ Record is [] or [[RecordedArgument Value]].
+\\ Record is [] or [[RecordedPayload Value]]; a payload is the operation and its argument.
 (define fr.reply-check
   [tuple [int "0"] V] Arg [[Arg V]] -> []
   [tuple [int "0"] V] _ [[_ V]] -> ["key-bound-to-argument"]
@@ -138,8 +142,31 @@
                 ["not-delivered-sealed"] [])
             (fr.sealed-violations S Sealed)))
 
+\\ commit-atomic: the business state and the reply records were committed
+\\ together, every time. Read for the ledger peer (examples/remote/ledger-peer.fen,
+\\ a peer whose program has the tag "ledger-peer"), whose program gives the store
+\\ a meaning the checker can state without running it: cell 0, the total, is the
+\\ sum of the arguments of the reply records, and cell 1 is their number. A
+\\ commit of the writes without the record, of the record without the writes,
+\\ or of a part of the writes breaks it, and so does anything that changes the
+\\ store outside a commit. Sums are of small numbers here.
+(define fr.atomic-violations
+  Config [] -> []
+  Config [[Name _ [Store Log] _] | Members] ->
+    (append (if (and (= (remote.program-tag (remote.handler Config Name)) "ledger-peer")
+                     (not (and (= (remote.small (remote.store-get "0" Store)) (fr.recorded-sum Log))
+                               (= (remote.small (remote.store-get "1" Store)) (length Log)))))
+                ["commit-atomic"] [])
+            (fr.atomic-violations Config Members)))
+
+(define fr.recorded-sum
+  [] -> 0
+  [[_ [[_ [int A]] _]] | Log] -> (+ (remote.small A) (fr.recorded-sum Log))
+  [_ | Log] -> (fr.recorded-sum Log))
+
 (define fr.check-state
-  Config S -> (fr.union (append (fr.attempt-violations S (hd (remote.ghost S)))
+  Config S -> (fr.union (append (fr.attempt-violations Config S (hd (remote.ghost S)))
+                                (fr.atomic-violations Config (remote.members S))
                                 (fr.applied-violations (hd (tl (remote.ghost S))))
                                 (fr.edge-violations (remote.edges Config) (remote.members S))
                                 (fr.sealed-violations S (hd (tl (tl (remote.ghost S))))))
@@ -161,20 +188,42 @@
 \\ key-bound-to-argument, at the step: the peer says conflict only where the
 \\ request id has a record made with another argument, and then the store is
 \\ left as it was; and it replays only a record made with this argument.
+\\ commit-atomic, at the step: a request whose function trapped commits nothing.
+\\ reads-see-own-writes, at the step: what an applied request replies was
+\\ computed with its own writes in view. Read for the ledger peer, whose add
+\\ writes the total and then replies with what it reads back: the value replied
+\\ is the total before plus the argument, not the total before.
 (define fr.act-violations
-  M How Post -> (let Entry (hd (fr.inbox M))
-                     Record (remote.assoc [(hd (tl Entry)) (hd (tl (tl Entry)))] (fr.log M))
-                     Same (= (fr.durable M) (fr.durable (fr.member-of (hd M) Post)))
-                     Other (and (cons? Record) (not (= (hd (hd Record)) (nth 4 Entry))))
-                  (append (if (and (cons? Record) (not Same)) [(if (= How conflict) "key-bound-to-argument" "applied-at-most-once")] [])
-                          (if (and (= How conflict) (not Other)) ["key-bound-to-argument"] [])
-                          (if (and (= How replayed) Other) ["key-bound-to-argument"] []))))
+  Config M How Post ->
+    (let Entry (hd (fr.inbox M))
+         Record (remote.assoc [(hd (tl Entry)) (hd (tl (tl Entry)))] (fr.log M))
+         Same (= (fr.durable M) (fr.durable (fr.member-of (hd M) Post)))
+         Other (and (cons? Record) (not (= (hd (hd Record)) (nth 4 Entry))))
+      (append (if (and (cons? Record) (not Same)) [(if (= How conflict) "key-bound-to-argument" "applied-at-most-once")] [])
+              (if (and (= How conflict) (not Other)) ["key-bound-to-argument"] [])
+              (if (and (= How replayed) Other) ["key-bound-to-argument"] [])
+              (if (and (= How trapped) (not Same)) ["commit-atomic"] [])
+              (if (and (= How applied) (= (remote.program-tag (remote.handler Config (hd M))) "ledger-peer"))
+                  (fr.own-writes-violations (hd (fr.durable M)) Entry (remote.net Post))
+                  []))))
+
+\\ Entry is [Tag Caller Rid [Operation [int Amount]]]; the reply is in flight in Net.
+(define fr.own-writes-violations
+  Store [Tag Caller Rid [_ [int Amount]]] Net ->
+    (if (fr.any? (/. M (fr.reply-of? Tag (remote.ok [int (str (+ (remote.small (remote.store-get "0" Store)) (remote.small Amount)))]) M)) Net)
+        [] ["reads-see-own-writes"])
+  _ _ _ -> [])
+
+(define fr.reply-of?
+  Tag Value [rep Tag _ _ _ Value] -> true
+  _ _ _ -> false)
 
 \\ A crash between the commit and the reply (EFFECTS.md §12.3, §12.7). Judged
 \\ against the durable store, which is all that survives it:
 \\   applied-at-most-once  the request id had no reply record, and the store
 \\                         afterwards is the store before plus exactly that one
-\\                         application and its record;
+\\                         application, which is the writes of one run of the
+\\                         operation's function on the store before, and its record;
 \\   crash-isolation       no other member changes and nothing in flight changes:
 \\                         in particular no reply is emitted.
 (define fr.rest-changed?
@@ -183,8 +232,20 @@
   Name [M | Pre] [M | Post] -> (fr.rest-changed? Name Pre Post)
   _ _ _ -> true)
 
+\\ The store after one application of a keyed request to Store: the writes of
+\\ one run of its function, by the model without any mutant; or the symbol
+\\ none where the function does not return status 0.
+(define fr.one-application
+  [served Program] [Tag Caller Rid [Op Arg]] Store ->
+    (fr.applied-store (remote.applied-by (remote.served false Program Op [tuple [int Rid] Arg] Store)) Store)
+  _ _ _ -> none)
+
+(define fr.applied-store
+  [applied _ Writes] Store -> (remote.store-apply Writes Store)
+  _ _ -> none)
+
 (define fr.commit-crash-violations
-  Name M Pre Post ->
+  Config Name M Pre Post ->
     (let Entry (hd (fr.inbox M))
          Key [(hd (tl Entry)) (hd (tl (tl Entry)))]
          After (fr.member-of Name Post)
@@ -192,7 +253,7 @@
                       (not (= (remote.net Pre) (remote.net Post))))
                   ["crash-isolation"] [])
               (if (and (= (remote.assoc Key (fr.log M)) [])
-                       (= (hd (fr.durable After)) (+ 1 (hd (fr.durable M))))
+                       (= (hd (fr.durable After)) (fr.one-application (remote.handler Config Name) Entry (hd (fr.durable M))))
                        (= (remote.unrecord Key (fr.log After)) (fr.log M))
                        (cons? (remote.assoc Key (fr.log After)))
                        (= (hd (hd (remote.assoc Key (fr.log After)))) (nth 4 Entry)))
@@ -221,32 +282,33 @@
   [X | Xs] Ys -> (and (element? X Ys) (fr.every-in? Xs Ys)))
 
 \\ read-only-changes-nothing: acting on a read-only request leaves the peer's
-\\ durable store exactly as it was, the count and every record; and the peer
-\\ says read of a read-only request and of no other.
+\\ durable store exactly as it was, every cell and every record; and the peer
+\\ says read of a read-only request and of no other (or trapped, when its
+\\ function trapped: that changes nothing either).
 (define fr.read-act-violations
   M How Post -> (let ReadOnly (remote.read-only? (nth 4 (hd (fr.inbox M))))
                      Same (= (fr.durable M) (fr.durable (fr.member-of (hd M) Post)))
-                  (if (and ReadOnly (= How read) Same) [] ["read-only-changes-nothing"])))
+                  (if (and ReadOnly (element? How [read trapped]) Same) [] ["read-only-changes-nothing"])))
 
 (define fr.read-act?
   M How -> (or (= How read) (remote.read-only? (nth 4 (hd (fr.inbox M))))))
 
 \\ read-reply-from-state, at the step that gives the caller the reply: the value
-\\ is not more than the peer's count at that moment.
+\\ is not more than what the operation answers on the peer's store at that moment.
 (define fr.read-delivery-violations
-  [Tag Caller Peer Rid Fate Outcomes [read-only _ Low]] V Pre ->
-    (fr.read-check Low (remote.count-of (remote.find-member Peer (remote.members Pre))) V)
-  _ _ _ -> [])
+  Config [Tag Caller Peer Rid Fate Outcomes [read-only Op A Low]] V Pre ->
+    (fr.read-check Low (remote.reading Config Peer Op A (remote.find-member Peer (remote.members Pre))) V)
+  _ _ _ _ -> [])
 
 (define fr.check-step
   Config Pre [crash Name] Post -> (fr.isolation Name Pre Post)
   Config Pre [restart Name] Post -> (fr.isolation Name Pre Post)
   Config Pre [act Name _ How] Post -> (fr.read-act-violations (fr.member-of Name Pre) How Post)
     where (fr.read-act? (fr.member-of Name Pre) How)
-  Config Pre [deliver-reply Tag V] Post -> (fr.read-delivery-violations (remote.attempt Tag (hd (remote.ghost Pre))) V Pre)
-  Config Pre [act Name _ How] Post -> (fr.act-violations (fr.member-of Name Pre) How Post)
+  Config Pre [deliver-reply Tag V] Post -> (fr.read-delivery-violations Config (remote.attempt Tag (hd (remote.ghost Pre))) V Pre)
+  Config Pre [act Name _ How] Post -> (fr.act-violations Config (fr.member-of Name Pre) How Post)
   Config Pre [supervisor-restart] Post -> (fr.supervisor-restart-violations Pre Post)
-  Config Pre [crash-after-commit Name _] Post -> (fr.commit-crash-violations Name (fr.member-of Name Pre) Pre Post)
+  Config Pre [crash-after-commit Name _] Post -> (fr.commit-crash-violations Config Name (fr.member-of Name Pre) Pre Post)
   Config Pre [not-delivered Tag] Post -> (fr.not-delivered-violations (remote.attempt Tag (hd (remote.ghost Pre))) Pre)
   _ _ _ _ -> [])
 

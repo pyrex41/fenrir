@@ -1,0 +1,6 @@
+\\ The remote effect Rates: two read-only operations. Shared by rates-caller.fen
+\\ and rates-peer.fen, which both include this file (see ledger.decl.fen).
+
+(remote-effect Rates
+  (read-only base Unit --> I64)
+  (read-only cap Unit --> I64))

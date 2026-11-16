@@ -1,0 +1,5 @@
+\\ expect 5:21 unknown effect StoreRead
+\\ The store effects exist only in a program that serves.
+
+(define main {I64 --> I64}
+  input -> (perform StoreRead get input))

@@ -1,0 +1,10 @@
+\\ expect 9:24 the body of Ledger.add has type I64, but (Tuple I64 I64) is expected (
+\\ An implementation returns the operation's declared result.
+
+(remote-effect Ledger
+  (add I64 --> (Tuple I64 I64))
+  (read-only total Unit --> I64))
+
+(serve Ledger
+  ((add key amount) -> amount)
+  ((total u) -> 0))

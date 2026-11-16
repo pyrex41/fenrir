@@ -557,3 +557,165 @@ runs, not controller runs:
   required rows.
 
 There is still no qualification receipt from the workflow controller.
+
+## Amendment 4, 2026-11-16
+
+16 November 2026, last of the day • Amends the record above; nothing above is
+rewritten, and Amendments 1 to 3 stand as the record of what the manifest was
+after each. Where Amendment 3 gives the number of rows, the scope of the rows
+`remote-model` and `remote-run`, or the manifest's hash, this amendment
+replaces them. The hash under "Manifest now" in Amendment 3 is that of the
+manifest between Amendments 3 and 4.
+
+### Basis
+
+Last on 16 November 2026, in conversation, the owner (pyrex41) gave rulings
+on questions 13 and 15 of EFFECTS.md §12.10, the two that Amendment 3 left
+open, in the form of a direction to build their answers now and not defer
+them, and instructed that the pins and the manifest be updated and that this
+amendment be appended with the new manifest hash:
+
+- question 13, who vouches for read-only: the peer is written in Fenrir, its
+  store is reached through effects, and the type checker vouches for the
+  read-only marker;
+- question 15, who owns a signature: a shared declarations file included by
+  both programs, and a signature digest check at assembly.
+
+Two design choices were accepted with the direction: *include, not import*
+(the shared file is spliced in textually and may contain only declarations;
+real modules are a later decision), and that the store is a small map from
+key to integer for now, on the block device as before (SQLite later).
+
+As before, this is **acceptance by instruction given in conversation, not line
+review**. The owner had not seen the syntax of `serve` and `include`, the
+names of the store effects, the commit scheme, the wire format, the digest's
+encoding, the new row or any changed row text. What this change decided where
+the direction left a choice is listed in EFFECTS.md §12.10, under questions
+13 and 15 and as the new questions 17 to 24, all open: that a cell never
+written reads 0; that an implementation sees a request's key and argument
+and not its caller; that only the runtime says `conflict`, another status
+from a program being treated as a trap; that a trap commits nothing and sends
+no reply; how an included file is named and what the digest covers; that a
+peer with no store may still read; what the commit's atomicity assumes of the
+device; and that a peer does not call onward.
+
+### What changed
+
+| | After Amendment 3 | After this amendment |
+| --- | --- | --- |
+| Contract | `spec/tc1/EFFECTS.md` draft 8 | Draft 9: the store effects as the first of the durable class (§8); read-only checked on the peer's program (§12.3); the signature digest and seven refusals at assembly (§12.6); a crash inside a commit (§12.7); two more properties and four more model defects (§12.8); rulings on questions 13 and 15 and questions 17 to 24 (§12.10); §12.11 rewritten for a peer that is a program; §12.12 new. `spec/tc1/SURFACE.md` draft 4 |
+| The peer | Hand-written C: a counter with one keyed and one read-only operation | A program, `examples/remote/ledger-peer.fen`, run on the C machine by a runtime that keeps transport, the store and the commit. The counter is removed. Values change with it: the first application of 5 replies 5, not 1 |
+| Artifact schemas | `/1`, `/2`, `/3` | A fourth, `tc1-handler-demo/4`, for a program that serves. `/1`, `/2` and `/3` admit exactly what they admitted |
+| The caller image's program | `examples/remote/ledger-caller.fen`, declaring `Ledger` itself | The same file, including `examples/remote/ledger.decl.fen` where its three lines of declaration were. Its artifact is the same bytes (SHA-256 `28e97289cad10cb1483d2bf8053d79ce35281083119979f03fe709dc5cc7bf35`); the caller image is not, because the wire format changed |
+| System manifest | `fenrir.system-manifest/1`: a peer has a name | `fenrir.system-manifest/2`: a peer names its program and says whether it has a store. A second manifest, `examples/remote/rates-system.json`, for a system whose peer has none |
+| What a peer image says it serves | Derived from the caller's declarations | Derived from the peer's own program, with a digest of each effect's signature and whether the program writes the store |
+| Refusals at assembly | 5 | 7: a storeless peer whose program mentions the write effect, and a differing signature digest, are new. None was removed or weakened |
+| Wire format | Version 3: a request says its mode | Version 4: a request names its operation; the store is a log of cell records and reply records; a reply record keeps the operation; a reply may say `trapped`; the inbox header says where its hold is |
+| The peer's commit | One reply record, then the store header | A request's cell records and its reply record, then one write of the store header: atomic at record granularity if a 512-byte block write is atomic and a completed write survives the image |
+| Row `remote-model`, required scope | 10 systems, 13 model mutants, 19 hand schedules; 11 properties | 10 systems, 17 model mutants, 23 hand schedules; 13 properties. The peers of the model are the peer programs, run by the model's machine. The ten systems have the states and transitions they had: 1,029,806 and 4,850,067 |
+| Row `remote-run`, required scope | 26 hand schedules, 40 seeded, 4 free-running; 8 defect switches; one system | 31 hand schedules, 50 seeded, 5 free-running; 12 defect switches; two systems. New: a refusal of a differing signature, two kills inside a commit, and two hand schedules, 10 seeded ones and one free-running run of the rates system, whose storeless peer is accepted and runs |
+| Row `remote-peer` | | New and required: 22 hand cases and 400 generated ones of a single request served by a peer's program, on which the Shen model, the JavaScript machine and the C machine in a Solo5 guest agree step for step |
+| Claims | 8 | 9: `remote-peer-request-three-machine-agreement`, on the rows `toolchain-pinned` and `remote-peer`, with the evidence class "agreement of three implementations on listed cases" |
+| Workflow configuration | | One path added to the evaluator authority of the check `tc1-qualification`: `tests/remote`, which holds the test peer programs the new rows read. Nothing else |
+| Manifest text | | The acceptance texts of the rows `remote-model` and `remote-run`, the new row, `contract`, `review`, `model`, `not_covered`, `claims` and `claim_evidence` |
+
+Not changed: the other twenty rows, their ids, checks, required flags, ledger
+references and acceptance texts; the eight earlier claims, their rows and
+prerequisites; the aggregation rule; the rule for `registered`; the
+workflow's checks, required checks and claims; the eleven earlier properties'
+names; the thirteen earlier model mutants and the eight earlier defect
+switches, each still aimed at the property it was aimed at; the seeds. The
+handler machine in its three implementations is untouched in what it does:
+the C machine gained two entry points for a host that starts it at a given
+function, and no step of any machine changed.
+
+No check was loosened. Every condition the two remote rows had is still
+required. The 26 hand schedules of Amendment 3 are all among the 31, with the
+same steps; their expected values are the ledger's (a total) where they were
+the counter's (a count), and the refusal of the storeless peer image now
+names two reasons where it named one. The comparison of the peer's store
+with the model's is finer than it was: every cell and every record with its
+operation, where it was a count and the records.
+
+The rows for slices H1 and H2 are untouched, and so are their inputs: the
+artifacts of every example program that existed before are the same bytes.
+
+Manifest now, SHA-256 of `spec/tc1/tc1-requirements.json`:
+
+```text
+004d663f3fcbcbbdd60a92a45479d14cc7f7577b88cdb4f93c1460f6d044d83f
+```
+
+### What the rows show now
+
+- **`remote-model`.** *Model-level bounded exploration.* As in Amendment 3,
+  with the model's peers being programs: what acting does is one run of the
+  peer program's function on the model's machine, and the store is the
+  program's cells. Two properties are new, `commit-atomic` and
+  `reads-see-own-writes`, and four defects of the peer's runtime are killed
+  on them: a commit without its record, a commit without its writes, a
+  commit that a crash leaves in part, and reads that do not see the
+  request's own writes.
+- **`remote-run`.** *Observed histories on `spt` accepted by the model.* The
+  real peer is a Fenrir program. A kill placed inside its commit, when every
+  record of the commit is written and none is counted, leaves the store as
+  it was, and the supervisor's report shows the records it saw. A system
+  whose peer has no durable store is assembled and runs. A peer built from a
+  differing declaration of the effect is refused at assembly by its digest.
+- **`remote-peer`.** *Agreement of three implementations on listed cases.*
+  One request served by a peer's program gives the same run, store performs,
+  outcome and writes on the model, the JavaScript machine and the C machine
+  with the peer image's store code; the model gives the expected result of
+  each hand case.
+
+### What they still do not show, and what is new among it
+
+Everything under "What it does not show" and in Amendments 1 to 3 stands,
+with three lines overtaken: a peer is now written in the language; read-only
+is now checked on the peer's program; and a real run now has an accepted
+storeless peer. In addition:
+
+- **The read-only rule is tested, not proved.** It is a condition on effect
+  sets. The validator's cases are in the unit-suite row
+  (`tests/tc1/serving-artifact.test.mjs`); the frontend's are in
+  `sh frontend/test.sh`, which is not a row. No rejected program is a row.
+- **The peer's runtime is hand-written C.** Idempotence, conflict and the
+  commit are its, and are checked on the histories run. That it writes
+  nothing while serving a read is not checked statically; one defect switch
+  shows the histories catch it.
+- **Atomicity rests on two assumptions that nothing tests:** that a 512-byte
+  block write is atomic, and that a write that returned survives the image's
+  death. No torn block and no lost write is injected. The kill inside a
+  commit is placed at one point, with the image's cooperation.
+- **Two properties are read for one program.** `commit-atomic` and
+  `reads-see-own-writes` are stated in terms of what the ledger's cells
+  mean. For any other peer program the checker has only the comparison of
+  the store with the model's.
+- **No peer program traps on the real system.** A trap is exercised in the
+  model's hand schedules and in the row `remote-peer`. Where a program would
+  trap, the supervisor's enabled steps would have one crash between commit
+  and reply more than the model's; that is not exercised.
+- **The row `remote-peer` has no commit**, no reply record, no replay and no
+  conflict, and its generated cases carry no expectation: the three machines
+  are each other's check there.
+- **The digest is what a build wrote.** The supervisor compares two strings
+  from two image files. It does not recompute a digest, and nothing ties an
+  image to the program it was built from. The digest does not cover the
+  definition of a datatype.
+- **The store's log is never compacted**, and a store holds 63 records.
+- **Two system shapes**, each one caller and one peer. A peer that calls
+  onward is rejected, not built.
+- **Questions 17 to 24 of EFFECTS.md §12.10 are open.**
+
+### Checked before this amendment
+
+On a scratch clone of the working tree with one snapshot commit, by direct
+runs, not controller runs:
+
+- `sh harness/run-tc1-gate.sh`: verdict PASS, 22 of 22 required rows; the
+  report says `authority: owner-accepted, registered` and
+  `qualification: PASS`.
+- `sh harness/run-gate.sh` (TC0-A, manifest untouched): verdict PASS, 15 of 15
+  required rows.
+
+There is still no qualification receipt from the workflow controller.

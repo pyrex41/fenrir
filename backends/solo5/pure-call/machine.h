@@ -77,6 +77,13 @@ struct pc_machine {
 };
 /* 1 ok; -1 invalid program/state or exhausted guest memory (infrastructure, never a trap). */
 int pc_init(struct pc_machine *,const struct pc_program *,int reverse_operands,int wrap_overflow);
+/* The same start at another function with a given input, for a host that runs one
+ * function for each request (backends/solo5/remote/serve.c). The input must outlive the
+ * run and is not copied; the program's own entry and input are not used. */
+int pc_start(struct pc_machine *,const struct pc_program *,unsigned function,const struct pc_value *input);
+/* A unit, bool or int value in the machine's memory, for a host that gives a perform its
+ * value. 0 when the memory is exhausted. Valid until the next pc_init or pc_start. */
+const struct pc_value *pc_scalar(int tag,int64_t integer);
 int pc_step(struct pc_machine *,struct pc_sample *);
 /* Canonical-shaped sample JSON. Returns bytes written (excluding NUL) or 0 on cap/shape error. */
 size_t pc_format_sample(const struct pc_sample *,char *,size_t);

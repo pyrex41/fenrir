@@ -1,0 +1,15 @@
+\\ expect 14:21 Ledger.total is declared read-only, but its implementation can write t
+\\ The write is in a function value the implementation applies: the type of the
+\\ value carries the effect.
+
+(remote-effect Ledger
+  (add I64 --> (Tuple I64 I64))
+  (read-only total Unit --> I64))
+
+(define writer {Unit --> (I64 --> Unit ! StoreWrite)}
+  u -> (lambda (v : I64) (perform StoreWrite put 0 v)))
+
+(serve Ledger
+  ((add key amount) -> (tuple 0 amount))
+  ((total u) -> (do ((writer unit) 1)
+                    (perform StoreRead get 0))))

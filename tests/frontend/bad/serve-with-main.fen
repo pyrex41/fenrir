@@ -1,0 +1,13 @@
+\\ expect 8:1 a program that serves has no main: it does not run from an entry, it r
+\\ A program that serves has no entry.
+
+(remote-effect Ledger
+  (add I64 --> (Tuple I64 I64))
+  (read-only total Unit --> I64))
+
+(define main {I64 --> I64}
+  input -> input)
+
+(serve Ledger
+  ((add key amount) -> (tuple 0 amount))
+  ((total u) -> 0))

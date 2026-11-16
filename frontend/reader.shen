@@ -23,7 +23,11 @@
 \\ frontend itself by this record, not by the error text.
 (set fe.*diagnostic* [])
 
+\\ A position inside an included file has [at-file File Line] for its line
+\\ (elaborate.shen, fe.retag); the diagnostic then names that file.
 (define fe.fail
+  [at-file File Line] Column Message -> (do (set fe.*diagnostic* [Line Column Message File])
+                                            (error "fenrir diagnostic"))
   Line Column Message -> (do (set fe.*diagnostic* [Line Column Message])
                              (error "fenrir diagnostic")))
 

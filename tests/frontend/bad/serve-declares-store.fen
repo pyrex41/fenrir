@@ -1,0 +1,12 @@
+\\ expect 7:9 StoreWrite is the peer's store, which the runtime provides to a progra
+
+(remote-effect Ledger
+  (add I64 --> (Tuple I64 I64))
+  (read-only total Unit --> I64))
+
+(effect StoreWrite
+  (put I64 --> Unit))
+
+(serve Ledger
+  ((add key amount) -> (tuple 0 amount))
+  ((total u) -> 0))

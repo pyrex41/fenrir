@@ -50,6 +50,8 @@
                   (/. E (fe.rejected Source (value fe.*diagnostic*) (error-to-string E))))))
 
 (define fe.rejected
+  \\ a problem inside an included file is reported at that file
+  _ [L C Message File] _ -> (fe.finish 1 (make-string "~A:~A:~A: error: ~A~%" File L C Message))
   Source [L C Message] _ -> (fe.finish 1 (make-string "~A:~A:~A: error: ~A~%" Source L C Message))
   Source [] Error -> (fe.finish 3 (make-string "~A: internal error in the frontend: ~A~%" Source Error)))
 
@@ -151,6 +153,9 @@
 (define fe.execute
   Text Fuel ->
     (let Artifact (json.parse Text [[byte-limit 16777216]])
+         Entered (if (= (fh.field "schema_version" Artifact) "tc1-handler-demo/4")
+                     (fe.finish 2 (make-string "this program cannot be run alone: it serves a remote effect, and its implementations run inside a peer image, once for each request (sh harness/run-tc1-remote-run.sh builds and runs one). check and emit work on it~%"))
+                     true)
          Far (fe.left-to-the-system Artifact)
          Alone (if (empty? Far) true
                    (fe.finish 2 (make-string "this program cannot be run alone: main performs the remote effect ~A, which only a system of images discharges (sh harness/run-tc1-remote-run.sh builds and runs one). check and emit work on it~%" (hd Far))))

@@ -478,3 +478,38 @@
   Key [] -> [[Key 1]]
   Key [[Key N] | Rest] -> [[Key (+ N 1)] | Rest]
   Key [Pair | Rest] -> [Pair | (fh.count-key Key Rest)])
+
+\\ ---------- a peer's program, as the model takes it ----------
+
+\\ An artifact of schema tc1-handler-demo/4 (a program that serves a remote
+\\ effect) as models/tc1/remote-tc1-peer.shen runs it:
+\\ [Tag HasStore Table Codes Names], Table [[Operation Mode Parameter Body] ...]
+\\ with Operation "Effect.operation" and Mode "keyed" or "read-only".
+(define fh.peer-row
+  Name [[Id Name Parameter Body] | _] -> [Parameter Body]
+  Name [_ | Rows] -> (fh.peer-row Name Rows)
+  Name [] -> (error "harness: served function ~A is not defined" Name))
+
+(define fh.peer-effect
+  Name [E | Es] -> (if (= (fh.field "name" E) Name) E (fh.peer-effect Name Es))
+  Name [] -> (error "harness: served effect ~A is not declared" Name))
+
+(define fh.peer-mode
+  Name [O | Os] -> (if (= (fh.field "name" O) Name) (if (fh.field "read_only" O) "read-only" "keyed") (fh.peer-mode Name Os))
+  Name [] -> (error "harness: served operation ~A is not declared" Name))
+
+(define fh.peer-table
+  [] _ _ -> []
+  [S | Serves] Effects Rows ->
+    (let Effect (fh.field "effect" S)
+         Declared (fh.field "operations" (fh.peer-effect Effect Effects))
+      (append (map (/. O (let Row (fh.peer-row (fh.field "function" O) Rows)
+                           [(cn Effect (cn "." (fh.field "name" O))) (fh.peer-mode (fh.field "name" O) Declared) (hd Row) (hd (tl Row))]))
+                   (fh.field "operations" S))
+              (fh.peer-table Serves Effects Rows))))
+
+(define fh.peer
+  Tag HasStore Artifact ->
+    (let Rows (map (/. F (fh.function-row F)) (fh.field "functions" Artifact))
+         Names (map (/. R [(fh.function-name (hd (tl R))) (hd R)]) Rows)
+      [Tag HasStore (fh.peer-table (fh.field "serves" Artifact) (fh.field "effects" Artifact) Rows) (fh.function-codes Rows) Names]))

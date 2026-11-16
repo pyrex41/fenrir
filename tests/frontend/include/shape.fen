@@ -1,0 +1,5 @@
+\\ expect shape.fen:2:1 include is written (include "file.fen"), the file named rela
+(include shared)
+
+(define main {I64 --> I64}
+  input -> input)

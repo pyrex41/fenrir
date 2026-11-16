@@ -4,8 +4,12 @@
 \\ The system under check is real: the Erlang/OTP supervisor of supervisor/
 \\ running two Solo5 guests as OS processes under the spt tender, a caller image
 \\ (the TC1 program of the source file examples/remote/ledger-caller.fen,
-\\ elaborated by the frontend, on the C machine) and the counter peer image,
-\\ built by tools/solo5/remote-build.mjs. For each schedule
+\\ elaborated by the frontend, on the C machine) and a peer image whose
+\\ operations are a program too (examples/remote/ledger-peer.fen, on the same C
+\\ machine, run by the peer's runtime once for each request, with its durable
+\\ store in a file), built by tools/solo5/remote-build.mjs. A second system,
+\\ built the same way from examples/remote/rates-system.json, has a caller that
+\\ only reads and a peer with no durable store. For each schedule
 \\ this file starts that system, lets the supervisor follow the schedule, and
 \\ then judges what was recorded:
 \\   (a) the supervisor's event log is replayed through the model, step by step:
@@ -17,17 +21,27 @@
 \\       they observe: the caller's outcomes, its requests and its TC1 events,
 \\       per incarnation; the peer's actions and the store it found at each boot;
 \\       and the peer's store file at the end must be the model's durable store.
-\\ The model's caller is the same program, read from the build's program.json
+\\ The model's caller is the same program, read from the artifact the build wrote
 \\ and run by models/tc1/handler-machine.shen (models/tc1/remote-tc1-caller.shen),
 \\ with the operations the build derived from its remote-effect declarations.
+\\ The model's peer is the peer's program, read from its artifact and run by the
+\\ same machine with the store effects (models/tc1/remote-tc1-peer.shen).
 \\ What each image declares of itself is derived the same way. Which member serves
 \\ a remote effect is the system manifest's binding (EFFECTS.md §12.6): the build
 \\ read it from examples/remote/ledger-system.json, and every run here hands the
-\\ supervisor that manifest's bindings unless the schedule is about them. Four
+\\ supervisor that manifest's bindings unless the schedule is about them. Five
 \\ schedules are refusals at assembly: an effect the manifest binds to no member,
 \\ an effect bound to a name that is no member, an effect bound to a member the
-\\ manifest declares no connection to, and a peer image with no durable store
-\\ that serves an operation which is not read-only.
+\\ manifest declares no connection to, a peer image with no durable store
+\\ that serves an operation which is not read-only (and whose program writes),
+\\ and a peer image whose digest of the effect's signature is not the caller's.
+\\
+\\ A kill inside a peer's commit is not a step of its own in the model: a commit
+\\ is durable whole or not at all, so it is the step crash. A schedule here says
+\\ [crash-in-commit Peer]; the supervisor then lets the peer run, told to stop
+\\ inside its commit, kills it when the store file shows every record of the
+\\ commit written and none counted, and records crash. This file requires the
+\\ run's report to list that kill with the uncounted records the schedule expects.
 \\ Every scheduled run is made twice and the two recordings must be equal.
 \\ Then each defect switch of the supervisor or the peer must be killed: its
 \\ recorded run must fail (a), (b) or (c). A run that ends in an error is
@@ -51,7 +65,8 @@
 \\
 \\   shen-jit script harness/tc1-remote-run.shen LIBDIR ROOT BUILD EBIN ERL WORK check CONTROL
 \\   shen-jit script harness/tc1-remote-run.shen LIBDIR ROOT BUILD EBIN ERL WORK negative-control
-\\ BUILD  directory written by tools/solo5/remote-build.mjs
+\\ BUILD  directory written by tools/solo5/remote-build.mjs for the ledger system; the rates
+\\        system's is BUILD with -rates appended (--manifest examples/remote/rates-system.json)
 \\ EBIN   directory of the compiled supervisor;  ERL  the erl executable
 \\ WORK   an existing empty directory for the runs' files
 \\ CONTROL is what the runner saw of the negative-control run, in which the
@@ -70,11 +85,37 @@
 (load (cn (value fh.*root*) "harness/common.shen"))
 (load (cn (value fh.*root*) "models/tc1/remote-system.shen"))
 (load (cn (value fh.*root*) "models/tc1/remote-tc1-caller.shen"))
+(load (cn (value fh.*root*) "models/tc1/remote-tc1-peer.shen"))
 (load (cn (value fh.*root*) "harness/tc1-remote-properties.shen"))
 
-(set fx.*info* (json.parse (read-file-as-string (cn (value fx.*build*) "build.json")) []))
-(set fx.*program* (json.parse (read-file-as-string (fh.field "program" (value fx.*info*))) [[byte-limit 16777216]]))
+\\ A built system: [Info CallerArtifact PeerHandler], Info the decoded build.json.
+(define fx.member-info
+  Name [M | Ms] -> (if (= (fh.field "name" M) Name) M (fx.member-info Name Ms))
+  Name [] -> (error "harness: the build has no member ~A" Name))
+
+(define fx.artifact-of
+  Name Info -> (json.parse (read-file-as-string (fh.field "program" (fx.member-info Name (fh.field "members" Info)))) [[byte-limit 16777216]]))
+
+(define fx.built
+  Directory -> (let Info (json.parse (read-file-as-string (cn Directory "build.json")) [[byte-limit 16777216]])
+                    Peer (fx.artifact-of "peer" Info)
+                 [Info (fx.artifact-of "caller" Info)
+                  [served (fh.peer (fh.field "module" Peer) (fh.field "store" (fx.member-info "peer" (fh.field "members" Info))) Peer)]]))
+
+(set fx.*ledger* (fx.built (value fx.*build*)))
+(set fx.*rates* (fx.built (cn (nth 1 (value fx.*args*)) "-rates/")))
+
+\\ The system the functions below are about: the ledger system, or for some
+\\ schedules the rates system.
+(define fx.use
+  [Info Program Peer] -> (do (set fx.*info* Info) (set fx.*program* Program) (set fx.*peer* Peer)
+                             (set fx.*bindings* (fh.field "bindings" Info)) done))
+
+(define fx.caller-info -> (fx.member-info "caller" (fh.field "members" (value fx.*info*))))
+(define fx.peer-info -> (fx.member-info "peer" (fh.field "members" (value fx.*info*))))
+
 (set fx.*seeds* 40)
+(set fx.*rates-seeds* 10)
 (set fx.*runs* 0)
 
 \\ ---------- labels: the model's terms and the supervisor's JSON ----------
@@ -107,6 +148,7 @@
   ["act" N T "replayed"] -> [act N (fx.tag T) replayed]
   ["act" N T "conflict"] -> [act N (fx.tag T) conflict]
   ["act" N T "read"] -> [act N (fx.tag T) read]
+  ["act" N T "trapped"] -> [act N (fx.tag T) trapped]
   ["timeout" T] -> [timeout (fx.tag T)]
   ["not-delivered" T] -> [not-delivered (fx.tag T)]
   ["crash" N] -> [crash N]
@@ -130,10 +172,17 @@
   [timeout T] -> ["timeout" (fx.tag-json T)]
   [not-delivered T] -> ["not-delivered" (fx.tag-json T)]
   [crash N] -> ["crash" N]
+  \\ not a label of the model: the step crash, taken by a kill inside the peer's commit
+  [crash-in-commit N] -> ["crash" N "in-commit"]
   [crash-after-commit N T] -> ["crash-after-commit" N (fx.tag-json T)]
   [restart N] -> ["restart" N]
   [supervisor-restart] -> ["supervisor-restart"]
   L -> (error "harness: no JSON for the label ~S" L))
+
+\\ What the supervisor records for a scheduled step: a kill inside a commit is the step crash.
+(define fx.recorded-as
+  [crash-in-commit N] -> [crash N]
+  L -> L)
 
 \\ A step as the supervisor names it before taking it: an act does not say yet
 \\ whether it applies or replays, and handing a reply to the caller is one step
@@ -184,10 +233,11 @@
 \\ ---------- the model of the system that was built ----------
 
 \\ The caller's program is the artifact the caller image was lowered from, and
-\\ its remote operations are the image's. The peer is the model's counter.
+\\ its remote operations are the image's. The peer is the program the peer
+\\ image was lowered from, with or without a durable store as the image is.
 (define fx.config
-  Edges Mutant -> [remote-config [["caller" [tc1 (fh.state (value fx.*program*)) (fh.field "operations" (value fx.*info*))] [none]]
-                                  ["peer" [script []] [counter]]]
+  Edges Mutant -> [remote-config [["caller" [tc1 (fh.state (value fx.*program*)) (fh.field "operations" (fx.caller-info))] [none]]
+                                  ["peer" [script []] (value fx.*peer*)]]
                                  Edges Mutant])
 
 \\ ---------- replaying a recorded event log through the model ----------
@@ -396,11 +446,12 @@
         (fx.differ (and (= (length Hello) 1) (= (fh.field "incarnation" (hd Hello)) (str I)) (= (fh.field "role" (hd Hello)) "peer"))
                    (cn Where "hello frame"))
         (fx.differ (empty? (fx.of-kind "Fault" Frames)) (cn Where "the image reported a fault"))
-        \\ the store the image found when it started is the model's durable store at that point
+        \\ the store the image found when it started is the model's durable store at that point:
+        \\ every cell, and the number of reply records
         (fx.differ (and (= (length Hello) 1)
-                        (= (fh.field "applications" (hd Hello)) (str (hd Durable)))
+                        (= (fh.field "cells" (hd Hello)) (hd Durable))
                         (= (fh.field "records" (hd Hello)) (str (length (hd (tl Durable))))))
-                   (cn Where "store found at start"))
+                   (cn Where (make-string "store found at start: the image says ~S, the model ~S" (if (cons? Hello) (hd Hello) none) Durable)))
         (fx.differ (= Acts (fx.model-acts M Attempts Segment))
                    (cn Where (make-string "actions printed ~S, model ~S" Acts (fx.model-acts M Attempts Segment)))))))
 
@@ -420,22 +471,26 @@
   M [_ | Bs] -> (fx.boots-of M Bs))
 
 \\ The peer's store file, as the supervisor read it after the run, against the model's durable store:
-\\ the number of applications, and for each record its request id, the argument it was made with and its value.
+\\ every cell with its value, and for each reply record its request id, the operation and argument it was
+\\ made with and its value. A peer with no durable store has no file, and the model's store for it is empty.
 (define fx.store-differences
-  M [Count Log] [] -> ["no store was reported"]
-  M [Count Log] [Store | _] ->
-    (fx.differ (and (= (fh.field "applications" Store) (str Count))
+  M [[] []] [] -> [] where (not (fh.field "store" (fx.peer-info)))
+  M [Cells Log] [] -> ["no store was reported"]
+  M [Cells Log] [Store | _] ->
+    (fx.differ (and (= (fh.field "cells" Store) Cells)
                     (fx.same-set? (fh.field "records" Store)
-                                  (map (/. Rec [(hd (hd Rec)) (hd (tl (hd Rec))) (fh.value (hd (hd (tl Rec)))) (fh.value (hd (tl (hd (tl Rec)))))]) Log))
+                                  (map (/. Rec [(hd (hd Rec)) (hd (tl (hd Rec))) (hd (hd (hd (tl Rec)))) (fh.value (hd (tl (hd (hd (tl Rec))))))
+                                                (fh.value (hd (tl (hd (tl Rec)))))])
+                                       Log))
                     (= (length (fh.field "records" Store)) (length Log)))
-               (make-string "~A: the store file holds ~S, the model ~S ~S" M Store Count Log)))
+               (make-string "~A: the store file holds ~S, the model ~S ~S" M Store Cells Log)))
 
 (define fx.observations
   R Final Trace Boots ->
     (let Attempts (hd (remote.ghost Final))
       (append (fx.caller-all "caller" 1 (fx.segments "caller" Trace [] []) (fx.consoles "caller" R))
               (fx.peer-all "peer" 1 (fx.segments "peer" Trace [] []) (fx.consoles "peer" R) Attempts
-                           [[0 []] | (fx.boots-of "peer" Boots)])
+                           [[[] []] | (fx.boots-of "peer" Boots)])
               (fx.store-differences "peer" (fr.durable (fr.member-of "peer" Final))
                                     (fx.keep (/. S (= (fh.field "member" S) "peer")) (fh.field "stores" R))))))
 
@@ -444,9 +499,9 @@
 (define fx.budget
   Key Schedule -> (let V (fh.member Key Schedule) (if (= V []) 0 (fx.number V))))
 
-\\ The crashes among some steps, of either kind.
+\\ The crashes among some steps, of any kind.
 (define fx.crashes
-  Steps -> (let Kinds (map (/. L (hd L)) Steps) (+ (fx.count crash Kinds) (fx.count crash-after-commit Kinds))))
+  Steps -> (let Kinds (map (/. L (hd L)) Steps) (+ (fx.count crash Kinds) (+ (fx.count crash-after-commit Kinds) (fx.count crash-in-commit Kinds)))))
 
 \\ The model's crash budget for a run. A schedule states it. A free run has
 \\ none: there it is the number of crashes that were found to have happened.
@@ -509,16 +564,21 @@
 \\ ---------- running the real system ----------
 
 \\ Which of the build's peer images the member peer is given: "peer", or for
-\\ one refusal at assembly "peer_without_store".
+\\ a refusal at assembly one of the two images the build made for that,
+\\ "peer_without_store" or "peer_other_signature".
 (set fx.*peer-image* "peer")
 
 \\ The manifest's bindings, [[Caller Effect Member] ...]: the ones the build read
-\\ from the system manifest, or for two refusals at assembly other ones.
-(set fx.*bindings* (fh.field "bindings" (value fx.*info*)))
+\\ from the system manifest (fx.use), or for two refusals at assembly other ones.
+(fx.use (value fx.*ledger*))
+
+(define fx.peer-image
+  "peer" -> (fh.field "image" (fx.peer-info))
+  Extra -> (fh.field "image" (fh.field Extra (fh.field "extras" (value fx.*info*)))))
 
 (define fx.manifest
-  Edges -> [object ["members" [[object ["name" "caller"] ["kind" "caller"] ["image" (fh.field "caller" (value fx.*info*))]]
-                              [object ["name" "peer"] ["kind" "peer"] ["image" (fh.field (value fx.*peer-image*) (value fx.*info*))]]]]
+  Edges -> [object ["members" [[object ["name" "caller"] ["kind" "caller"] ["image" (fh.field "image" (fx.caller-info))]]
+                              [object ["name" "peer"] ["kind" "peer"] ["image" (fx.peer-image (value fx.*peer-image*))]]]]
                    ["connections" Edges]
                    ["bindings" (value fx.*bindings*)]])
 
@@ -570,29 +630,40 @@
 \\ more after timed_out; key 8 with 5; key 7 with 6; then the read-only total,
 \\ once more after timed_out. A read-only request has no key: the supervisor
 \\ names it "read-N", N being the number of the attempt.
+\\ The peer's program (examples/remote/ledger-peer.fen): add puts the amount on
+\\ the total and replies ok with the new total, so the first application of 5
+\\ replies 5 and a second one 10; total reads the total. A schedule may say
+\\ [crash-in-commit Peer]: the step crash, taken by a kill inside the peer's commit.
 (define fx.hand
   -> (let C "caller"
           P "peer"
           T (/. N [C N])
-          One (remote.ok [int "1"])
-          Two (remote.ok [int "2"])
+          One (remote.ok [int "5"])
+          Two (remote.ok [int "10"])
+          Six (remote.ok [int "6"])
+          Eleven (remote.ok [int "11"])
           Conflict (remote.conflict)
           \\ outcomes as the caller's console prints them
           R1 ["reply" (fh.value One)]
           R2 ["reply" (fh.value Two)]
+          R6 ["reply" (fh.value Six)]
+          R11 ["reply" (fh.value Eleven)]
           RC ["reply" (fh.value Conflict)]
           TO ["timed_out"]
           ND ["not_delivered"]
           \\ the read-only total: the supervisor's name for the request of attempt N, and the reply value
           Read (/. N (cn "read-" (str N)))
           Total (/. N [int (str N)])
-          RD1 ["reply" (fh.value (Total 1))]
-          RD2 ["reply" (fh.value (Total 2))]
+          RD1 ["reply" (fh.value (Total 5))]
+          RD2 ["reply" (fh.value (Total 10))]
+          RD6 ["reply" (fh.value (Total 6))]
+          RD11 ["reply" (fh.value (Total 11))]
           \\ key 8 as attempt N, applied second; then key 7 again with argument 6, refused as a conflict
           Keys (/. N [[issue C P "8"] [deliver-request (T N)] [act P (T N) applied] [deliver-reply (T N) Two]
                       [issue C P "7"] [deliver-request (T (+ N 1))] [act P (T (+ N 1)) conflict] [deliver-reply (T (+ N 1)) Conflict]])
-          \\ the total read as attempt N with two applications in the store, and the end of the program
-          Reading (/. N [[issue C P (Read N)] [deliver-request (T N)] [act P (T N) read] [deliver-reply (T N) (Total 2)] [finish C]])
+          \\ the total V read as attempt N, and the end of the program; with two applications of 5 it is 10
+          ReadingOf (/. N V [[issue C P (Read N)] [deliver-request (T N)] [act P (T N) read] [deliver-reply (T N) (Total V)] [finish C]])
+          Reading (/. N (ReadingOf N 10))
           \\ the rest of the program once key 7 has been applied with argument 5
           Rest (/. N (append (Keys N) (Reading (+ N 2))))
           \\ the three keyed performs with nothing going wrong: attempts 1, 2 and 3
@@ -619,8 +690,8 @@
         ["not-delivered-while-the-peer-is-up" (fx.declared) true
          [[issue C P "7"] [duplicate request (T 1)] [drop request (T 1)] [not-delivered (T 1)]
           [issue C P "8"] [deliver-request (T 2)] [act P (T 2) applied] [deliver-reply (T 2) One]
-          [issue C P "7"] [deliver-request (T 3)] [act P (T 3) applied] [deliver-reply (T 3) Two] | (Reading 4)]
-         "completed" [ND R1 R2 RD2] 2
+          [issue C P "7"] [deliver-request (T 3)] [act P (T 3) applied] [deliver-reply (T 3) Eleven] | (ReadingOf 4 11)]
+         "completed" [ND R1 R11 RD11] 2
          "the supervisor drops a request before hand-over while the peer is up and reports not-delivered: the copy it still held is destroyed and the peer never sees key 7 with argument 5; key 7 with argument 6 is then the key's first application"]
         ["peer-killed-after-handover-before-acting" (fx.declared) true
          (append [[issue C P "7"] [deliver-request (T 1)] [crash P] [timeout (T 1)] [restart P]
@@ -682,9 +753,9 @@
         ["issued-before-supervisor-restart-counts-as-handed-over" (fx.declared) true
          [[issue C P "7"] [supervisor-restart] [timeout (T 1)] [issue C P "7"] [timeout (T 2)]
           [issue C P "8"] [not-delivered (T 3)]
-          [issue C P "7"] [deliver-request (T 4)] [act P (T 4) applied] [deliver-reply (T 4) One]
-          [issue C P (Read 5)] [deliver-request (T 5)] [act P (T 5) read] [deliver-reply (T 5) (Total 1)] [finish C]]
-         "completed" [TO TO ND R1 RD1] 1
+          [issue C P "7"] [deliver-request (T 4)] [act P (T 4) applied] [deliver-reply (T 4) Six]
+          [issue C P (Read 5)] [deliver-request (T 5)] [act P (T 5) read] [deliver-reply (T 5) (Total 6)] [finish C]]
+         "completed" [TO TO ND R6 RD6] 1
          "the supervisor restarts with key 7 issued and never handed over: the copy in flight is lost and key 7 counts as handed over, in that attempt and every later one, so only timed-out; key 8, first issued after the restart, can still be not-delivered"]
         ["undeclared-refused-at-start" [] true
          []
@@ -707,16 +778,33 @@
         ["storeless-peer-refused-at-start" (fx.declared) true
          []
          "refused-at-start" [] none
-         "the peer image has no durable store and serves Ledger.add, which is not read-only: nothing is started (EFFECTS.md section 12.3, ruling on question 7)"
-         "peer_without_store" [["peer" "no-store" "Ledger.add"]]]
+         "the peer image has no durable store, serves Ledger.add, which is not read-only, and its program writes the store: nothing is started (EFFECTS.md section 12.3, ruling on question 7)"
+         "peer_without_store" [["peer" "no-store" "Ledger.add"] ["peer" "no-store" "StoreWrite"]]]
+        ["other-signature-refused-at-start" (fx.declared) true
+         []
+         "refused-at-start" [] none
+         "the peer image was built from a program that declares Ledger differently from the caller's (one operation more): the digests of the effect's signature differ and nothing is started, though every operation the caller performs is served in its mode (EFFECTS.md section 12.6, ruling on question 15)"
+         "peer_other_signature" [["caller" "peer" "signature" "Ledger"]]]
+        ["peer-killed-inside-its-commit" (fx.declared) true
+         (append [[issue C P "7"] [deliver-request (T 1)] [crash-in-commit P] [timeout (T 1)] [restart P]
+                  [issue C P "7"] [deliver-request (T 2)] [act P (T 2) applied] [deliver-reply (T 2) One]] (Rest 3))
+         "completed" [TO R1 R2 RC RD2] 2
+         "killed inside its commit, with the three cells and the reply record of key 7 written to the store file and the header that would count them not: nothing of the request is committed, the restarted peer finds an empty store, and the retry is the key's first application"]
+        ["peer-killed-inside-the-commit-of-its-second-request" (fx.declared) true
+         [[issue C P "7"] [deliver-request (T 1)] [act P (T 1) applied] [deliver-reply (T 1) One]
+          [issue C P "8"] [deliver-request (T 2)] [crash-in-commit P] [timeout (T 2)] [restart P]
+          [issue C P "7"] [deliver-request (T 3)] [act P (T 3) conflict] [deliver-reply (T 3) Conflict]
+          [issue C P (Read 4)] [deliver-request (T 4)] [act P (T 4) read] [deliver-reply (T 4) (Total 5)] [finish C]]
+         "completed" [R1 TO RC RD1] 1
+         "killed inside the commit of key 8, after key 7 was committed: the store keeps key 7 whole and nothing of key 8, no cell and no record; the total read afterwards is 5"]
         ["read-retried-across-a-peer-restart" (fx.declared) true
          (append Plain [[issue C P (Read 4)] [deliver-request (T 4)] [crash P] [timeout (T 4)] [restart P]
-                        [issue C P (Read 5)] [deliver-request (T 5)] [act P (T 5) read] [deliver-reply (T 5) (Total 2)] [finish C]])
+                        [issue C P (Read 5)] [deliver-request (T 5)] [act P (T 5) read] [deliver-reply (T 5) (Total 10)] [finish C]])
          "completed" [R1 R2 RC TO RD2] 2
          "a read-only request is handed to a peer that is killed before acting: only timed-out; the retry is a new request, and the restarted peer, another incarnation, answers it from the store it found; nothing is recorded for either"]
         ["read-duplicate-evaluated-again" (fx.declared) true
          (append Plain [[issue C P (Read 4)] [duplicate request (T 4)] [deliver-request (T 4)] [deliver-request (T 4)]
-                        [act P (T 4) read] [act P (T 4) read] [deliver-reply (T 4) (Total 2)] [discard-reply (T 4) (Total 2)] [finish C]])
+                        [act P (T 4) read] [act P (T 4) read] [deliver-reply (T 4) (Total 10)] [discard-reply (T 4) (Total 10)] [finish C]])
          "completed" [R1 R2 RC RD2] 2
          "two copies of a read-only request are handed over: each is evaluated, no record is consulted or made, and the store is as it was; the second reply is stale"]
         ["read-not-delivered-while-the-peer-is-up" (fx.declared) true
@@ -729,19 +817,58 @@
           [issue C P "7"] [deliver-request (T 3)] [act P (T 3) conflict] [deliver-reply (T 3) Conflict]
           [issue C P (Read 4)]
           [deliver-request (T 2)] [act P (T 2) applied]
-          [deliver-request (T 4)] [act P (T 4) read] [deliver-reply (T 4) (Total 2)]
+          [deliver-request (T 4)] [act P (T 4) read] [deliver-reply (T 4) (Total 10)]
           [discard-reply (T 2) Two] [finish C]]
          "completed" [R1 TO RC RD2] 2
-         "the read is issued when the total is 1; a late copy of key 8 is applied before the peer acts on the read, and the reply is 2: a value the state had between issue and reply, not the value at issue"]]))
+         "the read is issued when the total is 5; a late copy of key 8 is applied before the peer acts on the read, and the reply is 10: a value the state had between issue and reply, not the value at issue"]]))
+
+\\ Schedules of the rates system (examples/remote/rates-system.json): the caller only reads, base (once
+\\ more after timed_out) and then cap, and the peer has no durable store. Same fields as fx.hand.
+(define fx.rates-hand
+  -> (let C "caller"
+          P "peer"
+          T (/. N [C N])
+          Read (/. N (cn "read-" (str N)))
+          Base [int "250"]
+          Cap [int "300"]
+          RB ["reply" (fh.value Base)]
+          RC ["reply" (fh.value Cap)]
+          TO ["timed_out"]
+       [["storeless-peer-serves-two-read-only-operations" (fx.declared) true
+         [[issue C P (Read 1)] [deliver-request (T 1)] [act P (T 1) read] [deliver-reply (T 1) Base]
+          [issue C P (Read 2)] [deliver-request (T 2)] [act P (T 2) read] [deliver-reply (T 2) Cap] [finish C]]
+         "completed" [RB RC] none
+         "a system whose peer image has no durable store is assembled and runs: its program serves two read-only operations, the request names the one meant, nothing is recorded and no store file exists"]
+        ["storeless-peer-killed-and-restarted" (fx.declared) true
+         [[issue C P (Read 1)] [deliver-request (T 1)] [crash P] [timeout (T 1)] [restart P]
+          [issue C P (Read 2)] [deliver-request (T 2)] [act P (T 2) read] [deliver-reply (T 2) Base]
+          [issue C P (Read 3)] [duplicate request (T 3)] [deliver-request (T 3)] [deliver-request (T 3)]
+          [act P (T 3) read] [act P (T 3) read] [deliver-reply (T 3) Cap] [discard-reply (T 3) Cap] [finish C]]
+         "completed" [TO RB RC] none
+         "the storeless peer is killed with a read in its inbox: only timed-out; the retry, a new request, is answered by the restarted image, which has nothing to find; a duplicated read is evaluated twice"]]))
+
+\\ The records a kill inside a commit must have found written and not counted, for the
+\\ schedules that place one: [] for every other schedule.
+(define fx.expected-kills
+  "peer-killed-inside-its-commit" ->
+    [[["cell" "0" "5"] ["cell" "1" "1"] ["cell" "2" "7"] ["stored" "caller" "7" "Ledger.add" ["int" "5"] ["int" "5"]]]]
+  "peer-killed-inside-the-commit-of-its-second-request" ->
+    [[["cell" "0" "10"] ["cell" "1" "2"] ["cell" "2" "8"] ["stored" "caller" "8" "Ledger.add" ["int" "5"] ["int" "10"]]]]
+  _ -> [])
 
 (define fx.drop-last
   [_] -> []
   [X | Xs] -> [X | (fx.drop-last Xs)]
   [] -> [])
 
+\\ The number of reply records in the peer's store file: one for each request id applied.
 (define fx.applications
   R -> (let Stores (fh.member "stores" R)
-         (if (cons? Stores) (fx.number (fh.field "applications" (hd Stores))) none)))
+         (if (cons? Stores) (length (fh.field "records" (hd Stores))) none)))
+
+(define fx.kills-seen
+  R -> (let Kills (fh.member "kills_in_commit" R)
+         (if (cons? Kills) (map (/. K (fh.field "uncounted" K)) Kills) [])))
 
 \\ Failures of one hand schedule, as text; [] when it passes. Result [Json Failures Labels].
 (define fx.run-hand
@@ -756,7 +883,7 @@
          J (fx.judge Edges none R)
          Info (hd (tl (tl J)))
          Refused (= Status "refused-at-start")
-         Expected (if (= Status "step-not-enabled") (fx.drop-last Steps) Steps)
+         Expected (map (/. L (fx.recorded-as L)) (if (= Status "step-not-enabled") (fx.drop-last Steps) Steps))
          Failures (append
                     (fx.differ (hd (tl T)) "two runs of the schedule were recorded differently")
                     (fx.differ (= (fh.field "status" R) Status) (make-string "status ~A, expected ~A" (fh.field "status" R) Status))
@@ -766,6 +893,9 @@
                                 (fx.differ (= (hd (tl Info)) Outcomes) (make-string "outcomes ~S, expected ~S" (hd (tl Info)) Outcomes)))
                         [])
                     (fx.differ (= (fx.applications R) Applications) (make-string "applications ~S, expected ~S" (fx.applications R) Applications))
+                    \\ a kill inside a commit found every record of the commit written and none counted; no other run has one
+                    (fx.differ (= (fx.kills-seen R) (fx.expected-kills Name))
+                               (make-string "kills inside a commit found ~S, expected ~S" (fx.kills-seen R) (fx.expected-kills Name)))
                     \\ refused at start: what is refused is named and no image was started
                     (fx.differ (or (not Refused)
                                    (and (= (fh.field "refusals" R) Refusals) (empty? (fh.field "consoles" R)) (empty? (fh.field "events" R))))
@@ -787,10 +917,10 @@
 (define fx.seeded-schedule
   Seed -> [object ["mode" "seeded"] ["seed" (str Seed)] ["crashes" "1"] ["duplicates" "1"] ["supervisor_restarts" "1"] ["max_steps" "160"]])
 
-\\ Result [Seed Failures Labels Terminal Outcomes].
+\\ Result [Seed Failures Labels Terminal Outcomes]. Prefix names the run's files.
 (define fx.run-seed
-  Seed ->
-    (let T (fx.twice (cn "seed-" (str Seed)) (fx.declared) (fx.seeded-schedule Seed) [] true)
+  Prefix Seed ->
+    (let T (fx.twice (cn Prefix (str Seed)) (fx.declared) (fx.seeded-schedule Seed) [] true)
          R (hd T)
          J (fx.judge (fx.declared) none R)
          Info (hd (tl (tl J)))
@@ -801,8 +931,8 @@
       [Seed Failures (if (cons? Info) (hd Info) []) (if (cons? Info) (hd (tl (tl Info))) false) (if (cons? Info) (hd (tl Info)) [])]))
 
 (define fx.seeds
-  N N -> []
-  I N -> [(fx.run-seed (+ I 1)) | (fx.seeds (+ I 1) N)])
+  _ N N -> []
+  Prefix I N -> [(fx.run-seed Prefix (+ I 1)) | (fx.seeds Prefix (+ I 1) N)])
 
 \\ ---------- defects ----------
 
@@ -850,7 +980,24 @@
           [issue C P "7"] [deliver-request (T 3)] [act P (T 3)] [deliver-reply (T 3)]
           [issue C P "read-4"] [deliver-request (T 4)] [act P (T 4)] [deliver-reply (T 4)]]
          read-only-writes "read-only-changes-nothing"
-         "the peer image's read-only operation adds one to the counter and commits it: an operation declared read-only changes the store"]]))
+         "the peer image's runtime adds one to cell 0, the total, and commits it before it serves a read-only request: the store changes in an operation declared read-only, which the peer's program, checked, could not do; the reply is 11 where the model has 10"]
+        ["writes-without-record" (fx.declared) true
+         [[issue C P "7"] [duplicate request (T 1)] [deliver-request (T 1)] [deliver-request (T 1)] [act P (T 1)] [act P (T 1)]]
+         writes-without-record "commit-atomic"
+         "the peer image's commit leaves out the reply record: the writes are durable and the request id is not, so the second copy is applied again"]
+        ["record-without-writes" (fx.declared) true
+         [[issue C P "7"] [deliver-request (T 1)] [act P (T 1)] [deliver-reply (T 1)]
+          [issue C P "8"] [deliver-request (T 2)] [act P (T 2)] [deliver-reply (T 2)]]
+         record-without-writes "commit-atomic"
+         "the peer image's commit leaves out the program's writes: the request id is recorded and the total is not, so the next addition replies 5 where the model has 10"]
+        ["torn-commit" (fx.declared) true
+         [[issue C P "7"] [deliver-request (T 1)] [crash-in-commit P] [restart P]]
+         torn-commit "commit-atomic"
+         "the peer image counts each record of a commit as it writes it; killed inside the commit, it leaves the three cells of key 7 in the store without the record: a part of a commit, visible after the crash to the next incarnation"]
+        ["stale-reads" (fx.declared) true
+         [[issue C P "7"] [deliver-request (T 1)] [act P (T 1)] [deliver-reply (T 1)]]
+         stale-reads "reads-see-own-writes"
+         "the peer image's runtime answers a read of the store without the request's own writes: add replies the total before its addition, 0 where the model has 5"]]))
 
 \\ A schedule as commands: the supervisor reports what happened, so a command
 \\ may leave out the end of a label.
@@ -858,6 +1005,8 @@
   [act N T] -> ["act" N (fx.tag-json T)]
   [deliver-reply T] -> ["deliver-reply" (fx.tag-json T)]
   L -> (fx.label-json L))
+
+\\ A defect's schedule may place a kill inside a commit: that takes a crash from the budget.
 
 (define fx.command-schedule
   Steps -> [object ["mode" "list"] ["crashes" (str (fx.crashes Steps))]
@@ -922,11 +1071,12 @@
 \\ has waited long enough it reports not-delivered, which the contract allows
 \\ because nothing was handed over.
 (define fx.free-runs
-  -> (let R1 ["reply" (fh.value (remote.ok [int "1"]))]
-          R2 ["reply" (fh.value (remote.ok [int "2"]))]
+  -> (let R1 ["reply" (fh.value (remote.ok [int "5"]))]
+          R2 ["reply" (fh.value (remote.ok [int "10"]))]
+          R11 ["reply" (fh.value (remote.ok [int "11"]))]
           RC ["reply" (fh.value (remote.conflict))]
-          \\ the read-only total at the end of the program, with two applications in the store
-          RD ["reply" ["int" "2"]]
+          \\ the read-only total at the end of the program, with two applications of 5 in the store
+          RD ["reply" ["int" "10"]]
        [["free" [object ["mode" "free"] ["timeout_ms" "2000"] ["deadline_ms" "20000"]]
          [R1 R2 RC RD] [act-conflict act-read]]
         ["free-peer-killed" [object ["mode" "free"] ["timeout_ms" "300"] ["deadline_ms" "20000"] ["kill" [["peer" "2"]]]]
@@ -934,7 +1084,12 @@
         ["free-peer-killed-after-commit" [object ["mode" "free"] ["timeout_ms" "300"] ["deadline_ms" "20000"] ["kill_in_act" [["peer" "1"]]]]
          [["timed_out"] R1 R2 RC RD] [crash-after-commit restart timeout]]
         ["free-request-lost" [object ["mode" "free"] ["timeout_ms" "300"] ["deadline_ms" "20000"] ["lose" [["caller" "1"]]]]
-         [["not_delivered"] R1 R2 RD] [drop not-delivered]]]))
+         [["not_delivered"] R1 R11 ["reply" ["int" "11"]]] [drop not-delivered]]]))
+
+\\ One free-running run of the rates system: a peer with no durable store, serving reads.
+(define fx.rates-free-runs
+  -> [["free-storeless" [object ["mode" "free"] ["timeout_ms" "2000"] ["deadline_ms" "20000"]]
+       [["reply" ["int" "250"]] ["reply" ["int" "300"]]] [act-read finish]]])
 
 \\ Result [Passed Json Labels].
 (define fx.free
@@ -983,16 +1138,30 @@
   K [[K _] | _] -> true
   K [_ | Rest] -> (fx.has-kind? K Rest))
 
+\\ Run something on the rates system, and come back to the ledger system.
+(define fx.on-rates
+  Thunk -> (let In (fx.use (value fx.*rates*))
+                R (thaw Thunk)
+                Out (fx.use (value fx.*ledger*))
+             R))
+
 (define fx.main
   -> (let Control (= (value fx.*mode*) "negative-control")
+          Ledger (fx.caller-info)
+          LedgerPeer (fx.peer-info)
+          RatesPeer (fx.on-rates (freeze (fx.peer-info)))
           \\ The control: the non-idempotent peer image in place of the peer, judged as if it were the system.
           Hand (if Control
                    (map (/. H (fx.run-hand ["non-idempotent-peer"] H)) (fx.keep (/. H (= (hd H) "duplicate-applied-once")) (fx.hand)))
-                   (map (/. H (fx.run-hand [] H)) (fx.hand)))
+                   (append (map (/. H (fx.run-hand [] H)) (fx.hand))
+                           (fx.on-rates (freeze (map (/. H (fx.run-hand [] H)) (fx.rates-hand))))))
           HandFailed (fx.keep (/. H (not (empty? (hd (tl H))))) Hand)
-          Seeds (if Control [] (fx.seeds 0 (value fx.*seeds*)))
+          LedgerSeeds (if Control [] (fx.seeds "seed-" 0 (value fx.*seeds*)))
+          RatesSeeds (if Control [] (fx.on-rates (freeze (fx.seeds "rates-seed-" 0 (value fx.*rates-seeds*)))))
+          Seeds (append LedgerSeeds RatesSeeds)
           SeedsFailed (fx.keep (/. S (not (empty? (hd (tl S))))) Seeds)
-          Free (if Control [] (map (/. F (fx.free F)) (fx.free-runs)))
+          Free (if Control [] (append (map (/. F (fx.free F)) (fx.free-runs))
+                                      (fx.on-rates (freeze (map (/. F (fx.free F)) (fx.rates-free-runs))))))
           FreeFailed (fx.keep (/. F (not (hd F))) Free)
           Defects (if Control [] (map (/. D (fx.run-defect D)) (fx.defects)))
           NotKilled (fx.keep (/. D (not (= (hd D) "killed"))) Defects)
@@ -1004,33 +1173,41 @@
           Report [object ["schema" "fenrir.harness.tc1-remote-run/1"]
                          ["status" (if Pass "development-pass" "development-fail")]
                          ["qualification" "UNKNOWN"]
-                         ["evidence" "observed histories of the real system accepted by the model; one small system; spt tender only; no hvt run; no proof"]
+                         ["evidence" "observed histories of the real system accepted by the model; two small systems; spt tender only; no hvt run; no proof"]
                          ["harness" "Shen"]
                          ["shen" (make-string "~A ~A ~A" (value *implementation*) (value *port*) (version))]
                          ["mode" (value fx.*mode*)]
-                         ["system" "Erlang/OTP supervisor (supervisor/) with two Solo5 guests under the tender: caller = the TC1 program of a source file, elaborated by the frontend, on the C machine; peer = counter with a durable store, one keyed and one read-only operation; transport: block-device mailboxes, wire format 3"]
-                         ["caller_source" (fh.field "source" (value fx.*info*))]
-                         ["caller_source_sha256" (fh.field "source_sha256" (value fx.*info*))]
-                         ["caller_declaration" (fh.field "caller_declaration" (value fx.*info*))]
-                         ["peer_declaration" (fh.field "peer_declaration" (value fx.*info*))]
+                         ["system" "Erlang/OTP supervisor (supervisor/) with two Solo5 guests under the tender: caller = the TC1 program of a source file, elaborated by the frontend, on the C machine; peer = the program of a source file too, run on the same C machine once for each request by the peer's runtime, with a durable key-value store committed with the request's record; transport: block-device mailboxes, wire format 4. A second system, the rates system, has a caller that only reads and a peer with no durable store"]
+                         ["caller_source" (fh.field "source" Ledger)]
+                         ["caller_source_sha256" (fh.field "source_sha256" Ledger)]
+                         ["caller_declaration" (fh.field "declaration" Ledger)]
+                         ["peer_source" (fh.field "source" LedgerPeer)]
+                         ["peer_source_sha256" (fh.field "source_sha256" LedgerPeer)]
+                         ["peer_declaration" (fh.field "declaration" LedgerPeer)]
+                         ["storeless_peer_source" (fh.field "source" RatesPeer)]
+                         ["storeless_peer_declaration" (fh.field "declaration" RatesPeer)]
                          ["system_under_check" (if Control "the non-idempotent peer image in place of the peer" "as built")]
-                         ["model" "models/tc1/remote-system.shen with models/tc1/remote-tc1-caller.shen; the caller is the program the image was built from, with the operations derived from its remote-effect declarations"]
+                         ["model" "models/tc1/remote-system.shen with models/tc1/remote-tc1-caller.shen and models/tc1/remote-tc1-peer.shen; the caller and the peer are the programs the images were built from"]
                          ["abi" (fh.field "abi" (value fx.*info*))]
                          ["solo5_commit" (fh.field "solo5_commit" (value fx.*info*))]
                          ["tender_sha256" (fh.field "tender_sha256" (value fx.*info*))]
-                         ["caller_sha256" (fh.field "caller_sha256" (value fx.*info*))]
-                         ["peer_sha256" (fh.field "peer_sha256" (value fx.*info*))]
-                         ["program_sha256" (fh.field "program_sha256" (value fx.*info*))]
+                         ["caller_sha256" (fh.field "image_sha256" Ledger)]
+                         ["peer_sha256" (fh.field "image_sha256" LedgerPeer)]
+                         ["program_sha256" (fh.field "program_sha256" Ledger)]
+                         ["peer_program_sha256" (fh.field "program_sha256" LedgerPeer)]
                          ["properties" ["single-outcome" "resolved-at-termination" "reply-implies-acted" "not-delivered-not-handed" "not-delivered-sealed"
                                         "applied-at-most-once" "key-bound-to-argument" "declared-edges-only" "crash-isolation"
-                                        "read-only-changes-nothing" "read-reply-from-state"]]
+                                        "read-only-changes-nothing" "read-reply-from-state" "commit-atomic" "reads-see-own-writes"]]
                          ["schedules_accepted" (str Accepted)]
                          ["hand_schedules" (str (length Hand))]
                          ["hand_schedules_failed" (map (/. H (fh.field "schedule" (hd H))) HandFailed)]
                          ["hand" (map (/. H (hd H)) Hand)]
                          ["seeded_schedules" (str (length Seeds))]
+                         ["seeded_schedules_storeless" (str (length RatesSeeds))]
+                         ["seeded_steps_storeless" (str (fx.sum (map (/. S (length (nth 3 S))) RatesSeeds)))]
                          ["seeded_budgets" "1 crash, 1 duplicate, 1 supervisor restart, at most 160 steps"]
                          ["seeded_failed" (map (/. S [object ["seed" (str (hd S))] ["failures" (hd (tl S))]]) (fh.take 5 SeedsFailed))]
+                         ["kills_inside_a_commit" (str (length (fx.keep (/. H (cons? (fx.expected-kills (fh.field "schedule" (hd H))))) Hand)))]
                          ["seeded_steps" (str (fx.sum (map (/. S (length (nth 3 S))) Seeds)))]
                          ["seeded_schedules_with_a_crash_after_commit" (str (length (fx.keep (/. S (fr.any? (/. L (= (hd L) crash-after-commit)) (nth 3 S))) Seeds)))]
                          ["seeded_schedules_with_a_supervisor_restart" (str (length (fx.keep (/. S (fr.any? (/. L (= (hd L) supervisor-restart)) (nth 3 S))) Seeds)))]

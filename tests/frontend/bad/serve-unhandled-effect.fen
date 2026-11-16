@@ -1,0 +1,12 @@
+\\ expect 11:33 effect Ask is not handled: it comes from this perform, and no (handle
+
+(remote-effect Ledger
+  (add I64 --> (Tuple I64 I64))
+  (read-only total Unit --> I64))
+
+(effect Ask
+  (ask I64 --> I64))
+
+(serve Ledger
+  ((add key amount) -> (tuple 0 (perform Ask ask amount)))
+  ((total u) -> 0))

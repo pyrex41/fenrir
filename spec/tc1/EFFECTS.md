@@ -1,6 +1,6 @@
 # TC1 effect contract
 
-Draft 8 • 16 November 2026 • For owner review
+Draft 9 • 16 November 2026 • For owner review
 
 **Status.** Written together with its implementation, at the owner's request,
 so the text and the behaviour can be reviewed side by side. Both slices are
@@ -32,7 +32,14 @@ result of a remote perform must be examined, by a must-use rule (§3,
 question 11); each read-only perform is its own request (§12.3, question 12);
 which member serves a remote effect is stated in the system manifest and
 checked at assembly (§12.6, question 14); and a `handle` of a remote effect
-is rejected (§3, question 16). Questions 13 and 15 stay open.
+is rejected (§3, question 16). Questions 13 and 15 stayed open.
+Draft 9 records the owner's direction of the same day on those two, to build
+the answers now: a peer is a program of this language, its store is reached
+through effects, and the type checker vouches for the read-only marker (§8,
+§12.3, §12.12, question 13); and a remote effect's signature is owned by a
+declarations file that both programs include, with a digest of the signature
+in every image, compared at assembly (§12.6, §12.12, question 15). It raises
+eight questions, 17 to 24 of §12.10.
 
 Owner decisions of 14 November 2026 are folded in: a clause may continue after
 `resume` returns (§7); performs of user effects are not observations (§5);
@@ -60,7 +67,10 @@ remote effect Ledger { add : I64 -> (I64, I64); read-only total : Unit -> I64 }
   marked **read-only** (§12.3).
 
 - Effect names are identifiers, unique, and not one of the reserved runtime
-  effect names `Emit`, `Task`, `Channel`, `Time`, `Resource`.
+  effect names `Emit`, `Task`, `Channel`, `Time`, `Resource`. In a program
+  that serves a remote effect (§12.12) the names `StoreRead` and `StoreWrite`
+  are taken too: they are the peer's store, which such a program is given and
+  does not declare.
 - **Restriction, kept for both slices:** A and B are serializable types. No
   closure crosses an operation boundary. Lifting this needs a rule for what a
   closure passed through an operation may capture (§8).
@@ -89,6 +99,8 @@ one spelling.
 | `perform(E, op, a)` with `op : A -> B`, E ordinary | B, given `a : A` | those of `a`, plus E |
 | `perform(E, op, (k, a))` with `op : A -> B`, E remote, `op` not read-only | `Remote B`, given `k : I64` and `a : A`; allowed only as the scrutinee of a `match` (must-use, below) | those of the argument, plus E |
 | `perform(E, op, a)` with `op : A -> B`, E remote, `op` read-only | `Remote B`, given `a : A`; allowed only as the scrutinee of a `match` | those of `a`, plus E |
+| `perform(StoreRead, get, k)`, in a program that serves | I64, given `k : I64` | those of `k`, plus `StoreRead` |
+| `perform(StoreWrite, put, (k, v))`, in a program that serves | Unit, given `k : I64` and `v : I64` | those of the argument, plus `StoreWrite` |
 | `handle(E, clauses, body)` with `body : T` | T | (body's effects minus E) plus every clause's effects |
 | a clause `op(x) => c` | `c : B` with `x : A` in scope | those of `c` |
 | call, apply | as in TC0-A | the callee's declared set |
@@ -99,7 +111,12 @@ one spelling.
   every ordinary effect must be handled inside the program. An unhandled
   ordinary effect in a validated program is an implementation defect, not a
   trap. A remote effect that reaches the entry is discharged by the system the
-  image is assembled into (§12).
+  image is assembled into (§12). A program that serves a remote effect has no
+  entry function; the function of each operation it serves may leave only
+  `Emit`, `StoreRead` and `StoreWrite` unhandled, and the function of a
+  read-only operation not `StoreWrite` (§12.12).
+- **No `handle` names a store effect**, and a program that serves performs no
+  remote operation (§12.12).
 - **No `handle` names a remote effect.** A program cannot intercept, replace
   or simulate a remote operation: `handle(E, ...)` with E remote is rejected.
   The other choice, a handler that intercepts locally, was not taken: with it
@@ -313,7 +330,17 @@ Recorded now so that the concurrency slice is designed against it:
   **remote** effects, declared by the program, discharged by the system of
   images and its supervisor, and not replaceable by a user handler (owner
   ruling of 16 November 2026, §12.10 question 9). Ordinary and remote effects
-  are implemented; the other two are not, beyond `emit`. A remote effect
+  are implemented. Of the durable class one thing is, since draft 9: the
+  peer's store, the two effects `StoreRead` and `StoreWrite` of §12.12. They
+  fit this class as it is defined here, read as follows. The handler that
+  discharges them is not written by the program: it is the peer's runtime,
+  around each request. The storage contract it carries is the commit of
+  §12.3: a request's writes and its reply record become durable in one step
+  or not at all, and a trap commits nothing. So the transaction of this class
+  exists as one fixed shape, a request, and not as a construct a program
+  opens; a durable job, a durable inbox, and a durable handler written by a
+  program do not exist. The runtime class is not implemented beyond `emit`.
+  A remote effect
   differs from a runtime effect in three ways: its name and operations are the
   program's, not reserved; its performs can fail, and say so in their type;
   and what discharges it is outside the image.
@@ -362,6 +389,13 @@ hand traces alone and by the exhaustive traces alone.
 **Validation.** Unit tests reject, for the stated reason, a resumption used
 zero times, twice, or on one path only; read as a value; captured by a
 closure; used by an inner clause; and resumed with the wrong type. For the
+serving class (schema `tc1-handler-demo/4`,
+`tests/tc1/serving-artifact.test.mjs`) they reject: a read-only operation
+whose function writes the store, directly, through a call or through a
+function value, declared in its effect set or not; an entry; a served
+operation without its function or with one of another type; the store
+declared or handled; an ordinary effect left unhandled by a served function;
+and a remote perform. For the
 remote class (schema `tc1-handler-demo/3`, `tests/tc1/remote-artifact.test.mjs`)
 they reject: a declaration without its class, or with one under an older
 schema; a `handle` of a remote effect; a keyed perform without its key and a
@@ -383,9 +417,9 @@ the extended C machine still agrees with the model on those and on the 8,745
 exact-arithmetic programs.
 
 **The TC1 gate** (`harness/tc1-gate.shen`, manifest
-`spec/tc1/tc1-requirements.json`) has twenty-one required rows, including a
-passing TC0-A gate on the same commit and two rows for remote perform (§12.8,
-§12.11), and aggregates as the TC0-A gate does. It is **registered**: on 15
+`spec/tc1/tc1-requirements.json`) has twenty-two required rows, including a
+passing TC0-A gate on the same commit and three rows for remote perform (§12.8,
+§12.11, §12.12), and aggregates as the TC0-A gate does. It is **registered**: on 15
 November 2026 the owner instructed that the two remote rows be added and the
 gate registered, the manifest's status is `owner-accepted`, and the workflow
 configuration has the check `tc1-qualification`. That was acceptance by
@@ -394,10 +428,11 @@ instruction, not a line-by-line review;
 what was registered, what the gate does not show, and how to revoke it; its
 Amendment 1 of 16 November 2026 records the changed scope of the two remote
 rows and the manifest's new hash, its Amendment 2 of the same day does so
-again for draft 7, and its Amendment 3 for draft 8. The
+again for draft 7, its Amendment 3 for draft 8, and its Amendment 4 for
+draft 9, which added the third remote row. The
 report now says `authority: owner-accepted, registered` and its
 `qualification` is its verdict. On a committed tree it gives verdict PASS on
-21 of 21 required rows. No run through the workflow controller on a supported
+22 of 22 required rows. No run through the workflow controller on a supported
 runner has been made, so there is no qualification receipt.
 
 Not done: programs above 7 nodes; in the exhaustive family, effects with
@@ -445,6 +480,12 @@ Settled by the owner on 16 November 2026, in the same way:
    effect class (§3, §8), and read-only operations as the only ones a peer
    without a durable store may serve (§12.3).
 
+9. Later again, questions 13 and 15 of §12.10, by a direction to build their
+   answers: peers written in this language with the store reached through
+   effects and read-only checked by the type checker; and a shared
+   declarations file, included by both programs, with a signature digest
+   checked at assembly (§12.12).
+
 Open:
 
 1. When to lift the serializable restriction, and what a closure passed
@@ -453,8 +494,7 @@ Open:
    sets here.
 3. Whether a clause that traps before using its resumption should be a
    validation error instead of an implicit abort.
-4. Questions 13 and 15 of §12.10, raised by draft 7. The other four it raised
-   have rulings (draft 8).
+4. Questions 17 to 24 of §12.10, raised by draft 9.
 
 ## 12 Remote perform (model, and a first implementation)
 
@@ -476,8 +516,9 @@ later that day on the last two, the class of a remote effect and a peer with
 no durable store. All ten are marked in §12.10. Draft 7 raised six more; the
 owner ruled on four of them the same day (must-use, the identity of a
 read-only perform, the binding in the manifest, no handler for a remote
-effect), and two are open. Both checks of this section are rows of the TC1
-gate (§9).
+effect), and then on the other two (peers written in this language, shared
+declarations with a digest; draft 9, §12.12), which raised eight more. The
+three checks of this section are rows of the TC1 gate (§9).
 
 ### 12.1 Systems
 
@@ -557,12 +598,17 @@ attempt for the same request id; that is what a retry is.
   caller that reuses a key with a different argument is refused by the peer
   (next).
 - **Peer obligation: idempotent per request id, and a key is bound to its
-  argument.** Acting on a request has two parts, in this order. First the
+  operation and argument.** Acting on a request has two parts, in this order. First the
   *commit*, one atomic durable step, which does one of three things. If the
-  request id has a reply record made with this argument, nothing changes. If
-  it has a reply record made with another argument, nothing changes. Otherwise
+  request id has a reply record made with this operation and argument, nothing
+  changes. If it has a reply record made with another operation or argument,
+  nothing changes. Otherwise
   the request is applied and its reply recorded, together, and the record
-  keeps a digest of the argument. Then the *reply*: the recorded value, as
+  keeps the operation and a digest of the argument. Since draft 9 this
+  obligation is kept by the peer's runtime, not by the peer's program:
+  applying a request is running the program's function for the operation, and
+  the commit is that run's writes to the store together with the reply record
+  (§12.12). A function that traps commits nothing and nothing is replied. Then the *reply*: the recorded value, as
   `ok`, in the first and the third case, and `conflict` in the second. The
   record is durable, so this holds across the peer's restarts. The obligation
   covers every way a request can arrive twice: a copy duplicated by the
@@ -618,12 +664,18 @@ action of the peer could depend on.
   some incarnation of the peer computed the value from its state at some time
   between the issue of the perform and the reply. It may be out of date when
   the program sees it, and a retry may return another.
-- **What a declaration can and cannot promise.** The marker is written in the
-  caller's program, and the build derives from it what the peer's image says
-  it serves (§12.6). Nothing checks that the peer's code keeps the promise:
-  no peer is written in this language yet. A peer that writes in a read-only
-  operation is a defect, exercised as one in §12.8 and §12.11 (question 13 of
-  §12.10).
+- **Who vouches for the marker** (owner ruling of 16 November 2026, §12.10
+  question 13). The type checker does, on the peer's program. The function
+  that implements a read-only operation may not have `StoreWrite` in its
+  effect set (§12.12): not by a perform of its own, not through a function it
+  calls, not through a function value it applies. The frontend rejects such a
+  program with a position, the validator rejects such an artifact, and no
+  image is built from it. What the check does not cover is the peer's
+  runtime, which is C: a runtime that writes while it serves a read is a
+  defect, kept as a switch and caught on the histories run (§12.8, §12.11).
+  The marker in the caller's program and the one in the peer's are the same
+  marker because both programs include one declaration and the images'
+  digests are compared (§12.6).
 
 ### 12.4 Outcomes
 
@@ -660,7 +712,8 @@ action of the peer could depend on.
   which a read does not change: the two differ only in what the supervisor
   knows. The guarantee of its `reply` is weaker than the keyed one in exactly
   this: there is no record, so the value is tied to a moment and not to the
-  request. For a peer whose state only grows, as the counter's does, "between
+  request. For a peer whose answer only grows, as the ledger's total does
+  while amounts are not negative, "between
   issue and reply" bounds the value from both sides, and §12.8 checks that
   bound; for any other peer it says only that the value was once the state.
 
@@ -718,8 +771,36 @@ connection for every remote effect the program declares, taken from the
 declarations and the manifest's binding of each remote effect to a member
 (below). The image also
 carries each remote operation it may perform with the member it goes to and
-whether it is keyed or read-only, and a peer image carries the operations it
-serves, each keyed or read-only, and whether it has a durable store.
+whether it is keyed or read-only. A peer image carries the operations it
+serves, each keyed or read-only, whether it has a durable store, and whether
+its program mentions `StoreWrite` at all; since draft 9 these come from the
+peer's own program, not from a caller's declarations (§12.10 question 15).
+Every image also carries a **digest of the signature** of each remote effect
+it uses or serves (below).
+
+**One signature, and a digest of it** (owner ruling of 16 November 2026,
+§12.10 question 15). The signature of a remote effect is owned by a
+declarations file that the caller's program and the peer's program both
+include (§12.12). Each build computes, from its own program's artifact, a
+digest of the effect's signature and puts it in the image. The digest is
+SHA-256, in lowercase hexadecimal, of the canonical encoding
+(`tools/tc0/canonical.mjs`) of
+
+```json
+{"effect": "Ledger",
+ "operations": [{"argument_type": "I64", "name": "add", "read_only": false, "result_type": ["Tuple", "I64", "I64"]},
+                {"argument_type": "Unit", "name": "total", "read_only": true, "result_type": "I64"}],
+ "schema": "fenrir.remote-signature/1"}
+```
+
+with the operations in unsigned UTF-8 byte order of their names (a signature
+is a set of operations: the order of declaration is not part of it) and the
+types as the artifact writes them. It covers the effect's name and each
+operation's name, types and read-only marker. A declared datatype appears in
+a type by its name only: its constructors are not in the digest, and none
+crosses the wire yet. Two programs that include the same file have the same
+digest; two that declare the effect apart have the same digest only if they
+declare the same thing.
 
 **The system manifest, and the binding** (owner ruling of 16 November 2026,
 §12.10 question 14). One file describes a system: its members, its declared
@@ -729,16 +810,17 @@ build reads it from the manifest and holds none, and the supervisor's check
 at assembly uses the same manifest.
 
 ```json
-{"schema": "fenrir.system-manifest/1",
+{"schema": "fenrir.system-manifest/2",
  "members": [{"name": "caller", "kind": "caller", "program": "examples/remote/ledger-caller.fen"},
-             {"name": "peer", "kind": "peer"}],
+             {"name": "peer", "kind": "peer", "program": "examples/remote/ledger-peer.fen", "store": true}],
  "connections": [["caller", "peer"]],
  "bindings": [["caller", "Ledger", "peer"]]}
 ```
 
-- `members`: each has a name, unique in the system, and a kind. A caller
-  names its program, a source file. The manifest the supervisor is given is
-  this one with each member's image file in place of the program
+- `members`: each has a name, unique in the system, a kind, and its program,
+  a source file. A peer also says whether it has a durable store (schema /2,
+  draft 9; schema /1 had no program for a peer). The manifest the supervisor
+  is given is this one with each member's image file in place of the program
   (`"image"`); the build writes it.
 - `connections`: `[caller, member]`, the authority of this section: the
   caller may send requests to that member. Both names are members.
@@ -755,7 +837,7 @@ use, and a caller image that was built for another member than the manifest
 now binds its effect to, are errors of the manifest: nothing is built or
 started, and no refusal is reported.
 
-**Assembly refuses five things**, and starts no member if it finds one. The
+**Assembly refuses seven things**, and starts no member if it finds one. The
 first three are about the binding and are told apart in the report:
 
 1. `unbound`: a caller's program uses a remote effect, and the manifest binds
@@ -767,10 +849,20 @@ first three are about the binding and are told apart in the report:
    above);
 4. `no-store`: a peer image with no durable store serves an operation which
    is not read-only (§12.3; owner ruling, §12.10 question 7);
-5. `unserved`: a caller uses an operation that the member its effect is bound
+5. `no-store`, of `StoreWrite`: a peer image with no durable store whose
+   program mentions the store's write effect at all, in any function's or
+   function type's effect set (draft 9: the rule of the fourth, checked from
+   the peer's program too);
+6. `unserved`: a caller uses an operation that the member its effect is bound
    to does not serve, or serves in the other mode: a caller that sends no key
    for an operation the peer applies would defeat the peer's idempotence. A
-   member that is not a peer serves nothing.
+   member that is not a peer serves nothing;
+7. `signature`: the member a caller's effect is bound to serves that effect,
+   and its digest of the effect's signature is not the caller's: the two
+   images were built from different declarations (owner ruling, §12.10
+   question 15). This is told apart from `unserved`: a peer built from a
+   declaration with one operation more serves everything the caller performs
+   and is refused all the same.
 
 The build makes the same check, on the same manifest, before it compiles
 anything, so a system that would be refused is not built.
@@ -778,7 +870,9 @@ anything, so a system that would be refused is not built.
 Only the third has a run-time backstop: a request along a connection the
 manifest lacks is refused whatever else is true. The others rest on the
 manifest and on what the images declare, which the build derives; an image
-that lies about itself is outside the contract (§12.9).
+that lies about itself is outside the contract (§12.9). In particular the
+digest is what a build wrote into an image, not something the supervisor
+recomputes from a program.
 
 ### 12.7 Crash and restart
 
@@ -800,7 +894,16 @@ any later one, the peer finds the record and sends the recorded value: the
 request is applied once, and the retry's `reply(v)` carries the value that was
 committed before the crash.
 
-In the model this is one step, `crash-after-commit`, enabled wherever acting
+**A crash inside the commit** (draft 9). The commit is one atomic durable
+step: a request's writes and its reply record are in the store together or
+not at all. A peer killed before that step is complete has committed nothing,
+whatever it had already written to its device, and its successor finds the
+store as it was before the request; a retry is then the request's first
+application. In the model that is the step `crash`: there is no state in
+which a part of a commit exists. §12.12 says what the implementation's
+commit rests on, and §12.11 places the kill there.
+
+In the model the crash after the commit is one step, `crash-after-commit`, enabled wherever acting
 would apply a request and a crash is possible. It is one step and not a
 separate commit and reply because nothing of the peer can happen between its
 commit and its reply except the crash, and every other member's steps commute
@@ -853,8 +956,8 @@ modelled (§12.9).
 ### 12.8 Events, and what is checked today
 
 The program observes only its outcomes. The supervisor's record has, per
-step: issued, refused, handed, acted (applied, replayed, conflict or read, with
-the value), outcome, stale-reply, dropped, duplicated, crashed, restarted,
+step: issued, refused, handed, acted (applied, replayed, conflict, read or
+trapped, with the value), outcome, stale-reply, dropped, duplicated, crashed, restarted,
 supervisor-restarted. As in amendment
 §14, one member's events are ordered; events of different members are not.
 
@@ -889,7 +992,14 @@ and reordering are not bounded.
 | Caller, peer with no durable store; one read-only request, one retry | 1, 1, 0 | 54,186 | 246,562 | 8,345,522,833,044 |
 
 A schedule is a maximal path; the longest has 34 steps. In all 1,029,806
-states and 4,850,067 transitions, no property below fails. The first eight
+states and 4,850,067 transitions, no property below fails. Since draft 9 the
+peers of these systems are programs (§12.12): the ledger peer of
+`examples/remote/ledger-peer.fen` in the first nine, and in the tenth the
+storeless peer of `examples/remote/rates-peer.fen`. A request names its
+operation, the store is the program's cells, and what acting does is one run
+of the program's function. Every number in the table is what it was with the
+abstract counter of draft 8: these scripts cannot tell the ledger from a
+counter, the total after k additions of 5 standing where k stood. The first eight
 systems are those of draft 6, and their numbers are as they were: 834,783
 states and 3,931,593 transitions. (The first six are those of draft 5, which
 had 633,517 states and 3,013,418 transitions; they have had 681,127 and
@@ -910,18 +1020,26 @@ changing state only by hand schedules.
 | not-delivered-not-handed | Other than as a refusal, `not_delivered` is reported only for a request id of which no copy was ever handed to the peer, which was not issued before the supervisor's latest restart, and which is absent from the peer's record. Judged from the history, not from the supervisor's own record of hand-overs |
 | not-delivered-sealed | From `not_delivered` until the caller issues the request id again: no copy in flight, none handed over, no record |
 | applied-at-most-once | No request id is applied twice; acting on a recorded request id leaves the durable store unchanged; a crash after a commit leaves the store with exactly that one application and its record, made with the request's argument, more than before |
-| key-bound-to-argument | An observed `ok` belongs to a record made with that attempt's argument, and an observed `conflict` to a record made with another. A peer says `conflict` only where such a record exists, and then leaves the store unchanged; it replays only a record made with the same argument |
+| key-bound-to-argument | An observed `ok` belongs to a record made with that attempt's operation and argument, and an observed `conflict` to a record made with another. A peer says `conflict` only where such a record exists, and then leaves the store unchanged; it replays only a record made with the same operation and argument |
 | declared-edges-only | Everything in a member's inbox or record came along a declared connection |
 | crash-isolation | A crash or restart changes no other member, not the member's durable store, and nothing in flight. A crash after a commit changes no other member and nothing in flight: no reply is emitted. A restart of the supervisor changes no member and puts nothing in flight |
-| read-only-changes-nothing | Acting on a read-only request leaves the peer's durable store exactly as it was, the count and every record; and a peer says `read` of a read-only request and of no other |
-| read-reply-from-state | An observed `reply(v)` of a read-only perform is a value the peer's state had between the issue of that attempt and the reply: `v` is not less than the peer's count when the attempt was issued, and not more than its count when the reply is given. This uses that the counter never decreases; it is the reading of §12.4 for this peer, not a general one |
+| read-only-changes-nothing | Acting on a read-only request leaves the peer's durable store exactly as it was, every cell and every record; and a peer says `read` of a read-only request and of no other (or `trapped`, when its function trapped) |
+| read-reply-from-state | An observed `reply(v)` of a read-only perform is a value the peer's state had between the issue of that attempt and the reply: `v` is not less than what the operation would have answered on the peer's store when the attempt was issued, and not more than what it would answer when the reply is given. This uses that the answer never decreases (a total of amounts that are not negative, a constant); it is the reading of §12.4 for these peers, not a general one |
+| commit-atomic | The business state and the reply records were committed together, every time. Read for the ledger peer, whose program gives the store a meaning the checker can state without running it: cell 0, the total, is the sum of the arguments of the reply records, and cell 1 is their number, in every state; and a request whose function trapped changes nothing |
+| reads-see-own-writes | What an applied request replies was computed with its own writes in view. Read for the ledger peer, whose `add` writes the total and replies with what it reads back: the value replied is the total before plus the argument |
 
-The first nine properties are those of draft 6, unchanged, and hold in the two
+The first nine properties are those of draft 6 and hold in the two
 systems that have read-only requests as in the others: a read-only delivery
 adds no application and no record, so the guarantees of keyed operations are
-judged on the same store as before.
+judged on the same store as before. The last two came with draft 9. They are
+about what the peer's runtime owes the peer's program, and they are stated
+for one program, the ledger, in terms of what that program means: a checker
+that knew nothing of the program could only compare the model with itself.
+The property applied-at-most-once still says, of a crash after a commit, that
+the store afterwards is the store before plus the writes of exactly one run
+of the operation's function and its record.
 
-Thirteen defects, each a switch on the model, are each caught on the property
+Seventeen defects, each a switch on the model, are each caught on the property
 they are aimed at. The schedule shown is a shortest one.
 
 | Defect | Caught by | Shortest schedule |
@@ -937,17 +1055,22 @@ they are aimed at. The schedule shown is a shortest one.
 | Peer replies first and commits afterwards | reply-implies-acted | issue, hand over, act (reply sent, nothing committed), deliver reply |
 | A restarted supervisor takes nothing as handed over | not-delivered-not-handed | issue, supervisor restart, not-delivered. With a hand-over and an act before the restart, the same step tells the caller the peer has not acted when it has; §12.11 runs that one |
 | Peer replays a record whatever the argument | key-bound-to-argument | issue key 1 with 5, timeout, issue key 1 with 6, hand over the second, act (applied with 6), hand over the first, act: replayed, though its argument is 5 |
-| A read-only operation writes: acting on it adds one to the count | read-only-changes-nothing | issue key 1, not-delivered, issue the read, hand over, act: the store's count is 1 and nothing was applied |
-| A read-only operation ignores the state: it answers 0 | read-reply-from-state | issue key 1, hand over, act (applied), deliver reply, issue the read, hand over, act, deliver reply: 0, when the count has been 1 since before the read was issued |
+| The runtime writes while it serves a read-only request: it adds one to cell 0 | read-only-changes-nothing | issue key 1, not-delivered, issue the read, hand over, act: the store's total is 1 and nothing was applied |
+| A read-only operation ignores the state: it answers 0 | read-reply-from-state | issue key 1, hand over, act (applied), deliver reply, issue the read, hand over, act, deliver reply: 0, when the total has been 5 since before the read was issued |
+| The commit leaves out the reply record | commit-atomic | issue, hand over, act: the total is 5 and no record says why |
+| The commit leaves out the program's writes | commit-atomic | issue, hand over, act: a record of 5, and a total of 0 |
+| A crash of a peer about to commit leaves the first of the request's writes | commit-atomic | issue, hand over, crash peer: the total is 5, with no record |
+| A read does not see its own request's writes | reads-see-own-writes | issue, hand over, act: the reply is `ok 0`, the total before the addition |
 
 The ninth was added with the crash between commit and reply: it is the order
 of the two parts of acting, which §12.3 fixes. In that defect the caller
 holds a reply for which the store has no record, at once, and for good if the
-peer then crashes. The tenth and eleventh came with draft 6, the last two with
-draft 7.
+peer then crashes. The tenth and eleventh came with draft 6, the next two with
+draft 7, and the last four with draft 9: the runtime's half of a peer, which
+the program cannot be blamed for.
 
 A defective run that raises an error would be reported as crashed and not as
-caught; none does. Nineteen hand-written schedules, with expectations taken from
+caught; none does. Twenty-three hand-written schedules, with expectations taken from
 this text, pass. One is the crash between commit and reply, the timeout, the
 restart, and the retry answered from the record with one application. Five
 came with draft 6: `not_delivered` with the peer up and nothing handed over;
@@ -966,20 +1089,32 @@ never handed over, after an earlier read that was; a peer with no durable
 store serving a read before and after it is killed; and the refusal at
 assembly of a storeless peer that is sent a keyed request, and of an
 undeclared connection (`remote.assembly-refusals`: the model has no step for
-either system). As a negative control, the same checker run with the
+either system). Four came with draft 9: where acting would commit, the crash
+steps offered are exactly the crash that leaves the store as it was and the
+crash that leaves every write of the request and its record, and after the
+first the retry is applied once; a function that traps (the ledger's total
+overflowing) commits nothing, sends no reply, and is offered no crash between
+commit and reply; a key performed again with another operation and the same
+argument is a `conflict`, a function that traps after it has written leaves
+none of its writes, and a read-only function reads the store under a handler
+frame (the pots peer of `tests/remote/peers/pots.fen`); and a peer with no
+durable store serves two read-only operations, the request naming the one
+meant. As a negative control, the same checker run with the
 non-idempotent peer in place of the model reports failure and exits with
 status 1; the runner requires that.
 
-The model's members are abstract: a caller is a script of requests, a peer
-adds one to a counter and replies with it, or with `conflict`, and answers a
-read-only request with the counter. A peer with no durable store answers
-read-only requests only. One system uses a real tc1 program
+A caller of the model is abstract, a script of requests, except in one system,
+which uses a real tc1 program
 as the caller (`models/tc1/remote-tc1-caller.shen`): the handler machine runs
 to a perform of a bound effect that no frame handles, keeps its frames, and is
-given the outcome as the value of that perform.
+given the outcome as the value of that perform. A peer is a program in every
+system (`models/tc1/remote-tc1-peer.shen`, §12.12): the check elaborates the
+peers' source files with the frontend, has the validator admit the artifacts,
+and runs the functions on the model's handler machine. A peer with no durable
+store answers read-only requests only.
 
 This check is the row `remote-model` of the TC1 gate (§9). Its evidence class
-is model-level bounded exploration: no implementation is run.
+is model-level bounded exploration: no image and no supervisor is run.
 
 *Clarification (implementation).* Three things the list of events leaves open,
 which the implementation had to settle:
@@ -1012,10 +1147,21 @@ which the implementation had to settle:
   restart keeps (the attempt numbering and the set of accepted request ids)
   is assumed never lost; its messages are assumed uncorrupted; and a restart
   in the middle of a step is not modelled.
-- **A peer that breaks its obligation.** Idempotence, the refusal of a
-  reused key, and changing nothing in a read-only operation are assumed of
-  peers, not enforced on them; the non-idempotent defect, the replaying
-  defect and the writing read show what then fails.
+- **A peer's runtime that breaks its obligation.** Idempotence, the refusal
+  of a reused key and the atomic commit are the peer's runtime's, which is
+  hand-written C and is checked on histories, not proved; the defect switches
+  show what fails when it breaks one. That a read-only operation's program
+  writes nothing is checked on the program (§12.12); that the runtime writes
+  nothing while serving one is not.
+- **Atomicity below a block.** The commit is atomic if one 512-byte block
+  write is atomic and a write that returned survives the death of the image
+  (§12.12). A torn block, a lost write, and the loss of the host are not
+  modelled, not injected and not defended against.
+- **A peer's program that does not finish, and one that traps.** A request
+  whose function does not end within the step bound is an error of the model
+  and a fault of the image. A trap is specified (nothing committed, no
+  reply) and exercised in the model and in the three-way check, not on the
+  real system.
 - **An image that misdeclares itself.** Four of the five assembly checks
   (§12.6) rest on what the images say, which the build derives; nothing ties
   an image file to the build that made it, or to the manifest it was built
@@ -1032,11 +1178,11 @@ which the implementation had to settle:
 - **Time.** A timeout has no clock here; it may fire at once.
 - **Several tasks in one image** performing concurrently, bounded mailboxes
   and overload.
-- **Peers written in tc1.** The peer is hand-written C; so a read-only
-  declaration is checked against no peer code, and the operations a peer
-  serves are derived from the caller's program. Remote operation types beyond
-  what the wire carries (§12.11), and more than one keyed and one read-only
-  operation per peer.
+- **A peer that calls onward.** A program that serves performs no remote
+  operation (§12.12). **Who is asking.** An implementation sees the request's
+  key and argument, not the caller. Remote operation types beyond what the
+  wire carries (§12.11). **The store's growth:** its log is never compacted
+  and reply records are kept for ever.
 - **Soundness of the typing of §3 for remote effects.** It is checked by the
   validator and the frontend on tests, not proved.
 - Systems larger than those listed; any proof. The contract, the model, the
@@ -1047,9 +1193,9 @@ which the implementation had to settle:
 
 Questions 1, 2 and 10 have owner rulings of 15 November 2026, and questions 3,
 4, 5, 6 and 8, later the same day 7 and 9, and later again 11, 12, 14 and 16,
-of 16 November 2026. All were given by instruction in conversation, not by
-line review of this text. None of the first ten is open. Questions 11 to 16
-came with draft 7; 13 and 15 are open and are being taken up next.
+of 16 November 2026, and last of all 13 and 15. All were given by instruction
+in conversation, not by line review of this text. None of the first sixteen
+is open. Questions 17 to 24 came with draft 9 and are open.
 
 1. **Refusal.** An undeclared connection returns `not_delivered` here, because the
    guarantee is the same and the outcomes stay three. Alternatives: reject the
@@ -1177,7 +1323,23 @@ Raised by draft 7:
     a peer is written in this language, read-only should be checked on the
     peer: a handler that performs no durable effect. Until then it is a
     promise, and a peer that breaks it is caught only on the histories run.
-    *Open.*
+    **Owner ruling, 16 November 2026:** the peer is written in Fenrir, its
+    store is reached through effects, and the type checker vouches for the
+    read-only marker. Accepted with it: the store is a small map from key to
+    integer for now, on the block device as before (SQLite later). Done as
+    §12.12 says: two store effects of the durable class, provided by the
+    peer's runtime; a `serve` form with one implementation for each
+    operation; the rule that the implementation of a read-only operation has
+    no `StoreWrite` in its effect set, in the frontend and in the validator;
+    the peer image running that program on the C machine once for each
+    request, in a transaction; the model's peer being that program; and the
+    hand-written counter gone. What the ruling left to this text: the
+    effects' names and that an absent cell reads 0 (question 17); that an
+    implementation sees the key and the argument and not the caller
+    (question 18); that only the runtime says `conflict` (question 19); what
+    a trap of the program does (question 20); that a peer without a store may
+    still read (question 22); how the commit is made atomic and what that
+    assumes (question 23); and that a peer does not call onward (question 24).
 14. **Where the binding of a remote effect to a member lives.** Today it is a
     constant of the build script. It could be in the manifest, in the source,
     or on the build's command line. The manifest would then be the one
@@ -1198,7 +1360,16 @@ Raised by draft 7:
     callers that declare the same effect differently, something has to own
     the effect's signature: a shared declaration both programs import, which
     needs modules.
-    *Open.*
+    **Owner ruling, 16 November 2026:** a shared declarations file included
+    by both programs, and a signature digest check at assembly. Accepted with
+    it: include, not import; the file is spliced in textually and may contain
+    only declarations; real modules are a later decision. Done as §12.6 and
+    §12.12 say: `(include "file")`; a digest of each remote effect's
+    signature in every image, computed by each build from its own program;
+    the refusal `signature` at assembly; and the operations a peer serves
+    derived from the peer's program. What the ruling left to this text: how
+    the file is named and that an included file may include (question 21);
+    and what the digest covers and how it is encoded (question 21).
 16. **No handler for a remote effect.** Rejected here (§3). Allowing one that
     intercepts locally would let a caller program be run alone against a
     stub, at the price given in §3. Confirm the rejection, or say that
@@ -1210,6 +1381,54 @@ Raised by draft 7:
     manifest (question 14), running a caller against a stub is a matter of
     binding its effect to a stub member there.
 
+Raised by draft 9:
+
+17. **A cell that was never written reads 0.** So a program cannot tell an
+    absent cell from one that holds 0. That keeps `get` total and its type
+    an I64. The alternatives need a type the language can state at an
+    operation: an optional value, or a second operation that asks whether a
+    cell exists. Confirm, or say which.
+18. **What an implementation is told about a request.** Here the key and the
+    argument, and nothing about who asks; the reply record is per (caller,
+    key), but the program cannot see the caller. A tenant-scoped service
+    (amendment §8) needs the caller's identity, or a tenant, in the request
+    and in what the store's cells are keyed by. Should the runtime scope the
+    store by caller, or hand the caller to the program?
+19. **Only the runtime says `conflict`.** While the reply of a keyed
+    operation is the pair (status, value), an implementation must return
+    status 0; any other status is treated as a trap. With sums across the
+    boundary the implementation would return the value alone and the runtime
+    wrap it. Confirm the interim rule, or let a program define statuses of
+    its own beside 0 and 1.
+20. **A trap of a peer's program.** Here it commits nothing and sends no
+    reply: the caller times out, and a retry runs the program again. The
+    caller cannot tell a peer that always traps on this request from one
+    that is slow. Alternatives: a reply that says the operation failed, as a
+    value of the application; or a record of the failure under the key, so
+    that a retry is answered without running anything.
+21. **Include, and the digest.** The file is named relative to the including
+    file's directory, without `..`, and may include other declaration files;
+    nothing says where a file shared by two repositories lives. The digest
+    is over the canonical encoding of §12.6, ignores the order of
+    declaration, and does not cover the definition of a datatype a type
+    names. Confirm the three choices; the last has to change before a
+    datatype crosses the wire.
+22. **A peer with no store may read.** The ruling's rule is that such a
+    peer's program does not mention the write effect. `StoreRead` is left
+    allowed, and reads an empty store: every cell is 0. Forbidding both would
+    be simpler to state and loses nothing today.
+23. **What "atomic" rests on, and the store's growth.** The commit is atomic
+    if one 512-byte block write is atomic and a completed write is not lost
+    when the image dies; the store is an append-only log that is never
+    compacted, and reply records are never dropped. Is that the contract
+    wanted of the host-side store until SQLite replaces it, and how long must
+    a reply record be kept?
+24. **A peer that calls onward.** Rejected here: a program that serves
+    performs no remote operation. Allowing it needs a rule for a read-only
+    operation (it may perform read-only operations only), and a rule for the
+    transaction, which §8 says may not be held across a perform that can
+    suspend the task.
+
 ### 12.11 First implementation
 
 ```sh
@@ -1220,60 +1439,87 @@ The smallest system, for real: an Erlang/OTP supervisor
 ([supervisor/](../../supervisor/README.md); Erlang/OTP is assumed for this
 step, on a recommendation that is not yet an owner ruling), a caller image and
 a peer image, each a Solo5 guest run as an OS process under the `spt` tender.
-The caller is a TC1 program on the C machine of `backends/solo5/pure-call`,
-unchanged. Since draft 7 the program is a source file,
-[examples/remote/ledger-caller.fen](../../examples/remote/ledger-caller.fen),
-and the build elaborates it with the frontend
-([SURFACE.md](SURFACE.md)) to an artifact of schema `tc1-handler-demo/3`, which
-the validator admits with no option: the program declares `Ledger` as a remote
-effect with a keyed operation `add` and a read-only operation `total`. Until
-draft 6 the program was assembled by hand in a fixture, which is gone. It
-performs `Ledger.add` with key 7 and argument 5, once more with the same key
-and argument after `timed_out`, then with key 8, then with key 7 again and
-argument 6, a reuse of the key that the peer refuses if key 7 was applied with
-5; and then `Ledger.total`, once more after `timed_out`. Every one of those
-performs is the scrutinee of a match (must-use, §3); the program was already
-written so and did not change with draft 8, and its artifact is the same
-bytes. The system is described by its manifest,
-[examples/remote/ledger-system.json](../../examples/remote/ledger-system.json)
-(§12.6), which binds `Ledger` of the caller to the peer. The build reads the
-source's name, the connection and the binding from it, and derives from the
-program's declarations what each image says of itself: the caller's
-connections and operations, and the operations the peer serves; neither line
-is written by hand, and the images are the same bytes as when the binding was
-the build's constant. The outcome becomes the
-value of the perform, and the frames stay in the image. The peer is the
-model's counter with its durable store in a file; each record keeps the
-argument it was made with, and `total` replies with the counter and writes
-nothing. Messages go through block-device files used as mailboxes, which need
-no privileges, not through the network device. The wire format is version 3.
-It carries what this one system needs and no more: a keyed operation takes an
-I64 and replies a status and an I64 (§12.2); a read-only one takes unit and
-replies an I64; a request says which of the two modes it is, and not the
-operation's name, so a peer serves one operation of each mode; the build
-rejects a program whose remote operations are otherwise. Version 2 had no mode
-and no `read`; version 1 had no status, no `conflict` and no argument in a
-store record. The code of the outcome now called `not_delivered` is the one
-`peer_down` had. The
-supervisor's README has the wire format, what is trusted, and what is not
-shown.
+Both images run a program of this language on the C machine of
+`backends/solo5/pure-call`, and both programs are source files that the build
+elaborates with the frontend ([SURFACE.md](SURFACE.md)).
 
-`harness/tc1-remote-run.shen` runs the system and judges each recorded run:
+*The caller.*
+[examples/remote/ledger-caller.fen](../../examples/remote/ledger-caller.fen),
+an artifact of schema `tc1-handler-demo/3`. It performs `Ledger.add` with key 7
+and argument 5, once more with the same key and argument after `timed_out`,
+then with key 8, then with key 7 again and argument 6, a reuse of the key that
+the peer refuses if key 7 was applied with 5; and then `Ledger.total`, once
+more after `timed_out`. Every one of those performs is the scrutinee of a
+match (must-use, §3). With draft 9 its three lines that declared `Ledger`
+became three lines that include the shared declaration, and its artifact is
+the same bytes as before. When the machine is Ready at a remote perform, the
+image sends the request, waits for the one outcome, and gives it to the
+machine as the value of the perform; the frames stay in the image.
+
+*The peer* (draft 9, §12.12).
+[examples/remote/ledger-peer.fen](../../examples/remote/ledger-peer.fen), an
+artifact of schema `tc1-handler-demo/4`: it serves `Ledger`. `add` puts the
+amount on a stored total (cell 0), counts the addition (cell 1), notes the
+request key (cell 2), and replies status 0 with the total it reads back;
+`total` reads cell 0. The peer image is that program and a runtime in C:
+transport, the store, and the transaction around each request. The
+hand-written counter of drafts 4 to 8 is gone; nothing in the C says what an
+operation does. So the values differ from draft 8's: the first application of
+5 replies 5 where the counter replied 1, the second 10.
+
+*The system* is described by its manifest,
+[examples/remote/ledger-system.json](../../examples/remote/ledger-system.json)
+(§12.6), which names both programs, says that the peer has a durable store,
+and binds `Ledger` of the caller to the peer. The build derives what each
+image says of itself from that image's own program: the caller's connections
+and operations, the operations the peer serves, whether the peer's program
+writes, and a digest of `Ledger`'s signature on both sides, which are equal
+because both programs include
+[examples/remote/ledger.decl.fen](../../examples/remote/ledger.decl.fen).
+
+*A second system*,
+[examples/remote/rates-system.json](../../examples/remote/rates-system.json),
+is the one draft 8 lacked: a caller that only reads
+([rates-caller.fen](../../examples/remote/rates-caller.fen)) and a peer with
+no durable store ([rates-peer.fen](../../examples/remote/rates-peer.fen)),
+which serves two read-only operations from constants and arithmetic. Its peer
+image has no store device, its program mentions no store effect, and the
+system is assembled and runs.
+
+*The wire.* Messages go through block-device files used as mailboxes, which
+need no privileges, not through the network device. The wire format is
+version 4. A request now names its operation, `Effect.operation`, so a peer
+serves any number of operations of each mode; version 3 sent only the mode,
+and a peer served one of each. The types are still what one system needed: a
+keyed operation takes an I64 and replies a status and an I64 (§12.2); a
+read-only one takes unit and replies an I64; the build rejects a program
+whose remote operations are otherwise. A reply to the supervisor may say
+`trapped`, which the supervisor does not pass on. The peer's store is a log
+of two kinds of record, cells and reply records, and a reply record keeps the
+operation with the argument (§12.12). The supervisor's README has the format,
+what is trusted, and what is not shown.
+
+`harness/tc1-remote-run.shen` runs the systems and judges each recorded run:
 (a) every recorded step is enabled in the model at that point, and the set of
 steps the supervisor considered enabled is the model's; (b) the properties of
 §12.8 hold in every state and on every step of the replay; (c) the consoles of
 the images show what the model says they observe (the caller's outcomes,
 requests and TC1 events per incarnation, the peer's actions and the store it
-found at each start), the peer's store file at the end is the model's
-durable store, record by record with the argument each was made with, and the
-run had one relay process more than the supervisor restarts in its log. The
-model's caller is the same program, read from the build.
+found at each start, cell by cell), the peer's store file at the end is the
+model's durable store, every cell and every record with the operation and
+argument it was made with, and the run had one relay process more than the
+supervisor restarts in its log. The model's caller and the model's peer are
+the two programs, read from the build's artifacts.
 
 | Schedules | Number | Result |
 | --- | --- | --- |
-| Written by hand from this section | 26 | Accepted; the recorded steps are the schedule's and the outcomes the expected ones |
-| Seeded (1 crash, 1 duplicate, 1 supervisor restart, until no step is enabled) | 40, 989 steps | Accepted. All forty take the supervisor restart, 34 act on a read-only request, 28 end a perform in `conflict`, 15 report `not_delivered`, 3 take the crash between commit and reply |
-| Free-running: one undisturbed, two with the peer killed from outside, one with a request the supervisor is told to lose | 4 | Accepted |
+| Written by hand from this section | 31, two of them of the rates system | Accepted; the recorded steps are the schedule's and the outcomes the expected ones |
+| Seeded (1 crash, 1 duplicate, 1 supervisor restart, until no step is enabled) | 50, 1,147 steps: 40 of the ledger system, 989 steps, and 10 of the rates system, 158 steps | Accepted. All fifty take the supervisor restart, 41 act on a read-only request, 28 end a perform in `conflict`, 20 report `not_delivered`, 3 take the crash between commit and reply |
+| Free-running: one undisturbed, two with the peer killed from outside, one with a request the supervisor is told to lose, and one of the rates system | 5 | Accepted |
+
+The forty seeded schedules of the ledger system have, in all, the 989 steps
+they had in draft 8: the same seeds meet the same choices, with the new
+values in the replies.
 
 The hand schedules cover: plain reply; request dropped, timeout, retry applied;
 reply dropped, timeout, retry replayed; peer killed before hand-over,
@@ -1281,39 +1527,68 @@ reply dropped, timeout, retry replayed; peer killed before hand-over,
 `not_delivered`, the remaining copy destroyed; peer killed after hand-over,
 `timed_out`, restart, retry (applied if it had not acted, replayed from the
 surviving store if it had); peer killed between its commit and its reply,
-`timed_out`, restart, the retry given the committed value, applied once; no
+`timed_out`, restart, the retry given the committed value, applied once; two
+with the peer killed inside its commit (below); no
 `not_delivered` offered after a hand-over; a duplicate applied once; a reply
 after `timed_out` discarded; a caller restarted from its beginning; key 7
 applied with one argument and then performed with another, `conflict`, the
 store unchanged, and a late copy of the first request still replayed; four
 schedules with a supervisor restart (below); an undeclared connection refused
-at start, and at run time with the start-time check off; five that came
-with draft 7 (below); and two that came with draft 8, both refusals at
-assembly with nothing started: the manifest given with no binding for
-`Ledger` (`unbound`), and with `Ledger` bound to a name that is no member
-(`unknown-member`). The undeclared connection refused at start is the third
-refusal about a binding: `Ledger` bound to the peer, and no connection
-declared from the caller to it. Every other run is given the bindings the
+at start, and at run time with the start-time check off; five about read-only
+operations and a storeless peer image refused at assembly (below); two
+refusals about a binding, the manifest given with no binding for
+`Ledger` (`unbound`) and with `Ledger` bound to a name that is no member
+(`unknown-member`); one refusal of a differing signature (below); and the two
+of the rates system (below). Every other run is given the bindings the
 build read from the manifest. In every schedule that applies key 7 with argument 5,
 the program's third keyed perform is the reuse of key 7 and ends in
 `reply(conflict)`, and every schedule that runs the program to its end ends
-with the read. Every step kind of the model occurs. Each scheduled run was
+with the read. Every step kind of the model but `act ... trapped` occurs: the
+two programs never trap on these arguments. Each scheduled run was
 made twice with equal recordings.
 
-*Read-only, and assembly, for real.* The five: the read handed to the peer,
-the peer killed before it acts, `timed_out`, the peer restarted, and the
-retry, a new request, answered 2 by the new incarnation from the store it
-found; two copies of one read handed over, each evaluated, the second reply
-stale, the store as it was; a read never handed over reported `not_delivered`
-with the peer up, after three keyed requests of the same caller that were
-handed over; a read issued when the total is 1, a late copy of key 8 applied
-before the peer acts on the read, and the reply 2, which is the weaker
-guarantee of §12.4 seen from outside; and a peer image built without a store
-device, declaring that it serves `Ledger.add`, refused at assembly with
-nothing started. That last image is not part of any system: the build makes
-it, beside the real peer, so that the refusal can be exercised, and the
-build's own copy of the assembly check names the same refusal. No run has a storeless peer that is
-accepted: that would need a second caller program which only reads.
+*A kill inside the commit, for real* (draft 9). The model has no step of its
+own for it: a commit is durable whole or not at all, so a peer killed inside
+one has committed nothing, which is the step `crash`. The supervisor takes
+that step in a particular way when a schedule asks for it. It grants the peer
+the request with a mark in the inbox header that makes the image stop,
+without exiting, inside its commit: when every record of the commit is
+written to the store device and the header that would count them is not. The
+supervisor waits until the store file shows the request's reply record
+beyond the header's count, kills the tender process with `kill -9`, and
+records `crash`, having read from the store that the request has no counted
+record. Its report lists the records it saw written and uncounted, and the
+check requires that list. Two hand schedules: the peer killed inside the
+commit of its first request, with three cells and the reply record of key 7
+written and none counted, after which the restarted peer finds an empty
+store and the retry is the key's first application; and the peer killed
+inside the commit of key 8 after key 7 was committed, after which the store
+has key 7 whole and nothing of key 8, key 7 performed with another argument
+is still a `conflict`, and the total read is 5. The kill is placed at that
+one point; a kill between two record writes of a commit would find fewer
+records and no different store, and is not placed.
+
+*Read-only, assembly, and a storeless peer, for real.* Four schedules of the
+ledger system: the read handed to the peer, the peer killed before it acts,
+`timed_out`, the peer restarted, and the retry, a new request, answered 10
+by the new incarnation from the store it found; two copies of one read handed
+over, each evaluated, the second reply stale, the store as it was; a read
+never handed over reported `not_delivered` with the peer up, after three
+keyed requests of the same caller that were handed over; and a read issued
+when the total is 5, a late copy of key 8 applied before the peer acts on the
+read, and the reply 10, which is the weaker guarantee of §12.4 seen from
+outside. Two refusals at assembly, each of an image the build makes beside the
+real peer for the purpose, with nothing started: the ledger peer built
+without a store device, refused both because it serves `Ledger.add` and
+because its program writes (`no-store`, twice); and a peer built from
+[a program that declares `Ledger` itself](../../tests/remote/ledger-peer-other-signature.fen),
+with one read-only operation more than the shared file has, which serves
+everything the caller performs and is refused because its digest of the
+signature is not the caller's (`signature`). And two accepted runs of the
+rates system, whose peer has no store: both read-only operations served, the
+request naming the one meant; and the peer killed with a read in its inbox,
+restarted, the retry answered, and a duplicated read evaluated twice. No
+store file exists in those runs.
 
 *The supervisor's restart, for real.* The step machine and the two things the
 contract says are lost, the record of hand-overs and the messages in flight,
@@ -1357,18 +1632,22 @@ no reply; the supervisor compares the store with what it read before the
 grant and records `crash-after-commit` if the record appeared, `crash` if
 not. One free-running run kills the peer there from outside the step machine;
 the supervisor finds it, restarts the peer, and the retry is answered from the
-record. Before draft 5 that run ended in an error.
+record.
 
 | Defect, as a switch on the real system | Caught by | Schedule |
 | --- | --- | --- |
 | Supervisor reports `not_delivered` after hand-over | (a): the step is not the model's | issue, hand over, not-delivered |
-| Peer image applies a recorded request id again | (a): the model has only `replayed` there | issue, duplicate, hand over, hand over, act, act |
+| Peer runtime applies a recorded request id again | (a): the model has only `replayed` there | issue, duplicate, hand over, hand over, act, act |
 | Supervisor hands over a reply after `timed_out` | (a): the model has only `discard-reply` there | issue, hand over, act, timeout, deliver reply |
 | Supervisor carries an undeclared connection (start-time check off) | (a): the model has only `refuse` there | issue, hand over, act, deliver reply |
-| Peer image replies first and commits afterwards | (c): the peer's store file has no application where the model has one | issue, hand over, crash between commit and reply, deliver reply |
+| Peer runtime replies first and commits afterwards | (c): the peer's store file is empty where the model has three cells and a record | issue, hand over, crash between commit and reply, deliver reply |
 | Restarted supervisor takes nothing as handed over | (a): the model has only `timeout` there | issue, hand over, act, supervisor restart, not-delivered: the caller is told the peer has not acted, and it has applied the request |
-| Peer image replays a record whatever the argument | (a): the model has only `conflict` there | key 7 with argument 5 and key 8, each issued, handed over, acted on and replied to; then key 7 with argument 6 issued, handed over, act: replayed |
-| Peer image's read-only operation adds one to the counter and commits it | (a): the reply the supervisor carries is 3, and the model has only the reply 2 there | the three keyed performs, each issued, handed over, acted on and replied to; then the read issued, handed over, acted on, deliver reply |
+| Peer runtime replays a record whatever the argument | (a): the model has only `conflict` there | key 7 with argument 5 and key 8, each issued, handed over, acted on and replied to; then key 7 with argument 6 issued, handed over, act: replayed |
+| Peer runtime adds one to the total and commits it before it serves a read-only request | (a): the reply the supervisor carries is 11, and the model has only the reply 10 there | the three keyed performs, each issued, handed over, acted on and replied to; then the read issued, handed over, acted on, deliver reply |
+| Peer runtime commits a request's writes without its reply record | (a): the second copy is applied again, and the model has only `replayed` there | issue, duplicate, hand over, hand over, act, act |
+| Peer runtime commits a request's reply record without its writes | (a): the next addition replies 5, and the model has only the reply 10 there | keys 7 and 8, each issued, handed over, acted on and replied to |
+| Peer runtime counts each record of a commit as it writes it; killed inside the commit | (c): the restarted image finds the three cells of key 7 and no record, where the model's store is empty | issue, hand over, kill inside the commit, restart |
+| Peer runtime answers a read of the store without the request's own writes | (a): the reply is `ok 0`, and the model has only `ok 5` there | issue, hand over, act, deliver reply |
 
 In the fifth, the kill finds a reply and no commit. The supervisor records what
 it saw, an act by the reply and then the crash, and the caller is given the
@@ -1376,36 +1655,189 @@ reply. (a) and (b) accept that log: by the log the peer acted. Only the store
 says otherwise, which is the point of the ruling on question 10.
 
 In the eighth, the act itself is a step of the model: the supervisor cannot see
-that the image wrote. The value gives it away one step later, and the store
-file, with three applications where the model has two, would by (c) if the
-schedule stopped at the act.
+that the image wrote. The value gives it away one step later. This is the
+defect draft 8 called "a read-only operation writes". A peer's program cannot
+have it any more, being rejected before an image exists (§12.12); the runtime
+can, and the switch shows that the check on histories still sees it.
+
+The last four came with draft 9 and are the runtime's half of §12.3: the two
+halves of a commit each left out, a commit that is not atomic, and a
+transaction whose reads do not see its writes.
 
 Each of these recordings, replayed through the corresponding model mutant, is
 accepted and violates the property that mutant is aimed at in §12.8. A run
 that ends in an error would count as crashed, not caught; none does. As a
-negative control the checker is run with the non-idempotent peer image in
+negative control the checker is run with the non-idempotent peer runtime in
 place of the peer: it reports failure and exits with status 1, and the runner
 requires that.
 
 This check is the row `remote-run` of the TC1 gate (§9). Its evidence class is
 observed histories on `spt` accepted by the model.
 
-Limits. One two-member system and a few dozen histories of it: (a) to (c) say
+Limits. Two two-member systems and a few dozen histories of them: (a) to (c) say
 those histories are ones the model allows, nothing more. The supervisor's log
 is its own account. In the scheduled modes a crash is taken between steps,
-with the images at rest, or at the one place inside a step described above,
-with the image's cooperation; a kill at any other instant inside a step (in
-the middle of the store's two writes, or between the reply's two) is not
-placed and not exercised. The supervisor's restart is taken between steps
+with the images at rest, or at one of two places inside a step, with the
+image's cooperation: after the commit and before the reply, and inside the
+commit when every record is written and none counted. A kill at any other
+instant (between two record writes of a commit, between the reply's two
+writes) is not placed and not exercised. The supervisor's restart is taken between steps
 only, never in the free-running mode, and what survives it is in the memory of
 another Erlang process: a relay killed inside a step, and the loss of the
-whole VM, are not covered. Seven defects are caught by (a), the fifth by (c)
-alone. Three free-running runs depend on the wall clock. The peer is not a
-program of this language, so what it serves is taken from the caller's
-declarations, and "read-only" is checked against its behaviour on these
-histories only. The supervisor's handling of a manifest's errors (a duplicate
+whole VM, are not covered. Ten defects are caught by (a), two by (c)
+alone. Four free-running runs depend on the wall clock. The peer's runtime is
+hand-written C and is checked only on these histories; no peer program traps
+in them. The supervisor's handling of a manifest's errors (a duplicate
 binding, a binding for an unused effect, an image built for another member)
 was tried by hand runs only; no schedule of this check and no unit test runs
 it. The build's own check of a manifest has unit tests. The frontend that
-elaborates the caller is development code with its own tests (`sh frontend/test.sh`), which are not a row of the gate.
+elaborates the programs is development code with its own tests (`sh frontend/test.sh`), which are not a row of the gate.
 No `hvt` run and no proof.
+
+### 12.12 Peers written in the language
+
+Draft 9, by the owner's direction of 16 November 2026 on questions 13 and 15
+of §12.10. What follows is specified and implemented together; what it leaves
+open is questions 17 to 24.
+
+**The store.** A peer's durable store (§12.1) is a finite map from I64 to
+I64. A peer's program reaches it through two effects of the durable class
+(§8), which it is given and does not declare:
+
+```text
+effect StoreRead  { get : I64 -> I64 }
+effect StoreWrite { put : (I64, I64) -> Unit }      (key, value)
+```
+
+- `get` of a cell that was never written is 0. The operation is total, and
+  a program cannot tell an absent cell from one that holds 0 (question 17).
+- The two are provided by the peer's runtime. No `handle` names either, and
+  they exist only in a program that serves. The machines have no notion of a
+  store: when a machine is Ready at a perform of one of them that no frame
+  handles, its host gives the perform its value and the machine takes no
+  step for it, exactly as a caller's host does for a remote perform (§12.2).
+  All three machines are used so (below).
+
+**Serving.** A program *serves* a remote effect by giving one implementation
+for each of its operations (SURFACE.md has the spelling):
+
+```text
+serve Ledger { add(key, a) => e1 ; total(u) => e2 }
+```
+
+- The implementation of an operation `op : A -> B` that is not read-only is a
+  function `(I64, A) -> B`: it is given the request key, then the argument,
+  as the caller performed them. That of a read-only operation is `A -> B`.
+  It is not told who the caller is (question 18).
+- A program that serves has no entry function. It is run once for each
+  request, at the function of the operation requested, on the request's
+  input. Nothing of one run survives into the next except the store.
+- An implementation may leave unhandled only `Emit`, `StoreRead` and
+  `StoreWrite`; every ordinary effect is handled inside it, as at an entry.
+- **A peer does not call onward.** A perform of a remote operation in a
+  program that serves is rejected (question 24).
+- In the artifact (schema `tc1-handler-demo/4`, slice TC1-P1) each
+  implementation is a function named `Effect.operation`, which no program can
+  call, and `serves` lists them; there is no `entry` and no `input_schema`.
+
+**Read-only is checked** (owner ruling, §12.10 question 13). The function of
+an operation declared read-only may not have `StoreWrite` in its effect set.
+Effect sets are closed under calls and applications (§3), so this covers a
+write made by a function it calls and by a function value it applies. Both
+the frontend and the validator reject a program that breaks it, the frontend
+at the perform, call or application the write comes from. With no remote
+perform allowed, that is the whole rule; when a peer may call onward it has a
+second half, that a read-only implementation performs only read-only remote
+operations. **A peer without a durable store** has a program that does not
+mention `StoreWrite` at all, in any function's or function type's effect set:
+the build checks that on the artifact, the image says it, and the supervisor
+refuses at assembly otherwise (§12.6). Such a program may read; it reads an
+empty store (question 22).
+
+**The transaction.** The peer's runtime serves one request at a time (an image
+is single-threaded), and each request is a transaction:
+
+1. *Keyed, and the request id has a reply record.* Nothing is run. The reply
+   is the recorded value if the record was made with this operation and
+   argument, and `conflict` if not (§12.3).
+2. *Keyed, no record.* The function is run on (key, argument). Its writes
+   are kept aside, in the order of the cells; a read sees the value this
+   request last wrote to the cell, else the store's, else 0. If it returns
+   (0, v), **the commit**: the request's writes, the final value of each cell
+   it wrote, and the reply record (caller, key, operation, argument, v)
+   become durable in one atomic step. Then the reply `ok v` is sent.
+3. *Read-only.* The function is run on the store as it is. There is nothing
+   to commit, and the reply is its value.
+4. *A trap* of the function, at any point, or a keyed result whose status is
+   not 0: nothing is committed, not even what was written before the trap,
+   and no reply is sent. The supervisor is told, the caller is not, and the
+   caller's perform ends in `timed_out` (questions 19 and 20).
+
+**What "atomic" rests on.** The store is a block device of 512-byte blocks: a
+header block and a log of record blocks. The header counts the log's records.
+A commit writes its records, one for each cell written and one reply record,
+to the blocks after the last counted one, and then writes the header once,
+with the new count. A record the header does not count does not exist: it is
+not read when the store is opened, and the next commit writes over it. So a
+kill before the header write leaves the store exactly as it was, and a kill
+after it leaves all of the request. This is atomic at the granularity of a
+record under two assumptions about the device, neither of which is tested:
+that one 512-byte block write is atomic, so the header is never seen half
+written; and that a write that has returned is not lost when the image dies.
+A commit of n writes is n + 2 block writes, and the last is the commit. The
+log is never compacted (question 23). SQLite, on the host side, replaces this
+later (amendment §8).
+
+**Shared declarations** (owner ruling, §12.10 question 15). `(include "file")`
+at the top level of a program stands for the declarations of that file,
+spliced in at that place. It is textual inclusion, not a module: there is no
+namespace and no interface, and a name declared twice is an error wherever
+the two declarations are written. The file is named relative to the directory
+of the file the include is written in, with `/` between components, no
+absolute path and no `.` or `..` component. An included file may contain
+only declarations, of datatypes, effects and remote effects, and includes of
+its own; a function or a `serve` there, a file that cannot be read, and a
+file that includes itself directly or through others are rejected, each with
+the file, line and column of the form at fault. The caller and the peer of
+§12.11 include one file, and the digest of §12.6 is what makes that matter
+at assembly: nothing else stops two programs from declaring an effect apart.
+
+**The three machines.** The store effects have the same treatment in the Shen
+model (`models/tc1/remote-tc1-peer.shen`), the JavaScript machine
+(`runtime/tc1/peer-request.mjs`) and the C machine
+(`backends/solo5/remote/serve.c`, the code the peer image uses). The system
+model's peer is the first of them (§12.8).
+
+```sh
+sh harness/run-tc1-peer-requests.sh   # one request, three machines
+```
+
+`harness/tc1-peer-requests.shen` takes cases, each a peer program, one of
+its operations, a request input and a store, and requires the three machines
+to agree on the whole run: every machine step, every store perform with its
+value, in order, how the run ended, and the writes it would commit. The
+programs are the two peers of §12.11 and a third,
+[tests/remote/peers/pots.fen](../../tests/remote/peers/pots.fen), with two
+operations that change state, a trap after writes, a cell written twice in
+one request, and a store read under a handler frame.
+
+| Cases | Number | Result |
+| --- | --- | --- |
+| Written by hand, with the outcome and the writes expected from the programs' text | 22 | The model gives the expected outcome and writes of all 22; the three machines agree |
+| Generated from one fixed seed: a program, an operation, a key and argument from boundary and small values, a store of up to four cells | 400 | The three machines agree on all 400 |
+
+In all 422 cases: 22,500 machine steps and 1,138 store performs; 394 runs end
+Ok, 11 in `Overflow` and 17 in `DivZero`; 137 leave writes. The defect of a
+read that does not see its own request's writes, as a switch of the
+JavaScript and of the C store code, is detected on 123 cases each. This check
+is the row `remote-peer` of the TC1 gate (§9). Its evidence class is
+agreement of three implementations on listed cases. It has no commit, no
+reply record, no replay and no conflict: those are the runtime's, and are
+checked on the real system (§12.11) and, as a model, in §12.8.
+
+**Not done.** A peer that calls onward. Tenant scoping, and any identity of
+the caller in a request. A reply for a program that failed. A store other
+than I64 to I64, compaction, and retention of reply records. A torn block or
+a lost write. A proof of the read-only rule, of the atomicity of the commit,
+or of anything else here. The peer's runtime, the three store plugs, the
+programs, the cases and this text share one author lineage.

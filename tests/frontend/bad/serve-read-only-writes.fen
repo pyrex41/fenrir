@@ -1,0 +1,12 @@
+\\ expect 11:21 Ledger.total is declared read-only, but its implementation can write t
+\\ A read-only operation whose implementation writes the store is rejected:
+\\ the type checker vouches for the marker (EFFECTS.md §12.10 question 13).
+
+(remote-effect Ledger
+  (add I64 --> (Tuple I64 I64))
+  (read-only total Unit --> I64))
+
+(serve Ledger
+  ((add key amount) -> (tuple 0 amount))
+  ((total u) -> (do (perform StoreWrite put 0 1)
+                    (perform StoreRead get 0))))

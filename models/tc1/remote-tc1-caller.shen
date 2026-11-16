@@ -15,8 +15,9 @@
 \\ V is the operation's own result. For a keyed operation that is the pair
 \\ [tuple [int Status] [int Value]]: status 0 is ok, status 1 is conflict
 \\ (remote-system.shen, remote.ok and remote.conflict), and the request id is the
-\\ key. For a read-only operation it is the value. The operation name is not
-\\ sent: the abstract peer of remote-system.shen has one operation of each mode.
+\\ key. For a read-only operation it is the value. The request names its
+\\ operation, "Effect.operation": the payload is [Operation Argument], or
+\\ [read-only Operation Argument].
 \\
 \\ The machine runs from one scheduling point to the next as a single system
 \\ step. A perform is remote when no frame handles its effect and the operations
@@ -34,9 +35,9 @@
   [tc1-state [terminal _] | _] _ -> [halted]
   State Bindings -> (remote.tc1-run State Bindings [] (value remote.*tc1-fuel*)))
 
-\\ [Peer Mode] of Effect.Operation, or [].
+\\ [Peer Mode Name] of Effect.Operation, Name being "Effect.Operation", or [].
 (define remote.tc1-operation
-  Effect Op [[Effect Op Peer Mode] | _] -> [Peer Mode]
+  Effect Op [[Effect Op Peer Mode] | _] -> [Peer Mode (cn Effect (cn "." Op))]
   Effect Op [_ | Operations] -> (remote.tc1-operation Effect Op Operations)
   _ _ [] -> [])
 
@@ -46,10 +47,10 @@
   _ _ -> [])
 
 (define remote.tc1-request
-  [Peer "keyed"] [tc1-state [ready Node perform Meta [[tuple [int Key] Arg]] Tail] | Rest] Operations Events ->
-    [request Peer Key Arg [tc1 [tc1-state [ready Node perform Meta [[tuple [int Key] Arg]] Tail] | Rest] Operations] Events]
-  [Peer "read-only"] [tc1-state [ready Node perform Meta [Arg] Tail] | Rest] Operations Events ->
-    [request Peer read [read-only Arg] [tc1 [tc1-state [ready Node perform Meta [Arg] Tail] | Rest] Operations] Events])
+  [Peer "keyed" Name] [tc1-state [ready Node perform Meta [[tuple [int Key] Arg]] Tail] | Rest] Operations Events ->
+    [request Peer Key [Name Arg] [tc1 [tc1-state [ready Node perform Meta [[tuple [int Key] Arg]] Tail] | Rest] Operations] Events]
+  [Peer "read-only" Name] [tc1-state [ready Node perform Meta [Arg] Tail] | Rest] Operations Events ->
+    [request Peer read [read-only Name Arg] [tc1 [tc1-state [ready Node perform Meta [Arg] Tail] | Rest] Operations] Events])
 
 (define remote.tc1-run
   _ _ _ 0 -> (error "remote: tc1 program did not reach a scheduling point")

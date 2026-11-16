@@ -57,7 +57,7 @@ store. The amendment changes no TC0 evidence.
   Solo5 guest. All three agree step for step on twenty hand fixtures and on
   every one of 12,693 enumerated handler programs, and six injected defects
   are each detected. A separate TC1 gate (`sh harness/run-tc1-gate.sh`) passes
-  21 of 21 required rows on a committed tree. It was registered on 15 November
+  22 of 22 required rows on a committed tree. It was registered on 15 November
   2026 by the owner's instruction, not by line review
   ([record](campaigns/tc1/TC1_GATE_REGISTRATION.md)); no run through the
   workflow controller has been made, so it has no qualification receipt.
@@ -73,10 +73,19 @@ store. The amendment changes no TC0 evidence.
   Shen model, explored exhaustively on ten small systems, and a first
   implementation, an Erlang/OTP supervisor ([supervisor/](supervisor/README.md))
   relaying between two Solo5 `spt` guests through block-device mailboxes,
-  whose recorded runs the model accepts; the caller image is built from
-  [examples/remote/ledger-caller.fen](examples/remote/ledger-caller.fen). Both checks are rows of the TC1 gate.
-  That is bounded exploration of a model and observed histories of one small
-  system: no `hvt` run and no proof.
+  whose recorded runs the model accepts. Both images run programs of the
+  language: the caller is
+  [examples/remote/ledger-caller.fen](examples/remote/ledger-caller.fen), and
+  the peer is [examples/remote/ledger-peer.fen](examples/remote/ledger-peer.fen),
+  which *serves* the effect, reaches a durable key-value store through two
+  effects, and has each request's writes committed with its idempotency
+  record in one step. The type checker rejects a read-only operation whose
+  implementation can write; the two programs include one declarations file,
+  and the supervisor refuses to assemble images whose digests of an effect's
+  signature differ. The three checks are rows of the TC1 gate.
+  That is bounded exploration of a model, observed histories of two small
+  systems, and three machines agreeing on single requests: no `hvt` run and
+  no proof.
 - **Service model.** [verification/service/](verification/service/) is a Rocq
   model of a tenant-scoped request that atomically records a report, a durable
   job and its retry result before answering, with write isolation, atomicity,
