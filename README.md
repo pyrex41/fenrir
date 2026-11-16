@@ -62,8 +62,8 @@ store. The amendment changes no TC0 evidence.
   ([record](campaigns/tc1/TC1_GATE_REGISTRATION.md)); no run through the
   workflow controller has been made, so it has no qualification receipt.
 - **Remote perform between images.** EFFECTS.md §12: a perform that crosses an
-  image boundary returns `reply v`, `peer_down` or `timed_out`. There is a
-  Shen model, explored exhaustively on six small systems, and a first
+  image boundary returns `reply v`, `not_delivered` or `timed_out`. There is a
+  Shen model, explored exhaustively on eight small systems, and a first
   implementation, an Erlang/OTP supervisor ([supervisor/](supervisor/README.md))
   relaying between two Solo5 `spt` guests through block-device mailboxes,
   whose recorded runs the model accepts. Both checks are rows of the TC1 gate.

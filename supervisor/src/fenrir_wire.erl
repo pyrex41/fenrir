@@ -1,9 +1,11 @@
-%% Fenrir remote perform, wire format version 1: the supervisor's side.
+%% Fenrir remote perform, wire format version 2: the supervisor's side.
 %% The format is specified in backends/solo5/remote/wire.h. Decoding is strict:
 %% anything that is not exactly a well-formed block is `malformed`.
 -module(fenrir_wire).
 -export([block/0, header/1, decode_header/1, record/1, decode_record/1,
-         call_payload/3, decode_call/1, result_payload/2, decode_result/2, name_ok/1]).
+         call_payload/3, decode_call/1, decode_stored/1, outcome_payload/2, decode_result/2, name_ok/1]).
+
+-define(VERSION, 2).
 
 -define(BLOCK, 512).
 -define(RECORD, 16#31575246).
@@ -29,10 +31,10 @@ header(H = #{magic := Magic, kind := Kind, incarnation := Inc, count := Count, g
     K = case Kind of inbox -> 1; outbox -> 2; store -> 3 end,
     Hold = maps:get(hold, H, 0),
     true = Hold =:= 0 orelse (Kind =:= inbox andalso Hold =< Grant),
-    seal(<<M:32/little, 1:16/little, K:16/little, Inc:32/little, Count:32/little, Grant:32/little,
+    seal(<<M:32/little, ?VERSION:16/little, K:16/little, Inc:32/little, Count:32/little, Grant:32/little,
            Hold:32/little, 0:32, 0:((?BLOCK - 28) * 8)>>).
 
-decode_header(<<M:32/little, 1:16/little, K:16/little, Inc:32/little, Count:32/little, Grant:32/little,
+decode_header(<<M:32/little, ?VERSION:16/little, K:16/little, Inc:32/little, Count:32/little, Grant:32/little,
                 Hold:32/little, _Crc:32, Rest/binary>> = Block) when byte_size(Block) =:= ?BLOCK ->
     case sealed(Block) andalso zero(Rest) of
         false -> malformed;
@@ -59,10 +61,10 @@ type_name(4) -> reply; type_name(5) -> halt; type_name(6) -> stored; type_name(_
 record(#{type := Type, seq := Seq, incarnation := Inc, ref := Ref, payload := Payload})
   when byte_size(Payload) =< 480, Seq > 0 ->
     Pad = ?BLOCK - 32 - byte_size(Payload),
-    seal(<<?RECORD:32/little, 1:16/little, (type_code(Type)):16/little, Seq:32/little, Inc:32/little,
+    seal(<<?RECORD:32/little, ?VERSION:16/little, (type_code(Type)):16/little, Seq:32/little, Inc:32/little,
            Ref:32/little, (byte_size(Payload)):32/little, 0:32, 0:32, Payload/binary, 0:(Pad * 8)>>).
 
-decode_record(<<?RECORD:32/little, 1:16/little, T:16/little, Seq:32/little, Inc:32/little, Ref:32/little,
+decode_record(<<?RECORD:32/little, ?VERSION:16/little, T:16/little, Seq:32/little, Inc:32/little, Ref:32/little,
                 Length:32/little, _Crc:32, 0:32, Body/binary>> = Block)
   when byte_size(Block) =:= ?BLOCK, Seq > 0, Length =< 480 ->
     <<Payload:Length/binary, Rest/binary>> = Body,
@@ -78,7 +80,7 @@ name_ok(Name) when is_binary(Name), byte_size(Name) >= 1, byte_size(Name) =< 15 
               binary_to_list(Name));
 name_ok(_) -> false.
 
-%% REQUEST, DELIVER and STORED payload: name[16], key i64, value i64.
+%% REQUEST and DELIVER payload: name[16], key i64, argument i64.
 call_payload(Name, Key, Value) ->
     true = name_ok(Name),
     <<Name/binary, 0:((16 - byte_size(Name)) * 8), Key:64/little-signed, Value:64/little-signed>>.
@@ -91,11 +93,29 @@ decode_call(#{ref := 0, payload := <<Field:16/binary, Key:64/little-signed, Valu
     end;
 decode_call(_) -> malformed.
 
-%% OUTCOME: reply | peer_down | timed_out. REPLY: applied | replayed.
-result_payload(Code, Value) ->
-    N = case Code of reply -> 1; peer_down -> 2; timed_out -> 3; applied -> 1; replayed -> 2 end,
-    <<N:32/little, 0:32, Value:64/little-signed>>.
+%% STORED payload: caller name[16], key i64, argument i64, value i64.
+decode_stored(#{ref := 0, payload := <<Field:16/binary, Key:64/little-signed, Argument:64/little-signed, Value:64/little-signed>>}) ->
+    [Name | Pad] = binary:split(Field, <<0>>),
+    case name_ok(Name) andalso zero(iolist_to_binary(Pad)) of
+        true -> {ok, Name, Key, Argument, Value};
+        false -> malformed
+    end;
+decode_stored(_) -> malformed.
 
+%% OUTCOME: kind u32 (1 reply, 2 not_delivered, 3 timed_out), status u32, value i64.
+%% A reply is {ok, Value} (status 0) or conflict (status 1, value 0).
+outcome_payload(reply, {ok, Value}) -> <<1:32/little, 0:32/little, Value:64/little-signed>>;
+outcome_payload(reply, conflict) -> <<1:32/little, 1:32/little, 0:64>>;
+outcome_payload(not_delivered, none) -> <<2:32/little, 0:32, 0:64>>;
+outcome_payload(timed_out, none) -> <<3:32/little, 0:32, 0:64>>.
+
+%% REPLY: how u32 (1 applied, 2 replayed, 3 conflict), zero u32, value i64.
+%% {ok, How, {ok, Value} | conflict}
 decode_result(reply, #{ref := Ref, payload := <<N:32/little, 0:32, Value:64/little-signed>>}) when Ref > 0 ->
-    case N of 1 -> {ok, applied, Value}; 2 -> {ok, replayed, Value}; _ -> malformed end;
+    case N of
+        1 -> {ok, applied, {ok, Value}};
+        2 -> {ok, replayed, {ok, Value}};
+        3 when Value =:= 0 -> {ok, conflict, conflict};
+        _ -> malformed
+    end;
 decode_result(_, _) -> malformed.

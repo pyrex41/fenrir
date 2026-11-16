@@ -7,8 +7,10 @@
 \\ A remote operation op : A -> B is performed by the caller as
 \\   perform(Effect, op, tuple(key, a))      with key : I64 chosen by the program
 \\ and has the type RemoteResult B there:
-\\   [data "RemoteResult" "reply" V]  [data "RemoteResult" "peer_down"]  [data "RemoteResult" "timed_out"]
-\\ The request id is the key. The operation name is not sent: the abstract peer of
+\\   [data "RemoteResult" "reply" V]  [data "RemoteResult" "not_delivered"]  [data "RemoteResult" "timed_out"]
+\\ V is the operation's own result, the pair [tuple [int Status] [int Value]]:
+\\ status 0 is ok, status 1 is conflict (remote-system.shen, remote.ok and
+\\ remote.conflict). The request id is the key. The operation name is not sent: the abstract peer of
 \\ remote-system.shen has one operation.
 \\
 \\ The machine runs from one scheduling point to the next as a single system
@@ -48,7 +50,7 @@
 
 (define remote.tc1-result
   [reply V] -> [data "RemoteResult" "reply" V]
-  [peer-down] -> [data "RemoteResult" "peer_down"]
+  [not-delivered] -> [data "RemoteResult" "not_delivered"]
   [timed-out] -> [data "RemoteResult" "timed_out"])
 
 \\ The outcome is the value of the perform; the frames are those the image kept.

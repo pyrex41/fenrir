@@ -17,13 +17,13 @@
 \\ check. A report with other numbers is not this gate's check: UNKNOWN. The
 \\ manifest's acceptance text states the same numbers.
 
-(define fh.remote-model-systems -> 6)
-(define fh.remote-model-mutants -> 9)
-(define fh.remote-model-hand -> 9)
-(define fh.remote-run-hand -> 13)
+(define fh.remote-model-systems -> 8)
+(define fh.remote-model-mutants -> 11)
+(define fh.remote-model-hand -> 14)
+(define fh.remote-run-hand -> 19)
 (define fh.remote-run-seeds -> 40)
-(define fh.remote-run-free -> 3)
-(define fh.remote-run-defects -> 5)
+(define fh.remote-run-free -> 4)
+(define fh.remote-run-defects -> 7)
 
 \\ ---------- Erlang/OTP ----------
 

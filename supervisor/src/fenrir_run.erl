@@ -4,23 +4,25 @@
 %%   seeded  the next step is chosen among the enabled ones by a fixed
 %%           pseudo-random sequence, so one seed is one schedule.
 %%   free    the free-running policy: deliver at once, never drop or duplicate,
-%%           report timed-out (or peer-down, when the contract allows it) when a
-%%           caller has waited timeout_ms on the wall clock, restart a member
-%%           that is down, and record as a crash a member whose OS process is
-%%           found dead. This is the only mode in which time matters. For tests,
-%%           kill = [{Member, N}] kills that member's OS process from outside the
-%%           relay once N steps have been taken, and kill_in_act = [{Member, N}]
-%%           kills it inside its Nth act, after its durable commit and before
-%%           its reply.
+%%           report not-delivered (when the request does not count as handed
+%%           over) or else timed-out when a caller has waited timeout_ms on the
+%%           wall clock, restart a member that is down, and record as a crash a
+%%           member whose OS process is found dead. This is the only mode in
+%%           which time matters. The relay itself is not restarted in this mode.
+%%           For tests, kill = [{Member, N}] kills that member's OS process from
+%%           outside the relay once N steps have been taken, kill_in_act =
+%%           [{Member, N}] kills it inside its Nth act, after its durable commit
+%%           and before its reply, and lose = [[Caller, N]] makes the relay drop
+%%           the request of that caller's Nth attempt instead of handing it over.
 -module(fenrir_run).
 -export([run/1]).
 
 %% #{status, error} merged into the run report by fenrir_main.
 run(#{mode := list, steps := Steps}) -> list(Steps, 0);
 run(#{mode := seeded, seed := Seed, max_steps := Max}) -> seeded(Seed, Max);
-run(#{mode := free, timeout_ms := Timeout, deadline_ms := Deadline, kill := Kill, kill_in_act := InAct}) ->
+run(#{mode := free, timeout_ms := Timeout, deadline_ms := Deadline, kill := Kill, kill_in_act := InAct, lose := Lose}) ->
     [ok = fenrir_relay:arm_kill_in_act(Name, N) || {Name, N} <- InAct],
-    free(#{timeout => Timeout, deadline => erlang:monotonic_time(millisecond) + Deadline}, Kill, 0, #{}).
+    free(#{timeout => Timeout, deadline => erlang:monotonic_time(millisecond) + Deadline, lose => Lose}, Kill, 0, #{}).
 
 failed(Reason) -> #{status => <<"error">>, error => unicode:characters_to_binary(io_lib:format("~0p", [Reason]))}.
 
@@ -76,17 +78,19 @@ free(Options = #{timeout := Timeout, deadline := Deadline}, Kill, Taken, Since) 
         _ when Now >= Deadline -> #{status => <<"completed">>, stopped => <<"deadline">>};
         {ok, Enabled} ->
             Kind = fun(K) -> [L || L = [K1 | _] <- Enabled, K1 =:= K] end,
-            Forward = lists:append([Kind(K) || K <- [<<"restart">>, <<"issue">>, <<"refuse">>, <<"finish">>,
-                                                     <<"deliver-request">>, <<"act">>, <<"deliver-reply">>]]),
+            %% Test only: a request the relay is told to lose is dropped, not handed over.
+            Lost = [L || L = [<<"drop">>, <<"request">>, Tag] <- Enabled, lists:member(Tag, maps:get(lose, Options))],
+            Forward = Lost ++ lists:append([Kind(K) || K <- [<<"restart">>, <<"issue">>, <<"refuse">>, <<"finish">>,
+                                                             <<"deliver-request">>, <<"act">>, <<"deliver-reply">>]]),
             Waiting = Kind(<<"timeout">>),
             Since1 = maps:from_list([{W, maps:get(W, Since, Now)} || W <- Waiting]),
             Expired = [W || W <- Waiting, Now - maps:get(W, Since1) >= Timeout],
             Step = case {Forward, Expired} of
                        {[First | _], _} -> First;
                        {[], [[_, Tag] | _]} ->
-                           %% peer-down when the contract allows it for this attempt, timed-out otherwise.
-                           case lists:member([<<"peer-down">>, Tag], Enabled) of
-                               true -> [<<"peer-down">>, Tag];
+                           %% not-delivered when the request does not count as handed over, timed-out otherwise.
+                           case lists:member([<<"not-delivered">>, Tag], Enabled) of
+                               true -> [<<"not-delivered">>, Tag];
                                false -> [<<"timeout">>, Tag]
                            end;
                        {[], []} -> none

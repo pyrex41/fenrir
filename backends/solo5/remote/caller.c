@@ -11,7 +11,10 @@
  * they are: nothing of the continuation leaves the image.
  *
  *   perform(E, op, tuple(key, a))   key : I64, a : I64 in this version
- *   result: data RemoteResult = reply(I64) | peer_down | timed_out
+ *   result: data RemoteResult = reply((I64, I64)) | not_delivered | timed_out
+ * The field of reply is the operation's own result, (status, value): status 0
+ * is ok with the peer's value, status 1 is conflict (the key was applied with
+ * another argument) with value 0.
  *
  * Command line: "life=<milliseconds>". Console frames, in order:
  *   Hello; then Step (one machine sample), Remote (a request about to be sent)
@@ -29,8 +32,8 @@ const char fenrir_remote_decl[]="\n" REMOTE_DECL "\n";
 static struct pc_machine machine;
 static struct mailbox box;
 /* Outcome values live here, not in the machine's arena: the program may keep them. */
-static struct pc_value results[MAX_OUTCOMES],integers[MAX_OUTCOMES];
-static const struct pc_value *fields[MAX_OUTCOMES][1];
+static struct pc_value results[MAX_OUTCOMES],tuples[MAX_OUTCOMES],integers[MAX_OUTCOMES][2];
+static const struct pc_value *fields[MAX_OUTCOMES][1],*parts[MAX_OUTCOMES][2];
 static unsigned outcomes;
 
 static int same(const char *a,const char *b) {while(*a && *a==*b){a++;b++;}return *a==*b;}
@@ -48,15 +51,18 @@ static const char *remote_peer(const struct pc_machine *m,const struct pc_node *
     return 0;
 }
 static const struct pc_value *result_value(const struct frw_result *x) {
-    static const char *names[]={0,"reply","peer_down","timed_out"};
+    static const char *names[]={0,"reply","not_delivered","timed_out"};
     if(outcomes>=MAX_OUTCOMES)return 0;
     unsigned k=outcomes++;
-    struct pc_value *d=&results[k],*n=&integers[k];
-    memset(d,0,sizeof *d);memset(n,0,sizeof *n);
+    struct pc_value *d=&results[k],*t=&tuples[k],*n=integers[k];
+    memset(d,0,sizeof *d);memset(t,0,sizeof *t);memset(n,0,2*sizeof *n);
     d->tag=PV_DATA;d->text="RemoteResult";d->constructor=names[x->code];d->code=-1;
     if(x->code==FRW_REPLIED){
-        n->tag=PV_INT;n->integer=x->value;n->code=-1;
-        fields[k][0]=n;d->fields=fields[k];d->count=1;
+        n[0].tag=PV_INT;n[0].integer=(int64_t)x->status;n[0].code=-1;
+        n[1].tag=PV_INT;n[1].integer=x->value;n[1].code=-1;
+        parts[k][0]=&n[0];parts[k][1]=&n[1];
+        t->tag=PV_TUPLE;t->fields=parts[k];t->count=2;t->code=-1;
+        fields[k][0]=t;d->fields=fields[k];d->count=1;
     }
     return d;
 }
@@ -83,8 +89,11 @@ static int remote(const struct pc_node *site,const char *peer) {
     /* Exactly the outcome of the request this image is suspended in. */
     if(r.type!=FRW_OUTCOME || r.ref!=seq || !frw_get_result(&r,&result))return fault("malformed or unsolicited outcome",EXIT_MALFORMED);
     out_begin();out_text("{\"kind\":\"Outcome\",\"seq\":\"");out_natural(seq);out_text("\",\"outcome\":");
-    if(result.code==FRW_REPLIED){out_text("[\"reply\",[\"int\",\"");out_integer(result.value);out_text("\"]]");}
-    else out_text(result.code==FRW_PEER_DOWN?"[\"peer_down\"]":"[\"timed_out\"]");
+    if(result.code==FRW_REPLIED){
+        out_text("[\"reply\",[\"tuple\",[\"int\",\"");out_natural(result.status);out_text("\"],[\"int\",\"");
+        out_integer(result.value);out_text("\"]]]");
+    }
+    else out_text(result.code==FRW_NOT_DELIVERED?"[\"not_delivered\"]":"[\"timed_out\"]");
     out_text("}");frame_end();
     const struct pc_value *v=result_value(&result);
     if(!v)return fault("too many remote performs for this image",EXIT_MACHINE);
@@ -96,7 +105,7 @@ int solo5_app_main(const struct solo5_start_info *info) {
     uint64_t life;const char *rest;int e;
     if(!parse_life(info->cmdline,&life,&rest) || *rest)return EXIT_USAGE;
     if((e=mailbox_open(&box,life))!=1)return fault("cannot open the mailboxes",-e);
-    out_begin();out_text("{\"kind\":\"Hello\",\"role\":\"caller\",\"wire\":\"1\",\"incarnation\":\"");out_natural(box.incarnation);
+    out_begin();out_text("{\"kind\":\"Hello\",\"role\":\"caller\",\"wire\":\"2\",\"incarnation\":\"");out_natural(box.incarnation);
     out_text("\",\"program_sha256\":\"" PC_BATCH_SHA256 "\",\"connects\":[");
     for(unsigned i=0;i<remote_binding_count;i++){if(i)out_text(",");out_text("\"");out_text(remote_bindings[i].peer);out_text("\"");}
     out_text("]}");frame_end();

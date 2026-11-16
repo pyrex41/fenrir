@@ -1,6 +1,6 @@
 # TC1 gate: two remote rows added, and the gate registered
 
-15 November 2026 • Authority record
+15 November 2026 • Authority record • Amendment 1 of 16 November 2026 is at the end
 
 ## What changed
 
@@ -20,7 +20,9 @@ Manifest registered, SHA-256 of `spec/tc1/tc1-requirements.json`:
 8c3c087b0769eaa8382dc0eaf4b6b4e5c77e89dd907725058a0f42783a4528dd
 ```
 
-A manifest with another hash is not the one this record is about. The other
+That is the manifest as registered on 15 November 2026. Amendment 1 below
+replaces it, and gives the hash of the manifest this record is about now. A
+manifest with any other hash is not the one this record is about. The other
 nineteen rows, their required flags, ledger references, the earlier six
 claims, the claim prerequisites and the aggregation rule are as they were
 proposed.
@@ -185,3 +187,107 @@ registration: the TC0-A gate does not read the TC1 manifest, and the workflow's
 required checks do not include this one. The two remote rows can be removed
 from the manifest separately; that changes the manifest's hash, and this
 record then no longer describes it.
+
+## Amendment 1, 2026-11-16
+
+Everything above is the record as written on 15 November 2026 and is left as
+it was, except the two sentences that point here. Where it gives numbers for
+the two remote rows, or the manifest's hash, this amendment replaces them.
+
+### Basis
+
+In conversation on 16 November 2026 the owner (pyrex41) ruled on five of the
+open questions of EFFECTS.md §12.10 and instructed that the contract, the
+model, the implementation and the gate be brought into line with the rulings:
+
+- question 3: the supervisor may duplicate messages; the clause stays;
+- question 4: the outcome `peer_down` is renamed `not_delivered`, and it is
+  also allowed when the supervisor drops a request before hand-over while the
+  peer is up;
+- question 5: on a restart of the supervisor every request issued before the
+  restart counts as handed over; only `timed_out` or `reply` is possible for
+  it;
+- question 6: a restarted caller starts its program from the beginning and
+  keeps its durable store;
+- question 8: a key reused with a different argument is refused, inside
+  `reply`, as the service model's `Conflict`; the peer records a digest of
+  the argument with the reply record.
+
+Like the registration, this is **acceptance by instruction given in
+conversation, not line review**. The owner had not seen the changed row texts,
+the new counts, the property and defect names, the encoding of a conflict, or
+what this change decided a supervisor restart keeps and loses; they were
+written to carry the rulings out. Questions 7 and 9 were left open and were
+not touched.
+
+### What changed
+
+| | Registered on 15 November 2026 | After this amendment |
+| --- | --- | --- |
+| Contract | `spec/tc1/EFFECTS.md` draft 5 | Draft 6: five more rulings in §12.10; `not_delivered` (§12.4, §12.5); the supervisor's restart (§12.7); `conflict` inside `reply` (§12.2, §12.3) |
+| Row `remote-model`, required scope | 6 systems, 9 model mutants, 9 hand schedules | 8 systems, 11 model mutants, 14 hand schedules |
+| Row `remote-run`, required scope | 13 hand schedules, 40 seeded, 3 free-running; 5 defect switches | 19 hand schedules, 40 seeded, 4 free-running; 7 defect switches |
+| Row `remote-run`, what an accepted run is | Steps, properties, consoles and store as the model says | The same, and the run had one relay process more than the supervisor restarts it recorded; the store is compared record by record with the argument of each |
+| Properties of EFFECTS.md §12.8 | 8 | 9: `key-bound-to-argument` is new; `peer-down-not-handed` and `peer-down-sealed` are now `not-delivered-not-handed` and `not-delivered-sealed`, and the first no longer requires the peer to be down and does require that the request was not issued before a supervisor restart |
+| Budgets of a schedule | crashes, duplicates | crashes, duplicates, supervisor restarts |
+| Wire format between supervisor and images | Version 1 | Version 2: a status in a reply outcome, `conflict` as a third result of acting, the argument in a store record. The code of `not_delivered` is the one `peer_down` had |
+| The caller image's program | Key 7 (one retry), key 8 | The same, then key 7 again with another argument |
+| Manifest text | | The acceptance texts of the two rows, `contract`, `review` and `not_covered` |
+
+Not changed: the number of rows (21 required, 1 optional), their ids, checks,
+required flags and ledger references; the other nineteen rows' acceptance
+texts; the eight claims, their rows and prerequisites; the claims' evidence
+classes; the aggregation rule; the evaluator's rule for `registered`; the
+workflow configuration. No check was loosened: every condition the two rows
+had is still required, on more systems, schedules and defects.
+
+Manifest now, SHA-256 of `spec/tc1/tc1-requirements.json`:
+
+```text
+899fdedd01a044ed61a44be98ec39a94cb8c1e4609dc6ef1dba735c457c83c93
+```
+
+### What the two rows show now
+
+- **`remote-model`.** *Model-level bounded exploration.* The whole reachable
+  state graph of eight small systems (834,783 states, 3,931,593 transitions),
+  one of them with a supervisor restart in its budget and one performing a key
+  with two arguments, satisfies the nine properties; eleven model mutants are
+  each killed on the property they are aimed at; fourteen hand schedules pass;
+  a negative control fails as required.
+- **`remote-run`.** *Observed histories on `spt` accepted by the model.* 19
+  hand schedules, 40 seeded schedules (each with one crash, one duplicate and
+  one supervisor restart in its budget) and 4 free-running runs; seven defect
+  switches of the real system are each caught, among them a restarted
+  supervisor that reports `not_delivered` for a request the peer has applied,
+  and a peer image that replays its record for a key reused with another
+  argument; a negative control fails as required.
+
+### What they still do not show, and what is new among it
+
+Everything under "What it does not show" above stands. In addition:
+
+- **The supervisor's restart is a restart of one Erlang process.** The relay
+  process is killed and started again between two steps of a scheduled run,
+  while the guests keep running. What the contract says survives is held in
+  the memory of another process of the same Erlang VM, not on disk. A restart
+  inside a step, a restart in the free-running mode, and the loss of the VM or
+  the host are not exercised.
+- **The digest of an argument is the argument.** Arguments are I64. Nothing
+  here says anything about a peer that compares real digests.
+- **A conflict is a pair of integers.** No datatype crosses the image
+  boundary yet; the sum type the contract describes is not implemented.
+- **Three free-running runs depend on the wall clock**, not two.
+
+### Checked before this amendment
+
+On a scratch clone of the working tree with one snapshot commit, by direct
+runs, not controller runs:
+
+- `sh harness/run-tc1-gate.sh`: verdict PASS, 21 of 21 required rows; the
+  report says `authority: owner-accepted, registered` and
+  `qualification: PASS`.
+- `sh harness/run-gate.sh` (TC0-A, manifest untouched): verdict PASS, 15 of 15
+  required rows.
+
+There is still no qualification receipt from the workflow controller.

@@ -5,17 +5,28 @@
 %% This server is a step machine. Its steps are those of the model
 %% models/tc1/remote-system.shen, with the same labels: issue, refuse, finish,
 %% deliver-request, deliver-reply, discard-reply, drop, duplicate, act, timeout,
-%% peer-down, crash, crash-after-commit, restart. enabled/0 lists the steps that can be taken now;
+%% not-delivered, crash, crash-after-commit, restart, supervisor-restart.
+%% enabled/0 lists the steps that can be taken now;
 %% step/1 takes one and returns its label. Who chooses the next step (a schedule,
 %% a seeded choice, or the free-running policy with a clock) is fenrir_run's
 %% business. Every step taken is appended to the event log.
 %%
+%% supervisor-restart (EFFECTS.md §12.7) is this process being killed and started
+%% again by fenrir_sup while the member processes, and the guests, keep running.
+%% What the new process knows is what fenrir_journal holds: everything in the
+%% state below except `handed` (the record of hand-overs) and `net` (the
+%% messages in flight), which exist only in this process and die with it. The
+%% new process takes every request id in `issued` as handed over. Killed in any
+%% other way, the new process answers every call with an error.
+%%
 %% Defect switches, for the harness only (each breaks the contract on purpose):
-%%   peer-down-after-handover   peer-down offered although a copy was handed over
+%%   not-delivered-after-handover   not-delivered offered although a copy was handed over
 %%   late-reply-accepted        a reply for an attempt that timed out is given to the caller
 %%   relay-undeclared           requests are carried whatever the manifest says
-%% Two more are switches of the peer image, passed on its command line:
-%%   non-idempotent-peer, reply-before-commit (backends/solo5/remote/peer.c)
+%%   forgetful-supervisor-restart   after its restart the relay takes nothing as handed over
+%% Three more are switches of the peer image, passed on its command line:
+%%   non-idempotent-peer, reply-before-commit, replay-different-argument
+%%   (backends/solo5/remote/peer.c)
 -module(fenrir_relay).
 -behaviour(gen_server).
 -export([start_link/0, assemble/1, enabled/0, step/1, observe/0, inject_kill/1, arm_kill_in_act/2, report/0, shutdown/0]).
@@ -31,7 +42,32 @@ assemble(Spec) -> gen_server:call(?MODULE, {assemble, Spec}, 120000).
 %% {ok, [Label]} | {error, Reason}. Labels are in the model's order of step kinds.
 enabled() -> gen_server:call(?MODULE, enabled, 120000).
 %% {ok, Label} | {not_enabled, [Label]} | {error, Reason}
-step(Command) -> gen_server:call(?MODULE, {step, Command}, 120000).
+step(Command) ->
+    case gen_server:call(?MODULE, {step, Command}, 120000) of
+        {restart, Label} ->
+            %% The step is logged and journalled. Now it happens: this relay
+            %% process is killed, and its supervisor starts another.
+            ok = restart_relay(),
+            {ok, Label};
+        Other -> Other
+    end.
+
+restart_relay() ->
+    Old = whereis(?MODULE),
+    Ref = erlang:monitor(process, Old),
+    exit(Old, kill),
+    receive {'DOWN', Ref, process, Old, _} -> ok after 5000 -> exit(relay_did_not_die) end,
+    await_relay(Old, erlang:monotonic_time(millisecond) + 5000).
+
+await_relay(Old, Deadline) ->
+    case whereis(?MODULE) of
+        Pid when is_pid(Pid), Pid =/= Old -> gen_server:call(?MODULE, ready, 120000);
+        _ ->
+            case erlang:monotonic_time(millisecond) >= Deadline of
+                true -> exit(relay_not_restarted);
+                false -> timer:sleep(1), await_relay(Old, Deadline)
+            end
+    end.
 %% Free-running mode only: notice members whose OS process has died without the
 %% supervisor killing it, and record each as a crash. {ok, [Name]}.
 observe() -> gen_server:call(?MODULE, observe, 120000).
@@ -45,19 +81,41 @@ arm_kill_in_act(Name, N) -> gen_server:call(?MODULE, {arm_kill_in_act, Name, N},
 report() -> gen_server:call(?MODULE, report, 120000).
 shutdown() -> gen_server:call(?MODULE, shutdown, 120000).
 
-init([]) -> {ok, #{assembled => false}}.
+init([]) ->
+    case fenrir_journal:take() of
+        none -> {ok, #{assembled => false}};
+        {S = #{assembled := true}, true} ->
+            %% Restarted by a supervisor-restart step. The hand-over record and
+            %% the messages in flight are gone. Every request id issued so far
+            %% counts as handed over from here on.
+            Handed = case defect(<<"forgetful-supervisor-restart">>, S) of
+                         true -> [];
+                         false -> maps:get(issued, S)
+                     end,
+            {ok, S#{handed => Handed, net => [], incarnations := maps:get(incarnations, S) + 1}};
+        {S, _} -> {ok, S#{broken => true}}
+    end.
 
-handle_call({assemble, Spec}, _From, #{assembled := false}) ->
+%% Every call ends with the state, less what a restart loses, in the journal.
+handle_call(ready, _From, S) -> {reply, ok, S};
+handle_call(_, _From, S = #{broken := true}) -> {reply, {error, relay_died_outside_a_step}, S};
+handle_call(Request, From, S0) ->
+    {reply, Reply, S} = call(Request, From, S0),
+    Planned = case Reply of {restart, _} -> true; _ -> false end,
+    ok = fenrir_journal:put(maps:without([handed, net], S), Planned),
+    {reply, Reply, S}.
+
+call({assemble, Spec}, _From, #{assembled := false}) ->
     case assemble_system(Spec) of
         {ok, S} -> {reply, ok, S};
         {Other, S} -> {reply, Other, S}
     end;
-handle_call(enabled, _From, S0) ->
+call(enabled, _From, S0) ->
     case settle(S0) of
         {ok, S} -> {reply, {ok, [label(E) || E <- enabled_steps(S)]}, S};
         {Error, S} -> {reply, Error, S}
     end;
-handle_call({step, Command}, _From, S0) ->
+call({step, Command}, _From, S0) ->
     case settle(S0) of
         {ok, S1} ->
             Enabled = enabled_steps(S1),
@@ -73,12 +131,15 @@ handle_call({step, Command}, _From, S0) ->
                             Seen = #{label => Label, enabled => [label(E) || E <- Enabled]},
                             After = #{label => Then, enabled => <<"unobserved">>},
                             {reply, {ok, Label}, S2#{log := [After, Seen | maps:get(log, S2)]}};
+                        {restart, Label, S2} ->
+                            Seen = #{label => Label, enabled => [label(E) || E <- Enabled]},
+                            {reply, {restart, Label}, S2#{log := [Seen | maps:get(log, S2)]}};
                         {error, Reason, S2} -> {reply, {error, Reason}, S2}
                     end
             end;
         {Error, S1} -> {reply, Error, S1}
     end;
-handle_call(observe, _From, S = #{assembled := true, order := Order}) ->
+call(observe, _From, S = #{assembled := true, order := Order}) ->
     Dead = [Name || Name <- Order, died(Name, S)],
     S1 = lists:foldl(
            fun(Name, Acc) ->
@@ -88,11 +149,11 @@ handle_call(observe, _From, S = #{assembled := true, order := Order}) ->
                    Acc1#{log := [#{label => Label, enabled => <<"unobserved">>} | maps:get(log, Acc1)]}
            end, S, Dead),
     {reply, {ok, Dead}, S1};
-handle_call({inject_kill, Name}, _From, S) ->
+call({inject_kill, Name}, _From, S) ->
     {reply, fenrir_member:kill(pid(Name, S)), S};
-handle_call({arm_kill_in_act, Name, N}, _From, S) ->
+call({arm_kill_in_act, Name, N}, _From, S) ->
     {reply, ok, S#{kill_in_act := [{Name, N} | maps:get(kill_in_act, S)]}};
-handle_call(report, _From, S0) ->
+call(report, _From, S0) ->
     %% Let every image reach its next scheduling point, so that its console is complete.
     {Settled, S} = settle(S0),
     Enabled = case Settled of ok -> [label(E) || E <- enabled_steps(S)]; _ -> [] end,
@@ -102,8 +163,10 @@ handle_call(report, _From, S0) ->
               enabled_at_end => Enabled,
               settled => Settled =:= ok,
               refusals => maps:get(refusals, S, []),
-              declared => maps:get(declared, S, [])}, S};
-handle_call(shutdown, _From, S) ->
+              declared => maps:get(declared, S, []),
+              %% How many relay processes this run has had: one, and one more per supervisor-restart.
+              supervisor_incarnations => integer_to_binary(maps:get(incarnations, S, 1))}, S};
+call(shutdown, _From, S) ->
     Members = maps:get(pids, S, #{}),
     [fenrir_member:kill(Pid) || Pid <- maps:values(Members)],
     Order = maps:get(order, S, []),
@@ -123,10 +186,14 @@ exit_text(N) -> integer_to_binary(N).
 store_report(_, none) -> none;
 store_report(Name, #{applications := A, records := Records}) ->
     #{member => Name, applications => integer_to_binary(A),
-      records => [[Caller, integer_to_binary(Key), value(Value)] || {Caller, Key, Value} <- Records]};
+      records => [[Caller, integer_to_binary(Key), int(Argument), int(Value)] || {Caller, Key, Argument, Value} <- Records]};
 store_report(Name, Other) -> #{member => Name, error => atom_to_binary(Other)}.
 
-value(N) -> [<<"int">>, integer_to_binary(N)].
+int(N) -> [<<"int">>, integer_to_binary(N)].
+
+%% A reply value, as the caller's program sees it: (status, value).
+value({ok, N}) -> [<<"tuple">>, int(0), int(N)];
+value(conflict) -> [<<"tuple">>, int(1), int(0)].
 
 %% ---------- assembling the system ----------
 
@@ -175,9 +242,10 @@ assemble_system(Spec = #{members := Members, connections := Edges}) ->
 start_members(Spec = #{members := Members, connections := Edges, defects := Defects}, Base) ->
     Has = fun(Defect) -> lists:member(Defect, Defects) end,
     Options = fun(peer) ->
-                      case {Has(<<"non-idempotent-peer">>), Has(<<"reply-before-commit">>)} of
-                          {true, _} -> " non-idempotent";
-                          {_, true} -> " reply-before-commit";
+                      case {Has(<<"non-idempotent-peer">>), Has(<<"reply-before-commit">>), Has(<<"replay-different-argument">>)} of
+                          {true, _, _} -> " non-idempotent";
+                          {_, true, _} -> " reply-before-commit";
+                          {_, _, true} -> " replay-different-argument";
                           _ -> ""
                       end;
                  (caller) -> ""
@@ -193,9 +261,9 @@ start_members(Spec = #{members := Members, connections := Edges, defects := Defe
     S = Base#{assembled := true, pids => Pids, order => Order, edges => Edges, defects => Defects,
               kinds => maps:from_list([{maps:get(name, M), maps:get(kind, M)} || M <- Members]),
               members => maps:from_list([{N, #{status => down, pending => none, inbox => [], next => idle}} || N <- Order]),
-              net => [], handed => [], tags => maps:from_list([{N, 1} || N <- Order]), attempts => #{},
-              budget => {maps:get(crashes, Spec), maps:get(duplicates, Spec)}, log => [],
-              acts => #{}, kill_in_act => []},
+              net => [], handed => [], issued => [], tags => maps:from_list([{N, 1} || N <- Order]), attempts => #{},
+              budget => {maps:get(crashes, Spec), maps:get(duplicates, Spec), maps:get(supervisor_restarts, Spec)}, log => [],
+              acts => #{}, kill_in_act => [], incarnations => 1},
     boot_all(Order, S).
 
 boot_all([], S) -> {ok, S};
@@ -245,7 +313,7 @@ settle([Name | Names], S = #{members := Members, pids := Pids}) ->
 
 defect(Name, #{defects := Defects}) -> lists:member(Name, Defects).
 
-enabled_steps(S = #{order := Order, members := Members, net := Net, budget := {Crashes, Duplicates}}) ->
+enabled_steps(S = #{order := Order, members := Members, net := Net, budget := {Crashes, Duplicates, Restarts}}) ->
     Up = fun(Name) -> case Members of #{Name := #{status := up}} -> true; _ -> false end end,
     Down = fun(Name) -> case Members of #{Name := #{status := down}} -> true; _ -> false end end,
     Program = lists:append(
@@ -274,10 +342,11 @@ enabled_steps(S = #{order := Order, members := Members, net := Net, budget := {C
     Waiting = lists:append(
       [case maps:get(Name, Members) of
            #{status := up, pending := {Tag, Peer, Rid, _}} ->
+               %% not-delivered: only for a request id that does not count as
+               %% handed over. Whether the peer is up or down does not matter.
                [{timeout, Tag}] ++
-               [{peer_down, Tag} || Down(Peer),
-                                    defect(<<"peer-down-after-handover">>, S)
-                                        orelse not lists:member({Name, Peer, Rid}, maps:get(handed, S))];
+               [{not_delivered, Tag} || defect(<<"not-delivered-after-handover">>, S)
+                                            orelse not lists:member({Name, Peer, Rid}, maps:get(handed, S))];
            _ -> []
        end || Name <- Order]),
     Crash = [{crash, Name} || Name <- Order, Up(Name), Crashes > 0],
@@ -286,13 +355,13 @@ enabled_steps(S = #{order := Order, members := Members, net := Net, budget := {C
     CommitCrash = [{crash_after_commit, Name, Tag}
                    || Crashes > 0, {act, Name, Tag} <- Act, not recorded(Name, hd(maps:get(inbox, maps:get(Name, Members))), S)],
     Restart = [{restart, Name} || Name <- Order, Down(Name)],
-    Program ++ Link ++ Act ++ Waiting ++ Crash ++ CommitCrash ++ Restart.
+    Program ++ Link ++ Act ++ Waiting ++ Crash ++ CommitCrash ++ Restart ++ [{supervisor_restart} || Restarts > 0].
 
 %% Whether the peer's durable store has a reply record for the request id of an
 %% inbox entry. The store is on the host side and is the only place that says so.
 recorded(Name, {_, Caller, Rid, _, _}, S) ->
     case fenrir_member:store(pid(Name, S)) of
-        #{records := Records} -> lists:any(fun({C, K, _}) -> C =:= Caller andalso integer_to_binary(K) =:= Rid end, Records);
+        #{records := Records} -> lists:any(fun({C, K, _, _}) -> C =:= Caller andalso integer_to_binary(K) =:= Rid end, Records);
         _ -> false
     end.
 
@@ -316,10 +385,11 @@ label({drop, Message}) -> [<<"drop">> | message_label(Message)];
 label({duplicate, Message}) -> [<<"duplicate">> | message_label(Message)];
 label({act, Name, Tag}) -> [<<"act">>, Name, tag(Tag)];
 label({timeout, Tag}) -> [<<"timeout">>, tag(Tag)];
-label({peer_down, Tag}) -> [<<"peer-down">>, tag(Tag)];
+label({not_delivered, Tag}) -> [<<"not-delivered">>, tag(Tag)];
 label({crash, Name}) -> [<<"crash">>, Name];
 label({crash_after_commit, Name, Tag}) -> [<<"crash-after-commit">>, Name, tag(Tag)];
-label({restart, Name}) -> [<<"restart">>, Name].
+label({restart, Name}) -> [<<"restart">>, Name];
+label({supervisor_restart}) -> [<<"supervisor-restart">>].
 
 %% A command names a step by its label or by a prefix of it; an act may carry
 %% the expected applied/replayed, and discard-reply names the same step as
@@ -335,7 +405,7 @@ pid(Name, #{pids := Pids}) -> maps:get(Name, Pids).
 
 %% Give the caller the one outcome of the perform it is suspended in.
 outcome(Name, Seq, Code, Value, S) ->
-    case fenrir_member:put(pid(Name, S), outcome, Seq, fenrir_wire:result_payload(Code, Value), grant) of
+    case fenrir_member:put(pid(Name, S), outcome, Seq, fenrir_wire:outcome_payload(Code, Value), grant) of
         {ok, _} -> ok;
         {error, Reason} -> {error, {outcome, Name, Reason}}
     end.
@@ -351,12 +421,13 @@ take_step({issue, Name, Peer, Rid}, S = #{tags := Tags, net := Net, attempts := 
     S1 = set_member(Name, M#{pending := {Tag, Peer, Rid, Seq}, next := waiting}, S),
     {ok, label({issue, Name, Peer, Rid}),
      S1#{tags := Tags#{Name := N + 1}, net := lists:sort([{req, Tag, Name, Peer, Rid, Argument} | Net]),
+         issued := lists:usort([{Name, Peer, Rid} | maps:get(issued, S)]),
          attempts := Attempts#{Tag => {open, Seq}}}};
 take_step({refuse, Name, Peer, Rid}, S = #{tags := Tags, attempts := Attempts}) ->
     %% The backstop behind the start-time check: nothing is put in flight.
     M = #{next := {request, Peer, Rid, _, Seq}} = member(Name, S),
     N = maps:get(Name, Tags),
-    case outcome(Name, Seq, peer_down, 0, S) of
+    case outcome(Name, Seq, not_delivered, none, S) of
         ok ->
             S1 = set_member(Name, M#{pending := none, next := unknown}, S),
             {ok, label({refuse, Name, Peer, Rid}), S1#{tags := Tags#{Name := N + 1}, attempts := Attempts#{{Name, N} => closed}}};
@@ -399,11 +470,12 @@ take_step({deliver, Message = {rep, Tag = {Caller, _}, Caller, _, _, Value}}, S 
     end;
 take_step({drop, Message}, S = #{net := Net}) ->
     {ok, label({drop, Message}), S#{net := Net -- [Message]}};
-take_step({duplicate, Message}, S = #{net := Net, budget := {Crashes, Duplicates}}) ->
-    {ok, label({duplicate, Message}), S#{net := lists:sort([Message | Net]), budget := {Crashes, Duplicates - 1}}};
+take_step({duplicate, Message}, S = #{net := Net, budget := {Crashes, Duplicates, Restarts}}) ->
+    {ok, label({duplicate, Message}), S#{net := lists:sort([Message | Net]), budget := {Crashes, Duplicates - 1, Restarts}}};
 take_step({act, Name, Tag}, S0 = #{net := Net, acts := Acts, kill_in_act := Armed}) ->
     %% The peer image is let run on the oldest request in its inbox. Its reply
-    %% record says whether it applied the request or replayed a recorded reply.
+    %% record says whether it applied the request, replayed a recorded reply, or
+    %% refused a key it has applied with another argument (conflict).
     M = #{inbox := [Entry = {Tag, Caller, Rid, _, Seq} | Inbox]} = member(Name, S0),
     Pid = pid(Name, S0),
     Nth = maps:get(Name, Acts, 0) + 1,
@@ -439,25 +511,25 @@ take_step({act, Name, Tag}, S0 = #{net := Net, acts := Acts, kill_in_act := Arme
     end;
 take_step({timeout, Tag = {Name, _}}, S) ->
     #{pending := {Tag, _, _, Seq}} = member(Name, S),
-    case outcome(Name, Seq, timed_out, 0, S) of
+    case outcome(Name, Seq, timed_out, none, S) of
         ok -> {ok, label({timeout, Tag}), resolved(Name, Tag, {timed_out, Seq}, S)};
         {error, Reason} -> {error, Reason, S}
     end;
-take_step({peer_down, Tag = {Name, _}}, S = #{net := Net}) ->
-    %% Enabled only while the peer is down and no copy of this request id was
-    %% ever handed to it. Every copy still held, of every attempt, is destroyed.
+take_step({not_delivered, Tag = {Name, _}}, S = #{net := Net}) ->
+    %% Enabled only for a request id that does not count as handed over. Every
+    %% copy still held, of every attempt, is destroyed before the report.
     #{pending := {Tag, Peer, Rid, Seq}} = member(Name, S),
     Kept = [M || M <- Net, not is_request_for(M, Name, Peer, Rid)],
-    case outcome(Name, Seq, peer_down, 0, S) of
-        ok -> {ok, label({peer_down, Tag}), resolved(Name, Tag, closed, S#{net := Kept})};
+    case outcome(Name, Seq, not_delivered, none, S) of
+        ok -> {ok, label({not_delivered, Tag}), resolved(Name, Tag, closed, S#{net := Kept})};
         {error, Reason} -> {error, Reason, S}
     end;
-take_step({crash, Name}, S = #{budget := {Crashes, Duplicates}}) ->
+take_step({crash, Name}, S = #{budget := {Crashes, Duplicates, Restarts}}) ->
     case fenrir_member:kill(pid(Name, S)) of
-        ok -> crashed(Name, S#{budget := {Crashes - 1, Duplicates}});
+        ok -> crashed(Name, S#{budget := {Crashes - 1, Duplicates, Restarts}});
         {error, Reason} -> {error, {crash, Name, Reason}, S}
     end;
-take_step({crash_after_commit, Name, Tag}, S = #{net := Net, budget := {Crashes, Duplicates}}) ->
+take_step({crash_after_commit, Name, Tag}, S = #{net := Net, budget := {Crashes, Duplicates, Restarts}}) ->
     %% The peer is let run on the oldest request in its inbox, told to stop
     %% before it replies. When its store shows the commit, it is killed.
     M = #{inbox := [Entry = {Tag, Caller, Rid, _, Seq} | Inbox]} = member(Name, S),
@@ -465,7 +537,7 @@ take_step({crash_after_commit, Name, Tag}, S = #{net := Net, budget := {Crashes,
     ok = fenrir_member:grant_hold(Pid),
     Seen = await_commit(Name, Entry, S, erlang:monotonic_time(millisecond) + ?SETTLE_MS),
     Killed = fenrir_member:kill(Pid),
-    Spent = S#{budget := {Crashes - 1, Duplicates}},
+    Spent = S#{budget := {Crashes - 1, Duplicates, Restarts}},
     case {Seen, Killed} of
         {committed, ok} ->
             {ok, _, S1} = crashed(Name, Spent),
@@ -487,7 +559,11 @@ take_step({restart, Name}, S) ->
     case boot(Name, S) of
         {ok, S1} -> {ok, label({restart, Name}), S1};
         {error, Reason} -> {error, Reason, S}
-    end.
+    end;
+take_step({supervisor_restart}, S = #{budget := {Crashes, Duplicates, Restarts}}) ->
+    %% Nothing is done here but the bookkeeping: step/1 kills this process once
+    %% the step is in the log and the journal, and init/1 of the next one does the rest.
+    {restart, label({supervisor_restart}), S#{budget := {Crashes, Duplicates, Restarts - 1}}}.
 
 %% Wait for the peer's store to show a reply record for the request id of the
 %% inbox entry: committed. A peer that sends a record first has not committed:

@@ -55,7 +55,7 @@ export function buildRemote(tools,dir) {
   writeFileSync(resolve(dir,'program.json'),JSON.stringify(artifact)+'\n');
   const info={caller,peer,tender:tools.tender,abi:tools.abi,tender_sha256:tools.tender_sha256,solo5_commit:SOLO5_COMMIT,
     solo5_source:tools.solo5_source,solo5_path:tools.solo5_path,program:resolve(dir,'program.json'),program_sha256:lowered.batch_sha256,
-    bindings,caller_sha256:sha(readFileSync(caller)),peer_sha256:sha(readFileSync(peer)),wire_version:'1'};
+    bindings,caller_sha256:sha(readFileSync(caller)),peer_sha256:sha(readFileSync(peer)),wire_version:'2'};
   writeFileSync(resolve(dir,'build.json'),JSON.stringify(info)+'\n');
   return info;
 }

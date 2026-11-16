@@ -113,6 +113,37 @@ test('the remote rows, the manifest and the checks state the same scope', () => 
   assert.ok(readFileSync('harness/run-tc1-remote-run.sh','utf8').includes('harness/find-erlang.sh')&&rows.includes('harness/find-erlang.sh'));
 });
 
+test('the registration record carries its amendment, and the remote checks agree on names, properties and the wire version', () => {
+  const record=readFileSync('campaigns/tc1/TC1_GATE_REGISTRATION.md','utf8'),amendment=record.slice(record.indexOf('## Amendment 1, 2026-11-16'));
+  // The amendment is at the end, is by instruction and not by line review, and is the part that names the manifest as it is now.
+  assert.ok(record.includes('## Amendment 1, 2026-11-16')&&/given in\s+conversation, not line review/.test(amendment));
+  assert.ok(amendment.includes(createHash('sha256').update(readFileSync('spec/tc1/tc1-requirements.json')).digest('hex')));
+  assert.match(manifest.review,/Amended on 2026-11-16/);
+  assert.match(manifest.contract,/draft 6/);
+  assert.match(readFileSync('spec/tc1/EFFECTS.md','utf8'),/^Draft 6 /m);
+  // The outcome renamed on 16 November 2026 is not left under its old name in anything that runs.
+  const sources=['models/tc1/remote-system.shen','models/tc1/remote-tc1-caller.shen','harness/tc1-remote.shen','harness/tc1-remote-properties.shen',
+    'harness/tc1-remote-run.shen','harness/tc1-remote-rows.shen','supervisor/src/fenrir_relay.erl','supervisor/src/fenrir_run.erl','supervisor/src/fenrir_main.erl',
+    'supervisor/src/fenrir_wire.erl','backends/solo5/remote/caller.c','backends/solo5/remote/peer.c','backends/solo5/remote/wire.c','fixtures/tc1/remote-caller.mjs'];
+  for(const file of sources)assert.ok(!/peer[-_]down/i.test(readFileSync(file,'utf8')),file);
+  // Both checks report the same properties, and every model mutant is aimed at one of them.
+  const model=readFileSync('harness/tc1-remote.shen','utf8'),run=readFileSync('harness/tc1-remote-run.shen','utf8');
+  const properties=source=>source.match(/\["properties" \[([^\]]*)\]\]/)[1].match(/"[a-z-]+"/g);
+  assert.deepEqual(properties(model),properties(run));
+  assert.equal(properties(model).length,9);
+  const aimed=model.slice(model.indexOf('(define fr.mutants'),model.indexOf('(define fr.aimed')).match(/"[a-z-]+"\]/g).map(s=>s.slice(0,-1));
+  for(const property of aimed)assert.ok(properties(model).includes(property),property);
+  // Every defect switch the run check uses is one the supervisor accepts.
+  const known=readFileSync('supervisor/src/fenrir_main.erl','utf8').match(/Known = \[([^\]]*)\]/s)[1].match(/[a-z-]+(?=">>)/g);
+  const used=run.slice(run.indexOf('(define fx.defects'),run.indexOf('(define fx.command\n')).match(/^ +\[?\["[a-z0-9-]+"/gm).map(s=>s.match(/"([a-z0-9-]+)"/)[1]);
+  assert.deepEqual([...used].sort(),[...known].sort());
+  // One wire version: the C side, the Erlang side, the build and the images' greeting.
+  const version=readFileSync('backends/solo5/remote/wire.h','utf8').match(/#define FRW_VERSION (\d+)u/)[1];
+  assert.equal(readFileSync('supervisor/src/fenrir_wire.erl','utf8').match(/-define\(VERSION, (\d+)\)\./)[1],version);
+  assert.ok(readFileSync('tools/solo5/remote-build.mjs','utf8').includes(`wire_version:'${version}'`));
+  for(const image of ['caller','peer'])assert.ok(readFileSync(`backends/solo5/remote/${image}.c`,'utf8').includes(`\\"wire\\":\\"${version}\\"`),image);
+});
+
 test('the TC0-A manifest no longer carries the TC1 rows, and its evaluator no longer checks them', () => {
   const tc0=json('spec/tc0/tc0-a-requirements.json');
   assert.ok(!tc0.rows.some(r=>/tc1/.test(r.id)||/tc1/.test(r.check)));

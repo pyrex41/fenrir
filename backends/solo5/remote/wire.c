@@ -1,5 +1,5 @@
 /* ISC: freely use/copy/modify/distribute; AS IS without warranty or liability.
- * Wire format version 1: encoding and strict decoding. See wire.h. No I/O. */
+ * Wire format version 2: encoding and strict decoding. See wire.h. No I/O. */
 #include "wire.h"
 static void put16(uint8_t *p,uint16_t v) {p[0]=(uint8_t)v;p[1]=(uint8_t)(v>>8);}
 static void put32(uint8_t *p,uint32_t v) {for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(v>>(8*i));}
@@ -92,22 +92,38 @@ void frw_put_call(const struct frw_call *c,struct frw_record *r,uint16_t type) {
     r->type=type;r->ref=0;r->length=32;
 }
 int frw_get_call(const struct frw_record *r,struct frw_call *c) {
-    if((r->type!=FRW_REQUEST && r->type!=FRW_DELIVER && r->type!=FRW_STORED) || r->ref || r->length!=32)return 0;
+    if((r->type!=FRW_REQUEST && r->type!=FRW_DELIVER) || r->ref || r->length!=32)return 0;
     for(unsigned i=0;i<FRW_NAME;i++)c->name[i]=(char)r->payload[i];
     c->key=(int64_t)get64(r->payload+16);c->value=(int64_t)get64(r->payload+24);
     return frw_name_ok(c->name);
 }
+void frw_put_stored(const struct frw_stored *c,struct frw_record *r) {
+    for(unsigned i=0;i<FRW_PAYLOAD_MAX;i++)r->payload[i]=0;
+    for(unsigned i=0;i<FRW_NAME;i++)r->payload[i]=(uint8_t)c->name[i];
+    put64(r->payload+16,(uint64_t)c->key);put64(r->payload+24,(uint64_t)c->argument);put64(r->payload+32,(uint64_t)c->value);
+    r->type=FRW_STORED;r->ref=0;r->length=40;
+}
+int frw_get_stored(const struct frw_record *r,struct frw_stored *c) {
+    if(r->type!=FRW_STORED || r->ref || r->length!=40)return 0;
+    for(unsigned i=0;i<FRW_NAME;i++)c->name[i]=(char)r->payload[i];
+    c->key=(int64_t)get64(r->payload+16);c->argument=(int64_t)get64(r->payload+24);c->value=(int64_t)get64(r->payload+32);
+    return frw_name_ok(c->name);
+}
 void frw_put_result(const struct frw_result *x,struct frw_record *r,uint16_t type) {
     for(unsigned i=0;i<FRW_PAYLOAD_MAX;i++)r->payload[i]=0;
-    put32(r->payload,x->code);put64(r->payload+8,(uint64_t)x->value);
+    put32(r->payload,x->code);put32(r->payload+4,x->status);put64(r->payload+8,(uint64_t)x->value);
     r->type=type;r->length=16;
 }
 int frw_get_result(const struct frw_record *r,struct frw_result *x) {
-    if((r->type!=FRW_OUTCOME && r->type!=FRW_REPLY) || !r->ref || r->length!=16 || get32(r->payload+4))return 0;
-    x->code=get32(r->payload);x->value=(int64_t)get64(r->payload+8);
+    if((r->type!=FRW_OUTCOME && r->type!=FRW_REPLY) || !r->ref || r->length!=16)return 0;
+    x->code=get32(r->payload);x->status=get32(r->payload+4);x->value=(int64_t)get64(r->payload+8);
     if(r->type==FRW_OUTCOME){
         if(x->code<FRW_REPLIED || x->code>FRW_TIMED_OUT)return 0;
-        if(x->code!=FRW_REPLIED && x->value)return 0;
-    } else if(x->code!=FRW_APPLIED && x->code!=FRW_REPLAYED)return 0;
+        if(x->code!=FRW_REPLIED && (x->value || x->status))return 0;
+        if(x->status!=FRW_OK && (x->status!=FRW_KEY_CONFLICT || x->value))return 0;
+    } else {
+        if(x->status || x->code<FRW_APPLIED || x->code>FRW_CONFLICT)return 0;
+        if(x->code==FRW_CONFLICT && x->value)return 0;
+    }
     return 1;
 }

@@ -1,6 +1,6 @@
 # TC1 effect contract
 
-Draft 5 • 15 November 2026 • For owner review
+Draft 6 • 16 November 2026 • For owner review
 
 **Status.** Written together with its implementation, at the owner's request,
 so the text and the behaviour can be reviewed side by side. Both slices are
@@ -16,7 +16,11 @@ checked by bounded exploration, and a first implementation. Draft 5 records
 the owner's rulings of 15 November 2026 on questions 1, 2 and 10 of §12.10,
 specifies a peer's crash between its durable commit and its reply (§12.3,
 §12.7), and records that the TC1 gate has two rows for §12 and is registered
-(§9, §12.8, §12.11).
+(§9, §12.8, §12.11). Draft 6 records the owner's rulings of 16 November 2026
+on questions 3, 4, 5, 6 and 8 of §12.10: the outcome `peer_down` is renamed
+`not_delivered` and may be reported while the peer is up (§12.4); a restart
+of the supervisor is a step of the contract (§12.7); and a key reused with
+another argument is refused as `conflict`, inside `reply` (§12.2, §12.3).
 
 Owner decisions of 14 November 2026 are folded in: a clause may continue after
 `resume` returns (§7); performs of user effects are not observations (§5);
@@ -265,7 +269,9 @@ gate registered, the manifest's status is `owner-accepted`, and the workflow
 configuration has the check `tc1-qualification`. That was acceptance by
 instruction, not a line-by-line review;
 [the registration record](../../campaigns/tc1/TC1_GATE_REGISTRATION.md) says
-what was registered, what the gate does not show, and how to revoke it. The
+what was registered, what the gate does not show, and how to revoke it; its
+Amendment 1 of 16 November 2026 records the changed scope of the two remote
+rows and the manifest's new hash. The
 report now says `authority: owner-accepted, registered` and its
 `qualification` is its verdict. On a committed tree it gives verdict PASS on
 21 of 21 required rows. No run through the workflow controller on a supported
@@ -309,6 +315,10 @@ not by line review:
 6. The two checks of remote perform are rows of the TC1 gate, and the gate is
    registered (§9).
 
+Settled by the owner on 16 November 2026, in the same way:
+
+7. Questions 3, 4, 5, 6 and 8 of §12.10, as stated there.
+
 Open:
 
 1. When to lift the serializable restriction, and what a closure passed
@@ -331,9 +341,11 @@ because the implementation forced the question. The owner's decisions of 15 Nove
 crosses an image boundary; a static, declared topology. Later the same day
 the owner ruled on three of the choices this section had made beyond them:
 refusal of undeclared connections, who chooses the key, and a peer killed
-between its commit and its reply. Those are marked in §12.10; the other
-choices listed there are still open. Both checks of this section are rows of
-the TC1 gate (§9).
+between its commit and its reply. On 16 November 2026 the owner ruled on five
+more: duplicates, the outcome now called `not_delivered`, a restart of the
+supervisor, a restarted caller, and a key reused with another argument. All
+are marked in §12.10; questions 7 and 9 there are still open. Both checks of
+this section are rows of the TC1 gate (§9).
 
 ### 12.1 Systems
 
@@ -348,6 +360,9 @@ A member is *up* or *down*, and has
 - a *durable* store, held on the host side (amendment §8), which survives a
   crash.
 
+The supervisor has state of its own: the messages in flight, and a record of
+which request ids it has handed over. It can restart and lose both (§12.7).
+
 ### 12.2 The operation
 
 A remote operation is an operation of an effect that the image's build binds
@@ -356,10 +371,19 @@ is not replaceable by one. For `op : A -> B` on the peer, the caller writes
 
 ```text
 perform(E, op, (key, a))        key : I64, a : A        result : RemoteResult B
-RemoteResult B ::= reply(B) | peer_down | timed_out
+RemoteResult B ::= reply(B) | not_delivered | timed_out
 ```
 
 - A and B are serializable (§1), so `RemoteResult B` is.
+- **What the peer says is inside `reply`.** B is the operation's own result,
+  and it is where a peer refuses a key reused with another argument (§12.3).
+  That refusal is a value of the application, not a fourth outcome of the
+  transport (owner ruling, §12.10 question 8). In this slice the values that
+  cross are I64, so B is the pair `(status, value)`: `(0, v)` is *ok* with the
+  operation's value `v`, and `(1, 0)` is *conflict*. Below, `reply(ok v)` and
+  `reply(conflict)` stand for these. Once datatypes cross the boundary the
+  pair becomes a sum declared with the effect, `op : A -> Applied B'` with
+  `Applied B' ::= ok(B') | conflict`, and nothing else changes.
 - The perform always returns, with exactly one of the three. A failure is a
   value. It is never a trap and never a resumption that does not happen.
 - **No continuation crosses the boundary.** The suspended segment stays in the
@@ -376,35 +400,61 @@ One execution of a perform is an *attempt*; the supervisor gives each attempt
 a tag that is never used again. Performing again with the same key is a new
 attempt for the same request id; that is what a retry is.
 
-- **Caller obligation.** A key stands for one operation and one argument. What
-  a peer does with a key reused for a different argument is not specified.
-- **Peer obligation: idempotent per request id.** Acting on a request has two
-  parts, in this order. First the *commit*, one atomic durable step: if the
-  request id has a reply record, nothing changes; otherwise the request is
-  applied and its reply recorded, together. Then the *reply*: the recorded
-  value is sent. The record is durable, so this holds across the peer's
-  restarts. The obligation covers every way a request can arrive twice: a copy
-  duplicated by the supervisor, a retry after `timed_out`, and a caller that
-  restarted and performs again.
-- **Commit before reply.** A peer never sends a reply for which it has no
-  durable record. A crash can fall between the two parts (§12.7): the request
-  is then applied and recorded, and no reply for it exists. Whether a request
-  id has been applied is what the peer's durable store says, and nothing else:
-  not what the supervisor saw, and not its record of events (owner ruling,
-  §12.10 question 10).
+- **Caller obligation.** A key stands for one operation and one argument. A
+  caller that reuses a key with a different argument is refused by the peer
+  (next).
+- **Peer obligation: idempotent per request id, and a key is bound to its
+  argument.** Acting on a request has two parts, in this order. First the
+  *commit*, one atomic durable step, which does one of three things. If the
+  request id has a reply record made with this argument, nothing changes. If
+  it has a reply record made with another argument, nothing changes. Otherwise
+  the request is applied and its reply recorded, together, and the record
+  keeps a digest of the argument. Then the *reply*: the recorded value, as
+  `ok`, in the first and the third case, and `conflict` in the second. The
+  record is durable, so this holds across the peer's restarts. The obligation
+  covers every way a request can arrive twice: a copy duplicated by the
+  supervisor, a retry after `timed_out`, and a caller that restarted and
+  performs again.
+- **Conflict** (owner ruling of 16 November 2026, §12.10 question 8). A
+  `conflict` says: this request id has a record, made with another argument,
+  and nothing was applied for this attempt. It is the `Conflict` of
+  [verification/service/README.md](../../verification/service/README.md), and
+  like it leaves the store unchanged. Two arguments are the same when their
+  digests are equal. Here an argument is an I64 and the record keeps the
+  argument itself, which is its own digest; a larger argument would need a
+  collision-resistant one. A record never changes, so a `conflict` stays true.
+  Which of two arguments a key ends up bound to is decided by the order in
+  which the peer acts, not the order in which the caller performed: the
+  supervisor may hand over a late copy of the first request after the second
+  has been applied, and it is then the first that conflicts.
+- **Commit before reply.** A peer never sends an `ok` for which it has no
+  durable record, and never a `conflict` without the record that justifies
+  it. A crash can fall between the two parts (§12.7): the request is then
+  applied and recorded, and no reply for it exists. Whether a request id has
+  been applied, and with what argument, is what the peer's durable store says,
+  and nothing else: not what the supervisor saw, and not its record of events
+  (owner ruling, §12.10 question 10).
 
 ### 12.4 Outcomes
 
 | Outcome | May be produced | What the caller may conclude |
 | --- | --- | --- |
-| `reply(v)` | Only by giving the caller a reply message the peer produced by acting on this request id, while the caller is still suspended in the attempt whose tag the message carries | The peer applied the request, once, and `v` is the value in its durable record for the request id. It may have been applied for an earlier attempt |
-| `peer_down` | (a) While the peer is down and no copy of any attempt of this request id was ever handed to the peer, in any of its incarnations. The supervisor destroys every copy of the request id it still holds. (b) At once, when the connection is not in the manifest (§12.6) | The peer has not acted on the request id, and will not, until this caller performs it again. Nothing about whether the peer is down afterwards |
+| `reply(v)` | Only by giving the caller a reply message the peer produced by acting on this request id, while the caller is still suspended in the attempt whose tag the message carries | The peer has a durable record for the request id. `ok v`: the peer applied the request, once, with this argument, and `v` is the value in the record; it may have been applied for an earlier attempt. `conflict`: the record was made with another argument, and this attempt applied nothing |
+| `not_delivered` | (a) For a request id that does not *count as handed over* (§12.5): no copy of any attempt of it was ever handed to the peer, in any of its incarnations, and it was not issued before the supervisor's latest restart (§12.7). The peer may be up or down. The supervisor first destroys every copy of the request id it still holds. (b) At once, when the connection is not in the manifest (§12.6) | No copy of any attempt of this request id was ever handed to the peer, and none will be until this caller performs it again. So the peer has not acted on it. Nothing about whether the peer is up or down |
 | `timed_out` | At any time while the caller waits | Nothing. The peer may have acted, may not have, and may still act later: copies can remain in flight |
 
-- **`peer_down` is not "the peer died".** Once a copy has been handed to the
+- **`not_delivered` is about the hand-over, not about the peer** (owner ruling
+  of 16 November 2026, §12.10 question 4). Until draft 5 the outcome was
+  called `peer_down` and could be reported only while the peer was down. The
+  guarantee was never about the peer's state, and the supervisor may now give
+  it also for a request it has dropped, or drops in order to say so, before
+  any hand-over, while the peer is up.
+- **After a hand-over, only `timed_out`.** Once a copy has been handed to the
   peer, the supervisor cannot know whether the peer acted before it died. From
   then on the only failure outcome for that request id is `timed_out`, for
-  this attempt and every later one. `timed_out` is the indeterminate case that
+  this attempt and every later one. The same holds for every request id
+  issued before a restart of the supervisor, which no longer knows what it
+  handed over (§12.7). `timed_out` is the indeterminate case that
   [verification/service/README.md](../../verification/service/README.md)
   assumption 4 leaves out.
 - **At most one outcome per attempt.** A reply that arrives when the caller is
@@ -415,29 +465,36 @@ attempt for the same request id; that is what a retry is.
 
 ### 12.5 The supervisor
 
+A request id *counts as handed over* when the supervisor has handed a copy of
+any attempt of it to the peer, or when it was issued before the supervisor's
+latest restart. It never stops counting.
+
 May: deliver messages in any order; delay a message without bound; drop any
-message; duplicate any message; report `timed_out` at any time; restart a
-member that is down.
+message; duplicate any message; report `timed_out` at any time; report
+`not_delivered` for a request id that does not count as handed over; restart
+a member that is down; restart itself (§12.7).
 
 May not:
 
 - carry a request along a connection the manifest does not declare;
 - create a reply, or change a request or a reply;
 - give a reply to an attempt other than the one whose tag it carries;
-- report `peer_down` for a request id of which it has handed over a copy;
-- after `peer_down`, hand over a copy issued before that report;
+- report `not_delivered` for a request id that counts as handed over;
+- after `not_delivered`, hand over a copy issued before that report;
 - on a member's crash or restart, change another member, that member's
-  durable store, or the messages in flight.
+  durable store, or the messages in flight;
+- on its own restart, change a member in any way, or put a message in flight.
 
-Duplicates are allowed so that an implementation which redelivers after a
-restart is inside the contract. §12.3 covers them.
+Duplicates stay allowed (owner ruling of 16 November 2026, §12.10 question
+3), so that an implementation which redelivers after a restart is inside the
+contract. §12.3 covers them.
 
 ### 12.6 The manifest and refusal
 
 The supervisor checks every request against the manifest when it accepts it
 from the caller, whatever the image claims about itself. An undeclared
 connection carries nothing: no message is put in flight, the supervisor
-records a refusal, and the perform returns `peer_down`. A reply travels only
+records a refusal, and the perform returns `not_delivered`. A reply travels only
 back along the connection of its request.
 
 This is an authority property: which member can cause which other member to
@@ -464,7 +521,7 @@ stay with the supervisor, which may still deliver or drop them.
 inbox and crashes before any reply is emitted. Afterwards the durable store
 has the application and its reply record; no reply for it is in flight; the
 image, with the rest of its inbox, is lost as in any crash; and nobody outside
-the peer has seen the action. The request had been handed over, so `peer_down`
+the peer has seen the action. The request had been handed over, so `not_delivered`
 is not possible for it: the caller can only get `timed_out`. When a copy of
 the same request id reaches the peer again, in this incarnation's successor or
 any later one, the peer finds the record and sends the recorded value: the
@@ -481,16 +538,51 @@ there in which no reply ever existed, which is what an implementation does
 when the kill lands there. Where acting would only replay, a crash before the
 reply changes nothing durable and is the ordinary crash.
 
-So a restarted caller performs its requests again with the same keys, and the
-peer answers from its records. A caller that must not start over keeps its
-progress in its durable store; that is the durable workflow level of amendment
+**A restarted caller starts from the beginning** (confirmed by the owner on
+16 November 2026, §12.10 question 6). It keeps its durable store and nothing
+else. So it performs its requests again with the same keys, and the peer
+answers from its records. Resuming from a checkpoint is not the actor level's
+meaning of a restart: it belongs to the durable workflow level of amendment
 §14 and is not modelled here.
+
+**A restart of the supervisor** (owner ruling of 16 November 2026, §12.10
+question 5). The supervisor may restart at any time, and then:
+
+- *Lost.* Every message in flight, requests and replies alike, and the
+  supervisor's record of which request ids it handed over.
+- *Kept.* Every member as it is: up or down, its durable store, and its
+  volatile state, which is its program's position, the perform it is suspended
+  in, and the requests in its inbox. The images do not notice. Also kept: the
+  manifest, the numbering of attempts (a tag is not reused after a restart
+  either), and the set of request ids the supervisor has ever accepted. An
+  implementation has to hold those where its restart does not lose them.
+- *From then on.* Every request id issued before the restart counts as handed
+  over (§12.5), in the attempt that is pending and in every later attempt with
+  the same key. Only `timed_out` or `reply` is possible for it;
+  `not_delivered` is never reported for it. A request id first issued after
+  the restart is treated as before.
+
+A pending perform stays pending. If a copy of its request was already in the
+peer's inbox, the peer still acts on it and the reply is carried to the
+caller. If not, nothing is left to arrive, and the perform ends in
+`timed_out`. The supervisor does not redeliver what it lost; it would be
+allowed to (§12.5), and this model does not.
+
+The set of accepted request ids has to survive because without it a restarted
+supervisor could not tell a key first used after its restart from one used,
+and perhaps applied, before it, and could then never report `not_delivered`
+again without risking that it is false.
+
+In the model this is the step `supervisor-restart`, bounded by a budget like
+crashes and duplicates. A restart in the middle of another step is not
+modelled (§12.9).
 
 ### 12.8 Events, and what is checked today
 
 The program observes only its outcomes. The supervisor's record has, per
-step: issued, refused, handed, acted (applied or replayed, with the value),
-outcome, stale-reply, dropped, duplicated, crashed, restarted. As in amendment
+step: issued, refused, handed, acted (applied, replayed or conflict, with the
+value), outcome, stale-reply, dropped, duplicated, crashed, restarted,
+supervisor-restarted. As in amendment
 §14, one member's events are ordered; events of different members are not.
 
 The record is what the supervisor could observe, and it is not the authority
@@ -504,65 +596,81 @@ side. A later `replayed` is justified by the store, whatever the record says.
 sh harness/run-tc1-remote.sh       # explores the model, its mutants, and a negative control
 ```
 
-`harness/tc1-remote.shen` explores the whole reachable state graph of six
+`harness/tc1-remote.shen` explores the whole reachable state graph of eight
 small systems, breadth first, and checks every state and every step. A system
-is bounded by its scripts, their retries, and a budget of crash and duplicate
-steps; drops, timeouts, restarts and reordering are not bounded.
+is bounded by its scripts, their retries, and a budget of crash, duplicate and
+supervisor-restart steps; drops, timeouts, `not_delivered`, member restarts
+and reordering are not bounded.
 
-| System | Crashes, duplicates | States | Transitions | Schedules |
+| System | Crashes, duplicates, supervisor restarts | States | Transitions | Schedules |
 | --- | --- | --- | --- | --- |
-| Caller, peer; one request, one retry | 1, 1 | 32,171 | 147,206 | 8,025,082,064,588 |
-| The same | 2, 0 | 261,140 | 1,250,936 | 49,484,159,104,057,142 |
-| Caller, peer; two requests, one retry on the first | 1, 0 | 221,847 | 1,086,413 | 11,992,843,538,401,883 |
-| Caller, two peers; one connection undeclared | 2, 1 | 37,689 | 157,675 | 258,249,267,395 |
-| Two callers using the same key, one peer | 1, 1 | 33,065 | 145,220 | 287,912,716,706 |
-| Caller is a tc1 handler-machine program with one retry; peer | 1, 1 | 47,605 | 225,968 | 97,146,742,198,864 |
+| Caller, peer; one request, one retry | 1, 1, 0 | 32,783 | 149,398 | 8,025,085,292,837 |
+| The same | 2, 0, 0 | 268,932 | 1,280,992 | 49,484,181,860,038,150 |
+| Caller, peer; two requests, one retry on the first | 1, 0, 0 | 252,193 | 1,219,081 | 12,007,579,938,882,645 |
+| Caller, two peers; one connection undeclared | 2, 1, 0 | 41,849 | 170,980 | 258,303,024,668 |
+| Two callers using the same key, one peer | 1, 1, 0 | 36,839 | 162,012 | 291,132,317,230 |
+| Caller is a tc1 handler-machine program with one retry; peer | 1, 1, 0 | 48,531 | 229,264 | 97,146,773,747,921 |
+| Caller, peer; one request, one retry; the supervisor may restart | 1, 1, 1 | 87,427 | 419,263 | 30,144,991,211,636 |
+| Caller, peer; one key performed with one argument, then with another | 1, 1, 0 | 66,229 | 300,603 | 8,067,873,152,396 |
 
-A schedule is a maximal path; the longest has 34 steps. In all 633,517 states
-and 3,013,418 transitions, no property below fails. The crash between commit
-and reply (§12.7) accounts for 1,866 of the transitions and for no state: the
-state counts are those of draft 4.
+A schedule is a maximal path; the longest has 34 steps. In all 834,783 states
+and 3,931,593 transitions, no property below fails. The first six systems are
+those of draft 5, which had 633,517 states and 3,013,418 transitions; they now
+have 681,127 and 3,211,727, the difference being `not_delivered` with the peer
+up. Of the transitions, 20,120 report `not_delivered` other than as a refusal,
+32,783 are supervisor restarts, 22,603 are conflicts, and 2,218 are the crash
+between commit and reply (§12.7).
 
 | Property | Statement |
 | --- | --- |
 | single-outcome | No attempt has two outcomes |
 | resolved-at-termination | When no step is enabled, every attempt has exactly one outcome, except those whose caller crashed while waiting, which have none |
-| reply-implies-acted | An observed `reply(v)` has `v` in the peer's durable record for that request id. Judged against the store, not against a record of who saw the peer act |
-| peer-down-not-handed | Other than as a refusal, `peer_down` is reported only while the peer is down, for a request id never handed to it and absent from its record |
-| peer-down-sealed | From `peer_down` until the caller issues the request id again: no copy in flight, none handed over, no record |
-| applied-at-most-once | No request id is applied twice; acting on a recorded request id leaves the durable store unchanged; a crash after a commit leaves the store with exactly that one application and its record more than before |
+| reply-implies-acted | An observed `reply(v)` is `ok` or `conflict`, and the peer's durable store has a record for that request id; if it is `ok v`, the record's value is `v`. Judged against the store, not against a record of who saw the peer act |
+| not-delivered-not-handed | Other than as a refusal, `not_delivered` is reported only for a request id of which no copy was ever handed to the peer, which was not issued before the supervisor's latest restart, and which is absent from the peer's record. Judged from the history, not from the supervisor's own record of hand-overs |
+| not-delivered-sealed | From `not_delivered` until the caller issues the request id again: no copy in flight, none handed over, no record |
+| applied-at-most-once | No request id is applied twice; acting on a recorded request id leaves the durable store unchanged; a crash after a commit leaves the store with exactly that one application and its record, made with the request's argument, more than before |
+| key-bound-to-argument | An observed `ok` belongs to a record made with that attempt's argument, and an observed `conflict` to a record made with another. A peer says `conflict` only where such a record exists, and then leaves the store unchanged; it replays only a record made with the same argument |
 | declared-edges-only | Everything in a member's inbox or record came along a declared connection |
-| crash-isolation | A crash or restart changes no other member, not the member's durable store, and nothing in flight. A crash after a commit changes no other member and nothing in flight: no reply is emitted |
+| crash-isolation | A crash or restart changes no other member, not the member's durable store, and nothing in flight. A crash after a commit changes no other member and nothing in flight: no reply is emitted. A restart of the supervisor changes no member and puts nothing in flight |
 
-Nine defects, each a switch on the model, are each caught on the property
+Eleven defects, each a switch on the model, are each caught on the property
 they are aimed at. The schedule shown is a shortest one.
 
 | Defect | Caught by | Shortest schedule |
 | --- | --- | --- |
-| `peer_down` reported after hand-over | peer-down-not-handed | issue, hand over, crash peer after its commit, peer-down: the caller is told the peer has not acted, and it has |
+| `not_delivered` reported after hand-over | not-delivered-not-handed | issue, hand over, not-delivered: the request is in the peer's inbox |
 | Supervisor answers for a dead peer | reply-implies-acted | crash peer, issue, forged reply |
 | Peer applies a recorded request id again | applied-at-most-once | issue, duplicate, hand over, act, hand over, act |
 | Supervisor carries an undeclared connection | declared-edges-only | issue, timeout, issue to the undeclared peer, hand over |
 | Caller takes a reply after `timed_out` | single-outcome | issue, hand over, act, timeout, deliver reply |
 | A crash resets the callers waiting on it | crash-isolation | issue, crash peer |
-| `peer_down` destroys only its own attempt's copies | peer-down-sealed | issue, timeout, crash peer, issue, peer-down |
+| `not_delivered` destroys only its own attempt's copies | not-delivered-sealed | issue, timeout, issue, not-delivered: the first attempt's copy is still in flight |
 | The timeout never fires | resolved-at-termination | issue, hand over, crash peer, restart peer |
 | Peer replies first and commits afterwards | reply-implies-acted | issue, hand over, act (reply sent, nothing committed), deliver reply |
+| A restarted supervisor takes nothing as handed over | not-delivered-not-handed | issue, supervisor restart, not-delivered. With a hand-over and an act before the restart, the same step tells the caller the peer has not acted when it has; §12.11 runs that one |
+| Peer replays a record whatever the argument | key-bound-to-argument | issue key 1 with 5, timeout, issue key 1 with 6, hand over the second, act (applied with 6), hand over the first, act: replayed, though its argument is 5 |
 
-The last was added with the crash between commit and reply: it is the order
-of the two parts of acting, which §12.3 now fixes. In that defect the caller
+The ninth was added with the crash between commit and reply: it is the order
+of the two parts of acting, which §12.3 fixes. In that defect the caller
 holds a reply for which the store has no record, at once, and for good if the
-peer then crashes.
+peer then crashes. The last two came with draft 6.
 
 A defective run that raises an error would be reported as crashed and not as
-caught; none does. Nine hand-written schedules, with expectations taken from
-this text, pass; one is the crash between commit and reply, the timeout, the
-restart, and the retry answered from the record with one application. As a negative control, the same checker run with the
+caught; none does. Fourteen hand-written schedules, with expectations taken from
+this text, pass. One is the crash between commit and reply, the timeout, the
+restart, and the retry answered from the record with one application. Five
+came with draft 6: `not_delivered` with the peer up and nothing handed over;
+a supervisor restart after a hand-over, with no `not_delivered` afterwards
+whether the peer is up or down, no member changed, and the request in the
+peer's inbox still answered; a supervisor restart before any hand-over, with
+the old key never `not_delivered` again and a new key still able to be; a key
+reused with another argument refused as `conflict` with the store unchanged;
+and the same reuse applied when the first perform was `not_delivered`. As a negative control, the same checker run with the
 non-idempotent peer in place of the model reports failure and exits with
 status 1; the runner requires that.
 
 The model's members are abstract: a caller is a script of requests, a peer
-adds one to a counter and replies with it. One system uses a real tc1 program
+adds one to a counter and replies with it, or with `conflict`. One system uses a real tc1 program
 as the caller (`models/tc1/remote-tc1-caller.shen`): the handler machine runs
 to a perform of a bound effect that no frame handles, keeps its frames, and is
 given the outcome as the value of that perform.
@@ -597,10 +705,15 @@ which the implementation had to settle:
 - **Continuation or closure transfer.** Only serializable values cross.
 - **Order.** Between different peers, and between two requests to one peer:
   the supervisor may reorder.
-- **A supervisor that fails.** The supervisor's record of what it handed over
-  is assumed never lost, and its messages are assumed uncorrupted.
-- **A peer that breaks its obligation.** Idempotence is assumed of peers, not
-  enforced on them; the non-idempotent defect shows what then fails.
+- **A supervisor that fails in any way but the restart of §12.7.** What that
+  restart keeps (the attempt numbering and the set of accepted request ids)
+  is assumed never lost; its messages are assumed uncorrupted; and a restart
+  in the middle of a step is not modelled.
+- **A peer that breaks its obligation.** Idempotence and the refusal of a
+  reused key are assumed of peers, not enforced on them; the non-idempotent
+  defect and the replaying defect show what then fails.
+- **Digests.** A peer that compared real digests could take two different
+  arguments for the same one. Here the argument is its own digest.
 - **External effects of a peer's action.** Applied once means one durable
   application; an email sent by it needs its own receiver-side contract.
 - **Time.** A timeout has no clock here; it may fire at once.
@@ -614,11 +727,11 @@ which the implementation had to settle:
 
 ### 12.10 Open questions for the owner
 
-Questions 1, 2 and 10 have owner rulings, given on 15 November 2026 by
-instruction in conversation, not by line review of this text. The others are
-open.
+Questions 1, 2 and 10 have owner rulings of 15 November 2026, and questions 3,
+4, 5, 6 and 8 of 16 November 2026. All were given by instruction in
+conversation, not by line review of this text. Questions 7 and 9 are open.
 
-1. **Refusal.** An undeclared connection returns `peer_down` here, because the
+1. **Refusal.** An undeclared connection returns `not_delivered` here, because the
    guarantee is the same and the outcomes stay three. Alternatives: reject the
    program at build time and fault the image if it tries; or a fourth outcome.
    **Owner ruling, 15 November 2026:** rejected when the system is assembled
@@ -629,18 +742,44 @@ open.
    **Owner ruling, 15 November 2026:** the program chooses (§12.3).
 3. **May the supervisor duplicate?** Allowed here, to be safe. If the OTP
    supervisor never redelivers, the clause can go; retries still need §12.3.
-4. **`peer_down` only while the peer is down.** The supervisor could also
-   report it for a request it dropped before hand-over while the peer is up.
-   That would be sound, but the name would mislead. Not allowed here.
-5. **Supervisor state.** `peer_down` relies on the supervisor remembering every
-   hand-over. If that record can be lost, everything issued before the loss
-   has to count as handed over.
+   **Owner ruling, 16 November 2026:** the supervisor may duplicate messages.
+   The clause stays (§12.5).
+4. **The outcome for a request that was never handed over.** Until draft 5 it
+   was `peer_down` and could be reported only while the peer was down. The
+   supervisor could also report it for a request it dropped before hand-over
+   while the peer is up; that would be sound, but the name would mislead.
+   **Owner ruling, 16 November 2026:** the outcome is renamed `not_delivered`,
+   and it is allowed in that case too. Its guarantee is what the name says: no
+   copy of any attempt of the request id was ever handed to the peer, and none
+   will be until the caller issues it again. The sealing rule stays (§12.4,
+   §12.5).
+5. **Supervisor state.** `not_delivered` relies on the supervisor remembering
+   every hand-over. If that record can be lost, everything issued before the
+   loss has to count as handed over.
+   **Owner ruling, 16 November 2026:** so it does. On a restart of the
+   supervisor every request issued before the restart counts as handed over:
+   only `timed_out` or `reply` is possible for it, and `not_delivered` is
+   never reported for it. Done as the step `supervisor-restart` (§12.7). What
+   the ruling left to this text, and how it was decided: the messages in
+   flight are lost, all of them; a pending perform stays pending and ends in a
+   reply or `timed_out`; members are untouched; and the attempt numbering and
+   the set of accepted request ids survive, the second because the rule cannot
+   be kept without it.
 6. **A restarted caller starts from the beginning** (§12.7). Confirm that this
    is the actor level's meaning of "the supervisor restarts computation".
+   **Owner ruling, 16 November 2026:** confirmed. A restarted caller starts its
+   program from the beginning and keeps its durable store. Checkpointed
+   resumption belongs to durable workflows (amendment §14), not to actors.
 7. **A peer with no durable store** can be idempotent only within one
    incarnation. Allowed, and with what guarantee for `reply`?
 8. **A key reused with a different argument:** refuse, as the service example
    does with `Conflict`, or unspecified?
+   **Owner ruling, 16 November 2026:** refused, and reported inside `reply` as
+   a value of the application, not as a fourth outcome of the transport,
+   matching the service model's `Conflict`. The peer records a digest of the
+   argument with the reply record (§12.2, §12.3). What the ruling left to this
+   text: the encoding, which is the pair `(status, value)` while only I64
+   crosses the boundary, and a sum `ok(v) | conflict` later (§12.2).
 9. **Naming and class.** Is a remote operation a runtime effect with a reserved
    name, or a fourth class beside ordinary, runtime and durable (§8)?
 10. **The supervisor's record of `acted`** (raised by the implementation). In
@@ -670,15 +809,21 @@ The smallest system, for real: an Erlang/OTP supervisor
 step, on a recommendation that is not yet an owner ruling), a caller image and
 a peer image, each a Solo5 guest run as an OS process under the `spt` tender.
 The caller is a TC1 program on the C machine of `backends/solo5/pure-call`,
-unchanged: it performs `Ledger.add` with key 7, once more with the same key
-after `timed_out`, then with key 8. The build binds `Ledger` to the peer, the
+unchanged: it performs `Ledger.add` with key 7 and argument 5, once more with
+the same key and argument after `timed_out`, then with key 8, then with key 7
+again and argument 6, a reuse of the key that the peer refuses if key 7 was
+applied with 5. The build binds `Ledger` to the peer, the
 outcome becomes the value of the perform, and the frames stay in the image.
 The validator admits the program only through an option, because the typing of
 remote effects is open (§12.9). The peer is the model's counter with its
-durable store in a file. Messages go through block-device files used as
-mailboxes, which need no privileges, not through the network device; arguments
-and replies are I64 only. The supervisor's README has the wire format, what is
-trusted, and what is not shown.
+durable store in a file; each record keeps the argument it was made with.
+Messages go through block-device files used as mailboxes, which need no
+privileges, not through the network device; an argument is an I64 and a reply
+is a status and an I64 (§12.2). The wire format is version 2: version 1 had no
+status, no `conflict` and no argument in a store record. The code of the
+outcome now called `not_delivered` is the one `peer_down` had. The
+supervisor's README has the wire format, what is trusted, and what is not
+shown.
 
 `harness/tc1-remote-run.shen` runs the system and judges each recorded run:
 (a) every recorded step is enabled in the model at that point, and the set of
@@ -686,26 +831,63 @@ steps the supervisor considered enabled is the model's; (b) the properties of
 §12.8 hold in every state and on every step of the replay; (c) the consoles of
 the images show what the model says they observe (the caller's outcomes,
 requests and TC1 events per incarnation, the peer's actions and the store it
-found at each start), and the peer's store file at the end is the model's
-durable store. The model's caller is the same program, read from the build.
+found at each start), the peer's store file at the end is the model's
+durable store, record by record with the argument each was made with, and the
+run had one relay process more than the supervisor restarts in its log. The
+model's caller is the same program, read from the build.
 
 | Schedules | Number | Result |
 | --- | --- | --- |
-| Written by hand from this section | 13 | Accepted; the recorded steps are the schedule's and the outcomes the expected ones |
-| Seeded (1 crash, 1 duplicate, until no step is enabled) | 40, 601 steps | Accepted; two of them take the crash between commit and reply |
-| Free-running, two of them with the peer killed from outside | 3 | Accepted |
+| Written by hand from this section | 19 | Accepted; the recorded steps are the schedule's and the outcomes the expected ones |
+| Seeded (1 crash, 1 duplicate, 1 supervisor restart, until no step is enabled) | 40, 791 steps | Accepted. All forty take the supervisor restart, 28 end a perform in `conflict`, 7 report `not_delivered`, 3 take the crash between commit and reply |
+| Free-running: one undisturbed, two with the peer killed from outside, one with a request the supervisor is told to lose | 4 | Accepted |
 
 The hand schedules cover: plain reply; request dropped, timeout, retry applied;
 reply dropped, timeout, retry replayed; peer killed before hand-over,
-`peer_down`; peer killed after hand-over, `timed_out`, restart, retry (applied
-if it had not acted, replayed from the surviving store if it had); peer killed
-between its commit and its reply, `timed_out`, restart, the retry given the
-committed value, applied once; no
-`peer_down` offered after a hand-over; a duplicate applied once; a reply after
-`timed_out` discarded; a caller restarted from its beginning; an undeclared
-connection refused at start, and at run time with the start-time check off.
-Every step kind of the model occurs. Each scheduled run was made twice with
-equal recordings.
+`not_delivered`; a request dropped before hand-over with the peer up,
+`not_delivered`, the remaining copy destroyed; peer killed after hand-over,
+`timed_out`, restart, retry (applied if it had not acted, replayed from the
+surviving store if it had); peer killed between its commit and its reply,
+`timed_out`, restart, the retry given the committed value, applied once; no
+`not_delivered` offered after a hand-over; a duplicate applied once; a reply
+after `timed_out` discarded; a caller restarted from its beginning; key 7
+applied with one argument and then performed with another, `conflict`, the
+store unchanged, and a late copy of the first request still replayed; four
+schedules with a supervisor restart (below); an undeclared connection refused
+at start, and at run time with the start-time check off. In every schedule
+that applies key 7 with argument 5, the program's last perform is the reuse of
+key 7 and ends in `reply(conflict)`. Every step kind of the model occurs. Each
+scheduled run was made twice with equal recordings.
+
+*The supervisor's restart, for real.* The step machine and the two things the
+contract says are lost, the record of hand-overs and the messages in flight,
+are one Erlang process, the relay. The step `supervisor-restart` kills that
+process (`exit(Pid, kill)`) once the step is in its log, and its OTP supervisor
+starts another. The member processes, which hold the tender processes and the
+mailbox files, are not touched: both images keep running, a caller stays
+suspended in its perform, and a request stays in the peer's inbox. What the
+contract says is kept, the relay has left, after every step, with a journal
+process: what it knows of each member, the pending attempts, the attempt
+numbering, the set of accepted request ids, and for the harness the event log
+and the budgets. The record of hand-overs and the messages in flight are never
+put there. The new relay takes every accepted request id as handed over. The
+journal is memory of another process in the same Erlang VM, not durable
+storage: this is a restart of the relay, not of the VM or the host. The four
+hand schedules: after a hand-over and an act, `not_delivered` is not offered;
+a reply in flight is lost, the caller is timed out and its retry is replayed;
+a request in the peer's inbox at the restart is acted on and its reply is the
+outcome of the pending perform; and a request issued and never handed over
+counts as handed over afterwards, in that attempt and its retry, while key 8,
+first issued after the restart, is still reported `not_delivered`. The step is
+taken only in the scheduled modes, between steps. A relay that dies in any
+other way ends the run in an error.
+
+*`not_delivered` with the peer up, for real.* In the scheduled modes the step
+is offered for every pending request that does not count as handed over. In
+the free-running mode the supervisor hands a request over at once, so it
+reports `not_delivered` only where it did not: one free-running run tells it
+to lose the caller's first request, which it drops, and when the caller has
+waited its timeout the supervisor reports `not_delivered`, not `timed_out`.
 
 *The crash between commit and reply, for real.* The supervisor grants the
 peer image the request with a mark in the inbox header (`hold`, wire format in
@@ -719,17 +901,19 @@ no reply; the supervisor compares the store with what it read before the
 grant and records `crash-after-commit` if the record appeared, `crash` if
 not. One free-running run kills the peer there from outside the step machine;
 the supervisor finds it, restarts the peer, and the retry is answered from the
-record. Before this draft that run ended in an error.
+record. Before draft 5 that run ended in an error.
 
 | Defect, as a switch on the real system | Caught by | Schedule |
 | --- | --- | --- |
-| Supervisor reports `peer_down` after hand-over | (a): the step is not the model's | issue, hand over, crash peer, peer-down |
+| Supervisor reports `not_delivered` after hand-over | (a): the step is not the model's | issue, hand over, not-delivered |
 | Peer image applies a recorded request id again | (a): the model has only `replayed` there | issue, duplicate, hand over, hand over, act, act |
 | Supervisor hands over a reply after `timed_out` | (a): the model has only `discard-reply` there | issue, hand over, act, timeout, deliver reply |
 | Supervisor carries an undeclared connection (start-time check off) | (a): the model has only `refuse` there | issue, hand over, act, deliver reply |
 | Peer image replies first and commits afterwards | (c): the peer's store file has no application where the model has one | issue, hand over, crash between commit and reply, deliver reply |
+| Restarted supervisor takes nothing as handed over | (a): the model has only `timeout` there | issue, hand over, act, supervisor restart, not-delivered: the caller is told the peer has not acted, and it has applied the request |
+| Peer image replays a record whatever the argument | (a): the model has only `conflict` there | key 7 with argument 5 and key 8, each issued, handed over, acted on and replied to; then key 7 with argument 6 issued, handed over, act: replayed |
 
-In the last, the kill finds a reply and no commit. The supervisor records what
+In the fifth, the kill finds a reply and no commit. The supervisor records what
 it saw, an act by the reply and then the crash, and the caller is given the
 reply. (a) and (b) accept that log: by the log the peer acted. Only the store
 says otherwise, which is the point of the ruling on question 10.
@@ -750,6 +934,9 @@ is its own account. In the scheduled modes a crash is taken between steps,
 with the images at rest, or at the one place inside a step described above,
 with the image's cooperation; a kill at any other instant inside a step (in
 the middle of the store's two writes, or between the reply's two) is not
-placed and not exercised. The first four defects are caught by (a), the last
-by (c) alone. Two free-running runs depend on the wall clock. No `hvt` run and
-no proof.
+placed and not exercised. The supervisor's restart is taken between steps
+only, never in the free-running mode, and what survives it is in the memory of
+another Erlang process: a relay killed inside a step, and the loss of the
+whole VM, are not covered. Six defects are caught by (a), the fifth by (c)
+alone. Three free-running runs depend on the wall clock. No `hvt` run and no
+proof.

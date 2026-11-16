@@ -4,9 +4,12 @@
  *
  * The abstract peer of models/tc1/remote-system.shen: a counter. Acting on a
  * request is idempotent per request id (caller, key): if the durable store has
- * a reply record for it, that value is sent again and nothing changes;
- * otherwise the counter is incremented, the new value is recorded, and it is
- * sent. The store is the block device "store" (wire.h): the record block is
+ * a reply record for it made with the same argument, that value is sent again
+ * and nothing changes; if the record was made with another argument, the reply
+ * is conflict and nothing changes (EFFECTS.md §12.3: a key stands for one
+ * argument); otherwise the counter is incremented, the new value is recorded
+ * together with the argument, and it is sent. The record keeps the argument
+ * itself: an I64 is its own digest. The store is the block device "store" (wire.h): the record block is
  * written first, then the header that counts it. The header write is the
  * commit; a record beyond the header's count does not exist.
  *
@@ -20,6 +23,8 @@
  * defect, for the harness:
  *   non-idempotent        a request id that has a record is applied again
  *   reply-before-commit   the reply is sent first and the commit made after it
+ *   replay-different-argument   a key that has a record is answered from it
+ *                         whatever the argument: no conflict is ever reported
  * Console frames: Hello (with the store as found), one Act per request replied to. */
 #include "support.h"
 #define MAX_RECORDS 62u
@@ -27,7 +32,7 @@ static struct mailbox box;
 static solo5_handle_t store;
 static uint64_t store_blocks;
 static uint32_t applications,records;
-static struct frw_call table[MAX_RECORDS];
+static struct frw_stored table[MAX_RECORDS];
 static uint8_t block[FRW_BLOCK];
 
 static int store_header(void) {
@@ -35,9 +40,9 @@ static int store_header(void) {
     frw_encode_header(&h,block);
     return solo5_block_write(store,0,block,FRW_BLOCK)==SOLO5_R_OK;
 }
-static int store_record(uint32_t slot,const struct frw_call *c) {
+static int store_record(uint32_t slot,const struct frw_stored *c) {
     struct frw_record r;
-    frw_put_call(c,&r,FRW_STORED);r.seq=slot+1;r.incarnation=0;
+    frw_put_stored(c,&r);r.seq=slot+1;r.incarnation=0;
     if(!frw_encode_record(&r,block))return 0;
     return solo5_block_write(store,(solo5_off_t)(slot+1)*FRW_BLOCK,block,FRW_BLOCK)==SOLO5_R_OK;
 }
@@ -52,7 +57,7 @@ static int store_open(void) {
     for(uint32_t i=0;i<records;i++){
         struct frw_record r;
         if(solo5_block_read(store,(solo5_off_t)(i+1)*FRW_BLOCK,block,FRW_BLOCK)!=SOLO5_R_OK)return EXIT_DEVICE;
-        if(!frw_decode_record(block,&r) || r.type!=FRW_STORED || r.seq!=i+1 || r.incarnation || !frw_get_call(&r,&table[i]))return EXIT_MALFORMED;
+        if(!frw_decode_record(block,&r) || r.type!=FRW_STORED || r.seq!=i+1 || r.incarnation || !frw_get_stored(&r,&table[i]))return EXIT_MALFORMED;
         for(uint32_t k=0;k<i;k++)
             if(frw_name_same(table[k].name,table[i].name) && table[k].key==table[i].key)return EXIT_MALFORMED;
     }
@@ -60,27 +65,30 @@ static int store_open(void) {
 }
 /* The durable commit of one application: the record, then the header that
  * counts it. 0 ok, otherwise an exit code. */
-static int commit(uint32_t slot,const struct frw_call *call) {
-    if(!store_record(slot,call))return fault("store write",EXIT_DEVICE);
-    table[slot]=*call;applications++;
+static int commit(uint32_t slot,const struct frw_stored *made) {
+    if(!store_record(slot,made))return fault("store write",EXIT_DEVICE);
+    table[slot]=*made;applications++;
     if(slot==records)records++;
     if(!store_header())return fault("store commit",EXIT_DEVICE);
     return 0;
 }
 int solo5_app_main(const struct solo5_start_info *info) {
-    uint64_t life;const char *rest;int e,defect=0,early=0;
+    uint64_t life;const char *rest;int e,defect=0,early=0,deaf=0;
     if(!parse_life(info->cmdline,&life,&rest))return EXIT_USAGE;
     if(word_is(rest,"non-idempotent"))defect=1;
     else if(word_is(rest,"reply-before-commit"))early=1;
+    else if(word_is(rest,"replay-different-argument"))deaf=1;
     else if(*rest)return EXIT_USAGE;
     if((e=mailbox_open(&box,life))!=1)return fault("cannot open the mailboxes",-e);
     if((e=store_open()))return fault("cannot open the store",e);
-    out_begin();out_text("{\"kind\":\"Hello\",\"role\":\"peer\",\"wire\":\"1\",\"incarnation\":\"");out_natural(box.incarnation);
+    out_begin();out_text("{\"kind\":\"Hello\",\"role\":\"peer\",\"wire\":\"2\",\"incarnation\":\"");out_natural(box.incarnation);
     out_text("\",\"applications\":\"");out_natural(applications);out_text("\",\"records\":\"");out_natural(records);
-    out_text(defect?"\",\"defect\":\"non-idempotent\"}":early?"\",\"defect\":\"reply-before-commit\"}":"\",\"defect\":\"none\"}");frame_end();
+    out_text(defect?"\",\"defect\":\"non-idempotent\"}":early?"\",\"defect\":\"reply-before-commit\"}":
+             deaf?"\",\"defect\":\"replay-different-argument\"}":"\",\"defect\":\"none\"}");frame_end();
     if((e=mailbox_announce(&box))!=1)return fault("cannot announce",-e);
     for(;;){
-        struct frw_record r;struct frw_call call;struct frw_result result;uint32_t slot=records;int apply;
+        struct frw_record r;struct frw_call call;struct frw_stored made;struct frw_result result;uint32_t slot=records;int apply;
+        memset(&made,0,sizeof made);
         if((e=mailbox_receive(&box,&r))!=1){
             if(e==-EXIT_LIFETIME){frame_text("{\"kind\":\"Lifetime\"}");return EXIT_LIFETIME;}
             return fault("malformed inbox",-e);
@@ -89,14 +97,19 @@ int solo5_app_main(const struct solo5_start_info *info) {
         for(uint32_t i=0;i<records;i++)
             if(frw_name_same(table[i].name,call.name) && table[i].key==call.key)slot=i;
         apply=!(slot<records && !defect);
-        if(!apply){
+        result.status=0;
+        if(!apply && table[slot].argument!=call.value && !deaf){
+            /* The key has a record made with another argument: refused. Nothing changes. */
+            result.code=FRW_CONFLICT;result.value=0;
+        } else if(!apply){
             result.code=FRW_REPLAYED;result.value=table[slot].value;
         } else {
             if(slot>=MAX_RECORDS || (uint64_t)slot+1>=store_blocks)return fault("store full",EXIT_MACHINE);
-            /* Apply: the counter. */
-            call.value=(int64_t)applications+1;
-            result.code=FRW_APPLIED;result.value=call.value;
-            if(!early && (e=commit(slot,&call)))return e;
+            /* Apply: the counter. The record keeps the argument with the value. */
+            for(unsigned i=0;i<FRW_NAME;i++)made.name[i]=call.name[i];
+            made.key=call.key;made.argument=call.value;made.value=(int64_t)applications+1;
+            result.code=FRW_APPLIED;result.value=made.value;
+            if(!early && (e=commit(slot,&made)))return e;
         }
         /* Committed, not replied: where the supervisor may ask for the image to stop. */
         if(!early && mailbox_held(&box,r.seq)){
@@ -104,15 +117,17 @@ int solo5_app_main(const struct solo5_start_info *info) {
         }
         out_begin();out_text("{\"kind\":\"Act\",\"seq\":\"");out_natural(r.seq);out_text("\",\"caller\":\"");out_name(call.name);
         out_text("\",\"key\":\"");out_integer(call.key);
-        out_text(result.code==FRW_APPLIED?"\",\"how\":\"applied\",\"value\":[\"int\",\"":"\",\"how\":\"replayed\",\"value\":[\"int\",\"");
-        out_integer(result.value);out_text("\"]}");frame_end();
+        /* value: the operation's result as the caller's program will see it, (status, value). */
+        out_text(result.code==FRW_APPLIED?"\",\"how\":\"applied\"":result.code==FRW_REPLAYED?"\",\"how\":\"replayed\"":"\",\"how\":\"conflict\"");
+        out_text(result.code==FRW_CONFLICT?",\"value\":[\"tuple\",[\"int\",\"1\"],[\"int\",\"":",\"value\":[\"tuple\",[\"int\",\"0\"],[\"int\",\"");
+        out_integer(result.value);out_text("\"]]}");frame_end();
         struct frw_record reply;
         frw_put_result(&result,&reply,FRW_REPLY);reply.ref=r.seq;
         if((e=mailbox_send(&box,&reply))!=1)return fault("cannot send the reply",-e);
         if(early){
             /* The defect: replied, not committed. */
             if(mailbox_held(&box,r.seq)){mailbox_hold(&box);frame_text("{\"kind\":\"Lifetime\"}");return EXIT_LIFETIME;}
-            if(apply && (e=commit(slot,&call)))return e;
+            if(apply && (e=commit(slot,&made)))return e;
         }
     }
 }

@@ -139,7 +139,7 @@ has the numbers. In short:
 
 ```sh
 sh harness/run-tc1-remote.sh        # the model of remote perform, explored exhaustively on small systems
-sh harness/run-tc1-remote-run.sh    # the real system (Erlang/OTP supervisor, two Solo5 spt guests) against that model, ~35 s
+sh harness/run-tc1-remote-run.sh    # the real system (Erlang/OTP supervisor, two Solo5 spt guests) against that model, ~40 s
 ```
 
 Contract and numbers: EFFECTS.md §12 (§12.8 for the model, §12.11 for the
@@ -155,8 +155,12 @@ each with its negative control run first:
 
 | Row | Evidence class | Needs | Otherwise |
 | --- | --- | --- | --- |
-| remote-model | Model-level bounded exploration; no implementation is run | Six systems explored with no property failing, every step kind taken, nine mutants killed, nine hand schedules passing, control failed as required | FAIL; a report with other counts is UNKNOWN |
-| remote-run | Observed histories on `spt` accepted by the model | 13 hand, 40 seeded and 3 free-running schedules all accepted, every step kind taken, five defects killed, control failed as required | FAIL; no Erlang/OTP or no Solo5 build is BLOCKED; a supervisor that does not compile, or other counts, is UNKNOWN |
+| remote-model | Model-level bounded exploration; no implementation is run | Eight systems explored with no property failing, every step kind taken, eleven mutants killed, fourteen hand schedules passing, control failed as required | FAIL; a report with other counts is UNKNOWN |
+| remote-run | Observed histories on `spt` accepted by the model | 19 hand, 40 seeded and 4 free-running schedules all accepted, every step kind taken, seven defects killed, control failed as required | FAIL; no Erlang/OTP or no Solo5 build is BLOCKED; a supervisor that does not compile, or other counts, is UNKNOWN |
+
+Those counts are the scope after Amendment 1 of the
+[registration record](../campaigns/tc1/TC1_GATE_REGISTRATION.md) (16 November
+2026); they were 6, 9, 9 and 13, 40, 3, 5 when the gate was registered.
 
 The gate's toolchain row also requires that the Erlang/OTP found by
 [find-erlang.sh](find-erlang.sh), which the runner script uses too, is the
@@ -166,6 +170,24 @@ A peer killed between its durable commit and its reply (EFFECTS.md §12.7,
 owner ruling of 15 November 2026) is a step of the model, a hand schedule and
 a possible choice of the seeded schedules in both checks, and one free-running
 run kills the peer there from outside.
+
+Three things came with the owner's rulings of 16 November 2026 (EFFECTS.md
+§12.10 questions 4, 5 and 8), and each is in both checks as steps of the
+model, hand schedules, a defect that must be caught, and choices open to the
+seeded schedules:
+
+- The outcome `peer_down` is now `not_delivered`, and the step
+  `not-delivered` is enabled for any pending request that does not count as
+  handed over, with the peer up or down. One free-running run makes the
+  supervisor lose a request and report it.
+- `supervisor-restart`: the supervisor loses the messages in flight and its
+  record of hand-overs, and every request id issued before counts as handed
+  over. In the run check the relay process is really killed and started again
+  while the guests run, and the judgement also requires one relay process
+  more than the restarts in the log. It is a step of scheduled runs only.
+- A key reused with another argument is answered `conflict`, inside `reply`:
+  the act step has a third result beside applied and replayed, and the peer's
+  store file is compared record by record, argument included.
 
 ### The generated family
 

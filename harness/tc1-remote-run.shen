@@ -23,6 +23,12 @@
 \\ recorded run must fail (a), (b) or (c). A run that ends in an error is
 \\ counted as crashed, never as killed.
 \\
+\\ A restart of the supervisor is one of the model's steps too (supervisor-restart,
+\\ EFFECTS.md §12.7): in the scheduled modes the relay process is killed and
+\\ started again while the guests keep running, and the run's report says how
+\\ many relay processes there were, which must be one more than the restarts in
+\\ the log.
+\\
 \\ A peer killed between its durable commit and its reply is one of the model's
 \\ steps (crash-after-commit, EFFECTS.md §12.7). The supervisor places that kill
 \\ in the scheduled modes and, in the free-running mode, finds out from the
@@ -69,9 +75,9 @@
 (define fx.tag [C N] -> [C (fx.number N)])
 (define fx.tag-json [C N] -> [C (str N)])
 
-\\ Values on the wire are I64 in wire format version 1.
+\\ A reply value in wire format version 2: (status, value), both I64.
 (define fx.val
-  ["int" N] -> [int N]
+  ["tuple" ["int" S] ["int" N]] -> [tuple [int S] [int N]]
   V -> (error "harness: unexpected value ~S" V))
 
 (define fx.label
@@ -87,11 +93,13 @@
   ["duplicate" "reply" T V] -> [duplicate reply (fx.tag T) (fx.val V)]
   ["act" N T "applied"] -> [act N (fx.tag T) applied]
   ["act" N T "replayed"] -> [act N (fx.tag T) replayed]
+  ["act" N T "conflict"] -> [act N (fx.tag T) conflict]
   ["timeout" T] -> [timeout (fx.tag T)]
-  ["peer-down" T] -> [peer-down (fx.tag T)]
+  ["not-delivered" T] -> [not-delivered (fx.tag T)]
   ["crash" N] -> [crash N]
   ["crash-after-commit" N T] -> [crash-after-commit N (fx.tag T)]
   ["restart" N] -> [restart N]
+  ["supervisor-restart"] -> [supervisor-restart]
   L -> (error "harness: unknown event ~S" L))
 
 (define fx.label-json
@@ -107,10 +115,11 @@
   [duplicate reply T V] -> ["duplicate" "reply" (fx.tag-json T) (fh.value V)]
   [act N T How] -> ["act" N (fx.tag-json T) (str How)]
   [timeout T] -> ["timeout" (fx.tag-json T)]
-  [peer-down T] -> ["peer-down" (fx.tag-json T)]
+  [not-delivered T] -> ["not-delivered" (fx.tag-json T)]
   [crash N] -> ["crash" N]
   [crash-after-commit N T] -> ["crash-after-commit" N (fx.tag-json T)]
   [restart N] -> ["restart" N]
+  [supervisor-restart] -> ["supervisor-restart"]
   L -> (error "harness: no JSON for the label ~S" L))
 
 \\ A step as the supervisor names it before taking it: an act does not say yet
@@ -238,7 +247,7 @@
 
 (define fx.outcome-json
   [reply V] -> ["reply" (fh.value V)]
-  [peer-down] -> ["peer_down"]
+  [not-delivered] -> ["not_delivered"]
   [timed-out] -> ["timed_out"])
 
 (define fx.model-outcomes
@@ -387,12 +396,14 @@
   M [[M D] | Bs] -> [D | (fx.boots-of M Bs)]
   M [_ | Bs] -> (fx.boots-of M Bs))
 
-\\ The peer's store file, as the supervisor read it after the run, against the model's durable store.
+\\ The peer's store file, as the supervisor read it after the run, against the model's durable store:
+\\ the number of applications, and for each record its request id, the argument it was made with and its value.
 (define fx.store-differences
   M [Count Log] [] -> ["no store was reported"]
   M [Count Log] [Store | _] ->
     (fx.differ (and (= (fh.field "applications" Store) (str Count))
-                    (fx.same-set? (fh.field "records" Store) (map (/. Rec [(hd (hd Rec)) (hd (tl (hd Rec))) (fh.value (hd (tl Rec)))]) Log))
+                    (fx.same-set? (fh.field "records" Store)
+                                  (map (/. Rec [(hd (hd Rec)) (hd (tl (hd Rec))) (fh.value (hd (hd (tl Rec)))) (fh.value (hd (tl (hd (tl Rec)))))]) Log))
                     (= (length (fh.field "records" Store)) (length Log)))
                (make-string "~A: the store file holds ~S, the model ~S ~S" M Store Count Log)))
 
@@ -438,7 +449,7 @@
          Schedule (fh.field "schedule" R)
          Labels (map (/. E (fx.label E)) (fh.field "events" R))
          Free (set fx.*free* (= (fh.field "mode" Schedule) "free"))
-         S0 (remote.initial Config (fx.crash-budget Schedule Labels) (fx.budget "duplicates" Schedule))
+         S0 (remote.initial-with Config (fx.crash-budget Schedule Labels) (fx.budget "duplicates" Schedule) (fx.budget "supervisor_restarts" Schedule))
          V0 (fr.check-state Config S0)
          P (fx.replay Config S0 Labels (if (= Mutant none) (fh.field "enabled" R) unchecked) 0 [] [] (if (empty? V0) [] [[initial V0]]))
          Final (nth 3 P)
@@ -460,13 +471,17 @@
                               (fx.same-set? (fx.model-enabled Rest) (fh.field "enabled_at_end" R)))
                           "the steps enabled at the end are not the model's")
          Unresolved (if (empty? Rest) (fr.check-terminal Final) [])
+         \\ One relay process, and one more for each supervisor-restart in the log: the kill happened.
+         Relays (fx.differ (or (not (= Mutant none))
+                               (= (fh.member "supervisor_incarnations" R) (str (+ 1 (fx.count supervisor-restart (map (/. L (hd L)) (hd Info)))))))
+                           "the number of relay processes is not one more than the supervisor restarts recorded")
          \\ Refused at start: no image ran, so there is nothing to compare.
          Seen (if (and (= Mutant none) (not (= (fh.field "status" R) "refused-at-start"))) (fx.observations R Final Trace Boots) [])
       (if (not (empty? Unresolved))
           ["violated" (make-string "at the end: ~S" Unresolved) Info]
           (if (not (empty? AtEnd))
               ["enabled-differs" (hd AtEnd) Info]
-              (if (empty? Seen) ["accepted" "" Info] ["observations-differ" (hd Seen) Info])))))
+              (if (empty? (append Relays Seen)) ["accepted" "" Info] ["observations-differ" (hd (append Relays Seen)) Info])))))
 
 \\ ---------- running the real system ----------
 
@@ -491,6 +506,7 @@
 (define fx.list-schedule
   Steps -> [object ["mode" "list"] ["crashes" (str (fx.crashes Steps))]
                    ["duplicates" (str (fx.count duplicate (map (/. L (hd L)) Steps)))]
+                   ["supervisor_restarts" (str (fx.count supervisor-restart (map (/. L (hd L)) Steps)))]
                    ["steps" (map (/. L (fx.label-json L)) Steps)]])
 
 \\ What two runs of one schedule must have in common: everything but file names.
@@ -519,72 +535,116 @@
   -> (let C "caller"
           P "peer"
           T (/. N [C N])
-          One [int "1"]
-          Two [int "2"]
-          \\ the second request, from issue to reply, as attempt N
-          Second (/. N [[issue C P "8"] [deliver-request (T N)] [act P (T N) applied] [deliver-reply (T N) Two] [finish C]])
+          One (remote.ok [int "1"])
+          Two (remote.ok [int "2"])
+          Conflict (remote.conflict)
+          \\ outcomes as the caller's console prints them
+          R1 ["reply" (fh.value One)]
+          R2 ["reply" (fh.value Two)]
+          RC ["reply" (fh.value Conflict)]
+          TO ["timed_out"]
+          ND ["not_delivered"]
+          \\ the rest of the program once key 7 has been applied with argument 5: key 8 as attempt N,
+          \\ applied; then key 7 again with argument 6 as attempt N+1, refused as a conflict
+          Rest (/. N [[issue C P "8"] [deliver-request (T N)] [act P (T N) applied] [deliver-reply (T N) Two]
+                      [issue C P "7"] [deliver-request (T (+ N 1))] [act P (T (+ N 1)) conflict] [deliver-reply (T (+ N 1)) Conflict]
+                      [finish C]])
        [["plain-reply" (fx.declared) true
-         (append [[issue C P "7"] [deliver-request (T 1)] [act P (T 1) applied] [deliver-reply (T 1) One]] (Second 2))
-         "completed" [["reply" ["int" "1"]] ["reply" ["int" "2"]]] 2
-         "a request is handed over, applied, and its reply is the outcome"]
+         (append [[issue C P "7"] [deliver-request (T 1)] [act P (T 1) applied] [deliver-reply (T 1) One]] (Rest 2))
+         "completed" [R1 R2 RC] 2
+         "a request is handed over, applied, and its reply is the outcome; key 7 performed again with another argument is refused as a conflict, inside the reply, and nothing is applied for it"]
         ["request-dropped-timeout-retry" (fx.declared) true
          (append [[issue C P "7"] [drop request (T 1)] [timeout (T 1)]
-                  [issue C P "7"] [deliver-request (T 2)] [act P (T 2) applied] [deliver-reply (T 2) One]] (Second 3))
-         "completed" [["timed_out"] ["reply" ["int" "1"]] ["reply" ["int" "2"]]] 2
+                  [issue C P "7"] [deliver-request (T 2)] [act P (T 2) applied] [deliver-reply (T 2) One]] (Rest 3))
+         "completed" [TO R1 R2 RC] 2
          "the request is lost; timed-out; the retry with the same key is applied"]
         ["reply-dropped-timeout-retry-replayed" (fx.declared) true
          (append [[issue C P "7"] [deliver-request (T 1)] [act P (T 1) applied] [drop reply (T 1) One] [timeout (T 1)]
-                  [issue C P "7"] [deliver-request (T 2)] [act P (T 2) replayed] [deliver-reply (T 2) One]] (Second 3))
-         "completed" [["timed_out"] ["reply" ["int" "1"]] ["reply" ["int" "2"]]] 2
+                  [issue C P "7"] [deliver-request (T 2)] [act P (T 2) replayed] [deliver-reply (T 2) One]] (Rest 3))
+         "completed" [TO R1 R2 RC] 2
          "the reply is lost; timed-out; the retry is answered from the record and applied once"]
         ["peer-killed-before-handover" (fx.declared) true
-         [[crash P] [issue C P "7"] [peer-down (T 1)] [issue C P "8"] [peer-down (T 2)] [finish C] [restart P]]
-         "completed" [["peer_down"] ["peer_down"]] 0
-         "the peer is down and nothing was handed over: peer-down, and the peer never acts"]
+         [[crash P] [issue C P "7"] [not-delivered (T 1)] [issue C P "8"] [not-delivered (T 2)] [issue C P "7"] [not-delivered (T 3)]
+          [finish C] [restart P]]
+         "completed" [ND ND ND] 0
+         "the peer is down and nothing was handed over: not-delivered, and the peer never acts"]
+        ["not-delivered-while-the-peer-is-up" (fx.declared) true
+         [[issue C P "7"] [duplicate request (T 1)] [drop request (T 1)] [not-delivered (T 1)]
+          [issue C P "8"] [deliver-request (T 2)] [act P (T 2) applied] [deliver-reply (T 2) One]
+          [issue C P "7"] [deliver-request (T 3)] [act P (T 3) applied] [deliver-reply (T 3) Two] [finish C]]
+         "completed" [ND R1 R2] 2
+         "the supervisor drops a request before hand-over while the peer is up and reports not-delivered: the copy it still held is destroyed and the peer never sees key 7 with argument 5; key 7 with argument 6 is then the key's first application"]
         ["peer-killed-after-handover-before-acting" (fx.declared) true
          (append [[issue C P "7"] [deliver-request (T 1)] [crash P] [timeout (T 1)] [restart P]
-                  [issue C P "7"] [deliver-request (T 2)] [act P (T 2) applied] [deliver-reply (T 2) One]] (Second 3))
-         "completed" [["timed_out"] ["reply" ["int" "1"]] ["reply" ["int" "2"]]] 2
+                  [issue C P "7"] [deliver-request (T 2)] [act P (T 2) applied] [deliver-reply (T 2) One]] (Rest 3))
+         "completed" [TO R1 R2 RC] 2
          "killed with the request in its inbox: only timed-out; after the restart the retry is applied"]
         ["peer-killed-after-acting-store-intact" (fx.declared) true
          (append [[issue C P "7"] [deliver-request (T 1)] [act P (T 1) applied] [crash P] [drop reply (T 1) One] [timeout (T 1)] [restart P]
-                  [issue C P "7"] [deliver-request (T 2)] [act P (T 2) replayed] [deliver-reply (T 2) One]] (Second 3))
-         "completed" [["timed_out"] ["reply" ["int" "1"]] ["reply" ["int" "2"]]] 2
+                  [issue C P "7"] [deliver-request (T 2)] [act P (T 2) replayed] [deliver-reply (T 2) One]] (Rest 3))
+         "completed" [TO R1 R2 RC] 2
          "killed after it applied: timed-out; the restarted peer has its record and replays it"]
         ["peer-killed-between-commit-and-reply" (fx.declared) true
          (append [[issue C P "7"] [deliver-request (T 1)] [crash-after-commit P (T 1)] [timeout (T 1)] [restart P]
-                  [issue C P "7"] [deliver-request (T 2)] [act P (T 2) replayed] [deliver-reply (T 2) One]] (Second 3))
-         "completed" [["timed_out"] ["reply" ["int" "1"]] ["reply" ["int" "2"]]] 2
+                  [issue C P "7"] [deliver-request (T 2)] [act P (T 2) replayed] [deliver-reply (T 2) One]] (Rest 3))
+         "completed" [TO R1 R2 RC] 2
          "killed after its durable commit and before its reply: nothing in flight, only timed-out; the restarted peer finds the record in its store and the retry gets the committed value; applied once"]
-        ["no-peer-down-after-handover" (fx.declared) true
-         [[issue C P "7"] [deliver-request (T 1)] [crash P] [peer-down (T 1)]]
+        ["no-not-delivered-after-handover" (fx.declared) true
+         [[issue C P "7"] [deliver-request (T 1)] [crash P] [not-delivered (T 1)]]
          "step-not-enabled" [] 0
-         "after a hand-over the supervisor does not offer peer-down, even with the peer down"]
+         "after a hand-over the supervisor does not offer not-delivered, even with the peer down"]
         ["duplicate-applied-once" (fx.declared) true
          (append [[issue C P "7"] [duplicate request (T 1)] [deliver-request (T 1)] [deliver-request (T 1)]
-                  [act P (T 1) applied] [act P (T 1) replayed] [deliver-reply (T 1) One] [discard-reply (T 1) One]] (Second 2))
-         "completed" [["reply" ["int" "1"]] ["reply" ["int" "2"]]] 2
+                  [act P (T 1) applied] [act P (T 1) replayed] [deliver-reply (T 1) One] [discard-reply (T 1) One]] (Rest 2))
+         "completed" [R1 R2 RC] 2
          "two copies of one request are handed over: applied once, replayed once; the second reply is stale"]
         ["late-reply-discarded" (fx.declared) true
          (append [[issue C P "7"] [deliver-request (T 1)] [act P (T 1) applied] [timeout (T 1)]
                   [issue C P "7"] [discard-reply (T 1) One]
-                  [deliver-request (T 2)] [act P (T 2) replayed] [deliver-reply (T 2) One]] (Second 3))
-         "completed" [["timed_out"] ["reply" ["int" "1"]] ["reply" ["int" "2"]]] 2
+                  [deliver-request (T 2)] [act P (T 2) replayed] [deliver-reply (T 2) One]] (Rest 3))
+         "completed" [TO R1 R2 RC] 2
          "the reply arrives after timed-out, while the caller waits in its retry: discarded, not shown"]
         ["caller-restarts-from-the-beginning" (fx.declared) true
          (append [[issue C P "7"] [deliver-request (T 1)] [act P (T 1) applied] [crash C] [restart C]
                   [issue C P "7"] [discard-reply (T 1) One]
-                  [deliver-request (T 2)] [act P (T 2) replayed] [deliver-reply (T 2) One]] (Second 3))
-         "completed" [["reply" ["int" "1"]] ["reply" ["int" "2"]]] 2
+                  [deliver-request (T 2)] [act P (T 2) replayed] [deliver-reply (T 2) One]] (Rest 3))
+         "completed" [R1 R2 RC] 2
          "a caller that crashed while waiting gets no outcome; restarted, it performs again and is answered from the record"]
+        ["key-reused-with-another-argument" (fx.declared) true
+         [[issue C P "7"] [duplicate request (T 1)] [deliver-request (T 1)] [act P (T 1) applied] [deliver-reply (T 1) One]
+          [issue C P "8"] [deliver-request (T 2)] [act P (T 2) applied] [deliver-reply (T 2) Two]
+          [issue C P "7"] [deliver-request (T 3)] [act P (T 3) conflict]
+          [deliver-request (T 1)] [act P (T 1) replayed]
+          [deliver-reply (T 3) Conflict] [discard-reply (T 1) One] [finish C]]
+         "completed" [R1 R2 RC] 2
+         "key 7 is applied with argument 5 and then performed with argument 6: the reply is conflict, the store keeps the first record and nothing more, and a late copy of the first request is still answered from that record"]
+        ["supervisor-restart-then-no-not-delivered" (fx.declared) true
+         [[issue C P "7"] [deliver-request (T 1)] [act P (T 1) applied] [supervisor-restart] [not-delivered (T 1)]]
+         "step-not-enabled" [] 1
+         "the supervisor restarts after a hand-over: the request counts as handed over, so not-delivered is not offered for it"]
+        ["supervisor-restart-loses-the-reply-in-flight" (fx.declared) true
+         (append [[issue C P "7"] [deliver-request (T 1)] [act P (T 1) applied] [supervisor-restart] [timeout (T 1)]
+                  [issue C P "7"] [deliver-request (T 2)] [act P (T 2) replayed] [deliver-reply (T 2) One]] (Rest 3))
+         "completed" [TO R1 R2 RC] 2
+         "the supervisor restarts with a reply in flight: the reply is lost, the caller still waits and is timed out; the retry is answered from the peer's record"]
+        ["supervisor-restart-request-in-the-inbox-is-answered" (fx.declared) true
+         (append [[issue C P "7"] [deliver-request (T 1)] [supervisor-restart] [act P (T 1) applied] [deliver-reply (T 1) One]] (Rest 2))
+         "completed" [R1 R2 RC] 2
+         "the supervisor restarts while the request is in the peer's inbox and the caller waits: both images keep running, the peer acts, and the reply is the outcome of the pending perform"]
+        ["issued-before-supervisor-restart-counts-as-handed-over" (fx.declared) true
+         [[issue C P "7"] [supervisor-restart] [timeout (T 1)] [issue C P "7"] [timeout (T 2)]
+          [issue C P "8"] [not-delivered (T 3)]
+          [issue C P "7"] [deliver-request (T 4)] [act P (T 4) applied] [deliver-reply (T 4) One] [finish C]]
+         "completed" [TO TO ND R1] 1
+         "the supervisor restarts with key 7 issued and never handed over: the copy in flight is lost and key 7 counts as handed over, in that attempt and every later one, so only timed-out; key 8, first issued after the restart, can still be not-delivered"]
         ["undeclared-refused-at-start" [] true
          []
          "refused-at-start" [] none
          "the caller's program declares a connection the manifest lacks: nothing is started"]
         ["undeclared-refused-at-run-time" [] false
-         [[refuse C P "7"] [refuse C P "8"] [finish C]]
-         "completed" [["peer_down"] ["peer_down"]] 0
-         "the backstop, with the start-time check switched off: nothing in flight, peer-down at once"]]))
+         [[refuse C P "7"] [refuse C P "8"] [refuse C P "7"] [finish C]]
+         "completed" [ND ND ND] 0
+         "the backstop, with the start-time check switched off: nothing in flight, not-delivered at once"]]))
 
 (define fx.drop-last
   [_] -> []
@@ -632,7 +692,7 @@
 \\ ---------- seeded schedules ----------
 
 (define fx.seeded-schedule
-  Seed -> [object ["mode" "seeded"] ["seed" (str Seed)] ["crashes" "1"] ["duplicates" "1"] ["max_steps" "120"]])
+  Seed -> [object ["mode" "seeded"] ["seed" (str Seed)] ["crashes" "1"] ["duplicates" "1"] ["supervisor_restarts" "1"] ["max_steps" "160"]])
 
 \\ Result [Seed Failures Labels Terminal Outcomes].
 (define fx.run-seed
@@ -661,10 +721,10 @@
   -> (let C "caller"
           P "peer"
           T (/. N [C N])
-       [["peer-down-after-handover" (fx.declared) true
-         [[issue C P "7"] [deliver-request (T 1)] [crash P] [peer-down (T 1)]]
-         peer-down-after-handover "peer-down-not-handed"
-         "the supervisor reports peer-down for a request it has handed over"]
+       [["not-delivered-after-handover" (fx.declared) true
+         [[issue C P "7"] [deliver-request (T 1)] [not-delivered (T 1)]]
+         not-delivered-after-handover "not-delivered-not-handed"
+         "the supervisor reports not-delivered for a request it has handed over"]
         ["non-idempotent-peer" (fx.declared) true
          [[issue C P "7"] [duplicate request (T 1)] [deliver-request (T 1)] [deliver-request (T 1)] [act P (T 1)] [act P (T 1)]]
          non-idempotent-peer "applied-at-most-once"
@@ -680,7 +740,17 @@
         ["reply-before-commit" (fx.declared) true
          [[issue C P "7"] [deliver-request (T 1)] [crash-after-commit P (T 1)] [deliver-reply (T 1)]]
          reply-before-commit "reply-implies-acted"
-         "the peer image sends its reply first and commits afterwards; killed in between, it has replied with no durable record"]]))
+         "the peer image sends its reply first and commits afterwards; killed in between, it has replied with no durable record"]
+        ["forgetful-supervisor-restart" (fx.declared) true
+         [[issue C P "7"] [deliver-request (T 1)] [act P (T 1)] [supervisor-restart] [not-delivered (T 1)]]
+         forgetful-supervisor-restart "not-delivered-not-handed"
+         "after its restart the supervisor takes nothing as handed over, and reports not-delivered for a request the peer has applied"]
+        ["replay-different-argument" (fx.declared) true
+         [[issue C P "7"] [deliver-request (T 1)] [act P (T 1)] [deliver-reply (T 1)]
+          [issue C P "8"] [deliver-request (T 2)] [act P (T 2)] [deliver-reply (T 2)]
+          [issue C P "7"] [deliver-request (T 3)] [act P (T 3)]]
+         replay-on-different-argument "key-bound-to-argument"
+         "the peer image answers a key from its record whatever the argument: a key reused with another argument is replayed, not refused"]]))
 
 \\ A schedule as commands: the supervisor reports what happened, so a command
 \\ may leave out the end of a label.
@@ -692,6 +762,7 @@
 (define fx.command-schedule
   Steps -> [object ["mode" "list"] ["crashes" (str (fx.crashes Steps))]
                    ["duplicates" (str (fx.count duplicate (map (/. L (hd L)) Steps)))]
+                   ["supervisor_restarts" (str (fx.count supervisor-restart (map (/. L (hd L)) Steps)))]
                    ["steps" (map (/. L (fx.command L)) Steps)]])
 
 (define fx.properties-of
@@ -704,7 +775,7 @@
     (trap-error
       (let Config (fx.config Edges Mutant)
            Schedule (fh.field "schedule" R)
-           P (fx.replay Config (remote.initial Config (fx.budget "crashes" Schedule) (fx.budget "duplicates" Schedule))
+           P (fx.replay Config (remote.initial-with Config (fx.budget "crashes" Schedule) (fx.budget "duplicates" Schedule) (fx.budget "supervisor_restarts" Schedule))
                         (map (/. E (fx.label E)) (fh.field "events" R)) unchecked 0 [] [] [])
         (if (= (hd P) violated) (fx.properties-of (nth 6 P)) [(str (hd P))]))
       (/. E ["error"])))
@@ -746,13 +817,22 @@
 \\ In the third it is killed inside its first act, after its commit and before
 \\ its reply: the supervisor has to find it dead and learn from its store that it
 \\ had committed; the retry is then answered from the record.
+\\ In the fourth the supervisor is told to lose the caller's first request: it
+\\ drops it instead of handing it over, with the peer up, and when the caller
+\\ has waited long enough it reports not-delivered, which the contract allows
+\\ because nothing was handed over.
 (define fx.free-runs
-  -> [["free" [object ["mode" "free"] ["timeout_ms" "2000"] ["deadline_ms" "20000"]]
-       [["reply" ["int" "1"]] ["reply" ["int" "2"]]] []]
-      ["free-peer-killed" [object ["mode" "free"] ["timeout_ms" "300"] ["deadline_ms" "20000"] ["kill" [["peer" "2"]]]]
-       [["timed_out"] ["reply" ["int" "1"]] ["reply" ["int" "2"]]] [crash restart timeout]]
-      ["free-peer-killed-after-commit" [object ["mode" "free"] ["timeout_ms" "300"] ["deadline_ms" "20000"] ["kill_in_act" [["peer" "1"]]]]
-       [["timed_out"] ["reply" ["int" "1"]] ["reply" ["int" "2"]]] [crash-after-commit restart timeout]]])
+  -> (let R1 ["reply" (fh.value (remote.ok [int "1"]))]
+          R2 ["reply" (fh.value (remote.ok [int "2"]))]
+          RC ["reply" (fh.value (remote.conflict))]
+       [["free" [object ["mode" "free"] ["timeout_ms" "2000"] ["deadline_ms" "20000"]]
+         [R1 R2 RC] [act-conflict]]
+        ["free-peer-killed" [object ["mode" "free"] ["timeout_ms" "300"] ["deadline_ms" "20000"] ["kill" [["peer" "2"]]]]
+         [["timed_out"] R1 R2 RC] [crash restart timeout]]
+        ["free-peer-killed-after-commit" [object ["mode" "free"] ["timeout_ms" "300"] ["deadline_ms" "20000"] ["kill_in_act" [["peer" "1"]]]]
+         [["timed_out"] R1 R2 RC] [crash-after-commit restart timeout]]
+        ["free-request-lost" [object ["mode" "free"] ["timeout_ms" "300"] ["deadline_ms" "20000"] ["lose" [["caller" "1"]]]]
+         [["not_delivered"] R1 R2] [drop not-delivered]]]))
 
 \\ Result [Passed Json Labels].
 (define fx.free
@@ -760,7 +840,7 @@
     (let R (fx.execute Name (fx.declared) Schedule [] true)
          J (fx.judge (fx.declared) none R)
          Info (hd (tl (tl J)))
-         Kinds (if (cons? Info) (map (/. L (hd L)) (hd Info)) [])
+         Kinds (if (cons? Info) (map (/. L (fx.kind-of L)) (hd Info)) [])
          Passed (and (= (fh.field "status" R) "completed") (= (hd J) "accepted") (cons? Info) (hd (tl (tl Info)))
                      (= (hd (tl Info)) Outcomes) (fx.subset? Required Kinds))
       [Passed
@@ -772,7 +852,7 @@
 
 (define fx.required-kinds
   -> [issue refuse finish deliver-request deliver-reply discard-reply drop duplicate act-applied act-replayed
-      crash-after-commit timeout peer-down crash restart])
+      act-conflict crash-after-commit timeout not-delivered crash restart supervisor-restart])
 
 (define fx.tally
   [] Acc -> Acc
@@ -826,7 +906,7 @@
                          ["harness" "Shen"]
                          ["shen" (make-string "~A ~A ~A" (value *implementation*) (value *port*) (version))]
                          ["mode" (value fx.*mode*)]
-                         ["system" "Erlang/OTP supervisor (supervisor/) with two Solo5 guests under the tender: caller = TC1 program on the C machine, peer = counter with a durable store; transport: block-device mailboxes, wire format 1"]
+                         ["system" "Erlang/OTP supervisor (supervisor/) with two Solo5 guests under the tender: caller = TC1 program on the C machine, peer = counter with a durable store; transport: block-device mailboxes, wire format 2"]
                          ["system_under_check" (if Control "the non-idempotent peer image in place of the peer" "as built")]
                          ["model" "models/tc1/remote-system.shen with models/tc1/remote-tc1-caller.shen; the caller is the program the image was built from"]
                          ["abi" (fh.field "abi" (value fx.*info*))]
@@ -835,17 +915,20 @@
                          ["caller_sha256" (fh.field "caller_sha256" (value fx.*info*))]
                          ["peer_sha256" (fh.field "peer_sha256" (value fx.*info*))]
                          ["program_sha256" (fh.field "program_sha256" (value fx.*info*))]
-                         ["properties" ["single-outcome" "resolved-at-termination" "reply-implies-acted" "peer-down-not-handed" "peer-down-sealed"
-                                        "applied-at-most-once" "declared-edges-only" "crash-isolation"]]
+                         ["properties" ["single-outcome" "resolved-at-termination" "reply-implies-acted" "not-delivered-not-handed" "not-delivered-sealed"
+                                        "applied-at-most-once" "key-bound-to-argument" "declared-edges-only" "crash-isolation"]]
                          ["schedules_accepted" (str Accepted)]
                          ["hand_schedules" (str (length Hand))]
                          ["hand_schedules_failed" (map (/. H (fh.field "schedule" (hd H))) HandFailed)]
                          ["hand" (map (/. H (hd H)) Hand)]
                          ["seeded_schedules" (str (length Seeds))]
-                         ["seeded_budgets" "1 crash, 1 duplicate, at most 120 steps"]
+                         ["seeded_budgets" "1 crash, 1 duplicate, 1 supervisor restart, at most 160 steps"]
                          ["seeded_failed" (map (/. S [object ["seed" (str (hd S))] ["failures" (hd (tl S))]]) (fh.take 5 SeedsFailed))]
                          ["seeded_steps" (str (fx.sum (map (/. S (length (nth 3 S))) Seeds)))]
                          ["seeded_schedules_with_a_crash_after_commit" (str (length (fx.keep (/. S (fr.any? (/. L (= (hd L) crash-after-commit)) (nth 3 S))) Seeds)))]
+                         ["seeded_schedules_with_a_supervisor_restart" (str (length (fx.keep (/. S (fr.any? (/. L (= (hd L) supervisor-restart)) (nth 3 S))) Seeds)))]
+                         ["seeded_schedules_with_a_conflict" (str (length (fx.keep (/. S (fr.any? (/. L (= (fx.kind-of L) act-conflict)) (nth 3 S))) Seeds)))]
+                         ["seeded_schedules_with_not_delivered" (str (length (fx.keep (/. S (fr.any? (/. L (= (hd L) not-delivered)) (nth 3 S))) Seeds)))]
                          ["seeded_ran_until_no_step_was_enabled" (str (length (fx.keep (/. S (nth 4 S)) Seeds)))]
                          ["free_runs" (map (/. F (hd (tl F))) Free)]
                          ["steps_by_kind" (fx.kinds-json Kinds)]

@@ -239,8 +239,8 @@ read_store(_) -> none.
 decode_stored(Block, Seq) ->
     case fenrir_wire:decode_record(Block) of
         {ok, Record = #{type := stored, seq := Seq, incarnation := 0}} ->
-            case fenrir_wire:decode_call(Record) of
-                {ok, Caller, Key, Value} -> {Caller, Key, Value};
+            case fenrir_wire:decode_stored(Record) of
+                {ok, Caller, Key, Argument, Value} -> {Caller, Key, Argument, Value};
                 malformed -> malformed
             end;
         _ -> malformed

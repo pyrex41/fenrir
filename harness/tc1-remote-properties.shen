@@ -5,7 +5,9 @@
 \\ harness/tc1-remote-run.shen, which replays the event log of a real run
 \\ through the model. The properties read the model's history variables
 \\ (attempts, applications, sealed request ids), which the model's own steps
-\\ maintain.
+\\ maintain. Whether a copy of a request id was handed over, and whether it was
+\\ issued before a supervisor restart, are read from those history variables and
+\\ not from the supervisor's own record, which a defective supervisor loses.
 \\   fr.check-state Config State            violations in a state
 \\   fr.check-step Config Pre Label Post    violations of one step
 \\   fr.check-terminal State                violations when no step is enabled
@@ -43,23 +45,46 @@
 (define fr.log [_ _ [_ Log] _] -> Log)
 (define fr.inbox [_ _ _ [_ _ Inbox]] -> Inbox)
 
+\\ History: request ids of which a copy really was handed to the peer, and
+\\ request ids issued before the supervisor's latest restart.
+(define fr.given S -> (nth 4 (remote.ghost S)))
+(define fr.old S -> (nth 5 (remote.ghost S)))
+
 \\ ---------- properties of a state ----------
 
 \\ single-outcome: a perform never has two outcomes.
-\\ reply-implies-acted: an observed reply v means the peer's durable log records v for that request id.
-\\ It is judged against the store, not against any record of who saw the peer act.
+\\ reply-implies-acted: an observed reply is one of the operation's two values,
+\\ and the peer's durable log has a record for that request id; if the reply is
+\\ ok v, the record's value is v.
+\\ key-bound-to-argument: if the reply is ok, the record was made with this
+\\ attempt's argument; if it is conflict, the record was made with another.
+\\ Both are judged against the store, not against any record of who saw the peer act.
 (define fr.attempt-violations
   S [] -> []
-  S [[Tag Caller Peer Rid Fate Outcomes] | Attempts] ->
+  S [[Tag Caller Peer Rid Fate Outcomes Arg] | Attempts] ->
     (append (if (> (length Outcomes) 1) ["single-outcome"] [])
-            (fr.reply-violations S Caller Peer Rid Outcomes)
+            (fr.reply-violations (fr.record-of S Caller Peer Rid) Arg Outcomes)
             (fr.attempt-violations S Attempts)))
 
 (define fr.reply-violations
-  _ _ _ _ [] -> []
-  S Caller Peer Rid [[reply V] | Outcomes] ->
-    (append (if (fr.recorded? S Caller Peer Rid [V]) [] ["reply-implies-acted"]) (fr.reply-violations S Caller Peer Rid Outcomes))
-  S Caller Peer Rid [_ | Outcomes] -> (fr.reply-violations S Caller Peer Rid Outcomes))
+  _ _ [] -> []
+  Record Arg [[reply V] | Outcomes] -> (append (fr.reply-check V Arg Record) (fr.reply-violations Record Arg Outcomes))
+  Record Arg [_ | Outcomes] -> (fr.reply-violations Record Arg Outcomes))
+
+\\ Record is [] or [[RecordedArgument Value]].
+(define fr.reply-check
+  [tuple [int "0"] V] Arg [[Arg V]] -> []
+  [tuple [int "0"] V] _ [[_ V]] -> ["key-bound-to-argument"]
+  [tuple [int "1"] [int "0"]] Arg [[Arg _]] -> ["key-bound-to-argument"]
+  [tuple [int "1"] [int "0"]] _ [[_ _]] -> []
+  _ _ _ -> ["reply-implies-acted"])
+
+(define fr.record-of
+  S Caller Peer Rid -> (fr.record-in (remote.find-member Peer (remote.members S)) [Caller Rid]))
+
+(define fr.record-in
+  [] _ -> []
+  [M] Key -> (remote.assoc Key (fr.log M)))
 
 (define fr.recorded?
   S Caller Peer Rid Expected -> (fr.recorded-in? (remote.find-member Peer (remote.members S)) [Caller Rid] Expected))
@@ -82,7 +107,7 @@
             (if (fr.any? (/. Record (not (element? [(hd (hd Record)) Name] Edges))) Log) ["declared-edges-only"] [])
             (fr.edge-violations Edges Members)))
 
-\\ peer-down-sealed: after peer-down for a request id, until the caller issues it
+\\ not-delivered-sealed: after not-delivered for a request id, until the caller issues it
 \\ again, the peer has no record of it, has not been handed it, and no copy is in flight.
 (define fr.sealed-violations
   S [] -> []
@@ -90,8 +115,8 @@
     (append (if (or (fr.any? (/. M (remote.request-for? Caller Peer Rid M)) (remote.net S))
                     (not (fr.recorded? S Caller Peer Rid []))
                     (fr.any? (/. Entry (and (= (hd (tl Entry)) Caller) (= (hd (tl (tl Entry))) Rid))) (fr.inbox (fr.member-of Peer S)))
-                    (element? [Caller Peer Rid] (hd (remote.sup S))))
-                ["peer-down-sealed"] [])
+                    (element? [Caller Peer Rid] (fr.given S)))
+                ["not-delivered-sealed"] [])
             (fr.sealed-violations S Sealed)))
 
 (define fr.check-state
@@ -114,10 +139,17 @@
 
 \\ applied-at-most-once, at the step: acting on a request id that has a reply
 \\ record leaves the durable store as it was.
+\\ key-bound-to-argument, at the step: the peer says conflict only where the
+\\ request id has a record made with another argument, and then the store is
+\\ left as it was; and it replays only a record made with this argument.
 (define fr.act-violations
-  M Post -> (if (and (not (= (remote.assoc [(hd (tl (hd (fr.inbox M)))) (hd (tl (tl (hd (fr.inbox M)))))] (fr.log M)) []))
-                     (not (= (fr.durable M) (fr.durable (fr.member-of (hd M) Post)))))
-                ["applied-at-most-once"] []))
+  M How Post -> (let Entry (hd (fr.inbox M))
+                     Record (remote.assoc [(hd (tl Entry)) (hd (tl (tl Entry)))] (fr.log M))
+                     Same (= (fr.durable M) (fr.durable (fr.member-of (hd M) Post)))
+                     Other (and (cons? Record) (not (= (hd (hd Record)) (nth 4 Entry))))
+                  (append (if (and (cons? Record) (not Same)) [(if (= How conflict) "key-bound-to-argument" "applied-at-most-once")] [])
+                          (if (and (= How conflict) (not Other)) ["key-bound-to-argument"] [])
+                          (if (and (= How replayed) Other) ["key-bound-to-argument"] []))))
 
 \\ A crash between the commit and the reply (EFFECTS.md §12.3, §12.7). Judged
 \\ against the durable store, which is all that survives it:
@@ -143,25 +175,39 @@
               (if (and (= (remote.assoc Key (fr.log M)) [])
                        (= (hd (fr.durable After)) (+ 1 (hd (fr.durable M))))
                        (= (remote.unrecord Key (fr.log After)) (fr.log M))
-                       (not (= (remote.assoc Key (fr.log After)) [])))
+                       (cons? (remote.assoc Key (fr.log After)))
+                       (= (hd (hd (remote.assoc Key (fr.log After)))) (nth 4 Entry)))
                   [] ["applied-at-most-once"]))))
 
-\\ peer-down-not-handed: peer-down is reported only while the peer is down and
-\\ only for a request id of which no copy was ever handed to it; so the peer has
-\\ no record of it.
-(define fr.peer-down-violations
+\\ not-delivered-not-handed: not-delivered is reported only for a request id of
+\\ which no copy was ever handed to the peer, and which was not issued before
+\\ the supervisor's latest restart; so the peer has no record of it. The peer
+\\ may be up or down.
+(define fr.not-delivered-violations
   [Tag Caller Peer Rid | _] Pre ->
-    (if (and (= (remote.status Peer Pre) down)
-             (not (element? [Caller Peer Rid] (hd (remote.sup Pre))))
+    (if (and (not (element? [Caller Peer Rid] (fr.given Pre)))
+             (not (element? [Caller Peer Rid] (fr.old Pre)))
              (fr.recorded? Pre Caller Peer Rid []))
-        [] ["peer-down-not-handed"]))
+        [] ["not-delivered-not-handed"]))
+
+\\ crash-isolation, for the supervisor's own restart: no member changes, not
+\\ even its volatile state, and nothing is put in flight.
+(define fr.supervisor-restart-violations
+  Pre Post -> (if (and (= (remote.members Pre) (remote.members Post))
+                       (fr.every-in? (remote.net Post) (remote.net Pre)))
+                  [] ["crash-isolation"]))
+
+(define fr.every-in?
+  [] _ -> true
+  [X | Xs] Ys -> (and (element? X Ys) (fr.every-in? Xs Ys)))
 
 (define fr.check-step
   Config Pre [crash Name] Post -> (fr.isolation Name Pre Post)
   Config Pre [restart Name] Post -> (fr.isolation Name Pre Post)
-  Config Pre [act Name | _] Post -> (fr.act-violations (fr.member-of Name Pre) Post)
+  Config Pre [act Name _ How] Post -> (fr.act-violations (fr.member-of Name Pre) How Post)
+  Config Pre [supervisor-restart] Post -> (fr.supervisor-restart-violations Pre Post)
   Config Pre [crash-after-commit Name _] Post -> (fr.commit-crash-violations Name (fr.member-of Name Pre) Pre Post)
-  Config Pre [peer-down Tag] Post -> (fr.peer-down-violations (remote.attempt Tag (hd (remote.ghost Pre))) Pre)
+  Config Pre [not-delivered Tag] Post -> (fr.not-delivered-violations (remote.attempt Tag (hd (remote.ghost Pre))) Pre)
   _ _ _ _ -> [])
 
 (define fr.isolation
@@ -175,6 +221,6 @@
   S -> (if (fr.any? (/. A (fr.unresolved? A)) (hd (remote.ghost S))) ["resolved-at-termination"] []))
 
 (define fr.unresolved?
-  [_ _ _ _ closed [_]] -> false
-  [_ _ _ _ orphaned []] -> false
+  [_ _ _ _ closed [_] _] -> false
+  [_ _ _ _ orphaned [] _] -> false
   _ -> true)

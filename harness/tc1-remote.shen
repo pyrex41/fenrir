@@ -2,8 +2,9 @@
 \\ model models/tc1/remote-system.shen). Explores every schedule of a few small
 \\ systems, breadth first over the whole reachable state graph, and checks the
 \\ contract's properties on every state and every step. The bounds are the
-\\ configuration itself: members, scripts, retries, and budgets for crash and
-\\ duplicate steps. Drops, timeouts, restarts and reordering are unbounded.
+\\ configuration itself: members, scripts, retries, and budgets for crash,
+\\ duplicate and supervisor-restart steps. Drops, timeouts, not-delivered,
+\\ member restarts and reordering are unbounded.
 \\ Then each mutant of the model must violate the property it is aimed at; the
 \\ shortest violating schedule is reported. A mutant run that raises an error is
 \\ counted as crashed, never as killed.
@@ -139,9 +140,9 @@
 
 \\ Result [States Transitions Terminals Depth Counterexamples ViolationCount Kinds].
 (define fr.explore
-  Config Crashes Duplicates Stop ->
+  Config Crashes Duplicates Restarts Stop ->
     (let Fresh (fr.reset)
-         S0 (remote.initial Config Crashes Duplicates)
+         S0 (remote.initial-with Config Crashes Duplicates Restarts)
          R0 (fr.index Config S0 [])
          Noted (fr.found (hd (tl R0)) [])
          Depth (fr.level Config [[(hd R0) S0 []]] [] 0 Stop)
@@ -156,7 +157,7 @@
   Base Retry -> (let N (/. K (str (+ Base K)))
     [match (N 0) [perform (N 1) "Ledger" "add" [tuple (N 2) [int (N 3) "7"] [int (N 4) "5"]]]
       [["reply" [(N 5)] [emit (N 6) "got" [var (N 7) (N 5)]]]
-       ["peer_down" [] [emit (N 8) "down" [unit (N 9)]]]
+       ["not_delivered" [] [emit (N 8) "undelivered" [unit (N 9)]]]
        ["timed_out" [] Retry]]]))
 
 (define fr.tc1-program
@@ -166,29 +167,36 @@
           [["Ledger" p]]])
 
 (define fr.payload -> [int "5"])
+(define fr.other-payload -> [int "6"])
 
-\\ [Name Config Crashes Duplicates Description]
+\\ [Name Config Crashes Duplicates SupervisorRestarts Description]
 (define fr.systems
   -> [["two-members-one-request"
-       [remote-config [[c [script [[p "1" (fr.payload) 1]]] [none]] [p [script []] [counter]]] [[c p]] none] 1 1
+       [remote-config [[c [script [[p "1" (fr.payload) 1]]] [none]] [p [script []] [counter]]] [[c p]] none] 1 1 0
        "caller c, peer p; one request, retried once after timed-out; 1 crash, 1 duplicate"]
       ["two-members-one-request-two-crashes"
-       [remote-config [[c [script [[p "1" (fr.payload) 1]]] [none]] [p [script []] [counter]]] [[c p]] none] 2 0
+       [remote-config [[c [script [[p "1" (fr.payload) 1]]] [none]] [p [script []] [counter]]] [[c p]] none] 2 0 0
        "the same system; 2 crashes, no duplicate"]
       ["two-members-two-requests"
-       [remote-config [[c [script [[p "1" (fr.payload) 1] [p "2" (fr.payload) 0]]] [none]] [p [script []] [counter]]] [[c p]] none] 1 0
+       [remote-config [[c [script [[p "1" (fr.payload) 1] [p "2" (fr.payload) 0]]] [none]] [p [script []] [counter]]] [[c p]] none] 1 0 0
        "caller c, peer p; two requests, the first retried once; 1 crash, no duplicate"]
       ["three-members-undeclared-edge"
        [remote-config [[c [script [[p "1" (fr.payload) 0] [q "2" (fr.payload) 0]]] [none]] [p [script []] [counter]] [q [script []] [counter]]]
-                      [[c p]] none] 2 1
+                      [[c p]] none] 2 1 0
        "caller c, peers p and q; c to p declared, c to q not; one request to each; 2 crashes, 1 duplicate"]
       ["two-callers-one-peer"
        [remote-config [[c [script [[p "1" (fr.payload) 0]]] [none]] [d [script [[p "1" (fr.payload) 0]]] [none]] [p [script []] [counter]]]
-                      [[c p] [d p]] none] 1 1
+                      [[c p] [d p]] none] 1 1 0
        "callers c and d, peer p; both use request key 1; 1 crash, 1 duplicate"]
       ["tc1-caller"
-       [remote-config [[c (fr.tc1-program) [none]] [p [script []] [counter]]] [[c p]] none] 1 1
-       "caller c is a tc1 handler-machine program with one retry; peer p; 1 crash, 1 duplicate"]])
+       [remote-config [[c (fr.tc1-program) [none]] [p [script []] [counter]]] [[c p]] none] 1 1 0
+       "caller c is a tc1 handler-machine program with one retry; peer p; 1 crash, 1 duplicate"]
+      ["two-members-supervisor-restart"
+       [remote-config [[c [script [[p "1" (fr.payload) 1]]] [none]] [p [script []] [counter]]] [[c p]] none] 1 1 1
+       "caller c, peer p; one request, retried once after timed-out; 1 crash, 1 duplicate, 1 supervisor restart"]
+      ["two-members-key-reuse"
+       [remote-config [[c [script [[p "1" (fr.payload) 0] [p "1" (fr.other-payload) 0]]] [none]] [p [script []] [counter]]] [[c p]] none] 1 1 0
+       "caller c, peer p; key 1 performed with one argument and then with another; 1 crash, 1 duplicate"]])
 
 (define fr.system
   Name [[Name | Rest] | _] -> [Name | Rest]
@@ -215,13 +223,13 @@
 
 \\ Result [Json Passed Kinds].
 (define fr.baseline
-  Mutant [Name Config Crashes Duplicates Description] ->
-    (let R (fr.explore (fr.with-mutant Config Mutant) Crashes Duplicates false)
+  Mutant [Name Config Crashes Duplicates Restarts Description] ->
+    (let R (fr.explore (fr.with-mutant Config Mutant) Crashes Duplicates Restarts false)
          Paths (fr.paths (shen.dict 65536) 1)
          Passed (and (= (nth 6 R) 0) (> (nth 3 R) 0))
       [[object ["system" Name] ["description" Description]
                ["members" (str (length (remote.specs Config)))]
-               ["crash_budget" (str Crashes)] ["duplicate_budget" (str Duplicates)]
+               ["crash_budget" (str Crashes)] ["duplicate_budget" (str Duplicates)] ["supervisor_restart_budget" (str Restarts)]
                ["states" (str (nth 1 R))] ["transitions" (str (nth 2 R))] ["terminal_states" (str (nth 3 R))]
                ["schedules" (fr.big-string (hd Paths))] ["longest_schedule" (str (hd (tl Paths)))]
                ["violations" (str (nth 6 R))]
@@ -231,15 +239,17 @@
 
 \\ [Mutant System ExpectedProperty]
 (define fr.mutants
-  -> [[peer-down-after-handover "two-members-one-request" "peer-down-not-handed"]
+  -> [[not-delivered-after-handover "two-members-one-request" "not-delivered-not-handed"]
       [forged-reply "two-members-one-request" "reply-implies-acted"]
       [non-idempotent-peer "two-members-one-request" "applied-at-most-once"]
       [undeclared-delivery "three-members-undeclared-edge" "declared-edges-only"]
       [late-reply-accepted "two-members-one-request" "single-outcome"]
       [linked-crash "two-members-one-request" "crash-isolation"]
-      [purge-by-attempt "two-members-one-request" "peer-down-sealed"]
+      [purge-by-attempt "two-members-one-request" "not-delivered-sealed"]
       [no-timeout "two-members-one-request" "resolved-at-termination"]
-      [reply-before-commit "two-members-one-request" "reply-implies-acted"]])
+      [reply-before-commit "two-members-one-request" "reply-implies-acted"]
+      [forgetful-supervisor-restart "two-members-supervisor-restart" "not-delivered-not-handed"]
+      [replay-on-different-argument "two-members-key-reuse" "key-bound-to-argument"]])
 
 (define fr.aimed
   Expected [] -> []
@@ -256,7 +266,7 @@
   [Mutant System Expected] ->
     (let Sys (fr.system System (fr.systems))
       (trap-error
-        (let R (fr.explore (fr.with-mutant (nth 2 Sys) Mutant) (nth 3 Sys) (nth 4 Sys) true)
+        (let R (fr.explore (fr.with-mutant (nth 2 Sys) Mutant) (nth 3 Sys) (nth 4 Sys) (nth 5 Sys) true)
              V (fr.mutant-verdict Expected (nth 5 R))
           [(hd V) [object ["mutant" (str Mutant)] ["system" System] ["aimed_at" Expected] ["verdict" (hd V)]
                           ["states_explored" (str (nth 1 R))]
@@ -276,65 +286,146 @@
   -> (let A (nth 2 (fr.system "two-members-one-request" (fr.systems)))
           U (nth 2 (fr.system "three-members-undeclared-edge" (fr.systems)))
           T (nth 2 (fr.system "tc1-caller" (fr.systems)))
+          B (nth 2 (fr.system "two-members-two-requests" (fr.systems)))
+          K (nth 2 (fr.system "two-members-key-reuse" (fr.systems)))
+          One (remote.ok [int "1"])
+          Record1 [1 [[[c "1"] [[int "5"] [int "1"]]]]]
        (append
-         \\ peer down before anything was handed over: peer-down, and the copy in flight is destroyed
-         (fr.hand "peer-down-before-handover"
-           (freeze (let R (remote.run A (remote.initial A 1 0) [[crash p] [issue c p "1"] [peer-down [c 1]]])
+         \\ the peer is down and nothing was handed over: not-delivered, and the copy in flight is destroyed
+         (fr.hand "not-delivered-before-handover"
+           (freeze (let R (remote.run A (remote.initial A 1 0) [[crash p] [issue c p "1"] [not-delivered [c 1]]])
                      (and (= (remote.net (hd R)) [])
-                          (element? [outcome [c 1] [peer-down]] (hd (tl R)))
+                          (element? [outcome [c 1] [not-delivered]] (hd (tl R)))
                           (= (fr.log (fr.member-of p (hd R))) [])))))
+         \\ the peer is up and nothing was handed over: not-delivered is possible all the same, the copy in
+         \\ flight is destroyed, and the peer never acts; a handed-over request leaves only timed-out
+         (fr.hand "not-delivered-while-peer-is-up"
+           (freeze (let S0 (remote.initial A 0 0)
+                        R1 (remote.run A S0 [[issue c p "1"]])
+                        Ls (fr.labels A (hd R1))
+                        R (remote.run A (hd R1) [[not-delivered [c 1]]])
+                        R2 (remote.run A (hd R1) [[deliver-request [c 1]]])
+                     (and (= (remote.status p (hd R1)) up)
+                          (element? [not-delivered [c 1]] Ls)
+                          (= (remote.net (hd R)) [])
+                          (element? [outcome [c 1] [not-delivered]] (hd (tl R)))
+                          (= (fr.durable (fr.member-of p (hd R))) [0 []])
+                          (empty? (fr.labels A (hd R)))
+                          (not (element? [not-delivered [c 1]] (fr.labels A (hd R2))))))))
          \\ after hand-over a dead peer gives timed-out only
-         (fr.hand "no-peer-down-after-handover"
+         (fr.hand "no-not-delivered-after-handover"
            (freeze (let R (remote.run A (remote.initial A 1 0) [[issue c p "1"] [deliver-request [c 1]] [crash p]])
                         Ls (fr.labels A (hd R))
-                     (and (element? [timeout [c 1]] Ls) (not (element? [peer-down [c 1]] Ls))))))
+                     (and (element? [timeout [c 1]] Ls) (not (element? [not-delivered [c 1]] Ls))))))
          \\ a retry after timed-out is answered from the record and applied once
          (fr.hand "retry-is-replayed"
            (freeze (let R (remote.run A (remote.initial A 0 0)
                             [[issue c p "1"] [deliver-request [c 1]] [act p [c 1] applied] [timeout [c 1]] [issue c p "1"]
-                             [deliver-request [c 2]] [act p [c 2] replayed] [deliver-reply [c 2] [int "1"]]])
-                     (and (= (fr.durable (fr.member-of p (hd R))) [1 [[[c "1"] [int "1"]]]])
-                          (element? [outcome [c 2] [reply [int "1"]]] (hd (tl R)))))))
+                             [deliver-request [c 2]] [act p [c 2] replayed] [deliver-reply [c 2] One]])
+                     (and (= (fr.durable (fr.member-of p (hd R))) Record1)
+                          (element? [outcome [c 2] [reply One]] (hd (tl R)))))))
          \\ the peer's record survives its restart; the caller's position does not survive its own
          (fr.hand "durable-record-survives-restart"
            (freeze (let R (remote.run A (remote.initial A 2 0)
                             [[issue c p "1"] [deliver-request [c 1]] [act p [c 1] applied] [crash p] [restart p] [crash c] [restart c]
                              [issue c p "1"] [deliver-request [c 2]] [act p [c 2] replayed]])
-                     (= (fr.durable (fr.member-of p (hd R))) [1 [[[c "1"] [int "1"]]]]))))
+                     (= (fr.durable (fr.member-of p (hd R))) Record1))))
          \\ killed between its commit and its reply: the store has the record and nothing is in flight;
-         \\ the request was handed over, so no peer-down; the retry is answered from the record, applied once
+         \\ the request was handed over, so no not-delivered; the retry is answered from the record, applied once
          (fr.hand "committed-then-crashed-is-replayed"
            (freeze (let R (remote.run A (remote.initial A 1 0) [[issue c p "1"] [deliver-request [c 1]] [crash-after-commit p [c 1]]])
                         Ls (fr.labels A (hd R))
                         R2 (remote.run A (hd R) [[timeout [c 1]] [restart p] [issue c p "1"] [deliver-request [c 2]]])
                         Ls2 (fr.labels A (hd R2))
-                        R3 (remote.run A (hd R2) [[act p [c 2] replayed] [deliver-reply [c 2] [int "1"]]])
+                        R3 (remote.run A (hd R2) [[act p [c 2] replayed] [deliver-reply [c 2] One]])
                      (and (= (remote.net (hd R)) [])
                           (= (remote.status p (hd R)) down)
-                          (= (fr.durable (fr.member-of p (hd R))) [1 [[[c "1"] [int "1"]]]])
-                          (element? [timeout [c 1]] Ls) (not (element? [peer-down [c 1]] Ls))
+                          (= (fr.durable (fr.member-of p (hd R))) Record1)
+                          (element? [timeout [c 1]] Ls) (not (element? [not-delivered [c 1]] Ls))
                           (element? [act p [c 2] replayed] Ls2) (not (element? [act p [c 2] applied] Ls2))
-                          (= (fr.durable (fr.member-of p (hd R3))) [1 [[[c "1"] [int "1"]]]])
+                          (= (fr.durable (fr.member-of p (hd R3))) Record1)
                           (= (hd (tl (hd (hd (tl (remote.ghost (hd R3))))))) 1)
-                          (element? [outcome [c 2] [reply [int "1"]]] (hd (tl R3)))))))
-         \\ an undeclared connection: nothing in flight, peer-down at once
+                          (element? [outcome [c 2] [reply One]] (hd (tl R3)))))))
+         \\ the supervisor restarts with a request handed over: every message in flight is lost, no member
+         \\ changes, and the request counts as handed over, so no not-delivered, with the peer up or down;
+         \\ the request already in the peer's inbox is still acted on and its reply is the outcome
+         (fr.hand "no-not-delivered-after-supervisor-restart"
+           (freeze (let S0 (remote.initial-with A 1 1 1)
+                        R1 (remote.run A S0 [[issue c p "1"] [duplicate request [c 1]] [deliver-request [c 1]]])
+                        R (remote.run A (hd R1) [[supervisor-restart]])
+                        Ls (fr.labels A (hd R))
+                        Down (fr.labels A (hd (remote.run A (hd R) [[crash p]])))
+                        R2 (remote.run A (hd R) [[act p [c 1] applied] [deliver-reply [c 1] One]])
+                     (and (= (length (remote.net (hd R1))) 1)
+                          (= (remote.net (hd R)) [])
+                          (= (remote.members (hd R)) (remote.members (hd R1)))
+                          (element? [timeout [c 1]] Ls) (not (element? [not-delivered [c 1]] Ls))
+                          (element? [timeout [c 1]] Down) (not (element? [not-delivered [c 1]] Down))
+                          (not (element? [supervisor-restart] Ls))
+                          (element? [outcome [c 1] [reply One]] (hd (tl R2)))
+                          (= (fr.durable (fr.member-of p (hd R2))) Record1)))))
+         \\ the supervisor restarts with a request issued and not handed over: it counts as handed over all
+         \\ the same, in this attempt and in the retry; a request id first issued after the restart does not
+         (fr.hand "issued-before-supervisor-restart-counts-as-handed"
+           (freeze (let S0 (remote.initial-with B 0 0 1)
+                        R1 (remote.run B S0 [[issue c p "1"]])
+                        Before (fr.labels B (hd R1))
+                        R2 (remote.run B (hd R1) [[supervisor-restart]])
+                        After (fr.labels B (hd R2))
+                        R3 (remote.run B (hd R2) [[timeout [c 1]] [issue c p "1"]])
+                        Retry (fr.labels B (hd R3))
+                        R4 (remote.run B (hd R3) [[timeout [c 2]] [issue c p "2"]])
+                        Fresh (fr.labels B (hd R4))
+                        R5 (remote.run B (hd R4) [[not-delivered [c 3]]])
+                     (and (element? [not-delivered [c 1]] Before)
+                          (= (remote.net (hd R2)) [])
+                          (= After [[timeout [c 1]]])
+                          (element? [timeout [c 2]] Retry) (not (element? [not-delivered [c 2]] Retry))
+                          (element? [not-delivered [c 3]] Fresh)
+                          (element? [outcome [c 3] [not-delivered]] (hd (tl R5)))
+                          (= (fr.durable (fr.member-of p (hd R5))) [0 []])))))
+         \\ a key reused with another argument: conflict, inside the reply; the store is unchanged, and the
+         \\ first argument's record still answers a copy of the first request
+         (fr.hand "key-reused-with-another-argument-is-a-conflict"
+           (freeze (let S0 (remote.initial K 0 1)
+                        R1 (remote.run K S0 [[issue c p "1"] [duplicate request [c 1]] [deliver-request [c 1]] [act p [c 1] applied]
+                                             [deliver-reply [c 1] One] [issue c p "1"] [deliver-request [c 2]]])
+                        Ls (fr.labels K (hd R1))
+                        R2 (remote.run K (hd R1) [[act p [c 2] conflict] [deliver-reply [c 2] (remote.conflict)]])
+                        R3 (remote.run K (hd R2) [[deliver-request [c 1]] [act p [c 1] replayed]])
+                     (and (element? [act p [c 2] conflict] Ls)
+                          (not (element? [act p [c 2] replayed] Ls)) (not (element? [act p [c 2] applied] Ls))
+                          (not (element? [crash-after-commit p [c 2]] Ls))
+                          (= (fr.durable (fr.member-of p (hd R1))) Record1)
+                          (= (fr.durable (fr.member-of p (hd R2))) Record1)
+                          (element? [outcome [c 2] [reply (remote.conflict)]] (hd (tl R2)))
+                          (= (fr.durable (fr.member-of p (hd R3))) Record1)))))
+         \\ the same two performs when the first was never delivered: the second is the first application
+         \\ of the key, and the record is made with the second argument
+         (fr.hand "key-reused-after-not-delivered-is-applied"
+           (freeze (let R (remote.run K (remote.initial K 0 0)
+                            [[issue c p "1"] [not-delivered [c 1]] [issue c p "1"] [deliver-request [c 2]] [act p [c 2] applied]
+                             [deliver-reply [c 2] One]])
+                     (and (= (fr.durable (fr.member-of p (hd R))) [1 [[[c "1"] [[int "6"] [int "1"]]]]])
+                          (element? [outcome [c 2] [reply One]] (hd (tl R)))))))
+         \\ an undeclared connection: nothing in flight, not-delivered at once
          (fr.hand "undeclared-is-refused"
            (freeze (let R (remote.run U (remote.initial U 0 0) [[issue c p "1"] [timeout [c 1]] [refuse c q "2"]])
                      (and (= (length (remote.net (hd R))) 1)
                           (element? [refused [c 2] c q "2"] (hd (tl R)))
-                          (element? [outcome [c 2] [peer-down]] (hd (tl R)))))))
+                          (element? [outcome [c 2] [not-delivered]] (hd (tl R)))))))
          \\ the tc1 program: reply is matched and its value emitted, then the task ends
          (fr.hand "tc1-reply"
            (freeze (let R (remote.run T (remote.initial T 0 0)
-                            [[issue c p "7"] [deliver-request [c 1]] [act p [c 1] applied] [deliver-reply [c 1] [int "1"]] [finish c]])
-                     (and (element? [member c [emit "16" "got" [int "1"]]] (hd (tl R)))
+                            [[issue c p "7"] [deliver-request [c 1]] [act p [c 1] applied] [deliver-reply [c 1] One] [finish c]])
+                     (and (element? [member c [emit "16" "got" One]] (hd (tl R)))
                           (= (hd (reverse (hd (tl R)))) [member c [task-termination [ok [unit]]]])))))
          \\ the tc1 program retries with the same key and gets the recorded value
          (fr.hand "tc1-retry"
            (freeze (let R (remote.run T (remote.initial T 0 0)
                             [[issue c p "7"] [deliver-request [c 1]] [act p [c 1] applied] [timeout [c 1]] [issue c p "7"]
-                             [deliver-request [c 2]] [act p [c 2] replayed] [deliver-reply [c 2] [int "1"]] [finish c]])
-                     (and (element? [member c [emit "36" "got" [int "1"]]] (hd (tl R)))
+                             [deliver-request [c 2]] [act p [c 2] replayed] [deliver-reply [c 2] One] [finish c]])
+                     (and (element? [member c [emit "36" "got" One]] (hd (tl R)))
                           (= (hd (fr.durable (fr.member-of p (hd R)))) 1)))))
          \\ the tc1 program: two timeouts end in "unknown"
          (fr.hand "tc1-unknown"
@@ -346,7 +437,8 @@
 
 (define fr.required-kinds
   -> [issue refuse finish deliver-request deliver-reply discard-reply drop duplicate act-applied act-replayed
-      crash-after-commit timeout peer-down crash restart outcome-reply outcome-peer-down outcome-timed-out])
+      act-conflict crash-after-commit timeout not-delivered crash restart supervisor-restart
+      outcome-reply outcome-not-delivered outcome-timed-out])
 
 (define fr.merge-kinds
   [] Acc -> Acc
@@ -391,13 +483,13 @@
                          ["shen" (make-string "~A ~A ~A" (value *implementation*) (value *port*) (version))]
                          ["mode" (value fr.*mode*)]
                          ["model_under_check" (if Control "mutant non-idempotent-peer in place of the model" "models/tc1/remote-system.shen")]
-                         ["bounds" "whole reachable graph of each system; bounded by its scripts, retries and its crash and duplicate budgets; drop, timeout, restart and reordering unbounded"]
-                         ["properties" ["single-outcome" "resolved-at-termination" "reply-implies-acted" "peer-down-not-handed" "peer-down-sealed"
-                                        "applied-at-most-once" "declared-edges-only" "crash-isolation"]]
+                         ["bounds" "whole reachable graph of each system; bounded by its scripts, retries and its crash, duplicate and supervisor-restart budgets; drop, timeout, not-delivered, member restart and reordering unbounded"]
+                         ["properties" ["single-outcome" "resolved-at-termination" "reply-implies-acted" "not-delivered-not-handed" "not-delivered-sealed"
+                                        "applied-at-most-once" "key-bound-to-argument" "declared-edges-only" "crash-isolation"]]
                          ["systems" (map (/. B (hd B)) Baselines)]
                          ["step_kinds_not_exercised" Missing]
                          ["hand_schedules_failed" Hand]
-                         ["hand_schedules" (if Control "0" "9")]
+                         ["hand_schedules" (if Control "0" "14")]
                          ["mutants" (map (/. M (hd (tl M))) Mutants)]
                          ["mutants_not_killed" (map (/. M (fh.field "mutant" M)) NotKilled)]
                          ["negative_control" (value fr.*control*)]]
