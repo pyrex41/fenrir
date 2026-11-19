@@ -338,6 +338,17 @@
       (ux.replay-steps Machine Params S2 M2 Ls (+ I 1) F2))
   _ _ _ _ _ _ _ I _ -> [disabled I])
 
+(define ux.read-budget
+  B -> (map (/. K (let N (sx.int (fh.field K B))
+                    (if (>= N 0) N
+                        (error "invalid A4 replay budget ~A" K))))
+            ["submits" "deliveries" "responses" "crashes" "dispatches" "upgrade_steps"]))
+
+(define ux.within-budget?
+  [] _ -> true
+  [L | Ls] B -> (let Next (sx.spend (ux.kind L) B)
+                 (and (not (= Next exhausted)) (ux.within-budget? Ls Next))))
+
 (define ux.replay-file
   Path ->
     (let C (json.parse (read-file-as-string Path) [[byte-limit 16777216]])
@@ -345,16 +356,19 @@
          Check (fh.field "check" C)
          Length (sx.int (fh.field "length" C))
          Schedule (map (/. L (ux.decode-label L)) (fh.field "schedule" C))
+         Within (ux.within-budget? Schedule (ux.read-budget (fh.field "budgets" C)))
          Run (ux.replay-run (ux.machine Name) (sx.decode-params (fh.field "params" C)) Schedule)
          Disabled (and (cons? Run) (= (hd Run) disabled))
          At (if Disabled none (sx.first-index Check Run))
-         Reproduced (and (= At Length) (= (length Schedule) Length))
+         Reproduced (and (= (fh.field "schema" C) "fenrir.service.upgrade-counterexample/1")
+                         Within (= At Length) (= (length Schedule) Length))
       [Reproduced
        [object ["schema" "fenrir.service.replay/1"]
                ["status" (if Reproduced "reproduced" "not-reproduced")]
                ["qualification" "UNKNOWN"]
                ["file" Path] ["machine" Name] ["check" Check] ["length" Length]
                ["first_failure_at" (if (= At none) null At)]
+               ["schedule_within_budget" Within]
                ["schedule_enabled" (not Disabled)]
                ["checks_failing" (if Disabled [] (map (/. F [object ["check" (nth 2 F)] ["at" (hd F)]]) Run))]]]))
 
