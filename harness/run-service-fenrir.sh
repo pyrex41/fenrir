@@ -38,13 +38,8 @@ run() {
 }
 status=0
 if [ "${1:-}" = replay-retained ]; then
-  for f in "$root"/spec/service/counterexamples-a2/*.json; do
-    line=$(run replay "$f" "$artifacts" 2>&1 | tail -n 1) || true
-    case "$line" in
-      *'"status":"reproduced"'*) echo "reproduced: ${f#$root/}" ;;
-      *) echo "NOT reproduced: ${f#$root/}: $line"; status=1 ;;
-    esac
-  done
+  . "$root/harness/service-retained-replay.sh"
+  service_replay_retained "$artifacts" "$root"/spec/service/counterexamples-a2/*.json || status=$?
   exit "$status"
 fi
 if [ "${1:-}" = replay ]; then

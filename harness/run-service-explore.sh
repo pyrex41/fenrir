@@ -41,13 +41,8 @@ case "${1:-}" in
     ls "$root/spec/service/counterexamples"
     exit 0 ;;
   replay-retained)
-    for f in "$root"/spec/service/counterexamples/*.json; do
-      line=$(run replay "$f" 2>&1 | tail -n 1) || true
-      case "$line" in
-        *'"status":"reproduced"'*) echo "reproduced: ${f#$root/}" ;;
-        *) echo "NOT reproduced: ${f#$root/}: $line"; status=1 ;;
-      esac
-    done
+    . "$root/harness/service-retained-replay.sh"
+    service_replay_retained "" "$root"/spec/service/counterexamples/*.json || status=$?
     exit "$status" ;;
 esac
 if [ "$#" -ge 8 ]; then params="$1 $2 $3 $4 $5 $6 $7 $8"; shift 8; else params="2 2 2 3 2 2 1 2000000"; fi
