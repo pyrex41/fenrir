@@ -360,7 +360,7 @@
          Predictions (json.parse (read-file-as-string (cn (value fh.*root*) "spec/service/upgrade-fenrir-mutant-predictions.json")) [[byte-limit 1048576]])
          Mutants (ufx.mutant-runs (ufx.mutant-names) Params Budget Cap Predictions ModelReport [])
          MutantsOk (svcp.all? (/. R (hd R)) Mutants)
-         Pass (and Refines (hd JS) (= (string-length SampleSha) 64) MutantsOk
+         Pass (and Refines (hd JS) (= (length (explode SampleSha)) 64) MutantsOk
                    (fh.field "complete" ModelReport) (empty? (fh.field "violations" ModelReport)))
          Report [object ["schema" "fenrir.harness.service-upgrade-fenrir/1"]
                         ["status" (if Pass "development-pass" "development-fail")]

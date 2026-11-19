@@ -65,6 +65,7 @@ case $# in
 esac
 report=$(run check "$artifacts" "$@" sandbox 2>&1) || status=$?
 # Loading prints one line per definition; the report is the last line.
+printf '%s\n' "$report" > "$out/shen.log"
 printf '%s\n' "$report" | tail -n 1
 echo "output: $out" >&2
 [ "$status" -eq 0 ] || exit "$status"
