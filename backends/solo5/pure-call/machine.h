@@ -5,7 +5,9 @@
  * (spec/tc1/EFFECTS.md); and TC1-D1 durable effects: a perform of a durable effect with
  * no active handler stops the machine in HostWait until the host replies
  * (spec/tc1/DURABLE.md). TC1-D1 fields are appended; legacy lowerings set them to zero
- * and legacy control, rule and event numbers are unchanged.
+ * and legacy control, rule and event numbers are unchanged. TC1-C1 tasks
+ * (spec/tc1/CONCURRENCY.md) live in tasks.c, which includes this machine and steps it
+ * per task; the C1 additions here are enum values at the end of their enums only.
  * No oracle imports, no expected traces. */
 #ifndef FENRIR_PC_MACHINE_H
 #define FENRIR_PC_MACHINE_H
@@ -15,7 +17,9 @@
 #define PC_MAX_FRAMES 1024
 enum pc_tag { PC_UNIT,PC_BOOL,PC_INT,PC_BYTES,PC_VAR,PC_LET,PC_IF,PC_LAMBDA,PC_APPLY,PC_CALL,
               PC_PRIM,PC_EMIT,PC_TUPLE,PC_PROJECT,PC_CONSTRUCT,PC_MATCH,
-              PC_HANDLE,PC_PERFORM,PC_RESUME,PC_DISCONTINUE };
+              PC_HANDLE,PC_PERFORM,PC_RESUME,PC_DISCONTINUE,
+              /* TC1-C1 (tasks.c only; the handler machine never steps them itself) */
+              PC_SCOPE,PC_SPAWN,PC_AWAIT,PC_CANCEL,PC_YIELD,PC_CHANNEL,PC_SEND,PC_RECEIVE,PC_CLOSE };
 enum pc_op { PC_NONE,PC_ADD,PC_SUB,PC_MUL,PC_DIV,PC_NEG,PC_LT,PC_LE,PC_GT,PC_GE,PC_NOT,PC_EQ,
              PC_BYTES_LENGTH,PC_BYTES_INDEX,PC_BYTES_CONCAT };
 struct pc_arm { const char *constructor; unsigned binder_count; const uint64_t *binders; int body; };
@@ -48,7 +52,8 @@ struct pc_program {
     const struct pc_datatype *datatypes; unsigned datatype_count;
 };
 #define PC_INPUT_VALUE 100
-enum pc_vtag { PV_UNIT,PV_BOOL,PV_INT,PV_BYTES,PV_TUPLE,PV_DATA,PV_CLOSURE,PV_RESUMPTION };
+enum pc_vtag { PV_UNIT,PV_BOOL,PV_INT,PV_BYTES,PV_TUPLE,PV_DATA,PV_CLOSURE,PV_RESUMPTION,
+               PV_TASK,PV_CHANNEL /* TC1-C1 handles: integer is the ID */ };
 struct pc_env;
 struct pc_segment;
 /* Immutable once built. bytes: text is hex, count its length. data: text type, constructor.
@@ -59,10 +64,13 @@ struct pc_value {
     const struct pc_segment *segment;
 };
 struct pc_env { uint64_t id; const struct pc_value *value; const struct pc_env *parent; };
-enum pc_control { PC_EVAL,PC_VALUE,PC_READY,PC_UNWIND,PC_JOIN,PC_TERMINATE,PC_TERMINAL,PC_ABANDON,PC_HOSTWAIT };
-enum pc_trap { PC_NO_TRAP,PC_OVERFLOW,PC_DIVZERO,PC_BOUNDS };
+enum pc_control { PC_EVAL,PC_VALUE,PC_READY,PC_UNWIND,PC_JOIN,PC_TERMINATE,PC_TERMINAL,PC_ABANDON,PC_HOSTWAIT,
+                  PC_START,PC_WAIT,PC_PENDING /* TC1-C1: tasks.c */ };
+enum pc_trap { PC_NO_TRAP,PC_OVERFLOW,PC_DIVZERO,PC_BOUNDS,
+               PC_CHILDFAILED,PC_CANCELLED /* TC1-C1: tasks.c */ };
 enum pc_frame_kind { PF_LET,PF_IF,PF_MATCH,PF_RETURN,PF_COLLECT,
-                     PF_HANDLE,PF_CLAUSE,PF_CLAUSE_EXIT,PF_RESUME,PF_DISCONTINUE };
+                     PF_HANDLE,PF_CLAUSE,PF_CLAUSE_EXIT,PF_RESUME,PF_DISCONTINUE,
+                     PF_SCOPE /* TC1-C1: node -1 for an implicit scope, next the scope ID */ };
 enum pc_rule { PR_DISPATCH,PR_READY,PR_LET_RETURN,PR_IF_RETURN,PR_MATCH_RETURN,PR_RETURN_RETURN,
                PR_COLLECT_RETURN,PR_UNWIND_FRAME,PR_VALUE,PR_UNWIND,PR_JOIN,PR_TERMINATE,
                PR_HANDLE_RETURN,PR_CLAUSE_RETURN,PR_CLAUSE_EXIT_RETURN,PR_RESUME_RETURN,
