@@ -95,9 +95,11 @@ export function lowerProgram(program,input,prefix) {
     `${r.children.length},${list('c',at,'int',r.children.map(String))},${r.arms.length},${list('a',at,'struct pc_arm',r.arms)},${r.free.length},${list('f',at,'uint64_t',r.free)}}`);
   const text=[...aux,`static const struct pc_node ${prefix}_nodes[]={\n${nodes.join(',\n')}\n};`,
     `static const struct pc_function ${prefix}_functions[]={${bodies.map(b=>`{${b.parameter},${b.body}}`).join(',')}};`].join('\n');
-  const entry=index.get(artifact.entry);
+  // A peer's program (schema tc1-handler-demo/4) has no entry: its host starts the machine at
+  // the function of the operation requested (pc_start). The entry and input columns are then unused.
+  const entry=artifact.entry===undefined?0:index.get(artifact.entry);
   return {text,row:`{${prefix}_nodes,${rows.length},${prefix}_functions,${functions.length},${entry},${inputTags[input[0]]},${inputInteger}}`,
-    artifact_sha256:createHash('sha256').update(encode(artifact)).digest('hex'),nodes:rows.length};
+    artifact_sha256:createHash('sha256').update(encode(artifact)).digest('hex'),nodes:rows.length,function_index:Object.fromEntries(index)};
 }
 
 // items: [{program, input}]. Returns {header, batch_sha256, artifact_sha256[]}.
@@ -107,5 +109,5 @@ export function lowerBatch(items) {
   const header=`/* Validated artifact DATA ONLY, not precomputed transitions. */\n#define PC_BATCH_SHA256 "${batch}"\n`+
     lowered.map(l=>l.text).join('\n')+`\nstatic const struct pc_program pc_programs[]={\n${lowered.map(l=>l.row).join(',\n')}\n};\n`+
     `static const unsigned pc_program_count=${lowered.length};\n`;
-  return {header,batch_sha256:batch,artifact_sha256:lowered.map(l=>l.artifact_sha256)};
+  return {header,batch_sha256:batch,artifact_sha256:lowered.map(l=>l.artifact_sha256),function_index:lowered.map(l=>l.function_index)};
 }

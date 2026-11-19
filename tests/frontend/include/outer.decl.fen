@@ -1,0 +1,5 @@
+\\ A declarations file may include another.
+(include "shared.decl.fen")
+
+(effect Tell
+  (tell I64 --> Unit))

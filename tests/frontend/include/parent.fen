@@ -1,0 +1,5 @@
+\\ expect parent.fen:2:10 an included file is named relative to the directory of this
+(include "../bad/unknown-type.fen")
+
+(define main {I64 --> I64}
+  input -> input)

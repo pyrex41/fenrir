@@ -1,0 +1,41 @@
+\\ A peer program for the checks of harness/tc1-peer-requests.shen and one hand
+\\ schedule of harness/tc1-remote.shen. It is not part of any built system.
+\\
+\\ Two operations that change state, deposit and withdraw, and two read-only
+\\ ones. Cell 0 is the balance and cell 1 the number of movements; cell 100 + k
+\\ holds what request key k moved. withdraw refuses to go below zero by
+\\ trapping (a division by zero), after it has already written: a trap commits
+\\ nothing, so those writes must never be seen. audit sums under a handler, so
+\\ the store is read with a handler frame for another effect on the stack, and
+\\ deposit writes cell 1 twice, so a request's write set has one entry a cell.
+
+(remote-effect Pots
+  (deposit I64 --> (Tuple I64 I64))
+  (withdraw I64 --> (Tuple I64 I64))
+  (read-only balance Unit --> I64)
+  (read-only audit Unit --> I64))
+
+(effect Tally
+  (tally I64 --> I64))
+
+(define cell {I64 --> I64}
+  k -> (perform StoreRead get k))
+
+(define move {(Tuple I64 I64) --> I64}
+  key amount -> (do (perform StoreWrite put 0 (+ (cell 0) amount))
+                    (perform StoreWrite put 1 (cell 1))
+                    (perform StoreWrite put 1 (+ (cell 1) 1))
+                    (perform StoreWrite put (+ 100 key) amount)
+                    (cell 0)))
+
+(serve Pots
+  ((deposit key amount) -> (tuple 0 (move key amount)))
+  ((withdraw key amount) -> (let left (move key (neg amount))
+                              (tuple (/ 0 (if (< left 0) 0 1)) left)))
+  ((balance u) -> (cell 0))
+  ((audit u) -> (handle Tally
+                  ((tally x) -> (+ x (cell 1)))
+                  (+ (perform Tally tally (cell 0)) (emit-count unit)))))
+
+(define emit-count {Unit --> I64}
+  u -> (do (emit "movements" (cell 1)) 0))

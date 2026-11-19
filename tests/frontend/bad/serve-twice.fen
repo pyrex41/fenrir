@@ -1,0 +1,13 @@
+\\ expect 11:8 effect Ledger is served twice: one (serve Ledger ...) holds all its im
+
+(remote-effect Ledger
+  (add I64 --> (Tuple I64 I64))
+  (read-only total Unit --> I64))
+
+(serve Ledger
+  ((add key amount) -> (tuple 0 amount))
+  ((total u) -> 0))
+
+(serve Ledger
+  ((add key amount) -> (tuple 0 amount))
+  ((total u) -> 1))

@@ -1,0 +1,32 @@
+\\ The caller of the rates system (rates-system.json): it only reads. It asks
+\\ the peer for the base rate, once more if that timed out, and then for the
+\\ cap. Both operations are read-only, so neither has a request key, and the
+\\ peer that serves them needs no durable store.
+
+(include "rates.decl.fen")
+
+(define missing {Unit --> I64}
+  u -> (do (emit "missing" u) -1))
+
+(define base-once {Unit --> I64}
+  u -> (match (perform Rates base u)
+         ((Reply n) -> (do (emit "base" n) n))
+         (NotDelivered -> (missing unit))
+         (TimedOut -> (missing unit))))
+
+(define base-with-retry {Unit --> I64}
+  u -> (match (perform Rates base u)
+         ((Reply n) -> (do (emit "base" n) n))
+         (NotDelivered -> (missing unit))
+         (TimedOut -> (base-once unit))))
+
+(define cap-once {Unit --> I64}
+  u -> (match (perform Rates cap u)
+         ((Reply n) -> (do (emit "cap" n) n))
+         (NotDelivered -> (missing unit))
+         (TimedOut -> (missing unit))))
+
+(define main {I64 --> (Tuple I64 I64)}
+  input -> (let b (base-with-retry unit)
+                c (cap-once unit)
+             (tuple b c)))

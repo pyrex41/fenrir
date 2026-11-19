@@ -1,0 +1,11 @@
+\\ expect 8:20 Reply is an outcome of a remote perform: a program takes outcomes apart with match and cannot make one
+\\ Outcomes come from the system only.
+
+(remote-effect Ledger
+  (read-only total Unit --> I64))
+
+(define main {I64 --> I64}
+  input -> (match (Reply input)
+             ((Reply n) -> n)
+             (NotDelivered -> -1)
+             (TimedOut -> -2)))

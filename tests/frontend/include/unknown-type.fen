@@ -1,0 +1,5 @@
+\\ expect unknown-type.decl.fen:2:8 unknown type Nope
+(include "unknown-type.decl.fen")
+
+(define main {I64 --> I64}
+  input -> input)

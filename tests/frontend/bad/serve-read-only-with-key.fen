@@ -1,0 +1,9 @@
+\\ expect 9:3 Ledger.total is read-only and has no request key: its implementation i
+
+(remote-effect Ledger
+  (add I64 --> (Tuple I64 I64))
+  (read-only total Unit --> I64))
+
+(serve Ledger
+  ((add key amount) -> (tuple 0 amount))
+  ((total key u) -> 0))

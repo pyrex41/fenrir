@@ -1,0 +1,15 @@
+\\ expect 13:28 effect Note is not handled
+\\ Declaring a remote effect does not excuse an ordinary one: only the remote
+\\ effect may reach main unhandled.
+
+(remote-effect Ledger
+  (read-only total Unit --> I64))
+
+(effect Note
+  (note I64 --> I64))
+
+(define main {I64 --> I64}
+  input -> (match (perform Ledger total unit)
+             ((Reply n) -> (perform Note note n))
+             (NotDelivered -> -1)
+             (TimedOut -> -2)))

@@ -1,0 +1,15 @@
+\\ ok
+\\ > outcome: Ok 42
+\\ The datatype and the two effects come from the included file.
+
+(include "shared.decl.fen")
+
+(define volume {Mood --> I64}
+  m -> (match m
+         (Calm -> 0)
+         ((Loud n) -> n)))
+
+(define main {I64 --> I64}
+  input -> (handle Ask
+             ((ask x) -> (+ x 1))
+             (+ (perform Ask ask 40) (volume (Loud 1)))))

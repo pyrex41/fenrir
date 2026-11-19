@@ -1,0 +1,5 @@
+\\ expect self.fen:2:1 include cycle: tests/frontend/include/self.fen is already be
+(include "self.fen")
+
+(define main {I64 --> I64}
+  input -> input)

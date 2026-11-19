@@ -1,0 +1,13 @@
+\\ expect 9:9 unknown name Ledger.total: no function, constructor or variable of tha
+\\ An implementation is run by the peer's runtime; no program calls it.
+
+(remote-effect Ledger
+  (add I64 --> (Tuple I64 I64))
+  (read-only total Unit --> I64))
+
+(define twice {I64 --> I64}
+  x -> (Ledger.total unit))
+
+(serve Ledger
+  ((add key amount) -> (tuple 0 amount))
+  ((total u) -> 0))

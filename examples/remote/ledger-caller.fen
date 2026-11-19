@@ -1,0 +1,79 @@
+\\ A caller image's program: remote perform against a peer (EFFECTS.md §12).
+\\
+\\ Ledger is a remote effect. Its operations are carried out by another member
+\\ of the system, the one the system's manifest binds Ledger to; no handler in this
+\\ program takes their place, and main is allowed to leave Ledger unhandled.
+\\ The declaration states each operation with the peer's own types.
+\\
+\\   add    changes the peer's state, so it is performed with a request key
+\\          first: (perform Ledger add key argument). The peer applies a key
+\\          once and answers a repeat from its record. Its result is
+\\          (status, value): status 0 is ok with the value, status 1 is
+\\          conflict, the key having been applied with another argument.
+\\   total  is read-only: no key, nothing recorded, and a repeat is simply
+\\          evaluated again.
+\\
+\\ A remote perform always returns, with one of three outcomes, and it may only
+\\ be written as the value a match takes apart, with an arm for each:
+\\ (Reply b), NotDelivered and TimedOut. No outcome can be left unexamined.
+\\
+\\ The program: add 5 under key 7, once more with the same key if that timed
+\\ out; add 5 under key 8; add 6 under key 7 again, a reuse of the key that the
+\\ peer refuses if key 7 was applied with 5; then read the total, once more if
+\\ that timed out. Note is an ordinary effect with a handler in scope, so the
+\\ remote performs happen under a handler frame.
+\\
+\\ This program does not run alone (sh frontend/fenrir.sh run refuses it):
+\\ tools/solo5/remote-build.mjs builds the caller image of
+\\ harness/run-tc1-remote-run.sh from this file.
+
+\\ Ledger is declared in a file this program shares with the peer's program,
+\\ ledger-peer.fen: the system is assembled only if both have the same signature.
+(include "ledger.decl.fen")
+
+(effect Note
+  (note I64 --> I64))
+
+(define settled {(Tuple I64 I64) --> I64}
+  status value -> (if (= status 0)
+                      (do (emit "got" value) value)
+                      (do (emit "conflict" unit) -3)))
+
+(define undelivered {Unit --> I64}
+  u -> (do (emit "undelivered" u) -1))
+
+(define unknown {Unit --> I64}
+  u -> (do (emit "unknown" u) -2))
+
+(define add-once {(Tuple I64 I64) --> I64}
+  key amount -> (match (perform Ledger add key amount)
+                  ((Reply r) -> (settled r))
+                  (NotDelivered -> (undelivered unit))
+                  (TimedOut -> (unknown unit))))
+
+(define add-with-retry {(Tuple I64 I64) --> I64}
+  key amount -> (match (perform Ledger add key amount)
+                  ((Reply r) -> (settled r))
+                  (NotDelivered -> (undelivered unit))
+                  (TimedOut -> (add-once key amount))))
+
+(define read-once {Unit --> I64}
+  u -> (match (perform Ledger total u)
+         ((Reply n) -> (do (emit "total" n) n))
+         (NotDelivered -> (undelivered unit))
+         (TimedOut -> (unknown unit))))
+
+(define read-with-retry {Unit --> I64}
+  u -> (match (perform Ledger total u)
+         ((Reply n) -> (do (emit "total" n) n))
+         (NotDelivered -> (undelivered unit))
+         (TimedOut -> (read-once unit))))
+
+(define main {I64 --> (Tuple I64 I64 I64 I64)}
+  input -> (handle Note
+             ((note x) -> x)
+             (let a (add-with-retry 7 5)
+                  b (add-once 8 5)
+                  c (add-once 7 6)
+                  t (read-with-retry unit)
+               (tuple a b c t))))

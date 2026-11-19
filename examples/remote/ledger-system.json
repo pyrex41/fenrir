@@ -1,0 +1,9 @@
+{
+  "schema": "fenrir.system-manifest/2",
+  "members": [
+    {"name": "caller", "kind": "caller", "program": "examples/remote/ledger-caller.fen"},
+    {"name": "peer", "kind": "peer", "program": "examples/remote/ledger-peer.fen", "store": true}
+  ],
+  "connections": [["caller", "peer"]],
+  "bindings": [["caller", "Ledger", "peer"]]
+}

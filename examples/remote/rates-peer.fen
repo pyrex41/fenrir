@@ -1,0 +1,14 @@
+\\ A peer with no durable store (EFFECTS.md §12.3). It serves the two read-only
+\\ operations of Rates from what its image has: constants and arithmetic. A
+\\ peer image without a store may serve read-only operations only, and its
+\\ program may not mention StoreWrite at all; this one uses no store effect.
+\\ The request names its operation, so one peer serves both.
+
+(include "rates.decl.fen")
+
+(define percent {(Tuple I64 I64) --> I64}
+  whole part -> (/ (* whole part) 100))
+
+(serve Rates
+  ((base u) -> 250)
+  ((cap u) -> (+ 250 (percent 250 20))))

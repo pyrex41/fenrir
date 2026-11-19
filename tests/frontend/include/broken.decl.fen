@@ -1,0 +1,2 @@
+(effect Ask
+  (ask I64 --> I64)

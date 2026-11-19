@@ -76,12 +76,6 @@
                       (fh.row "UNKNOWN" [(cn Skip " skipped tests are missing evidence")] [] Memo)
                       (fh.row "PASS" [] [["passed" Pass]] Memo)))))))
 
-\\ Build a guest batch with the JavaScript builder: its directory, or blocked.
-(define fh.guest-build
-  BuilderArgs ->
-    (let Built (fh.exec "node" (append [(cn (value fh.*root*) "tools/solo5/freerun-pure-call.mjs")] (append BuilderArgs ["--build-only"])) 1800)
-      (if (= (hd Built) 0) (fh.trim (hd (tl Built))) blocked)))
-
 \\ Build a guest batch and compare it in Shen: the comparison's report, or blocked.
 (define fh.guest-batch
   BuilderArgs ->

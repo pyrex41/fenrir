@@ -1,0 +1,8 @@
+\\ expect shared.decl.fen:5:9 effect Ask is declared twice
+(effect Ask
+  (ask I64 --> I64))
+
+(include "shared.decl.fen")
+
+(define main {I64 --> I64}
+  input -> input)

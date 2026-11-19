@@ -67,6 +67,20 @@ int pc_init(struct pc_machine *m,const struct pc_program *p,int reverse,int wrap
     m->env=bind(entry->parameter,input,0);
     return m->env?1:-1;
 }
+int pc_start(struct pc_machine *m,const struct pc_program *p,unsigned function,const struct pc_value *input) {
+    if(!m || !p || !p->node_count || function>=p->function_count || !input)return -1;
+    arena_used=0;
+    const struct pc_function *entry=&p->functions[function];
+    if(entry->body<0 || (unsigned)entry->body>=p->node_count)return -1;
+    m->program=p;m->control=PC_EVAL;m->node=entry->body;m->tail=1;m->trap=PC_NO_TRAP;
+    m->reverse_operands=0;m->wrap_overflow=0;m->value=0;m->depth=0;m->epoch=0;
+    m->env=bind(entry->parameter,input,0);
+    return m->env?1:-1;
+}
+const struct pc_value *pc_scalar(int tag,int64_t integer) {
+    if(tag!=PV_UNIT && tag!=PV_BOOL && tag!=PV_INT)return 0;
+    return scalar(tag,integer);
+}
 static void site(const struct pc_machine *m,struct pc_sample *s) {
     static const int returns[]={PR_LET_RETURN,PR_IF_RETURN,PR_MATCH_RETURN,PR_RETURN_RETURN,PR_COLLECT_RETURN,
                                 PR_HANDLE_RETURN,PR_CLAUSE_RETURN,PR_CLAUSE_EXIT_RETURN,PR_RESUME_RETURN,PR_DISCONTINUE_RETURN};

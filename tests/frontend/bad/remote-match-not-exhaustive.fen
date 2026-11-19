@@ -1,0 +1,10 @@
+\\ expect 8:12 this match on (Remote I64) is not exhaustive: there is no arm for TimedOut
+\\ All three outcomes of a remote perform must be dealt with.
+
+(remote-effect Ledger
+  (read-only total Unit --> I64))
+
+(define main {I64 --> I64}
+  input -> (match (perform Ledger total unit)
+             ((Reply n) -> n)
+             (NotDelivered -> -1)))

@@ -1,0 +1,7 @@
+\\ expect 6:8 Ask is not a remote effect: serve gives the implementations of the ope
+
+(effect Ask
+  (ask I64 --> I64))
+
+(serve Ask
+  ((ask x) -> x))

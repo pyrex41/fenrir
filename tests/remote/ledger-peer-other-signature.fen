@@ -1,0 +1,20 @@
+\\ A peer program that does NOT include examples/remote/ledger.decl.fen: it
+\\ declares Ledger itself, with one operation more than the shared file has.
+\\ It serves everything the ledger caller performs, in the right modes, so the
+\\ only thing wrong with a system of that caller and this peer is that the two
+\\ were built from different declarations of Ledger. Their signature digests
+\\ differ, and the supervisor refuses to assemble the system (EFFECTS.md §12.6;
+\\ owner ruling of 16 November 2026 on §12.10 question 15). The build makes an
+\\ image of this program beside the real peer so that the refusal can be shown.
+
+(remote-effect Ledger
+  (add I64 --> (Tuple I64 I64))
+  (read-only total Unit --> I64)
+  (read-only entries Unit --> I64))
+
+(serve Ledger
+  ((add key amount) -> (do (perform StoreWrite put 0 (+ (perform StoreRead get 0) amount))
+                           (perform StoreWrite put 1 (+ (perform StoreRead get 1) 1))
+                           (tuple 0 (perform StoreRead get 0))))
+  ((total u) -> (perform StoreRead get 0))
+  ((entries u) -> (perform StoreRead get 1)))

@@ -1,0 +1,9 @@
+\\ expect 9:34 the outcome of this remote perform is not examined: a perform of Ledger.total may only be written as the value a match takes apart
+\\ Must-use: an outcome cannot be stored in a tuple.
+
+(remote-effect Ledger
+  (add I64 --> (Tuple I64 I64))
+  (read-only total Unit --> I64))
+
+(define main {I64 --> I64}
+  input -> (project (tuple input (perform Ledger total unit)) 0))

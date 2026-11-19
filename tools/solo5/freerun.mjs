@@ -47,16 +47,29 @@ export function frames(output) {
   return result;
 }
 
-export function toolchain(solo5) {
-  if(must('git',['-C',solo5,'rev-parse','HEAD']).trim()!==SOLO5_COMMIT)throw new Error('Solo5 checkout is not the pinned commit');
-  if(must('git',['-C',solo5,'status','--porcelain','--untracked-files=no']).trim())throw new Error('Solo5 checkout has modified tracked files');
-  const bin=resolve(solo5,'toolchain/bin');
+// Where Solo5 comes from when --solo5 is not given: FENRIR_SOLO5, else the checkout.
+export const defaultSolo5=()=>resolve(process.env.FENRIR_SOLO5||resolve(root,'build/vendor/solo5'));
+
+// solo5 is either a git checkout built in place, or an installed tree (`make install`,
+// as the flake's solo5 output) that records its source commit in SOLO5_COMMIT. abi
+// selects the tender: 'spt' or 'hvt'.
+export function toolchain(solo5,abi='spt') {
+  if(abi!=='spt'&&abi!=='hvt')throw new Error('Solo5 ABI must be spt or hvt');
+  const installed=existsSync(resolve(solo5,'SOLO5_COMMIT'));
+  if(installed) {
+    if(readFileSync(resolve(solo5,'SOLO5_COMMIT'),'utf8').trim()!==SOLO5_COMMIT)throw new Error('Installed Solo5 is not the pinned commit');
+  } else {
+    if(must('git',['-C',solo5,'rev-parse','HEAD']).trim()!==SOLO5_COMMIT)throw new Error('Solo5 checkout is not the pinned commit');
+    if(must('git',['-C',solo5,'status','--porcelain','--untracked-files=no']).trim())throw new Error('Solo5 checkout has modified tracked files');
+  }
+  const bin=resolve(solo5,installed?'bin':'toolchain/bin');
   const cc=readdirSync(bin).find(name=>name.endsWith('-solo5-none-static-cc'));
   if(!cc)throw new Error('Solo5 toolchain is not built');
   const prefix=cc.slice(0,-3);
-  const tools={cc:resolve(bin,cc),ld:resolve(bin,prefix+'-ld'),elftool:resolve(solo5,'elftool/solo5-elftool'),tender:resolve(solo5,'tenders/spt/solo5-spt')};
+  const tools={cc:resolve(bin,cc),ld:resolve(bin,prefix+'-ld'),elftool:resolve(solo5,installed?'bin/solo5-elftool':'elftool/solo5-elftool'),
+    tender:resolve(solo5,installed?`bin/solo5-${abi}`:`tenders/${abi}/solo5-${abi}`)};
   for(const path of Object.values(tools))if(!existsSync(path))throw new Error('Missing '+path);
-  return {...tools,triple:prefix,tender_sha256:sha(readFileSync(tools.tender))};
+  return {...tools,abi,triple:prefix,tender_sha256:sha(readFileSync(tools.tender)),solo5_source:installed?'installed':'checkout',solo5_path:solo5};
 }
 
 export function build(tools,artifactBytes,dir) {
@@ -100,7 +113,7 @@ export function firstDivergence(a,b) {
 function main() {
   const args=process.argv.slice(2);
   const option=(name,fallback)=>{const i=args.indexOf(name);return i<0?fallback:args[i+1];};
-  const solo5=resolve(option('--solo5',resolve(root,'build/vendor/solo5')));
+  const solo5=resolve(option('--solo5',defaultSolo5()));
   const maxCases=Number(option('--max-cases','80'));
   if(!Number.isSafeInteger(maxCases)||maxCases<1||maxCases>400)throw new Error('--max-cases must be 1..400');
   const shen=option('--shen',null);
@@ -135,7 +148,7 @@ function main() {
     qualification:'UNKNOWN',
     scope:'TC0-A arithmetic demo schema /1; stock spt tender; observed free run compared with '+(model?'the Shen expression model and the JS expression machine':'the JS expression machine only; no Shen oracle run'),
     shen_oracle:model?{executable_sha256:sha(readFileSync(resolve(shen))),model_steps_compared:String(modelSteps)}:'not-run',
-    solo5_commit:SOLO5_COMMIT,triple:tools.triple,tender_sha256:tools.tender_sha256,fuel:String(FUEL),
+    solo5_commit:SOLO5_COMMIT,solo5_source:tools.solo5_source,solo5_path:tools.solo5_path,triple:tools.triple,tender_sha256:tools.tender_sha256,fuel:String(FUEL),
     programs:String(programs.length),reference_steps_compared:String(steps),outcomes,
     reverse_operand_mutant:{killed:String(mutantKilled),survived_equivalent:String(mutantSurvived)},failures};
   writeFileSync(resolve(out,'report.json'),JSON.stringify(report,null,2)+'\n');

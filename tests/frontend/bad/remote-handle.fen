@@ -1,0 +1,10 @@
+\\ expect 8:20 effect Ledger is remote and cannot be handled
+\\ A remote effect is discharged by the system, never by a handler in the program.
+
+(remote-effect Ledger
+  (read-only total Unit --> I64))
+
+(define main {I64 --> I64}
+  input -> (handle Ledger
+             ((total u) -> 0)
+             input))

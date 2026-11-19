@@ -1,0 +1,19 @@
+\\ The remote effect Ledger, as every member of the ledger system declares it.
+\\
+\\ This file holds declarations only. The caller's program (ledger-caller.fen)
+\\ and the peer's program (ledger-peer.fen) both include it, so neither can
+\\ state the effect differently from the other: (include "ledger.decl.fen").
+\\ Each image carries a digest of this signature, read-only markers included,
+\\ and the supervisor assembles the system only if the caller's digest is the
+\\ serving peer's (EFFECTS.md §12.6).
+\\
+\\   add    changes the peer's state. A caller performs it with a request key
+\\          first, (perform Ledger add key amount); the peer applies a key once.
+\\          Its result is (status, value): status 0 is ok with the value, the
+\\          total after the addition; status 1 is conflict, the key having been
+\\          applied with another argument.
+\\   total  is read-only: no key, nothing recorded, nothing changed.
+
+(remote-effect Ledger
+  (add I64 --> (Tuple I64 I64))
+  (read-only total Unit --> I64))

@@ -59,7 +59,10 @@
         "tests/tc0/requirement-ledger.test.mjs",
         "tests/tc0/s3-repair.test.mjs",
         "tests/tc0/sandbox.test.mjs",
-        "tests/tc1/handler-artifact.test.mjs"
+        "tests/tc1/handler-artifact.test.mjs",
+        "tests/tc1/handler-enumeration.test.mjs",
+        "tests/tc1/gate-manifest.test.mjs",
+        "tests/tc1/remote-artifact.test.mjs"
       ],
       "timeoutSeconds": 120,
       "authorityPaths": []
@@ -105,6 +108,43 @@
         "fixtures/tc1",
         "spec/tc1",
         "tests/tc1"
+      ]
+    },
+    "tc1-qualification": {
+      "kind": "qualification",
+      "command": [
+        "sh",
+        "harness/run-tc1-gate.sh"
+      ],
+      "timeoutSeconds": 3600,
+      "authorityPaths": [
+        "harness",
+        "spec/tc1",
+        "spec/tc0",
+        "models/tc1",
+        "models/tc0",
+        "fixtures/tc1",
+        "fixtures/tc0",
+        "tools/tc1",
+        "tools/tc0",
+        "runtime/tc1",
+        "runtime/tc0",
+        "tools/solo5/freerun-pure-call.mjs",
+        "tools/solo5/freerun.mjs",
+        "tools/solo5/pure-call",
+        "tools/solo5/remote-build.mjs",
+        "frontend",
+        "examples/remote",
+        "backends/solo5/pure-call",
+        "backends/solo5/remote",
+        "supervisor",
+        "tests/remote",
+        "tests/tc1",
+        "tests/tc0",
+        "campaigns/tc0/s3",
+        "campaigns/tc1",
+        "flake.nix",
+        "flake.lock"
       ]
     }
   }

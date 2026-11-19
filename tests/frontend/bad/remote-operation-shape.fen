@@ -1,0 +1,8 @@
+\\ expect 5:3 an operation of a remote-effect is written (name ArgumentType --> ResultType), or (read-only name ArgumentType --> ResultType) when it changes nothing
+\\ The read-only marker comes first.
+
+(remote-effect Ledger
+  (total read-only Unit --> I64))
+
+(define main {I64 --> I64}
+  input -> input)

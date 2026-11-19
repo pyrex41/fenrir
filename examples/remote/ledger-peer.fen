@@ -1,0 +1,39 @@
+\\ A peer image's program: it serves the remote effect Ledger (EFFECTS.md §12.12).
+\\
+\\ (serve Ledger ...) gives one implementation for each operation of the effect.
+\\ The peer's runtime runs one of them for each request it acts on, in a
+\\ transaction: what the implementation writes is kept aside while it runs, and
+\\ when it returns, its writes and the record of the request (its key, its
+\\ argument and this reply) are committed in one durable step, and only then is
+\\ the reply sent. A request key that already has a record is answered from the
+\\ record, or refused as a conflict if its argument differs, without running
+\\ anything. If the implementation traps, nothing is committed and nothing is
+\\ replied.
+\\
+\\ The store is a map from I64 to I64, reached through two effects the runtime
+\\ provides: (perform StoreRead get cell) and (perform StoreWrite put cell value).
+\\ A cell never written reads 0, and a read sees what this request has written.
+\\
+\\   cell 0   the total
+\\   cell 1   the number of additions
+\\   cell 2   the request key of the latest addition
+\\
+\\ total is declared read-only, so its implementation may not perform
+\\ StoreWrite, directly or through anything it calls: the program would be
+\\ rejected. add returns the pair its caller expects: status 0 and the new total.
+\\
+\\ This program has no main and does not run alone (sh frontend/fenrir.sh run
+\\ refuses it): tools/solo5/remote-build.mjs builds the peer image of
+\\ harness/run-tc1-remote-run.sh from this file.
+
+(include "ledger.decl.fen")
+
+(define bump {(Tuple I64 I64) --> Unit}
+  cell by -> (perform StoreWrite put cell (+ (perform StoreRead get cell) by)))
+
+(serve Ledger
+  ((add key amount) -> (do (bump 0 amount)
+                           (bump 1 1)
+                           (perform StoreWrite put 2 key)
+                           (tuple 0 (perform StoreRead get 0))))
+  ((total u) -> (perform StoreRead get 0)))

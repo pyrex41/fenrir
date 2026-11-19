@@ -1,0 +1,5 @@
+\\ expect with-function.decl.fen:4:1 an included file may contain only declarations: (datatype ..
+(include "with-function.decl.fen")
+
+(define main {I64 --> I64}
+  input -> input)

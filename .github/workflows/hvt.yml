@@ -1,0 +1,43 @@
+# Builds the flake's pinned Solo5 and runs Fenrir guests under the hvt tender (KVM),
+# comparing them with the Shen model and, frame for frame, with the spt tender.
+# Development evidence only; no qualification verdict.
+name: hvt
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hvt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable KVM access
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            system-features = nixos-test benchmark big-parallel kvm
+      - name: Build pinned Solo5
+        run: nix build .#solo5 --print-out-paths -L
+      # Not hvt: the remote-perform system (Erlang/OTP supervisor and two guests) runs on
+      # the spt tender. Its transport is plain files, so it needs no privileges and no KVM.
+      - name: Remote perform on spt against the Shen model
+        run: |
+          export FENRIR_SOLO5=$(nix build .#solo5 --no-link --print-out-paths)
+          nix shell --inputs-from . nixpkgs#nodejs_22 -c sh harness/run-tc1-remote-run.sh
+      # hvt directly on the runner: one level of nesting.
+      - name: hvt against the Shen model and spt, on the runner
+        run: nix run .#hvt-compare
+      # The same comparison inside a NixOS VM: the hvt guest is then nested one level
+      # deeper, which depends on the runner exposing virtualisation to its guests.
+      - name: hvt against the Shen model and spt, in a NixOS VM
+        run: nix build .#checks.x86_64-linux.hvt -L

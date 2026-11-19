@@ -1,0 +1,9 @@
+{
+  "schema": "fenrir.system-manifest/2",
+  "members": [
+    {"name": "caller", "kind": "caller", "program": "examples/remote/rates-caller.fen"},
+    {"name": "peer", "kind": "peer", "program": "examples/remote/rates-peer.fen", "store": false}
+  ],
+  "connections": [["caller", "peer"]],
+  "bindings": [["caller", "Rates", "peer"]]
+}

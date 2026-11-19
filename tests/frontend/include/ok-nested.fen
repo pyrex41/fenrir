@@ -1,0 +1,9 @@
+\\ ok
+\\ > outcome: Ok 7
+
+(include "outer.decl.fen")
+
+(define main {I64 --> I64}
+  input -> (handle Tell
+             ((tell x) -> unit)
+             (do (perform Tell tell 1) 7)))

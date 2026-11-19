@@ -1,0 +1,10 @@
+\\ Declarations shared by the programs of this directory.
+
+(datatype Mood Calm (Loud I64))
+
+(effect Ask
+  (ask I64 --> I64))
+
+(remote-effect Ledger
+  (add I64 --> (Tuple I64 I64))
+  (read-only total Unit --> I64))

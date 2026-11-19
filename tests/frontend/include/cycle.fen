@@ -1,0 +1,5 @@
+\\ expect cycle-b.decl.fen:3:1 include cycle: tests/frontend/include/cycle-a.decl.fen is al
+(include "cycle-a.decl.fen")
+
+(define main {I64 --> I64}
+  input -> input)
