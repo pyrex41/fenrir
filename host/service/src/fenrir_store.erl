@@ -6,8 +6,8 @@
 %%
 %% One commit is ONE SQLite transaction: BEGIN IMMEDIATE (the write lock is taken first,
 %% so the transaction never upgrades a read lock mid-flight), the guard read, the writes,
-%% COMMIT. WAL journal with synchronous=FULL: the WAL is fsynced before COMMIT returns
-%% (CONTRACT.md A-DUR). Outcomes of commit/1:
+%% COMMIT. With WAL and synchronous=FULL SQLite requests WAL sync before COMMIT
+%% returns (CONTRACT.md A-DUR). Scope was assigned by trusted OTP. Outcomes of commit/2:
 %%   {reply, ReplyValue}       committed (or a guard/authority answer with no write)
 %%   busy                      SQLITE_BUSY: nothing applied, retryable; never a rollback
 %%                             of committed work and never a success
@@ -21,7 +21,7 @@
 %% equivalent control equivalent_control. `normal` is the adapter.
 -module(fenrir_store).
 -behaviour(gen_server).
--export([start_link/1, commit/1, snapshot/0, pending_jobs/0, port_os_pid/0, arm_port/2, info/0]).
+-export([start_link/1, commit/2, snapshot/0, pending_jobs/0, port_os_pid/0, arm_port/2, info/0, io_counters/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -export([parse_tx/1, schema/0, read_snapshot/2, open_configured/2]).
 
@@ -29,8 +29,8 @@
 
 start_link(Opts) -> gen_server:start_link({local, ?MODULE}, ?MODULE, Opts, []).
 
-commit(Tx) ->
-    try gen_server:call(?MODULE, {commit, Tx}, 60000)
+commit(Scope, Tx) ->
+    try gen_server:call(?MODULE, {commit, Scope, Tx}, 60000)
     catch exit:Reason -> {indeterminate, {store_call, element(1, Reason)}}
     end.
 snapshot() -> gen_server:call(?MODULE, snapshot, 60000).
@@ -38,6 +38,7 @@ pending_jobs() -> gen_server:call(?MODULE, pending_jobs, 60000).
 port_os_pid() -> gen_server:call(?MODULE, port_os_pid).
 arm_port(Kind, N) -> gen_server:call(?MODULE, {arm_port, Kind, N}).
 info() -> gen_server:call(?MODULE, info).
+io_counters() -> gen_server:call(?MODULE, io_counters).
 
 schema() ->
     ["CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)",
@@ -60,21 +61,27 @@ init(Opts) ->
     case open_configured(Path, Mutant) of
         {ok, Port} ->
             ok = ensure_schema(Port, Tenants),
-            {ok, #{port => Port, tenants => Tenants, mutant => Mutant, deferred => [],
-                   busy_timeout => maps:get(busy_timeout, Opts, 50)}};
+            {ok, #{port => Port, tenants => Tenants, mutant => Mutant, deferred => []}};
         {error, E} -> {stop, E}
     end.
 
 %% Open and configure a connection: WAL, synchronous=FULL, foreign keys on, a short busy
 %% timeout. Each setting is read back; a setting that did not take is a refusal to start.
 open_configured(Path, Mutant) ->
-    {ok, Port} = fenrir_sqlite:open(Path),
+    case fenrir_sqlite:open(Path) of
+        {ok, Port} -> configure(Port, Mutant);
+        {error, _} = E -> E
+    end.
+
+configure(Port, Mutant) ->
     Sync = case Mutant of sync_off -> "OFF"; _ -> "FULL" end,
     Checks = [{"PRAGMA journal_mode=WAL", [[<<"wal">>]]},
               {"PRAGMA synchronous=" ++ Sync, []},
               {"PRAGMA synchronous", [[case Mutant of sync_off -> 0; _ -> 2 end]]},
               {"PRAGMA foreign_keys=ON", []},
-              {"PRAGMA busy_timeout=50", [[50]]}],
+              {"PRAGMA foreign_keys", [[1]]},
+              {"PRAGMA busy_timeout=50", [[50]]},
+              {"PRAGMA busy_timeout", [[50]]}],
     Bad = [{Q, R} || {Q, Want} <- Checks, (R = fenrir_sqlite:exec(Port, Q)) =/= {rows, Want}],
     case Bad of
         [] -> {ok, Port};
@@ -89,11 +96,17 @@ ensure_schema(Port, Tenants) ->
     {rows, _} = fenrir_sqlite:exec(Port, "COMMIT"),
     ok.
 
-handle_call({commit, TxValue}, _From, S0) ->
-    S = flush_deferred(S0),
+handle_call({commit, Scope, TxValue}, _From, S0 = #{tenants := N}) ->
     case parse_tx(TxValue) of
-        {ok, Tx} -> {Out, S1} = do_commit(Tx, S), reply_or_stop(Out, S1);
-        error -> {reply, {aborted, malformed_tx}, S}
+        {ok, {tx, T, Guard, Writes}} when Scope =:= {tenant, T}, T >= 0, T < N ->
+            %% Use the host tenant for all SQL, after checking the guest's claim.
+            {tenant, HostTenant} = Scope,
+            S = flush_deferred(S0),
+            {Out, S1} = do_commit({tx, HostTenant, Guard, Writes}, S), reply_or_stop(Out, S1);
+        {ok, {tx, T, _, _}} when Scope =:= {tenant, T} ->
+            {reply, {reply, reply(<<"Unauthorized">>)}, S0};
+        {ok, _} -> {reply, {aborted, unauthorized_scope}, S0};
+        error -> {reply, {aborted, malformed_tx}, S0}
     end;
 handle_call(snapshot, _From, S0) ->
     S = flush_deferred(S0),
@@ -115,6 +128,7 @@ handle_call(pending_jobs, _From, S0) ->
     {reply, Jobs, S};
 handle_call(port_os_pid, _From, S) -> {reply, fenrir_sqlite:os_pid(maps:get(port, S)), S};
 handle_call({arm_port, Kind, N}, _From, S) -> {reply, fenrir_sqlite:arm(maps:get(port, S), Kind, N), S};
+handle_call(io_counters, _From, S) -> {reply, fenrir_sqlite:counters(maps:get(port, S)), S};
 handle_call(info, _From, S) -> {reply, maps:with([tenants, mutant], S), S}.
 
 handle_cast(_, S) -> {noreply, S}.
@@ -141,7 +155,7 @@ parse_tx({data, <<"Tx">>, <<"Tx">>, [Cap, Guard, Writes]}) ->
     end;
 parse_tx(_) -> error.
 
-cap({data, <<"Cap">>, <<"Tenant">>, [{int, T}]}) -> T.
+cap({data, <<"Cap">>, <<"Tenant">>, [{int, T}]}) when is_integer(T) -> T.
 guard({data, <<"Guard">>, <<"Always">>, []}) -> always;
 guard({data, <<"Guard">>, <<"Once">>, [{int, K}]}) -> {once, K};
 guard({data, <<"Guard">>, <<"Pending">>, [{int, J}]}) -> {pending, J}.

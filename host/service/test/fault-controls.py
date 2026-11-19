@@ -113,17 +113,19 @@ unverified = ('false = lists:any(fun(E) -> hd(E) =:= <<"fault">> end, Events), '
               '{fault_fired,false,_} = lists:keyfind(fault_fired,1,maps:get(checks,S)), '
               'not fenrir_campaign:fault_evidence(S)')
 if not gap_baseline and not observe_baseline:
-    submit = 'command({submit, T, K, D, P}, _) -> fenrir_front:submit(T, K, D, P);'
+    submit_context = '_' if baseline else '{_, Tokens}'
+    submit_call = 'fenrir_front:submit(T, K, D, P)' if baseline else 'fixture_submit(Tokens, T, K, D, P)'
+    submit = f'command({{submit, T, K, D, P}}, {submit_context}) -> {submit_call};'
     run("unrelated-node-sigkill", "crash_points", "w2_request_before_commit-kill_node-submit",
         "fenrir_node.erl", submit,
-        '''command({submit, T, 2, D, P}, _) ->
+        '''command({submit, T, 2, D, P}, @CONTEXT@) ->
     case file:read_file(@MARKER@) of
         {error, enoent} ->
             ok = file:write_file(@MARKER@, <<"once">>),
             os:cmd("kill -9 " ++ os:getpid()), timer:sleep(infinity);
-        {ok, _} -> fenrir_front:submit(T, 2, D, P)
+        {ok, _} -> @CALL@
     end;
-'''
+'''.replace('@CONTEXT@', submit_context).replace('@CALL@', submit_call.replace('K, D', '2, D'))
         + submit,
         'true = (maps:get(crashes,S) =:= 1), ' +
         ('{fault_fired,true,_} = lists:keyfind(fault_fired,1,maps:get(checks,S)), is_list(Events)'

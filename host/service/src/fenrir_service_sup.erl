@@ -17,6 +17,12 @@
 -export([start_link/1, init/1, worker_sup_init/1]).
 
 start_link(Config) ->
+    case fenrir_authority:validate(Config) of
+        {ok, Bindings} -> start_checked(Config#{submit_credentials => Bindings});
+        {error, _} = E -> E
+    end.
+
+start_checked(Config) ->
     case fenrir_worker:check_image(maps:get(image, Config)) of
         {ok, _} -> supervisor:start_link({local, ?MODULE}, ?MODULE, {top, Config});
         {error, E} -> {error, E}
@@ -31,7 +37,7 @@ init({top, Config}) ->
          #{id => fenrir_store, start => {fenrir_store, start_link, [Store]}},
          #{id => fenrir_worker_sup, type => supervisor,
            start => {supervisor, start_link, [{local, fenrir_worker_sup}, ?MODULE, {workers, Workers, Config}]}},
-         #{id => fenrir_front, start => {fenrir_front, start_link, [Workers]}},
+         #{id => fenrir_front, start => {fenrir_front, start_link, [Workers, maps:get(submit_credentials, Config)]}},
          #{id => fenrir_runner, start => {fenrir_runner, start_link, [maps:get(runner, Config, #{})]}}],
     {ok, {#{strategy => one_for_one, intensity => 1000, period => 10}, Children}};
 init({workers, Workers, Config}) -> worker_sup_init({Workers, Config}).

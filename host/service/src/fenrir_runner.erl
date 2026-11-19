@@ -30,7 +30,7 @@ run_once(Notify, Opts) ->
 
 deliver(Notify, T, J, Ok) ->
     Notify({deliver, T, J, Ok}),
-    {Out, _} = fenrir_front:complete(T, J, Ok),
+    {Out, _} = fenrir_front:deliver(T, J, Ok),
     Notify({delivered, T, J, Ok, Out}),
     true.
 

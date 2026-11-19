@@ -59,6 +59,7 @@ main([ConfigFile, HistExit]) ->
           <<"not_covered">> => [<<"power loss and fsync honesty: kill -9 of a process cannot drop the OS page cache, so synchronous=OFF is NOT DETECTED by this campaign">>,
                                 <<"disk corruption, torn sectors, a lying disk">>, <<"SQLite itself">>, <<"OTP itself">>,
                                 <<"isolation between several workers on one store beyond the observed serialized runs (one adapter process serializes commits)">>,
+                                <<"production client authentication and credential lifecycle (the campaign controller is privileged)">>,
                                 <<"performance">>, <<"requests outside the image's request domain (protocol v2 lowers entry inputs into the image)">>]},
     ok = file:write_file(filename:join(Out, "report.json"), json:encode(Report)),
     halt(0).

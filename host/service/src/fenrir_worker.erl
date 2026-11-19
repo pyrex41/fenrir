@@ -10,7 +10,7 @@
 %%   Init   the request's entry (the request is lowered into the image: v2 section 3),
 %%          its artifact identity and schema; Ready must repeat them
 %%   Run    64 steps at a time until HostWait or a terminal execution
-%%   HostRequest -> fenrir_store:commit/1 -> Reply (A frame) -> the HostReply step
+%%   HostRequest + host scope -> fenrir_store:commit/2 -> Reply -> the HostReply step
 %%   Completed -> the program's result (TaskTermination outcome) -> Terminate -> Bye, exit 0
 %%
 %% The worker type-checks nothing the guest checks (the reply's type is checked by the
@@ -22,7 +22,7 @@
 %% Reply type, so a busy store cannot be told to the program).
 -module(fenrir_worker).
 -behaviour(gen_server).
--export([start_link/2, run/2, run/3, check_image/1]).
+-export([start_link/2, run/3, check_image/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
@@ -34,11 +34,11 @@
 
 start_link(Name, Opts) -> gen_server:start_link({local, Name}, ?MODULE, Opts, []).
 
-%% run(Worker, Request) -> {ok, ResultValue, Stats} | {refused, Why} | {Outcome, Why, Stats}
+%% Internal call. Scope comes from the OTP ingress or host job runner, not the guest.
+%% run(Worker, Scope, Request) -> {ok, ResultValue, Stats} | {refused, Why} | {Outcome, Why, Stats}
 %%   Outcome: busy | aborted (nothing committed) | indeterminate (a commit may have
 %%   happened and no response exists) | failed (no commit was attempted)
-run(Worker, Request) -> run(Worker, Request, 120000).
-run(Worker, Request, Timeout) -> gen_server:call(Worker, {run, Request}, Timeout).
+run(Worker, Scope, Request) -> gen_server:call(Worker, {run, Scope, Request}, 120000).
 
 init(Opts) ->
     process_flag(trap_exit, true),
@@ -76,11 +76,11 @@ same_sha(File, Want, What) ->
         _ -> throw({identity, {missing, What}})
     end.
 
-handle_call({run, Request}, _From, S = #{image_info := I}) ->
-    case entry(Request, I) of
+handle_call({run, Scope, Request}, _From, S = #{image_info := I}) ->
+    case entry(Scope, Request, I) of
         {ok, Program} ->
             T0 = erlang:monotonic_time(microsecond),
-            Result = session(Program, S),
+            Result = session(Program, Scope, S),
             T1 = erlang:monotonic_time(microsecond),
             {reply, stats(Result, T1 - T0), S#{boots := maps:get(boots, S) + 1}};
         {refused, Why} -> {reply, {refused, Why}, S}
@@ -94,10 +94,12 @@ stats({ok, V, St}, Us) -> {ok, V, St#{us => Us}};
 stats({O, W, St}, Us) -> {O, W, St#{us => Us}}.
 
 %% The image entry of a request; requests outside the image's domain are refused.
-entry({submit, T, K, D, Payload}, I) when Payload =:= <<D>> -> find([<<"submit">>, T, K, D], I);
-entry({submit, _, _, _, _}, _) -> {refused, payload_outside_image_domain};
-entry({complete, T, J, Ok}, I) -> find([<<"complete">>, T, J, Ok], I);
-entry(_, _) -> {refused, unknown_request}.
+entry({tenant, T}, {submit, K, D, Payload}, I)
+  when is_integer(T), T >= 0, is_integer(D), D >= 0, D =< 255, Payload =:= <<D>> ->
+    find([<<"submit">>, T, K, D], I);
+entry({tenant, _}, {submit, _, _, _}, _) -> {refused, payload_outside_image_domain};
+entry({tenant, T}, {complete, J, Ok}, I) when is_integer(T), T >= 0 -> find([<<"complete">>, T, J, Ok], I);
+entry(_, _, _) -> {refused, unknown_request}.
 
 find(Req, I) ->
     case [maps:get(<<"program">>, E) || E <- maps:get(<<"entries">>, I), maps:get(<<"request">>, E) =:= Req] of
@@ -107,13 +109,13 @@ find(Req, I) ->
 
 %% ---------- one session: one boot, one request ----------
 
-session(Program, S = #{image_info := I}) ->
+session(Program, Scope, S = #{image_info := I}) ->
     Console = filename:join(maps:get(console_dir, S, "/tmp"), "console-" ++ atom_to_list(maps:get(name, S, worker)) ++ ".txt"),
     Port = open_port({spawn_executable, maps:get(launcher, S)},
                      [binary, exit_status, use_stdio, {args, [maps:get(<<"tender">>, I), maps:get(<<"image">>, I), Console]}]),
     OsPid = case erlang:port_info(Port, os_pid) of {os_pid, P} -> P; _ -> undefined end,
     Ctx = #{tender => OsPid, tender_port => Port, worker => self()},
-    St0 = #{port => Port, buf => <<>>, seq => 0, epoch => 0, requests => 0, commit => none, ctx => Ctx,
+    St0 = #{port => Port, scope => Scope, buf => <<>>, seq => 0, epoch => 0, requests => 0, commit => none, ctx => Ctx,
             frames => 0, runs => 0, replies => [], tender_os_pid => OsPid},
     try
         {Hello, St1} = expect(St0, $H),
@@ -181,7 +183,9 @@ host_request(Record, St, I) ->
     after 0 -> ok
     end,
     St1 = St#{commit := sent},
-    case fenrir_store:commit(Value) of
+    case fenrir_store:commit(maps:get(scope, St), Value) of
+        {reply, {data, <<"Reply">>, <<"Unauthorized">>, []}} ->
+            throw({fail, aborted, unauthorized_scope, St});
         {reply, Reply} ->
             St2 = St1#{commit := committed, replies := maps:get(replies, St1) ++ [fenrir_value:encode(Reply)]},
             fenrir_faults:hit(w3_commit_before_reply, maps:get(ctx, St2)),
@@ -197,7 +201,7 @@ host_request(Record, St, I) ->
                 X -> throw({fail, failed, {execution, X}, St5})
             end;
         busy -> throw({fail, busy, store_busy, St1#{commit := none}});
-        {aborted, Why} -> throw({fail, aborted, Why, St1#{commit := none}});
+        {aborted, Why} -> throw({fail, aborted, Why, St});
         {indeterminate, Why} -> throw({fail, indeterminate, Why, St1})
     end.
 

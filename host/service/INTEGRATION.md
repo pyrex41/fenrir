@@ -29,11 +29,11 @@ campaign. ARM64 Linux is now the primary development target.
   (`FENRIR_SHEN_JIT` points to its install prefix). The runner's exit status is
   not a conformance verdict: inspect `verdicts.jsonl`. Run all 18 fixtures and
   compare every `verdict` to its input `expect` before claiming the checker works.
-- `sh host/service/check.sh quick` exits 2 before a build while shared input files
-  are absent. No A3 development report, new history acceptance, or qualification
-  follows from that exit or from the host-only tests.
+- `sh host/service/check.sh quick` requires Linux with the reconciled guest,
+  frontend and history tools. A preflight exit when any prerequisite is missing
+  is not a campaign run; the host-only check also gives no history verdict.
 
-Validation on this worktree: 62 host-only tests passed using arm64 macOS, OTP
+Historical validation before the shared guest dependencies landed: 62 host-only tests passed using arm64 macOS, OTP
 28.5.0.4 and Homebrew SQLite 3.54.0 (`SQLITE_PREFIX`); all 18 JavaScript tests
 passed with Node 22. `check.sh quick` was confirmed blocked at `harness/solo5.sh`,
 and a direct image-builder probe failed on the missing `residualEffects` export
@@ -53,7 +53,10 @@ before building. The Shen checker and A1/A2/A3 campaigns were not run.
 
 The A0 Rocq model proof remains an abstract result. The A3 host and SQLite
 implementation are not proved to refine it. A process kill does not simulate
-power loss; `sync_off` is outside the crash campaign's detection capability.
-Do not infer confidentiality, general transaction isolation, authenticated tenant
-capabilities, fairness, availability, or operation outside the guest's baked
-finite request domain. No amendment, gate, or owner decision has been changed.
+power loss; `sync_off` is outside the crash campaign's detection capability even
+though the connection-level VFS counter test distinguishes it from FULL. See
+[storage validation](STORAGE_VALIDATION.md). The [tenant boundary](CONTRACT.md#tenant-trust-boundary)
+authenticates bounded OTP submit requests with pre-provisioned credentials; do
+not infer production authentication, confidentiality, general transaction
+isolation, fairness, availability, or operation outside the guest's baked finite
+request domain. No amendment, gate, or owner decision has been changed.

@@ -9,9 +9,9 @@ the handler's one durable operation, `Store.commit`, against SQLite. The host is
 infrastructure with a stated contract, [CONTRACT.md](CONTRACT.md): named assumptions,
 each mapped to the tests that exercise it, none covered by Fenrir's proofs.
 
-**PR10 integration status: host-only tests are runnable; the real Solo5 campaign is
-blocked.** See [INTEGRATION.md](INTEGRATION.md) for the missing dependencies and
-the distinction between this worktree and the original runs. The intended campaign's
+**A3 development evidence only.** Host-only checks run without a guest; the
+Solo5 campaign requires Linux and the pinned or explicit tools. See
+[INTEGRATION.md](INTEGRATION.md) for integration and provenance. The intended campaign's
 evidence is *observed history accepted; bounded crash campaign* (development grade,
 `qualification: UNKNOWN`). An accepted history is one recorded execution consistent
 with the A1 model, not a claim about executions that were not run.
@@ -44,19 +44,19 @@ nix eval --offline --impure --json --file tests/host/pinned-tools.nix
 
 ## Architecture as built
 
-This describes the original keen-ptolemy A3 stack, not an end-to-end run on PR10.
+The campaign driver is privileged and is not a client transport.
 
 ```
 campaign driver (its own BEAM; client, recorder, fault injector, file auditor)
    |  {packet,4} external terms on fds 3/4 of the node (priv/node-launch)
 service node (BEAM OS process)                       -- killed and restarted by campaigns
-   fenrir_node            control channel
+   fenrir_node            privileged control channel; impersonates test principals
    fenrir_service_sup     one_for_one
      fenrir_holder        ETS owner (volatile_mailbox mutant only)
      fenrir_store         the SQLite adapter, one connection --> fenrir_sqlite_port (C, port)
      fenrir_worker_sup    one_for_one
        fenrir_worker wN   one solo5-spt per request --> priv/spt-launch --> solo5-spt
-     fenrir_front         submit / complete / respond, volatile outbox
+     fenrir_front         authenticated submit / internal delivery / volatile outbox
      fenrir_runner        delivers pending jobs (at least once)
 ```
 
@@ -82,6 +82,10 @@ service node (BEAM OS process)                       -- killed and restarted by 
   holds one entry per request of a finite domain: 3 tenants, 3 keys, 2 digests (payload =
   the digest octet, A2's abstraction), deliveries of jobs 0–7 with both outcomes, 66
   entries. A request outside the domain is refused before anything runs.
+- **Tenant authority.** OTP resolves a provisioned bearer credential to a tenant
+  before picking that tenant's guest entry. The guest's `Tenant t` must agree with the
+  independent host scope before SQLite is touched. This is a bounded submit boundary,
+  not production authentication; see [trust boundary](CONTRACT.md#tenant-trust-boundary).
 - **SQLite binding: a C port program** ([c_src/fenrir_sqlite_port.c](c_src/fenrir_sqlite_port.c)),
   built with gcc against nixpkgs' sqlite. Chosen over a NIF library (esqlite, exqlite)
   because it has the fewest unpinned inputs (nixpkgs' sqlite and gcc, nothing from hex),
@@ -89,9 +93,11 @@ service node (BEAM OS process)                       -- killed and restarted by 
   middle of a transaction. It executes statements and holds no storage logic; the
   transaction is written in [fenrir_store](src/fenrir_store.erl). A counting VFS shim
   over the unix VFS lets a campaign kill the program before its n-th write or fsync.
-- **Storage.** WAL journal, `synchronous=FULL` (the WAL is fsynced before `COMMIT`
-  returns; with `NORMAL` a committed transaction can be lost on power loss), foreign keys
-  on, 50 ms busy timeout, all read back at open. Tables `tenants(tenant, next)`,
+- **Storage.** WAL journal, `synchronous=FULL` (SQLite requests a WAL sync before
+  `COMMIT` returns; with `NORMAL` a committed transaction can be lost on power loss), foreign keys
+  on, 50 ms busy timeout, all checked at open. See [storage validation](STORAGE_VALIDATION.md)
+  for what process crashes and VFS counters do (and do not) establish.
+  Tables `tenants(tenant, next)`,
   `reports(tenant, id, digest, payload)`, `jobs(tenant, id, report, status)`,
   `request_keys(tenant, key, digest, receipt fields)`, each keyed by tenant. One
   `BEGIN IMMEDIATE … COMMIT` per `Store.commit`.

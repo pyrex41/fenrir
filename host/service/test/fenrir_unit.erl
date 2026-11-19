@@ -16,9 +16,9 @@ run(ConfigFile, Mode) ->
     ok = filelib:ensure_dir(filename:join(Out, "unit/x")),
     fenrir_faults:init(),
     Root = maps:get(root, C),
-    Common = [vectors(Root), values(), store(C), settings(C), artifact_manifest(C), fenrir_report_test:tests(Root)],
+    Common = [vectors(Root), values(), authority(C), store(C), settings(C), artifact_manifest(C), fenrir_report_test:tests(Root)],
     Extra = case Mode of
-                full -> [image_manifest(C), identity(C)];
+                full -> [image_manifest(C), identity(C), guest_authority(C)];
                 host_only -> [[t(store_lost_commit_ack, fun() -> lost_commit_ack(C) end)]]
             end,
     Tests = lists:append(Common ++ Extra),
@@ -109,6 +109,10 @@ receipt(T, K, D, R, J) -> d(<<"Receipt">>, <<"Receipt">>, [i(T), i(K), i(D), i(R
 committed(Rc) -> {reply, d(<<"Reply">>, <<"Committed">>, [Rc])}.
 reply(N) -> {reply, d(<<"Reply">>, N, [])}.
 
+%% These adapter contract fixtures run on the trusted host. Their expected
+%% tenant is assigned independently by each test, never inferred by the store.
+commit(T, Tx) -> fenrir_store:commit({tenant, T}, Tx).
+
 with_store(C, Name, Mutant, Fun) ->
     Db = filename:join([maps:get(out, C), "unit", Name ++ ".db"]),
     fenrir_drive:fresh_db(Db),
@@ -116,38 +120,104 @@ with_store(C, Name, Mutant, Fun) ->
     {ok, Pid} = fenrir_store:start_link(#{db => Db, tenants => 2, mutant => Mutant}),
     try Fun(Db) after unlink(Pid), exit(Pid, shutdown), timer:sleep(50) end.
 
+%% No guest here: exercise real front dispatch with a worker mailbox probe.
+authority(C) ->
+    [t(invalid_authority_config_refuses_start, fun() ->
+         Hash = crypto:hash(sha256, <<"test">>),
+         {error, invalid_submit_credentials} = fenrir_service_sup:start_link(#{tenants => 2, submit_credentials => #{Hash => 2}}),
+         {error, invalid_submit_credentials} = fenrir_authority:validate(#{tenants => 2, submit_credentials => #{<<"short">> => 0}}),
+         {ok, Empty} = fenrir_authority:validate(#{tenants => 2}),
+         denied = fenrir_authority:authenticate(crypto:strong_rand_bytes(32), Empty),
+         true
+     end),
+     t(credential_scopes_front_dispatch, fun() ->
+         {Tokens, Bindings} = fenrir_authority:campaign_credentials(2),
+         Parent = self(),
+         Worker = spawn(fun() -> authority_worker_probe(Parent) end),
+         true = register(authority_probe, Worker),
+         {ok, Front} = fenrir_front:start_link([authority_probe], Bindings),
+         try
+             T1 = maps:get(1, Tokens),
+             Denied = {{refused, unauthorized}, #{}},
+             Denied = fenrir_front:submit(1, 0, 0, <<0>>), %% raw tenant is not a credential
+             Denied = fenrir_front:submit(crypto:hash(sha256, T1), 0, 0, <<0>>), %% verifier is not the token
+             Denied = fenrir_front:submit(crypto:strong_rand_bytes(32), 0, 0, <<0>>),
+             receive {Worker, _, _} -> error(unauthorized_dispatch) after 0 -> ok end,
+             {{accepted, [1, 0, 0, 0, 0]}, _} = fenrir_front:submit(T1, 0, 0, <<0>>),
+             receive {Worker, {tenant, 1}, {submit, 0, 0, <<0>>}} -> ok
+             after 1000 -> error(no_scoped_dispatch)
+             end,
+             %% The probe returns a mismatched receipt for key 1.
+             {indeterminate, _} = fenrir_front:submit(T1, 1, 0, <<0>>),
+             receive {Worker, {tenant, 1}, {submit, 1, 0, <<0>>}} -> ok
+             after 1000 -> error(no_scoped_dispatch)
+             end,
+             [{accepted, [1, 0, 0, 0, 0]}] = fenrir_front:outbox(),
+             true
+         after
+             gen_server:stop(Front),
+             exit(Worker, kill)
+         end
+     end),
+     t(guest_scope_mismatch_cannot_read_or_write, fun() ->
+         with_store(C, "scope", normal, fun(_) ->
+             Rc = receipt(1, 0, 1, 0, 0),
+             {reply, {data, <<"Reply">>, <<"Committed">>, [Rc]}} = commit(1, sub(1, 0, 1)),
+             Before = fenrir_store:snapshot(),
+             IoBefore = fenrir_store:io_counters(),
+             Denied = {aborted, unauthorized_scope},
+             Denied = commit(0, sub(1, 0, 1)), %% no recorded receipt leak
+             Denied = commit(0, sub(1, 1, 0)), %% no cross-tenant allocation
+             Denied = commit(0, tx(1, pending(0), [w(<<"Finish">>, [i(0), {bool, true}])])),
+             Denied = fenrir_store:commit(none, sub(1, 1, 0)),
+             Before = fenrir_store:snapshot(),
+             IoBefore = fenrir_store:io_counters(),
+             committed(receipt(0, 0, 0, 0, 0)) =:= commit(0, sub(0, 0, 0))
+         end)
+     end)].
+
+authority_worker_probe(Parent) ->
+    receive
+        {'$gen_call', From, {run, Scope, Req = {submit, K, D, _}}} ->
+            Parent ! {self(), Scope, Req},
+            T = case K of 0 -> 1; 1 -> 0 end,
+            Resp = d(<<"Response">>, <<"Accepted">>, [receipt(T, K, D, 0, 0)]),
+            gen_server:reply(From, {ok, Resp, #{}}),
+            authority_worker_probe(Parent)
+    end.
+
 store(C) ->
     Cases =
-        [{fresh_key_commits, [sub(0, 1, 1)], committed(receipt(0, 1, 1, 0, 0))},
-         {same_key_same_digest_recorded, [sub(0, 1, 1), sub(0, 1, 1)],
+        [{fresh_key_commits, [{0, sub(0, 1, 1)}], committed(receipt(0, 1, 1, 0, 0))},
+         {same_key_same_digest_recorded, [{0, sub(0, 1, 1)}, {0, sub(0, 1, 1)}],
           {reply, d(<<"Reply">>, <<"Recorded">>, [i(1), receipt(0, 1, 1, 0, 0)])}},
-         {same_key_other_digest_recorded_with_first_digest, [sub(0, 1, 1), sub(0, 1, 0)],
+         {same_key_other_digest_recorded_with_first_digest, [{0, sub(0, 1, 1)}, {0, sub(0, 1, 0)}],
           {reply, d(<<"Reply">>, <<"Recorded">>, [i(1), receipt(0, 1, 1, 0, 0)])}},
-         {second_key_next_id, [sub(0, 1, 1), sub(0, 2, 0)], committed(receipt(0, 2, 0, 1, 1))},
-         {tenants_are_separate, [sub(0, 1, 1), sub(1, 1, 1)], committed(receipt(1, 1, 1, 0, 0))},
-         {unknown_tenant_unauthorized, [sub(2, 0, 0)], reply(<<"Unauthorized">>)},
-         {negative_tenant_unauthorized, [sub(-1, 0, 0)], reply(<<"Unauthorized">>)},
-         {pending_job_finished_applied, [sub(0, 0, 0), tx(0, pending(0), [w(<<"Finish">>, [i(0), {bool, true}])])], reply(<<"Applied">>)},
-         {finished_job_skipped, [sub(0, 0, 0), tx(0, pending(0), [w(<<"Finish">>, [i(0), {bool, true}])]),
-                                 tx(0, pending(0), [w(<<"Finish">>, [i(0), {bool, false}])])], reply(<<"Skipped">>)},
-         {unknown_job_skipped, [tx(0, pending(5), [w(<<"Finish">>, [i(5), {bool, true}])])], reply(<<"Skipped">>)},
-         {always_finish_unconditional_applied, [tx(0, always(), [w(<<"Finish">>, [i(9), {bool, true}])])], reply(<<"Applied">>)},
-         {stage_job_of_does_not_allocate, [tx(0, always(), [w(<<"StageJobOf">>, [i(3)])]), sub(0, 0, 0)], committed(receipt(0, 0, 0, 0, 0))},
-         {malformed_tx_aborted, [d(<<"Tx">>, <<"Tx">>, [])], {aborted, malformed_tx}}],
+         {second_key_next_id, [{0, sub(0, 1, 1)}, {0, sub(0, 2, 0)}], committed(receipt(0, 2, 0, 1, 1))},
+         {tenants_are_separate, [{0, sub(0, 1, 1)}, {1, sub(1, 1, 1)}], committed(receipt(1, 1, 1, 0, 0))},
+         {unknown_tenant_unauthorized, [{2, sub(2, 0, 0)}], reply(<<"Unauthorized">>)},
+         {negative_tenant_unauthorized, [{-1, sub(-1, 0, 0)}], reply(<<"Unauthorized">>)},
+         {pending_job_finished_applied, [{0, sub(0, 0, 0)}, {0, tx(0, pending(0), [w(<<"Finish">>, [i(0), {bool, true}])])}], reply(<<"Applied">>)},
+         {finished_job_skipped, [{0, sub(0, 0, 0)}, {0, tx(0, pending(0), [w(<<"Finish">>, [i(0), {bool, true}])])},
+                                 {0, tx(0, pending(0), [w(<<"Finish">>, [i(0), {bool, false}])])}], reply(<<"Skipped">>)},
+         {unknown_job_skipped, [{0, tx(0, pending(5), [w(<<"Finish">>, [i(5), {bool, true}])])}], reply(<<"Skipped">>)},
+         {always_finish_unconditional_applied, [{0, tx(0, always(), [w(<<"Finish">>, [i(9), {bool, true}])])}], reply(<<"Applied">>)},
+         {stage_job_of_does_not_allocate, [{0, tx(0, always(), [w(<<"StageJobOf">>, [i(3)])])}, {0, sub(0, 0, 0)}], committed(receipt(0, 0, 0, 0, 0))},
+         {malformed_tx_aborted, [{0, d(<<"Tx">>, <<"Tx">>, [])}], {aborted, malformed_tx}}],
     [t({store_contract, N}, fun() ->
             with_store(C, atom_to_list(N), normal,
-                       fun(_) -> Rs = [fenrir_store:commit(X) || X <- Txs], {lists:last(Rs) =:= Want, Rs} end)
+                       fun(_) -> Rs = [commit(T, X) || {T, X} <- Txs], {lists:last(Rs) =:= Want, Rs} end)
         end) || {N, Txs, Want} <- Cases]
     ++ [t({store_contract, snapshot_is_canonical}, fun() ->
             with_store(C, "snapshot", normal, fun(_) ->
-                fenrir_store:commit(sub(0, 1, 1)), fenrir_store:commit(sub(0, 0, 0)),
-                fenrir_store:commit(tx(0, pending(1), [w(<<"Finish">>, [i(1), {bool, false}])])),
+                commit(0, sub(0, 1, 1)), commit(0, sub(0, 0, 0)),
+                commit(0, tx(0, pending(1), [w(<<"Finish">>, [i(1), {bool, false}])])),
                 S = fenrir_store:snapshot(),
                 {S =:= [[[[0, 1], [1, 0]], [[0, 0, <<"pending">>], [1, 1, <<"failed">>]], [[0, 0, [0, 0, 0, 1, 1]], [1, 1, [0, 1, 1, 0, 0]]], 2],
                         [[], [], [], 0]], S} end) end),
         t({store_contract, payload_stored}, fun() ->
             with_store(C, "payload", normal, fun(Db) ->
-                fenrir_store:commit(tx(0, once(0), [w(<<"PutReport">>, [i(7), {bytes, <<"hello">>}]), w(<<"RecordKey">>, [i(0), i(7)])])),
+                commit(0, tx(0, once(0), [w(<<"PutReport">>, [i(7), {bytes, <<"hello">>}]), w(<<"RecordKey">>, [i(0), i(7)])])),
                 {ok, P} = fenrir_sqlite:open(Db),
                 R = fenrir_sqlite:exec(P, "SELECT payload FROM reports"), fenrir_sqlite:close(P),
                 {R =:= {rows, [[{blob, <<"hello">>}]]}, R} end) end)].
@@ -158,17 +228,38 @@ settings(C) ->
     [t(settings_wal_full, fun() ->
          with_store(C, "settings", normal, fun(Db) ->
              {ok, P} = fenrir_store:open_configured(Db, normal),
-             R = [fenrir_sqlite:exec(P, Q) || Q <- ["PRAGMA journal_mode", "PRAGMA synchronous", "PRAGMA foreign_keys"]],
+             R = [fenrir_sqlite:exec(P, Q) || Q <- ["PRAGMA journal_mode", "PRAGMA synchronous", "PRAGMA foreign_keys", "PRAGMA busy_timeout"]],
+             {sqlite_error, constraint, _, _} = fenrir_sqlite:exec(P, "INSERT INTO reports VALUES (9,0,0,X'00')"),
              fenrir_sqlite:close(P),
-             {R =:= [{rows, [[<<"wal">>]]}, {rows, [[2]]}, {rows, [[1]]}], R} end) end),
+             {R =:= [{rows, [[<<"wal">>]]}, {rows, [[2]]}, {rows, [[1]]}, {rows, [[50]]}], R} end) end),
+     t(settings_refuse_non_wal_database, fun() ->
+         {error, {connection_settings, Bad}} = fenrir_store:open_configured(":memory:", normal),
+         lists:member({"PRAGMA journal_mode=WAL", {rows, [[<<"memory">>]]}}, Bad)
+     end),
+     t(settings_wal_commit_requests_sync, fun() ->
+         Full = measured_commit_io(C, normal),
+         Off = measured_commit_io(C, sync_off),
+         {W, Sync} = Full,
+         {WOff, SyncOff} = Off,
+         {W > 0 andalso Sync > 0 andalso WOff > 0 andalso SyncOff =:= 0, #{full => Full, off => Off}}
+     end),
      t(settings_busy_is_distinct_outcome, fun() ->
          with_store(C, "busy", normal, fun(Db) ->
              {ok, P} = fenrir_sqlite:open(Db),
              {rows, _} = fenrir_sqlite:exec(P, "BEGIN IMMEDIATE"),
-             R = fenrir_store:commit(sub(0, 0, 0)),
+             R = commit(0, sub(0, 0, 0)),
              fenrir_sqlite:exec(P, "ROLLBACK"), fenrir_sqlite:close(P),
-             R2 = fenrir_store:commit(sub(0, 0, 0)),
+             R2 = commit(0, sub(0, 0, 0)),
              {R =:= busy andalso R2 =:= committed(receipt(0, 0, 0, 0, 0)), {R, R2}} end) end)].
+
+measured_commit_io(C, Mutant) ->
+    with_store(C, "commit-io-" ++ atom_to_list(Mutant), Mutant, fun(_) ->
+        {W0, S0} = fenrir_store:io_counters(),
+        Rc = receipt(0, 0, 0, 0, 0),
+        {reply, {data, <<"Reply">>, <<"Committed">>, [Rc]}} = commit(0, sub(0, 0, 0)),
+        {W1, S1} = fenrir_store:io_counters(),
+        {W1 - W0, S1 - S0}
+    end).
 
 %% Exercise the real SQLite port fault, without making a guest or history claim.
 lost_commit_ack(C) ->
@@ -188,13 +279,13 @@ lost_commit_ack(C) ->
     {First, FirstRef} = Start(),
     try
         ok = fenrir_faults:arm(s3_before_commit, lose_ack, 1),
-        {indeterminate, {port_died, commit, {lost_commit_ack, 137}}} = fenrir_store:commit(Tx),
+        {indeterminate, {port_died, commit, {lost_commit_ack, 137}}} = commit(0, Tx),
         sqlite_port_died = Wait(First, FirstRef),
         {Second, SecondRef} = Start(),
         try
             Snapshot = [[[[0, 1]], [[0, 0, <<"pending">>]], [[1, 1, [0, 1, 1, 0, 0]]], 1], [[], [], [], 0]],
             Snapshot = fenrir_store:snapshot(),
-            {reply, {data, <<"Reply">>, <<"Recorded">>, [{int, 1}, Receipt]}} = fenrir_store:commit(Tx),
+            {reply, {data, <<"Reply">>, <<"Recorded">>, [{int, 1}, Receipt]}} = commit(0, Tx),
             Receipt = receipt(0, 1, 1, 0, 0),
             Snapshot = fenrir_store:snapshot(),
             true
@@ -270,6 +361,53 @@ supervisor_refusal(C, Variant) ->
     Refused = case R of {error, {capability_manifest_refused, [{no_contract_for_effect, <<"Mail">>}]}} -> true; _ -> false end,
     {Refused andalso whereis(fenrir_store) =:= undefined, R}.
 
+%% ---------- real guest authority wiring (full runner only) ----------
+
+guest_authority(C) ->
+    [t(authenticated_guest_submit, fun() ->
+         with_guest_service(C, "guest-tenant", maps:get(image, C), fun(Tokens) ->
+             T1 = maps:get(1, Tokens),
+             {{refused, unauthorized}, #{}} = fenrir_front:submit(1, 0, 0, <<0>>),
+             {{accepted, [1, 0, 0, 0, 0]}, _} = fenrir_front:submit(T1, 0, 0, <<0>>),
+             {{accepted, [1, 0, 0, 0, 0]}, _} = fenrir_front:submit(T1, 0, 0, <<0>>),
+             {delivered, _} = fenrir_front:deliver(1, 0, true),
+             [[[], [], [], 0], [[[0, 0]], [[0, 0, <<"done">>]], [[0, 0, [1, 0, 0, 0, 0]]], 1]]
+                 = fenrir_store:snapshot(),
+             true
+         end)
+     end),
+     t(real_guest_wrong_tenant_is_rejected, fun() ->
+         %% Inject bad dispatch metadata: select the real tenant-1 entry for
+         %% an authenticated tenant-0 submit. Same image and protocol; the
+         %% real guest emits a well-formed Store.commit for another tenant.
+         {ok, Bin} = file:read_file(maps:get(image, C)),
+         I = json:decode(Bin),
+         Entries = maps:get(<<"entries">>, I),
+         [E1] = [E || E = #{<<"request">> := [<<"submit">>, 1, 0, 0]} <- Entries],
+         Bad = [case E of #{<<"request">> := Req = [<<"submit">>, 0, 0, 0]} ->
+                              E1#{<<"request">> := Req};
+                          _ -> E
+                end || E <- Entries],
+         Desc = filename:join([maps:get(out, C), "unit", "wrong-tenant-image.json"]),
+         ok = file:write_file(Desc, json:encode(I#{<<"entries">> := Bad})),
+         with_guest_service(C, "wrong-tenant", Desc, fun(Tokens) ->
+             {aborted, #{why := unauthorized_scope, replies := [], commit := none}} =
+                 fenrir_front:submit(maps:get(0, Tokens), 0, 0, <<0>>),
+             [[[], [], [], 0], [[], [], [], 0]] = fenrir_store:snapshot(),
+             [] = fenrir_front:outbox(),
+             true
+         end)
+     end)].
+
+with_guest_service(C, Name, Image, Fun) ->
+    Dir = filename:join(maps:get(out, C), "unit"),
+    {Tokens, Bindings} = fenrir_authority:campaign_credentials(2),
+    {ok, Sup} = fenrir_service_sup:start_link(
+                  #{image => Image, db => filename:join(Dir, Name ++ ".db"),
+                    tenants => 2, launcher => maps:get(launcher, C), console_dir => Dir,
+                    submit_credentials => Bindings}),
+    try Fun(Tokens) after gen_server:stop(Sup) end.
+
 %% ---------- identities: a mismatched image is refused ----------
 
 identity(C) ->
@@ -290,7 +428,7 @@ identity(C) ->
          with_store(C, "identity", normal, fun(_) ->
              F = Write("batch.json", I#{<<"batch_sha256">> := Bad(maps:get(<<"batch_sha256">>, I))}),
              {ok, W} = fenrir_worker:start_link(wid, #{image => F, launcher => maps:get(launcher, C), console_dir => Dir, name => wid}),
-             R = fenrir_worker:run(wid, {submit, 0, 0, 0, <<0>>}),
+             R = fenrir_worker:run(wid, {tenant, 0}, {submit, 0, 0, <<0>>}),
              S = fenrir_store:snapshot(),
              unlink(W), exit(W, shutdown),
              {element(1, R) =:= failed andalso element(2, R) =:= {'Identity', hello} andalso S =:= [[[], [], [], 0], [[], [], [], 0]], R} end) end),
@@ -304,7 +442,7 @@ identity(C) ->
                                             <<"image_sha256">> := binary:encode_hex(crypto:hash(sha256, OB), lowercase)}),
                  with_store(C, "identity2", normal, fun(_) ->
                      {ok, W} = fenrir_worker:start_link(wid2, #{image => F, launcher => maps:get(launcher, C), console_dir => Dir, name => wid2}),
-                     R = fenrir_worker:run(wid2, {submit, 0, 0, 0, <<0>>}),
+                     R = fenrir_worker:run(wid2, {tenant, 0}, {submit, 0, 0, <<0>>}),
                      unlink(W), exit(W, shutdown),
                      {element(1, R) =:= failed andalso element(2, R) =:= {'Identity', hello}, R} end)
          end end)].

@@ -22,12 +22,43 @@ not a record that they all ran in this integration.
 | **A-CONTRACT** | `Store.commit(Tx)` does to the tenant's store exactly what HANDLER.md §3 (`models/service-a2/store-contract.shen`) says: capability, guard (`Always`, `Once k`, `Pending j`), the writes in order with N = Next, the reply | `fenrir_store:body/5` and `apply_writes/5` | unit `store_contract` (15 cases); `a2_runs`: all 68 distinct (request, replies) runs of the A2 refinement reproduced with the replies the Shen model gives; `hand_traces` (11); every campaign history checked against A1 |
 | **A-ATOM** | One commit is one SQLite transaction (`BEGIN IMMEDIATE` … `COMMIT`): after any crash the file holds either all of a commit's writes or none of them | `fenrir_store:run_tx/3` | `sqlite_kills`: kill -9 of the SQLite port program before the n-th statement, before the n-th file write and before the n-th fsync of the request's transaction, for every n until the request completes unharmed; `crash_points` s1–s4; the audit of the SQLite file after every crash; mutants `two_transactions`, `no_transaction` |
 | **A-SERIAL** | Transactions on a store are serial: `BEGIN IMMEDIATE` takes the write lock before the guard is read, so a transaction never upgrades a read lock and no two commits interleave; the adapter is one process with one connection | `fenrir_store` | `busy`; `two_workers` (2 workers, concurrent pairs; observed only, see §6) |
-| **A-DUR** | A reported commit survives a crash of every host process: WAL journal, `synchronous=FULL` (the WAL is fsynced before `COMMIT` returns), both read back at open and the adapter refuses to start otherwise | `fenrir_store:open_configured/2` | unit `settings_wal_full`; every crash scenario (process crashes only). **Power loss is not tested** (§6); mutant `sync_off` is NOT DETECTED by this campaign |
+| **A-DUR** | A reported commit survives a crash of every host process: WAL journal and `synchronous=FULL` (SQLite requests WAL sync before `COMMIT` returns), both checked at open and the adapter refuses to start otherwise | `fenrir_store:open_configured/2` | `settings_wal_full`, `settings_refuse_non_wal_database`, `settings_wal_commit_requests_sync` (FULL vs OFF VFS calls); crash scenarios (process crashes only). **Power loss is not tested** ([validation plan](STORAGE_VALIDATION.md)); `sync_off` is NOT DETECTED by the crash campaign |
 | **A-BUSY** | `SQLITE_BUSY` (another connection holds the write lock; 50 ms busy timeout) is the outcome `busy`: nothing applied, retryable; never reported as success or as a rollback of committed work | `fenrir_store:run_tx/3`, `finish/5` | `busy` (submit and delivery); unit `settings_busy_is_distinct_outcome`; mutant `busy_as_success` |
 | **A-INDET** | A commit whose acknowledgment is lost (the `COMMIT` statement was sent and no answer came back) is reported as `indeterminate`, never as a rollback; a retry with the same key returns the recorded receipt and makes no second mutation | `fenrir_store:finish/5`; `fenrir_worker:outcome/3`; `fenrir_front` | `lost_ack` (the port program kills itself after `COMMIT` completes, before answering); `sqlite_kills` during the commit's writes and fsync; `crash_points` w3, w4, s3 |
-| **A-TENANT** | Per-tenant isolation in the schema: every table is keyed by tenant; a commit touches only the rows of the tenant its capability names; a capability naming no tenant is `Unauthorized` | `fenrir_store:schema/0` | unit `unknown_tenant_unauthorized`, `negative_tenant_unauthorized`, `tenants_are_separate`; every `observe` (A1 `authority.frame` through store equality) |
+| **A-TENANT** | OTP binds each submit invocation to a tenant. The guest's serialized `Tenant t` is a claim checked against that binding, not proof of authority. A mismatched claim aborts before SQL; all authorized tenant-table queries use the bound tenant; a matching scope without a configured tenant is `Unauthorized` at the adapter. | `fenrir_authority`, `fenrir_front`, `fenrir_worker`, `fenrir_store:commit/2` | unit `credential_scopes_front_dispatch`, `guest_scope_mismatch_cannot_read_or_write`; full-run units `authenticated_guest_submit`, `real_guest_wrong_tenant_is_rejected`; existing per-tenant fixtures and A1 `authority.frame` observations |
 | **A-DEDUP** | The request-key table (key, payload digest, receipt) is consulted inside the same transaction as the writes | `fenrir_store:guard_check/4` | `retries`; mutant `no_dedup` |
 | **A-JOBS** | Job records are durable rows; the runner delivers every pending job at least once (it re-reads pending jobs from SQLite on every pass) and the `Pending` guard absorbs duplicates | `fenrir_runner`, `fenrir_store` | `duplicates` (each job delivered twice with opposite outcomes, plus deliveries of finished and unknown jobs); every crash scenario ends with a drained runner; mutant `volatile_mailbox` |
+
+### Tenant trust boundary
+
+- **Submit ingress.** `fenrir_front:submit(Credential, Key, Digest, Payload)` has
+  no tenant selector. The trusted operator provisions a `submit_credentials`
+  map in the OTP application config, from binary SHA-256 fingerprints of
+  random 32-byte bearer tokens to tenant IDs in `0..tenants-1`. Absent bindings
+  deny every submit; malformed bindings refuse supervisor start. Missing,
+  unknown or malformed credentials never dispatch a worker. The token is not
+  forwarded to the worker or encoded into the image or guest protocol.
+- **Guest invocation.** OTP selects the pre-lowered entry for the authenticated
+  tenant and request. Its `Cap.Tenant(t)` input is useful to the handler but is
+  not an unforgeable wire token. The separate per-invocation scope stays in the
+  host worker. Each `Store.commit` checks the guest's claim against that scope
+  before reading a guard, releasing a receipt, or writing. Mismatches do not get
+  a guest reply. The front also refuses to publish a receipt or conflict for
+  another tenant. This enforces a tenant frame, not per-operation privileges
+  within a tenant or confidentiality against a hostile platform.
+- **Trusted components.** Same-VM Erlang code, supervisor/configuration, store,
+  durable-job runner, image metadata and launch environment are trusted.
+  `deliver/3` takes scope from a trusted job row (or a fixture on the test
+  control pipe). `respond/1`, `outbox/0`, all-tenant snapshots, direct worker/store
+  calls and the controller's fds are privileged, not client APIs. The controller
+  intentionally impersonates fixtures using fresh per-boot credentials so its
+  tenant-labelled A1 schedules are unchanged. The scope tuple is not security
+  against arbitrary Erlang code, distribution/RPC access or host compromise.
+- **Not production authentication.** This checks possession of a pre-provisioned
+  bearer token for a finite demo domain; there is no client transport, issuer,
+  identity proof, secret distribution, expiry, revocation, rotation, auditing or
+  protection of tokens from trusted OTP inspection. The owner must choose those
+  before exposing an ingress, and must keep the privileged controller separate.
 
 ## 2 What the supervisor promises
 
@@ -44,7 +75,7 @@ not a record that they all ran in this integration.
 | Point | Place |
 | --- | --- |
 | `w1_before_request` | worker, after the first Steps response, before the guest's host request |
-| `w2_request_before_commit` | worker, the HostRequest received, before `fenrir_store:commit` |
+| `w2_request_before_commit` | worker, the HostRequest received, before `fenrir_store:commit/2` |
 | `w3_commit_before_reply` | worker, the commit returned, before the Reply frame |
 | `w4_reply_before_response` | worker, the HostReply step acknowledged, before the program's response |
 | `f1_after_response` | node, the response written to the client, before the next command |
@@ -109,4 +140,4 @@ isolation contract between several workers beyond what was observed (the adapter
 process, so commits from two workers are serialized there; no read-then-write isolation
 is claimed); performance; requests outside the image's request domain (control protocol
 v2 lowers entry inputs into the image, so the image holds one entry per request of a
-finite domain and the worker refuses others); authentication of clients.
+finite domain and the worker refuses others); production client authentication.

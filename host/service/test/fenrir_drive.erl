@@ -311,6 +311,7 @@ audit(Db, Told) ->
         Integrity = Q("PRAGMA integrity_check"),
         Journal = Q("PRAGMA journal_mode"),
         _ = Q("BEGIN"),
+        ForeignKeys = Q("PRAGMA foreign_key_check"),
         Tenants = Q("SELECT tenant, next FROM tenants ORDER BY tenant"),
         Reports = Q("SELECT tenant, id, digest FROM reports"),
         Jobs = Q("SELECT tenant, id, report, status FROM jobs"),
@@ -318,6 +319,7 @@ audit(Db, Told) ->
         _ = Q("COMMIT"),
         V = [{integrity, Integrity} || Integrity =/= [[<<"ok">>]]]
             ++ [{journal_mode, Journal} || Journal =/= [[<<"wal">>]]]
+            ++ [{foreign_key_check, ForeignKeys} || ForeignKeys =/= []]
             ++ lists:append([tenant_audit(T, N, Reports, Jobs, Keys) || [T, N] <- Tenants])
             ++ [{told_not_recorded, R} || {accepted, R} <- Told, not recorded(R, Reports, Jobs, Keys)],
         V
