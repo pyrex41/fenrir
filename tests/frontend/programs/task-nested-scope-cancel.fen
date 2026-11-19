@@ -1,0 +1,21 @@
+\\ A task whose body is a scope waiting on a channel is cancelled by main: the
+\\ request is delivered at the task's next scheduling point (here the scope's own
+\\ entry, under FIFO), it unwinds through its scopes, and await reports Cancelled.
+\\ An explicitly cancelled child does not fail main's scope (TC1-C1).
+\\
+\\ Expected:
+\\ > emit "cancelled": 1 (task 0)
+\\ > outcome: Ok 1
+\\ > schedule: policy fifo, a production schedule by the model's records
+
+(define main {I64 --> I64}
+  input -> (let ch (channel I64 1)
+                t (spawn (lambda (_ : Unit)
+                           (scope (match (receive ch)
+                                    ((Item x) -> x)
+                                    (End -> 0)))))
+             (do (cancel t)
+                 (match (await t)
+                   ((Ok v) -> v)
+                   (Cancelled -> (do (emit "cancelled" 1) 1))
+                   ((Failed code) -> 2)))))

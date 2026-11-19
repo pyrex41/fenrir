@@ -1,0 +1,4 @@
+\\ expect 2:12 Task takes one type: write (Task T)
+(define f {(Task I64 Bool) --> I64} t -> 0)
+(define main {I64 --> I64}
+  input -> 0)

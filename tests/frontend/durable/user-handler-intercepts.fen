@@ -1,0 +1,5 @@
+\\ A user handler for the durable effect intercepts it before the host.
+\\ > outcome: Ok 101
+(effect Store durable (put I64 --> I64))
+(define main {I64 --> I64}
+  input -> (handle Store ((put x) -> (+ x 100)) (perform Store put 1)))

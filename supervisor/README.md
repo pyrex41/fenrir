@@ -27,7 +27,8 @@ sh supervisor/run.sh                # one free-running run by hand; prints where
 sh supervisor/build.sh ERLC EBIN    # compile only: erlc, no rebar, no hex
 ```
 
-Erlang/OTP comes from the flake (`nix build .#erlang`, OTP 28 without wx), or
+Erlang/OTP comes from the flake (`nix build .#erlang` on x86-64 or ARM64 Linux,
+OTP 28 without wx), or
 set `FENRIR_ERLANG` to an installation, or have `erl` and `erlc` on `PATH`
 ([harness/find-erlang.sh](../harness/find-erlang.sh) is the lookup; the gate
 uses the same one and requires the flake's).

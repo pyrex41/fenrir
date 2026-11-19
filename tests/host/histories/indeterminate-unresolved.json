@@ -1,0 +1,1 @@
+{"schema": "fenrir.service.history/1", "tenants": 2, "scenario": "indeterminate-unresolved", "expect": "accepted", "note": "an unresolved indeterminate outcome is admitted either way", "events": [["submit", 0, 0, 0, ["indeterminate"]], ["crash", "node"], ["submit", 1, 0, 0, ["accepted", [1, 0, 0, 0, 0]]]]}

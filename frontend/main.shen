@@ -7,14 +7,14 @@
 \\ WORK     an existing scratch directory; the artifact is written to
 \\          WORK/artifact.json and what the user should see to WORK/result
 \\ COMMAND  check SOURCE MODULE
-\\          run SOURCE MODULE FUEL
+\\          run SOURCE MODULE FUEL [SCHEDULE]
 \\          emit SOURCE MODULE OUT
-\\          run-artifact ARTIFACT FUEL
+\\          run-artifact ARTIFACT FUEL [SCHEDULE]
 \\
 \\ Loading prints a line per definition on standard output, so the result goes to
 \\ a file and the exit status says how to read it:
 \\   0 done   1 the program was rejected   2 a file could not be read or written,
-\\   or the program leaves a remote effect to the system and cannot run alone
+\\   or the program cannot run alone (it needs its host, peer, or model)
 \\   3 a defect in the frontend            4 the step budget ran out
 \\
 \\ The stages are kept apart on purpose. The elaborator produces an artifact; the
@@ -26,6 +26,8 @@
 (set fh.*root* (cn (hd (tl (tl (value *argv*)))) "/"))
 (set fe.*work* (cn (hd (tl (tl (tl (value *argv*))))) "/"))
 (set fe.*command* (tl (tl (tl (tl (value *argv*))))))
+(set fe.*require-shen-typing* (and (cons? (value fe.*command*)) (= (hd (value fe.*command*)) "require-shen-typing")))
+(if (value fe.*require-shen-typing*) (set fe.*command* (tl (value fe.*command*))) skip)
 (load (cn (value fh.*root*) "harness/common.shen"))
 (load (cn (value fh.*root*) "frontend/reader.shen"))
 (load (cn (value fh.*root*) "frontend/elaborate.shen"))
@@ -59,22 +61,42 @@
 
 \\ The validator's report on the artifact text at Path: a decoded JSON object.
 (define fe.validation
-  Path -> (let R (fh.exec "node" [(cn (value fh.*root*) "frontend/validate.mjs") Path] 120)
+  Path -> (let Args [(cn (value fh.*root*) "frontend/validate.mjs") Path]
+               R (fh.exec "node" (if (value fe.*require-shen-typing*) (append Args ["--with-input"]) Args) 120)
                Report (fh.last-report (hd (tl R)))
             (if (or (= Report []) (not (= (hd R) 0)))
                 (fe.finish 3 (make-string "the artifact validator did not run: ~A~%" (hd (tl (tl R)))))
                 Report)))
 
 \\ Write the artifact, have it validated, and return [Text Report]. A rejection
-\\ of what the elaborator accepted is a defect here or in the validator: the two
-\\ are meant to agree, and the program is not run on the strength of either alone.
+\\ of what the elaborator accepted is a defect here or in the validator.
 (define fe.checked
   Source Artifact ->
     (let Text (json.stringify Artifact [[byte-limit 16777216]])
          Path (cn (value fe.*work*) "artifact.json")
          Written (write-to-file Path Text)
          Report (fe.validation Path)
-      (fe.verdict Source Text Report (fh.member "status" Report))))
+         Checked (fe.verdict Source Text Report (fh.member "status" Report))
+         Typing (fe.require-typing Source Text Report)
+      Checked))
+
+\\ Run only after JavaScript validation. In strict mode both must accept the
+\\ same text and input; a missing/unsupported checker is not a fallback.
+(define fe.require-typing
+  _ _ _ -> true where (not (value fe.*require-shen-typing*))
+  Source Text Report ->
+    (let Loaded (load (cn (value fh.*root*) "typing/validate.shen"))
+         Input (fh.field "input" Report)
+      (fe.typing-verdict Source (tv.validate Text Input 2000000))))
+
+(define fe.typing-verdict
+  _ [valid _] -> true
+  Source [unsupported Schema] ->
+    (fe.finish 2 (make-string "~A: Shen typing does not support schema ~A~%" Source Schema))
+  Source [unknown Why] ->
+    (fe.finish 2 (make-string "~A: Shen typing UNKNOWN: ~A~%" Source Why))
+  Source [Status Check Message] ->
+    (fe.finish 3 (make-string "~A: JavaScript validation accepted, but Shen typing says ~A (~A: ~A)~%" Source Status Check Message)))
 
 (define fe.verdict
   Source Text Report "valid" ->
@@ -145,15 +167,64 @@
 (define fe.left-to-the-system
   Artifact -> (remove "Emit" (fh.field "effects" (fe.entry-function (fh.field "entry" Artifact) (fh.field "functions" Artifact)))))
 
+\\ The durable harness is optional for check/emit and for running older slices.
+\\ Run the D1 model with no replies: the first HostRequest ends the run.
+(define fe.execute-durable
+  Artifact Fuel ->
+    (let Takes (fh.field "type" (fh.field "input_schema" Artifact))
+         Fixed (if (= Takes "I64") true
+                   (fe.finish 2 (make-string "this program cannot be run alone: the entry takes a request its host supplies, and run has only I64 input 0. check and emit work on it~%")))
+         Ready (trap-error (load (cn (value fh.*root*) "harness/tc1-durable-common.shen"))
+                           (/. E (fe.finish 2 (make-string "cannot run TC1-D1 without the durable model harness (~A). check and emit work on it~%" (error-to-string E)))))
+         Run (dh.run Artifact ["int" "0"] [replies] Fuel)
+         Steps (nth 2 Run)
+         Text (fe.durable-observations Steps)
+      (cond ((= (hd Run) "Completed")
+              (let Outcome (fh.model-outcome Steps)
+                (fe.finish 0 (cn Text (make-string "outcome: ~A~%~Asteps: ~A~%" (fe.show-outcome Outcome) (fe.trap-line Outcome Steps Artifact) (length Steps))))))
+            ((= (hd Run) "AwaitingHost")
+              (fe.finish 0 (cn Text (make-string "outcome: none (waiting for the host's reply; run has no host)~%steps: ~A~%" (length Steps)))))
+            ((= (hd Run) "BudgetExhausted")
+              (fe.finish 4 (cn Text (make-string "outcome: none (stopped after the budget of ~A steps; set FENRIR_FUEL to raise it)~%" Fuel))))
+            (true (fe.finish 3 (make-string "unexpected durable model execution: ~A~%" (hd Run)))))))
+
+(define fe.host-event
+  Event -> (if (= (fh.field "kind" Event) "HostRequest")
+               (make-string "host request ~A: ~A.~A ~A~%" (fh.field "seq" Event) (fh.field "effect" Event)
+                           (fh.field "operation" Event) (fe.show-value (fh.field "value" Event)))
+               (fe.emit-lines [Event])))
+
+(define fe.durable-observations
+  [] -> ""
+  [Step | Steps] ->
+    (cn (fe.durable-event-lines (fh.field "events" Step))
+        (fe.durable-observations Steps)))
+
+(define fe.durable-event-lines
+  [] -> ""
+  [E | Es] -> (cn (fe.host-event E) (fe.durable-event-lines Es)))
+
 \\ Run the artifact decoded from Text and report emissions in order, the outcome
 \\ and the number of model steps. Entry input is the harness's fixed 0.
 \\ A program that leaves a remote effect to the system is not run here: the
 \\ outcome of a remote perform comes from a supervisor and a peer, and this
 \\ driver has neither.
 (define fe.execute
-  Text Fuel ->
+  Text Fuel Schedule ->
     (let Artifact (json.parse Text [[byte-limit 16777216]])
-         Entered (if (= (fh.field "schema_version" Artifact) "tc1-handler-demo/4")
+         Schema (fh.field "schema_version" Artifact)
+      (cond ((= Schema "tc1-task-demo/1")
+              (do (load (cn (value fh.*root*) "harness/tc1-task-common.shen"))
+                  (load (cn (value fh.*root*) "frontend/tasks.shen"))
+                  (fe.execute-tasks Text Artifact Fuel (if (= Schedule default) "fifo" Schedule))))
+            ((not (= Schedule default))
+              (fe.finish 2 (make-string "a schedule applies only to TC1-C1 task programs~%")))
+            ((= Schema "tc1-durable-demo/1") (fe.execute-durable Artifact Fuel))
+            (true (fe.execute-handler Artifact Fuel)))))
+
+(define fe.execute-handler
+  Artifact Fuel ->
+    (let Entered (if (= (fh.field "schema_version" Artifact) "tc1-handler-demo/4")
                      (fe.finish 2 (make-string "this program cannot be run alone: it serves a remote effect, and its implementations run inside a peer image, once for each request (sh harness/run-tc1-remote-run.sh builds and runs one). check and emit work on it~%"))
                      true)
          Far (fe.left-to-the-system Artifact)
@@ -174,9 +245,10 @@
   ["check" Source Module] ->
     (let Checked (fe.checked Source (fe.artifact Source Module))
       (fe.finish 0 (make-string "ok: ~A: ~A~%" Source (fe.summary (hd (tl Checked))))))
-  ["run" Source Module Fuel] ->
+  ["run" Source Module Fuel] -> (fe.command ["run" Source Module Fuel default])
+  ["run" Source Module Fuel Schedule] ->
     (let Checked (fe.checked Source (fe.artifact Source Module))
-      (fe.execute (hd Checked) (fe.natural Fuel 0)))
+      (fe.execute (hd Checked) (fe.natural Fuel 0) Schedule))
   ["emit" Source Module Out] ->
     (let Checked (fe.checked Source (fe.artifact Source Module))
          Written (trap-error (write-to-file Out (hd Checked))
@@ -184,13 +256,32 @@
       (fe.finish 0 (make-string "wrote ~A: ~A~%" Out (fe.summary (hd (tl Checked))))))
   \\ An existing artifact, such as a hand fixture: validated, then run, and reported
   \\ as run reports. This is how the tests compare a surface program with a fixture.
-  ["run-artifact" Path Fuel] ->
+  ["run-artifact" Path Fuel] -> (fe.command ["run-artifact" Path Fuel default])
+  ["run-artifact" Path Fuel Schedule] ->
+    (fe.run-checked-artifact Path (fe.snapshot Path) (fe.natural Fuel 0) Schedule)
+    where (value fe.*require-shen-typing*)
+  ["run-artifact" Path Fuel Schedule] -> (fe.run-checked-artifact Path Path (fe.natural Fuel 0) Schedule)
+  _ -> (fe.finish 3 (make-string "internal error: frontend/main.shen was started with arguments it does not understand~%")))
+
+\\ In strict mode both validators and the model consume one byte snapshot.
+(define fe.snapshot
+  Path -> (let Result (io.read-file Path 1048577)
+               Snapshot (cn (value fe.*work*) "artifact.json")
+            (fe.save-snapshot Path Result Snapshot)))
+
+(define fe.save-snapshot
+  Source [ok Bytes] Dest ->
+    (if (= (hd (io.write-file Dest Bytes)) ok) Dest
+        (fe.finish 2 (make-string "~A: error: cannot write an artifact snapshot~%" Source)))
+  Source _ _ -> (fe.finish 2 (make-string "~A: error: cannot read an artifact snapshot (file or size limit)~%" Source)))
+
+(define fe.run-checked-artifact
+  Source Path Fuel Schedule ->
     (let Text (trap-error (read-file-as-string Path)
-                          (/. E (fe.finish 2 (make-string "~A: error: the file cannot be read~%" Path))))
+                          (/. E (fe.finish 2 (make-string "~A: error: the file cannot be read~%" Source))))
          Report (fe.validation Path)
       (if (= (fh.member "status" Report) "valid")
-          (fe.execute Text (fe.natural Fuel 0))
-          (fe.finish 1 (make-string "~A: error: not a valid artifact (~A)~%" Path (fh.member "message" Report)))))
-  _ -> (fe.finish 3 (make-string "internal error: frontend/main.shen was started with arguments it does not understand~%")))
+          (do (fe.require-typing Source Text Report) (fe.execute Text Fuel Schedule))
+          (fe.finish 1 (make-string "~A: error: not a valid artifact (~A)~%" Source (fh.member "message" Report))))))
 
 (fe.command (value fe.*command*))

@@ -1,0 +1,5 @@
+\\ expect 5:8 effect Ask is not handled: it comes from this perform
+(effect Ask (ask I64 --> I64))
+(effect Store durable (put I64 --> I64))
+(define main {I64 --> I64} input ->
+  (+ 1 (perform Ask ask (perform Store put input))))

@@ -1,0 +1,5 @@
+\\ expect 2:1 tasks and channels cannot be combined with remote-effect in one artifact
+(remote-effect Ask (read-only ask I64 --> I64))
+(datatype Box (Boxed (Channel I64)))
+(define main {I64 --> I64}
+  input -> input)

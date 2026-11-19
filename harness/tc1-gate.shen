@@ -2,9 +2,9 @@
 \\ spec/tc1/EFFECTS.md. Registered as the check tc1-qualification in
 \\ .pi/fenrir-workflow.json, with the manifest spec/tc1/tc1-requirements.json, by the
 \\ owner's instruction of 2026-11-15; see campaigns/tc1/TC1_GATE_REGISTRATION.md.
-\\ The verdict counts as a qualification only while the manifest is owner-accepted
-\\ and the workflow configuration names this evaluator; otherwise the report says
-\\ authority UNREGISTERED and qualification UNKNOWN.
+\\ The verdict counts as a qualification only on the legacy Linux x86-64 runner
+\\ with an owner-accepted manifest and matching workflow registration. Otherwise
+\\ the report says authority UNREGISTERED and qualification UNKNOWN.
 \\
 \\   shen-jit script harness/tc1-gate.shen LIBDIR ROOT OUTDIR SHEN_JIT_EXECUTABLE [NONCE CHECK_ID SOURCE_SHA256 CONFIG_SHA256]
 \\
@@ -48,13 +48,38 @@
   Waivers -> (map (/. W ["waiver" W]) Waivers))
 
 \\ The TC0-A gate, run by its own evaluator as a separate process on the same tree.
-\\ Its verdict is this row's status; a report for another HEAD says nothing about this one.
+\\ Its verdict and exit must agree; a report for another HEAD says nothing about this one.
 (define fh.tc0-a-gate
   Memo ->
-    (let Report (fh.harness "gate.shen" [(fh.subdir "tc0-a-gate") (value fh.*jit*)] 7200)
+    (let Dir (fh.subdir "tc0-a-gate")
+         Capture (value fh.*capture*)
+         Args (if (empty? Capture) [] (fh.capture-args "nested-g1" Capture (fh.field "g1_manifest_sha256" Capture)))
+         Path (cn Dir "/gate.json")
+         Report (fh.harness "gate.shen" (append [Dir (value fh.*jit*)] Args) 7200)
          Verdict (fh.member "verdict" Report)
          Detail [["required_rows_passing" (fh.member "required_rows_passing" Report)] ["authority" (fh.member "authority" Report)]
-                 ["qualification" (fh.member "qualification" Report)] ["claims" (json.stringify (fh.member "claims" Report) [])]]
+                  ["qualification" (fh.member "qualification" Report)] ["claims" (json.stringify (fh.member "claims" Report) [])]]
+      (if (and (not (empty? Capture))
+               (not (fh.same-run-g1? Report Path (fh.capture-binding Args) (fh.member-in "head" Memo))))
+          (fh.row "UNKNOWN" ["Nested G1 report or same-run binding was not verified"] [] Memo)
+          (fh.tc0-a-result Report Verdict
+            (if (empty? Capture) Detail (append Detail [["report_sha256" (fh.sha256 Path)]])) Memo))))
+
+(define fh.same-run-g1?
+  Report Path Binding Head ->
+    (and (not (empty? Report)) (string? Head) (not (= Head ""))
+         (= (fh.member "capture" Report) Binding)
+         (= (fh.member "head" Report) Head)
+         (= (fh.member "schema" Report) "tc0-a-gate-run/3")
+         (= (fh.member "manifest" Report) "spec/tc0/tc0-a-requirements.json")
+         (= (fh.member "evaluator" Report) "harness/gate.shen")
+         (= (fh.member "authority" Report) "UNREGISTERED")
+         (= (fh.member "qualification" Report) "UNKNOWN")
+         (= (fh.member "claims" Report) [])
+         (= Report (json.parse (read-file-as-string Path) [[byte-limit 4194304]]))))
+
+(define fh.tc0-a-result
+  Report Verdict Detail Memo ->
       (if (or (= Report []) (not (= (fh.member "schema" Report) "tc0-a-gate-run/3")))
           (fh.row "UNKNOWN" ["The TC0-A gate did not report"] [] Memo)
           (if (= Verdict "PASS")
@@ -63,7 +88,7 @@
                   (fh.row "UNKNOWN" ["The TC0-A gate report is for another HEAD, or this run's source was never identified"] Detail Memo))
               (fh.row (if (element? Verdict ["FAIL" "BLOCKED"]) Verdict "UNKNOWN")
                       [(cn "TC0-A gate verdict " (if (string? Verdict) Verdict "missing")) | (fh.not-passing (fh.member "rows" Report))]
-                      Detail Memo)))))
+                       Detail Memo))))
 
 (define fh.tc1-handlers
   Memo ->
@@ -77,7 +102,8 @@
                       [["failures" (json.stringify (fh.member "failures" Report) [])]] Memo)
               (fh.row "UNKNOWN" ["The TC1 handler harness did not report"] [] Memo)))))
 
-\\ Agreement only: each defect has its own row, read from the report kept in Memo.
+\\ Each defect has its own row, read from the report kept in Memo. Agreement alone
+\\ cannot make this row pass when the exhaustive harness reports failure.
 (define fh.tc1-exhaustive
   Memo ->
     (let Report (fh.harness "tc1-exhaustive.shen" [(fh.tc1-bound) (fh.subdir "tc1-exhaustive") "sandbox"] 1800)
@@ -90,9 +116,12 @@
               (if (not (= Agreeing Programs))
                   (fh.row "FAIL" [(make-string "~A of ~A programs agree with the model" Agreeing Programs)]
                           [["disagreements" (json.stringify (fh.member "disagreements" Report) [])]] [["tc1-exhaustive" Report] | Memo])
-                  (fh.row "PASS" [] [["programs" Programs] ["steps" (fh.member "model_steps" Report)]
-                                     ["outcomes" (json.stringify (fh.member "outcomes" Report) [])]]
-                          [["tc1-exhaustive" Report] | Memo]))))))
+                   (if (= (fh.member "status" Report) "development-pass")
+                       (fh.row "PASS" [] [["programs" Programs] ["steps" (fh.member "model_steps" Report)]
+                                          ["outcomes" (json.stringify (fh.member "outcomes" Report) [])]]
+                               [["tc1-exhaustive" Report] | Memo])
+                       (fh.row "FAIL" ["The exhaustive handler harness reported failure despite agreement"]
+                               [] [["tc1-exhaustive" Report] | Memo])))))))
 
 \\ Killed means: completed with a trace different from the model's. Crashes are never kills.
 (define fh.tc1-defect

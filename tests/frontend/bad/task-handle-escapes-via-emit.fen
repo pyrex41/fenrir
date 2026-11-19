@@ -1,0 +1,3 @@
+\\ expect 3:49 emit needs a serializable value, but this has type (Channel I64), which contains a function or a task or channel handle
+(define main {I64 --> I64}
+  input -> (let c (channel I64 1) (do (emit "c" c) 0)))

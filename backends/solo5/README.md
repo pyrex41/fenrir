@@ -117,6 +117,29 @@ toolchain, tender and host kernel are trusted as built, and the build is not
 reproducible-build pinned. The guest machine and the JS candidate share an author lineage.
 The pure-call guest takes unit, bool and int entry inputs and IDs up to 2^64 − 1 only.
 
+### Controlled task guest (TC1-C1)
+
+On Linux ARM64 with the pinned stock Solo5 SPT toolchain and Shen/JIT available:
+
+```sh
+sh harness/run-solo5-tasks.sh --stride 50
+```
+
+The [v3 control protocol](../../spec/solo5/pure-call-control-v3.md) adds explicit
+reference schedules and guest FIFO scheduling. The Shen driver compares each step,
+including deadlock wait graphs, and replays hand-fixture tapes across cold boots.
+The default stride samples every 50th program of grammar G, in addition to all hand
+fixtures. The runner writes the batch, tapes, console logs and report below
+`build/solo5/control-tasks/`. This is development evidence (`qualification: UNKNOWN`).
+The v3 guest cannot run durable host effects, and free-run lowering refuses task
+artifacts. There are no changes to the remote-perform wire protocol.
+
+In the ARM64 Linux development run (pinned Solo5 v0.9.3, Shen/JIT 0.7,
+stride 50), all 151 hand-fixture reference schedules, all 248 grammar G
+witness schedules across the 72 sampled programs, and all 90 guest FIFO runs
+agreed. All 169 hand tapes matched on two cold boots each. The harness caught
+all four injected guest defects without counting a crash as a detection.
+
 ### Remote-perform guests (two images and a supervisor)
 
 ```sh

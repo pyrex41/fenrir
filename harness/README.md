@@ -373,6 +373,33 @@ remote perform that is not the scrutinee of a match, with the position of the
 perform (must-use, EFFECTS.md §3); eleven of its rejected test programs are
 about that.
 
+## TC1-C1 development replay and catalog
+
+```sh
+sh harness/run-tc1-task-loop.sh
+```
+
+The runner needs Shen/JIT, Node with the permission model, and Linux permission
+to create a network namespace (`unshare -n`). It does not fall back to running
+the JavaScript candidate unsandboxed. It compares the seeded task family against
+Shen, checks the pinned [C1 catalog](../spec/tc1/task-catalog.json) against hand,
+grammar G and generated traces, and checks that four reduction campaigns recover
+the committed original and minimized witnesses. Strict JavaScript replay checks
+each choice and step, and rejects the specific tape edits in the report. The default
+walks all of grammar G; `stride N` reports a sample instead.
+
+This is separate from [v3 stock SPT guest replay](../backends/solo5/README.md#controlled-task-guest-tc1-c1)
+and the registered gate. Output under `build/harness/tc1-task-loop/` carries
+`qualification: UNKNOWN`.
+
+In the ARM64 Linux development run at stride 1, 1,000 generated runs across
+200 programs agreed; the coverage walk visited 15,808 witnesses across all
+3,600 grammar G programs and exercised all 53 pinned transitions. All 151
+hand runs replayed exactly, as did the eight retained witnesses with and
+without their defects; five tape edits were refused. JavaScript tapes in
+this loop are recorded and replayed in memory; the runner retains replay
+inputs and verdict rows.
+
 ## What is still not Shen
 
 | Piece | Now | Notes |

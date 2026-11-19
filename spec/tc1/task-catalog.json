@@ -1,0 +1,657 @@
+{
+ "version": "tc1-task-catalog/1",
+ "status": "development-proposal-not-qualified",
+ "contract": "spec/tc1/CONCURRENCY.md (draft 1), sections 5 to 7 and 10",
+ "profile": "tc1-task-step/1",
+ "schema_versions": [
+  "tc1-task-demo/1"
+ ],
+ "model": "models/tc1/task-machine.shen",
+ "candidate": "runtime/tc1/task-machine.mjs",
+ "derived_from": {
+  "concurrency_section_10": "The rows of the table of reference steps, split by the case of section 5 to 7 each step takes, as the step record can tell them apart (its rule, site, events, the control after it and whether its task is still Runnable). Steps of the handler machine taken by a task (EFFECTS.md, TC0-A) are not keys of this catalog: they are counted as inherited and measured by the handler and TC0-A catalogs."
+ },
+ "depth": "The depth of a step record counts the task's frames after it, scope frames included (section 10). depth_change is the difference from the same task's previous record; a task's first record (TaskStart) has no previous one.",
+ "invariants": [
+  "After every step, for every channel: the queue holds at most its capacity; if a sender waits the queue is full; if a receiver waits the queue is empty (section 4).",
+  "A record's runnable list is the Runnable tasks in ID order, and a scheduling point is exactly the steps this catalog marks so (section 8)."
+ ],
+ "transitions": [
+  {
+   "key": "task-start",
+   "rule": "TaskStart",
+   "site": "machine TaskStart",
+   "when": "no cancellation pending: the spawned function is applied to unit",
+   "after": [
+    "Eval"
+   ],
+   "depth_change": "first step of the task (not checked)",
+   "scheduling_point": true,
+   "section": "5"
+  },
+  {
+   "key": "task-start/deliver",
+   "rule": "TaskStart",
+   "site": "machine TaskStart",
+   "when": "a cancellation is pending: CancelEffective, no user code runs",
+   "after": [
+    "Unwind"
+   ],
+   "depth_change": "first step of the task (not checked)",
+   "scheduling_point": true,
+   "section": "6"
+  },
+  {
+   "key": "scope/enter",
+   "rule": "Dispatch",
+   "site": "the scope node",
+   "when": "ScopeEnter: a scope frame is pushed and the body entered",
+   "after": [
+    "Eval"
+   ],
+   "depth_change": "+1",
+   "scheduling_point": true,
+   "section": "5"
+  },
+  {
+   "key": "scope/deliver",
+   "rule": "Dispatch",
+   "site": "the scope node",
+   "when": "a cancellation is pending: CancelEffective",
+   "after": [
+    "Unwind"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "6"
+  },
+  {
+   "key": "dispatch/spawn",
+   "rule": "Dispatch",
+   "site": "the spawn node",
+   "when": "its first operand is entered (a collect frame is pushed)",
+   "after": [
+    "Eval"
+   ],
+   "depth_change": "+1",
+   "scheduling_point": false,
+   "section": "10"
+  },
+  {
+   "key": "dispatch/await",
+   "rule": "Dispatch",
+   "site": "the await node",
+   "when": "its first operand is entered (a collect frame is pushed)",
+   "after": [
+    "Eval"
+   ],
+   "depth_change": "+1",
+   "scheduling_point": false,
+   "section": "10"
+  },
+  {
+   "key": "dispatch/cancel",
+   "rule": "Dispatch",
+   "site": "the cancel node",
+   "when": "its first operand is entered (a collect frame is pushed)",
+   "after": [
+    "Eval"
+   ],
+   "depth_change": "+1",
+   "scheduling_point": false,
+   "section": "10"
+  },
+  {
+   "key": "dispatch/send",
+   "rule": "Dispatch",
+   "site": "the send node",
+   "when": "its first operand is entered (a collect frame is pushed)",
+   "after": [
+    "Eval"
+   ],
+   "depth_change": "+1",
+   "scheduling_point": false,
+   "section": "10"
+  },
+  {
+   "key": "dispatch/receive",
+   "rule": "Dispatch",
+   "site": "the receive node",
+   "when": "its first operand is entered (a collect frame is pushed)",
+   "after": [
+    "Eval"
+   ],
+   "depth_change": "+1",
+   "scheduling_point": false,
+   "section": "10"
+  },
+  {
+   "key": "dispatch/close",
+   "rule": "Dispatch",
+   "site": "the close node",
+   "when": "its first operand is entered (a collect frame is pushed)",
+   "after": [
+    "Eval"
+   ],
+   "depth_change": "+1",
+   "scheduling_point": false,
+   "section": "10"
+  },
+  {
+   "key": "dispatch/yield",
+   "rule": "Dispatch",
+   "site": "the yield node",
+   "when": "no operands: Ready at once",
+   "after": [
+    "Ready"
+   ],
+   "depth_change": "0",
+   "scheduling_point": false,
+   "section": "10"
+  },
+  {
+   "key": "dispatch/channel",
+   "rule": "Dispatch",
+   "site": "the channel node",
+   "when": "no operands: Ready at once",
+   "after": [
+    "Ready"
+   ],
+   "depth_change": "0",
+   "scheduling_point": false,
+   "section": "10"
+  },
+  {
+   "key": "spawn/deliver",
+   "rule": "Ready",
+   "site": "the spawn node",
+   "when": "a cancellation is pending: CancelEffective, the operation is not performed",
+   "after": [
+    "Unwind"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "6"
+  },
+  {
+   "key": "await/deliver",
+   "rule": "Ready",
+   "site": "the await node",
+   "when": "a cancellation is pending: CancelEffective, the operation is not performed",
+   "after": [
+    "Unwind"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "6"
+  },
+  {
+   "key": "cancel/deliver",
+   "rule": "Ready",
+   "site": "the cancel node",
+   "when": "a cancellation is pending: CancelEffective, the operation is not performed",
+   "after": [
+    "Unwind"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "6"
+  },
+  {
+   "key": "send/deliver",
+   "rule": "Ready",
+   "site": "the send node",
+   "when": "a cancellation is pending: CancelEffective, the operation is not performed",
+   "after": [
+    "Unwind"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "6"
+  },
+  {
+   "key": "receive/deliver",
+   "rule": "Ready",
+   "site": "the receive node",
+   "when": "a cancellation is pending: CancelEffective, the operation is not performed",
+   "after": [
+    "Unwind"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "6"
+  },
+  {
+   "key": "close/deliver",
+   "rule": "Ready",
+   "site": "the close node",
+   "when": "a cancellation is pending: CancelEffective, the operation is not performed",
+   "after": [
+    "Unwind"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "6"
+  },
+  {
+   "key": "yield/deliver",
+   "rule": "Ready",
+   "site": "the yield node",
+   "when": "a cancellation is pending: CancelEffective, the operation is not performed",
+   "after": [
+    "Unwind"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "6"
+  },
+  {
+   "key": "channel/deliver",
+   "rule": "Ready",
+   "site": "the channel node",
+   "when": "a cancellation is pending: CancelEffective, the operation is not performed",
+   "after": [
+    "Unwind"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "6"
+  },
+  {
+   "key": "spawn/child",
+   "rule": "Ready",
+   "site": "the spawn node",
+   "when": "Spawn: the child is allocated, Runnable, in the innermost scope",
+   "after": [
+    "Value"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "5"
+  },
+  {
+   "key": "spawn/child-failed",
+   "rule": "Ready",
+   "site": "the spawn node",
+   "when": "the owning scope's latch is set: trap ChildFailed, nothing allocated",
+   "after": [
+    "Unwind"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "5"
+  },
+  {
+   "key": "await/terminal",
+   "rule": "Ready",
+   "site": "the await node",
+   "when": "Await then Awaited: the target is Terminal",
+   "after": [
+    "Value"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "5"
+  },
+  {
+   "key": "await/wait",
+   "rule": "Ready",
+   "site": "the await node",
+   "when": "Await then AwaitWait: the task blocks",
+   "after": [
+    "Wait"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "5"
+  },
+  {
+   "key": "cancel/new",
+   "rule": "Ready",
+   "site": "the cancel node",
+   "when": "CancelRequest with new_request true (and, for a blocked target, its removal event)",
+   "after": [
+    "Value"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "5, 6"
+  },
+  {
+   "key": "cancel/repeat",
+   "rule": "Ready",
+   "site": "the cancel node",
+   "when": "CancelRequest with new_request false: Terminal or already requested",
+   "after": [
+    "Value"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "6"
+  },
+  {
+   "key": "yield",
+   "rule": "Ready",
+   "site": "the yield node",
+   "when": "Yield",
+   "after": [
+    "Value"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "5"
+  },
+  {
+   "key": "channel",
+   "rule": "Ready",
+   "site": "the channel node",
+   "when": "Channel: a channel is allocated",
+   "after": [
+    "Value"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "5"
+  },
+  {
+   "key": "send/closed",
+   "rule": "Ready",
+   "site": "the send node",
+   "when": "Send then SendClosed",
+   "after": [
+    "Value"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "5"
+  },
+  {
+   "key": "send/enqueued",
+   "rule": "Ready",
+   "site": "the send node",
+   "when": "Send then Sent for the sender, then the stabilization's events",
+   "after": [
+    "Value"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "5"
+  },
+  {
+   "key": "send/wait",
+   "rule": "Ready",
+   "site": "the send node",
+   "when": "Send then SendWait: the queue is full, the sender blocks",
+   "after": [
+    "Wait"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "5"
+  },
+  {
+   "key": "receive/item",
+   "rule": "Ready",
+   "site": "the receive node",
+   "when": "Receive then Received for the receiver, then the stabilization's events",
+   "after": [
+    "Value"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "5"
+  },
+  {
+   "key": "receive/end",
+   "rule": "Ready",
+   "site": "the receive node",
+   "when": "Receive then End: empty and closed",
+   "after": [
+    "Value"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "5"
+  },
+  {
+   "key": "receive/wait",
+   "rule": "Ready",
+   "site": "the receive node",
+   "when": "Receive then ReceiveWait: the receiver blocks",
+   "after": [
+    "Wait"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "5"
+  },
+  {
+   "key": "close/first",
+   "rule": "Ready",
+   "site": "the close node",
+   "when": "Close with first true, then SendClosed, Received and End for waiters",
+   "after": [
+    "Value"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "5"
+  },
+  {
+   "key": "close/again",
+   "rule": "Ready",
+   "site": "the close node",
+   "when": "Close with first false",
+   "after": [
+    "Value"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "5"
+  },
+  {
+   "key": "wake/value",
+   "rule": "Wake",
+   "site": "the operation's node",
+   "when": "Pending(v): the committed value",
+   "after": [
+    "Value"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "5"
+  },
+  {
+   "key": "wake/deliver",
+   "rule": "Wake",
+   "site": "the operation's node",
+   "when": "a cancellation is pending: CancelEffective (after a commit, or a removed registration)",
+   "after": [
+    "Unwind"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "5, 6"
+  },
+  {
+   "key": "scope-close/implicit",
+   "rule": "ScopeClose",
+   "site": "machine TaskScope",
+   "when": "a value reaches an Open scope frame: phase Joining, reason Normal",
+   "after": [
+    "Join"
+   ],
+   "depth_change": "0",
+   "scheduling_point": false,
+   "section": "7"
+  },
+  {
+   "key": "scope-abort/implicit",
+   "rule": "ScopeAbort",
+   "site": "machine TaskScope",
+   "when": "Unwind or Abandon reaches an Open scope frame: its nonterminal children are requested cancelled",
+   "after": [
+    "Join"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "7"
+  },
+  {
+   "key": "scope-close/explicit",
+   "rule": "ScopeClose",
+   "site": "the scope node",
+   "when": "a value reaches an Open scope frame: phase Joining, reason Normal",
+   "after": [
+    "Join"
+   ],
+   "depth_change": "0",
+   "scheduling_point": false,
+   "section": "7"
+  },
+  {
+   "key": "scope-abort/explicit",
+   "rule": "ScopeAbort",
+   "site": "the scope node",
+   "when": "Unwind or Abandon reaches an Open scope frame: its nonterminal children are requested cancelled",
+   "after": [
+    "Join"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "7"
+  },
+  {
+   "key": "join/deliver",
+   "rule": "Join",
+   "site": "the scope node or machine TaskScope",
+   "when": "a cancellation is pending and the reason is Normal: CancelEffective, reason Cancelled, children requested cancelled",
+   "after": [
+    "Join"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "6, 7"
+  },
+  {
+   "key": "join/block",
+   "rule": "Join",
+   "site": "the scope node or machine TaskScope",
+   "when": "a child is not Terminal: the owner blocks on the join",
+   "after": [
+    "Join"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "7"
+  },
+  {
+   "key": "join/exit-ok",
+   "rule": "Join",
+   "site": "the scope node or machine TaskScope",
+   "when": "every child Terminal: the frame is popped, ScopeExit with outcome ok",
+   "after": [
+    "Value"
+   ],
+   "depth_change": "-1",
+   "scheduling_point": true,
+   "section": "7"
+  },
+  {
+   "key": "join/exit-child-failed",
+   "rule": "Join",
+   "site": "the scope node or machine TaskScope",
+   "when": "every child Terminal: the frame is popped, ScopeExit with outcome child-failed",
+   "after": [
+    "Unwind"
+   ],
+   "depth_change": "-1",
+   "scheduling_point": true,
+   "section": "7"
+  },
+  {
+   "key": "join/exit-trap",
+   "rule": "Join",
+   "site": "the scope node or machine TaskScope",
+   "when": "every child Terminal: the frame is popped, ScopeExit with outcome trap",
+   "after": [
+    "Unwind"
+   ],
+   "depth_change": "-1",
+   "scheduling_point": true,
+   "section": "7"
+  },
+  {
+   "key": "join/exit-cancelled",
+   "rule": "Join",
+   "site": "the scope node or machine TaskScope",
+   "when": "every child Terminal: the frame is popped, ScopeExit with outcome cancelled",
+   "after": [
+    "Unwind"
+   ],
+   "depth_change": "-1",
+   "scheduling_point": true,
+   "section": "7"
+  },
+  {
+   "key": "join/exit-abandoned",
+   "rule": "Join",
+   "site": "the scope node or machine TaskScope",
+   "when": "every child Terminal: the frame is popped, ScopeExit with outcome abandoned",
+   "after": [
+    "Abandon"
+   ],
+   "depth_change": "-1",
+   "scheduling_point": true,
+   "section": "7"
+  },
+  {
+   "key": "terminate/ok",
+   "rule": "Terminate",
+   "site": "machine Terminate",
+   "when": "Termination Ok",
+   "after": [
+    "Terminal"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "7"
+  },
+  {
+   "key": "terminate/cancelled",
+   "rule": "Terminate",
+   "site": "machine Terminate",
+   "when": "Termination Cancelled",
+   "after": [
+    "Terminal"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "7"
+  },
+  {
+   "key": "terminate/trap-latched",
+   "rule": "Terminate",
+   "site": "machine Terminate",
+   "when": "Termination Trap, latched into the owning scope (ScopeFailure)",
+   "after": [
+    "Terminal"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "7"
+  },
+  {
+   "key": "terminate/trap-root",
+   "rule": "Terminate",
+   "site": "machine Terminate",
+   "when": "Termination Trap of the root, which has no owning scope",
+   "after": [
+    "Terminal"
+   ],
+   "depth_change": "0",
+   "scheduling_point": true,
+   "section": "7"
+  }
+ ]
+}

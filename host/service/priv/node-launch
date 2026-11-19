@@ -1,0 +1,9 @@
+#!/bin/sh
+# Descriptor plumbing only (no semantics): start the service node with its control
+# channel on fds 3 (driver -> node) and 4 (node -> driver), taken from this script's
+# stdin and stdout (an Erlang port of the driver), and the node's own stdout/stderr
+# appended to a log. exec keeps the process id up to the BEAM.
+#   node-launch LOG ERL ARG...
+log=$1
+shift
+exec "$@" 3<&0 4>&1 </dev/null >>"$log" 2>&1

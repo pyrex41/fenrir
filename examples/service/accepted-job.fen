@@ -1,0 +1,79 @@
+\\ Stage A2 of the application example (04_DIRECTION_AMENDMENT.md section 8): the
+\\ accepted-job handler of spec/service/ACCEPTED_JOB.md written as a Fenrir program,
+\\ against the library interfaces atomic, once and jobs-stage (spec/service/HANDLER.md).
+\\
+\\ A request arrives as the entry input, a Command. Submit carries the tenant's
+\\ capability, the request key, the payload digest and the payload; the handler
+\\ computes the request transaction AS DATA (business state, the durable job, and the
+\\ key entry that records the retry result) and performs one durable operation,
+\\ Store.commit, which the host installs in one step or not at all (spec/tc1/DURABLE.md
+\\ section 8). The response is decided from the commit's reply: a fresh commit or a
+\\ replay of the same digest is Accepted with the recorded receipt; a reused key with
+\\ another digest is a Conflict. Complete is the worker's delivery: one commit that
+\\ finishes the job only while it is still pending, so a duplicated delivery changes
+\\ nothing.
+\\
+\\ There is no module system: the library is the first part of this file.
+
+\\ ---------- the storage contract's vocabulary (HANDLER.md section 2) ----------
+
+(datatype Cap (Tenant I64))
+(datatype Receipt (Receipt I64 I64 I64 I64 I64))
+(datatype Guard Always (Once I64) (Pending I64))
+(datatype Write (PutReport I64 Bytes) StageJob (StageJobOf I64) (RecordKey I64 I64) (Finish I64 Bool))
+(datatype Writes Done (Then Write Writes))
+(datatype Tx (Tx Cap Guard Writes))
+(datatype Reply (Committed Receipt) (Recorded I64 Receipt) Applied Skipped Unauthorized)
+
+(effect Store durable
+  (commit Tx --> Reply))
+
+\\ ---------- library: atomic, once, jobs-stage ----------
+
+\\ The body of a transaction computes its write set; it can perform nothing (its type
+\\ has no effects), so the whole transaction reaches the host as one commit.
+(define atomic {(Tuple Cap Guard (Unit --> Writes)) --> Reply}
+  cap guard build -> (perform Store commit (Tx cap guard (build unit))))
+
+\\ The request-key check, evaluated by the host inside the same commit: apply the
+\\ writes only if the key is not yet recorded, else answer with what is recorded.
+(define once {I64 --> Guard}
+  key -> (Once key))
+
+\\ Stage the durable job of the report this commit writes.
+(define jobs-stage {Writes --> Writes}
+  writes -> (Then StageJob writes))
+
+(define tenant-of {Cap --> I64}
+  cap -> (match cap ((Tenant t) -> t)))
+
+\\ ---------- the handler ----------
+
+(datatype Command (Submit Cap I64 I64 Bytes) (Complete Cap I64 Bool))
+(datatype Response (Accepted Receipt) (Conflict I64 I64) Delivered Refused)
+
+(define decide {(Tuple Cap I64 I64 Reply) --> Response}
+  cap key digest reply ->
+    (match reply
+      ((Committed receipt) -> (Accepted receipt))
+      ((Recorded recorded receipt) -> (if (= recorded digest) (Accepted receipt) (Conflict (tenant-of cap) key)))
+      (Applied -> Refused)
+      (Skipped -> Refused)
+      (Unauthorized -> Refused)))
+
+(define submit {(Tuple Cap I64 I64 Bytes) --> Response}
+  cap key digest payload ->
+    (decide cap key digest
+      (atomic cap (once key)
+        (lambda (u : Unit)
+          (jobs-stage (Then (PutReport digest payload) (Then (RecordKey key digest) Done)))))))
+
+\\ The worker's delivery of a job's result: done (ok) or failed, once.
+(define complete {(Tuple Cap I64 Bool) --> Response}
+  cap job ok -> (do (atomic cap (Pending job) (lambda (u : Unit) (Then (Finish job ok) Done)))
+                    Delivered))
+
+(define main {Command --> Response}
+  command -> (match command
+               ((Submit cap key digest payload) -> (submit cap key digest payload))
+               ((Complete cap job ok) -> (complete cap job ok))))

@@ -1,0 +1,1 @@
+{"schema": "fenrir.service.history/1", "tenants": 2, "scenario": "recorder-gap", "expect": "indeterminate", "note": "a gap is never an acceptance", "events": [["submit", 0, 0, 0, ["accepted", [0, 0, 0, 0, 0]]], ["gap", "the recorder lost events"]], "expect_index": 1}

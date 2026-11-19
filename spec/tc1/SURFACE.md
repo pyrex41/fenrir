@@ -9,7 +9,9 @@ qualified, and nothing here adds to the language: the frontend translates text
 into an artifact of schema `tc1-handler-demo/2` (contract
 [EFFECTS.md](EFFECTS.md), slice TC1-H2), of schema `tc1-handler-demo/3`
 (slice TC1-R1) when the program declares a remote effect, or of schema
-`tc1-handler-demo/4` (slice TC1-P1) when it serves one. What a program means
+`tc1-handler-demo/4` (slice TC1-P1) when it serves one. The disjoint D1 and
+C1 extensions use `tc1-durable-demo/1` and `tc1-task-demo/1`, respectively.
+What a program means
 is decided by the Shen model; whether an artifact is well formed is decided by
 the validator `tools/tc0/pure-call-artifact.mjs`. Draft 2 adds the remote
 effect class of EFFECTS.md draft 7 (owner rulings of 16 November 2026 on
@@ -36,6 +38,37 @@ sh frontend/fenrir.sh run FILE.fen             # check, then run on the Shen mod
 sh frontend/fenrir.sh emit FILE.fen OUT.json   # check, then write the artifact
 sh frontend/test.sh                            # the frontend's tests, about a minute
 ```
+
+Set `FENRIR_REQUIRE_SHEN_TYPING=1` to additionally require a derivation
+accepted by the [fixed Shen checker](TYPING.md). The default validator is
+unchanged. Strict mode also supports D1 and C1 but not remote or serving
+artifacts; it refuses to emit or run those two schemas.
+
+### Tasks and channels (C1)
+
+The [C1 draft](CONCURRENCY.md) adds `(scope body)`, `(spawn f)`, `(await t)`,
+`(cancel t)`, bare `yield`, `(channel T capacity)`, `(send c value)`,
+`(receive c)`, and `(close c)`. Capacity is a literal in `1..8`; `spawn` takes
+a function from Unit. A task form, a C1 type, or a `Task` or `Channel` effect
+annotation selects C1. Unbound task words have these special meanings; an
+existing named function or local binding still takes precedence. Ordinary
+H2 handlers and one-shot resumptions work in C1. Task/channel handles cannot
+cross a serializable value boundary.
+
+Types are `(Task T)`, `(Channel T)`, `(Outcome T)`, `SendResult`, and
+`(ReceiveResult T)`. Match the runtime results with `Ok(value)`, `Cancelled`,
+`Failed(code)`; `Sent`, `Closed`; and `Item(value)`, `End`, respectively.
+Use the ordinary match arm spelling, e.g. `((Item x) -> x)`. Code cannot
+construct runtime results. These type names cannot be declared in C1.
+
+`run` and `run-artifact` accept an optional C1-only schedule argument: `fifo`
+(default), `lowest`, `highest`, `random:N`, `prandom:N`, or a file containing a
+JSON array of canonical decimal task ID strings. A policy proposes choices
+using JavaScript; the Shen model checks runnability and scheduling points and
+reports its own outcome (including deadlock). An explicit schedule that ends
+too early, chooses a non-runnable task, or has unused choices after termination
+is rejected (exit 1). A malformed/unreadable schedule is a usage error (2);
+the step budget is still exit 4.
 
 `run` prints each emitted value in order, the outcome, where a trap arose, and
 the number of model steps:
@@ -359,8 +392,11 @@ an outcome, with status 0.
 
 ## 6 Not supported
 
-- Anything outside schemas `tc1-handler-demo/2`, `/3` and `/4`: tasks, scopes, channels, time,
-  resources, multi-shot resumption, polymorphism, effect-row polymorphism,
+- Mixing C1 task/channel forms, types or effects with D1 durable effects, R1
+  remote declarations, or a P1 `serve`. D1 is also disjoint from R1/P1. There
+  is no protocol here for routing a host or peer reply into a task, delivering
+  it after cancellation, or deciding whether a scope is waiting or deadlocked.
+- Time, resources, multi-shot resumption, polymorphism, effect-row polymorphism,
   modules and imports. `include` is not a module: it has no names of its own
   and exports nothing.
 - Running a program that serves: it needs a peer image, a store and a
@@ -369,7 +405,7 @@ an outcome, with status 0.
   A stub for one would need either a handler for the remote effect, which the
   contract rejects, or a manifest that binds the effect to a stub member.
 - Naming the member a remote effect is bound to: that is the manifest's.
-- An outcome as a value: naming one, passing it to a helper, returning it.
+- A **remote** outcome as a value: naming one, passing it to a helper, returning it.
   EFFECTS.md §3 says what a linear type for outcomes would allow later.
 - Patterns beyond one constructor per arm: no wildcard arm, no nested
   patterns, no literal patterns, no tuple patterns (use `project`, or several
@@ -378,8 +414,8 @@ an outcome, with status 0.
 - Lambdas with several parameters; operators with more than two operands;
   `and`/`or` (the artifact has none; `if` expresses them).
 - Qualified constructor names: hence the uniqueness rule in §2.
-- An entry input other than `I64` 0; the validator would allow any
-  serializable input type, the harness supplies only this one.
+- Running an entry with input other than `I64` 0. D1 can check and emit a
+  serializable host-request input; local `run` does not supply it.
 - Emit labels outside printable ASCII. A label is otherwise any text; the
   Solo5 guest's lowering additionally wants `[A-Za-z_][A-Za-z0-9_-]{0,63}`.
 - More than one error per run; warnings (an unused variable, a clause that

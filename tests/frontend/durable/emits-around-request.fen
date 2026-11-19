@@ -1,0 +1,9 @@
+\\ The emit before a request is reported; the one after it needs a reply.
+\\ > emit "before": 1
+\\ > host request 0: Store.put 2
+\\ > outcome: none (waiting for the host's reply; run has no host)
+(effect Store durable (put I64 --> I64))
+(define main {I64 --> I64}
+  input -> (do (emit "before" 1)
+               (let r (perform Store put 2)
+                 (do (emit "after" r) r))))

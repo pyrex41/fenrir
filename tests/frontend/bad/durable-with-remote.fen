@@ -1,0 +1,4 @@
+\\ expect 2:15 durable effects cannot be combined
+(effect Store durable (put I64 --> I64))
+(remote-effect Ledger (read-only read I64 --> I64))
+(define main {I64 --> I64} input -> input)

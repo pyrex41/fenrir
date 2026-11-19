@@ -1,0 +1,4 @@
+\\ expect 4:41 effect Task, which comes from this yield, is not allowed in a lambda that must have type (Unit --> I64)
+(define call {(Unit --> I64) --> I64} g -> (g unit))
+(define main {I64 --> I64}
+  input -> (call (lambda (_ : Unit) (do yield 1))))

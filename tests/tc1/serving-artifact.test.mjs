@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import {encode} from '../../tools/tc0/canonical.mjs';
 import {validatePureCallArtifact,InvalidPureCallArtifact,TC1_SERVING_SCHEMA,TC1_REMOTE_SCHEMA,mentionsStoreWrite} from '../../tools/tc0/pure-call-artifact.mjs';
 import {serveRequest} from '../../runtime/tc1/peer-request.mjs';
+import {lowerBatch} from '../../tools/solo5/pure-call/lower.mjs';
 
 const check=p=>validatePureCallArtifact(encode(p),null);
 const clone=p=>JSON.parse(JSON.stringify(p));
@@ -43,6 +44,13 @@ test('a peer program is admitted: served functions, store effects, no entry and 
   assert.equal(mentionsStoreWrite(artifact),true);
   // Whatever is given as an input is not looked at: there is no entry to give it to.
   assert.doesNotThrow(()=>validatePureCallArtifact(encode(program()),['int','0']));
+});
+
+test('Solo5 lowers remote peer operation indices without a durable input or reply descriptor', () => {
+  const {function_index,header}=lowerBatch([{program:program(),input:['unit']}]);
+  assert.deepEqual(function_index,[{bump:0,'Ledger.add':1,'Ledger.total':2}]);
+  assert.doesNotMatch(header,/PC_INPUT_VALUE|struct pc_datatype/);
+  assert.match(header,/,"StoreWrite","put",/);
 });
 
 test('read-only is checked on the peer: the implementation of a read-only operation cannot write the store', () => {

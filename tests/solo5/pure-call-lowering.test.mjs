@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {lowerBatch, lowerProgram, UnsupportedGuestProgram} from '../../tools/solo5/pure-call/lower.mjs';
 import {cases as callHand} from '../../fixtures/tc0/pure-call-hand-cases.mjs';
 import {cases as dataHand} from '../../fixtures/tc0/pure-data-hand-cases.mjs';
+import {cases as durableHand} from './durable-hand-cases.mjs';
+import * as validator from '../../tools/tc0/pure-call-artifact.mjs';
 
 const items=[...callHand,...dataHand].map(c=>({program:c.program,input:['int','0']}));
 
@@ -28,4 +31,29 @@ test('lambda free bindings are lowered in numeric, not lexicographic, order', ()
 });
 test('entry inputs the guest cannot hold are refused, not approximated', () => {
   assert.throws(()=>lowerProgram(items[0].program,['bytes','00'],'t'));
+});
+test('v2-style batch identity binds the canonical input without changing the legacy batch identity',()=>{
+  const a=items[0],b={...a,input:['int','1']};
+  assert.equal(lowerBatch([a]).batch_sha256,lowerBatch([b]).batch_sha256);
+  const bound=lowerBatch([a,b],{bindInputs:true});
+  const expected=createHash('sha256').update(bound.artifact_sha256.map((h,i)=>`${h}:${bound.input_sha256[i]}`).join('\n')).digest('hex');
+  assert.equal(bound.batch_sha256,expected);
+  assert.notEqual(bound.batch_sha256,lowerBatch([b,a],{bindInputs:true}).batch_sha256);
+});
+test('controlled v2 and the legacy lowerer refuse each other’s artifacts',()=>{
+  const program={...items[0].program,schema_version:'tc1-durable-demo/1'};
+  assert.throws(()=>lowerBatch([{...items[0],program}]),{name:'Error',message:/requires a controlled v2/});
+  assert.throws(()=>lowerBatch([items[0]],{durable:true,bindInputs:true}),/Expected a TC1-D1 durable artifact/);
+  assert.throws(()=>lowerBatch([items[0]],{durable:true}),/must bind their inputs/);
+});
+test('durable v2 lowers validated bound inputs and result descriptors', {
+  skip:typeof validator.residualEffects==='function'?false:'requires the shared durable validator',
+},()=>{
+  const entries=durableHand.map(({program,input})=>({program,input}));
+  const a=lowerBatch(entries,{durable:true,bindInputs:true});
+  assert.equal(a.input_sha256.length,entries.length);
+  assert.match(a.header,/PC_INPUT_VALUE/);
+  assert.match(a.header,/struct pc_datatype/);
+  assert.match(a.header,/,"Store","put",0,1,.*,"I"\}/);
+  assert.throws(()=>lowerBatch([{...entries[0],input:['bool',true]}],{durable:true,bindInputs:true}));
 });

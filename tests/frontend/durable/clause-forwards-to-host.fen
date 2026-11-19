@@ -1,0 +1,8 @@
+\\ The handler is inactive in its clause, so this perform goes to the host.
+\\ > host request 0: Store.put 2
+\\ > outcome: none (waiting for the host's reply; run has no host)
+(effect Store durable (put I64 --> I64))
+(define main {I64 --> I64}
+  input -> (handle Store
+             ((put x) -> (perform Store put (+ x 1)))
+             (perform Store put 1)))

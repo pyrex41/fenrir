@@ -1,0 +1,20 @@
+{
+  "schema": "fenrir.service.mutant-predictions/1",
+  "contract": "spec/service/UPGRADE.md",
+  "provenance": "Hand-derived from the mutant descriptions in UPGRADE.md section 8 and harness/service-upgrade-mutants.shen before any exploration was run. 'expected' is the property each mutant is aimed at, with the predicted length of its shortest counterexample; 'also' other properties predicted to fail, with lengths; 'clean' properties predicted to hold within the default bounds. A property in none of the three was not predicted. The harness reports actual against predicted; a mismatch is reported, not hidden.",
+  "mutants": {
+    "migration-drops-pending":  {"expected": {"pending": 3}, "also": {"atomicity": 3, "response": 3, "progress": 4}, "clean": ["authority", "retry", "receipts", "version", "manifest"]},
+    "migration-not-atomic":     {"expected": {"version": 3}, "also": {"pending": 3, "progress": 4}, "clean": ["authority", "atomicity", "response", "retry", "recovery", "receipts", "manifest"]},
+    "cutover-before-migration": {"expected": {"version": 2}, "also": {"pending": 3, "progress": 4}, "clean": ["authority", "atomicity", "response", "retry", "recovery", "receipts", "manifest"]},
+    "stale-v1-commit":          {"expected": {"version": 4}, "also": {"pending": 4, "progress": 5}, "clean": ["authority", "atomicity", "response", "retry", "recovery", "receipts", "manifest"]},
+    "keys-not-migrated":        {"expected": {"receipts": 3}, "also": {"atomicity": 3, "response": 3}, "clean": ["authority", "retry", "recovery", "pending", "version", "manifest"]},
+    "receipt-rewritten":        {"expected": {"receipts": 3}, "also": {"response": 3}, "clean": ["authority", "atomicity", "retry", "recovery", "pending", "version", "manifest"]},
+    "deliver-to-v1":            {"expected": {"version": 5}, "also": {}, "clean": ["authority", "atomicity", "response", "retry", "recovery", "progress", "pending", "receipts", "manifest"]},
+    "no-manifest-check":        {"expected": {"manifest": 1}, "also": {}, "clean": ["authority", "atomicity", "response", "retry", "recovery", "progress", "pending", "receipts", "version"]},
+    "volatile-upgrade-state":   {"expected": {"recovery": 2}, "also": {"version": 2}, "clean": ["authority", "atomicity", "response", "retry", "receipts", "manifest"]},
+    "v2-shared-counter":        {"expected": {"authority": 4}, "also": {}, "clean": ["atomicity", "response", "retry", "recovery", "progress", "pending", "receipts", "version", "manifest"], "added": "after the first exploration (tiny scope) showed authority never failing on a mutant; predicted before it ran"},
+    "v2-duplicate-delivery-counted": {"expected": {"retry": 5}, "also": {"version": 6}, "clean": ["authority", "atomicity", "response", "recovery", "progress", "pending", "receipts", "manifest"], "added": "after the first exploration showed retry never failing on a mutant; predicted before it ran"},
+    "v2-retry-reapplies":       {"expected": {"retry": 5}, "also": {"receipts": 5, "atomicity": 5, "response": 5}, "clean": ["authority", "recovery", "pending", "version", "manifest"], "added": "after the first exploration showed retry never failing on a mutant; predicted before it ran"},
+    "equivalent-control":      {"expected": {}, "also": {}, "clean": ["authority", "atomicity", "response", "retry", "recovery", "progress", "pending", "receipts", "version", "manifest"], "same_graph_as_model": true}
+  }
+}

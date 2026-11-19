@@ -1,0 +1,8 @@
+\\ The datatype field may name an effect declared later. It is not crossing
+\\ the host boundary, which still requires serializable input and output.
+\\ > outcome: Ok 1
+(datatype Holder (Held (I64 --> I64 ! Store)))
+(effect Ask ordinary (ask I64 --> I64))
+(effect Store durable (put I64 --> I64))
+(define main {I64 --> I64}
+  input -> (handle Store ((put x) -> (+ x 1)) (perform Store put input)))

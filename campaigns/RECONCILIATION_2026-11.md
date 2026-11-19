@@ -9,6 +9,14 @@ that proves Shen implementations in Rocq.
 Base: master `4898e7b`. These notes recommend; the owner merges. Nothing here
 is a gate verdict, and no qualification campaign was run.
 
+**19 November update:** The order below is historical. Review the current
+[ARM64 integration baseline](ARM64_INTEGRATION_BASELINE.md) in draft PR #11,
+stacked on #10. The Shen evaluator already carries the intent of #6; #7's
+TC0-B target was superseded by TC1; and #8's unary lane is included and
+extended by #11. Keep #5's historical receipt and attic proposal for a
+focused follow-up, rather than reviving its Python evaluator changes. Do
+not close the older PRs on the strength of a draft replacement alone.
+
 ## Summary
 
 | PR | Head | Content | Fit with the amendment | Recommendation |

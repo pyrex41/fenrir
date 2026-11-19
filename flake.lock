@@ -13,9 +13,28 @@
         "url": "https://releases.nixos.org/nixpkgs/nixpkgs-26.11pre1088030.8edc0c72e3a3/nixexprs.tar.zst"
       }
     },
+    "rocq-stdlib-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1784892014,
+        "narHash": "sha256-ySNY8XUQOH6B1B2p+39jdJ7UjIMrRDl499JJwpLEHuM=",
+        "ref": "refs/tags/V9.2.0",
+        "rev": "8dd155bc10529814202f8f4c643e5ae6c2c88fa6",
+        "revCount": 45194,
+        "type": "git",
+        "url": "https://github.com/rocq-prover/stdlib"
+      },
+      "original": {
+        "ref": "refs/tags/V9.2.0",
+        "rev": "8dd155bc10529814202f8f4c643e5ae6c2c88fa6",
+        "type": "git",
+        "url": "https://github.com/rocq-prover/stdlib"
+      }
+    },
     "root": {
       "inputs": {
         "nixpkgs": "nixpkgs",
+        "rocq-stdlib-src": "rocq-stdlib-src",
         "shen-cl-src": "shen-cl-src",
         "shen-jit-src": "shen-jit-src",
         "solo5-src": "solo5-src",

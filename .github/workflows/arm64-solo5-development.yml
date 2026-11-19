@@ -1,0 +1,79 @@
+name: ARM64 Linux Solo5 development
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/arm64-solo5-development.yml'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'package.json'
+      - 'backends/solo5/**'
+      - 'fixtures/**'
+      - 'harness/**'
+      - 'models/**'
+      - 'runtime/**'
+      - 'tools/**'
+      - 'host/service/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  stock-spt:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - name: Realize locked Solo5 and Shen/JIT and compare stock SPT with Shen
+        run: |
+          mkdir -p build/arm64-solo5
+          nix develop --no-update-lock-file -L -c sh tools/solo5/check-arm64-stock.sh \
+            2>&1 | tee build/arm64-solo5/nix-and-check.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: arm64-stock-spt-development
+          path: build/arm64-solo5/
+          if-no-files-found: error
+
+  a3-host-tools:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - name: Build pinned A3 host tools and run host-only OTP/SQLite checks
+        run: |
+          test "$(uname -s)/$(uname -m)" = Linux/aarch64
+          mkdir -p build/arm64-a3-host-tools
+          out=build/arm64-a3-host-tools
+          cp flake.lock "$out/flake.lock"
+          { git rev-parse HEAD; uname -srm; nix --version; } > "$out/host.log"
+          prefix=$(nix build --no-update-lock-file --no-link --print-out-paths -L \
+            .#packages.aarch64-linux.fenrir-a3-tools 2> >(tee "$out/nix.log" >&2))
+          nix path-info --json "$prefix" > "$out/nix-path.json"
+          export PATH="$prefix/bin:$PATH" CC="$prefix/bin/gcc" SQLITE_PREFIX="$prefix"
+          {
+            "$CC" --version
+            "$prefix/bin/sqlite3" --version
+            "$prefix/bin/node" --version
+            "$prefix/bin/erl" -noshell -noinput \
+              -eval 'io:format("~s~n", [erlang:system_info(system_version)]), halt().'
+            test -x "$prefix/bin/erlc"
+          } | tee "$out/tools.log"
+          sh host/service/check-host-only.sh 2>&1 | tee "$out/check.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: arm64-a3-host-only-development
+          path: |
+            build/arm64-a3-host-tools/
+            build/host/service/host-only-*/check.log
+            build/host/service/host-only-*/unit.json
+          if-no-files-found: error

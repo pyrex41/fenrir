@@ -1,0 +1,8 @@
+\\ Round trip: the TC1-C1 hand fixture close-wakes-receivers, in surface syntax.
+\\ frontend/test.sh compares this program's run (production FIFO schedule) with the run of the fixture's artifact.
+
+(define main {I64 --> I64}
+  input -> (let c (channel I64 1)
+                r1 (spawn (lambda (_ : Unit) (do (match (receive c) ((Item x) -> (emit "got" x)) (End -> (emit "end" 0))) 0)))
+                r2 (spawn (lambda (_ : Unit) (do (match (receive c) ((Item x) -> (emit "got" x)) (End -> (emit "end" 0))) 0)))
+             (do (close c) 0)))

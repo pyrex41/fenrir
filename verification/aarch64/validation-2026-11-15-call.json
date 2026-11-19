@@ -1,0 +1,2282 @@
+{
+  "schema": "fenrir.aarch64.validation-record/2",
+  "date": "2026-11-15",
+  "entry_point": "sh verification/aarch64/check.sh",
+  "duration": "6 min 21 s",
+  "summary": {
+    "schema": "fenrir.aarch64.check/1",
+    "status": "development-pass",
+    "qualification": "UNKNOWN",
+    "tools": "/nix/store/ndzwlvc4iljrrx4168np54vd2vlaq23p-fenrir-aarch64-verification-tools",
+    "unary": {
+      "profile": "fenrir-aarch64-checked-unary/1",
+      "report": "build/aarch64/1794728195173-18317/report.json",
+      "proof_instances": 12,
+      "native_comparisons": 564,
+      "rejected_mutants": 3
+    },
+    "expr": {
+      "profile": "fenrir-aarch64-checked-expr/1",
+      "report": "build/aarch64/check-1794728194-18053/expr/report.json",
+      "programs": 70,
+      "native_comparisons": 2520,
+      "rejected_mutants": 10
+    },
+    "call": {
+      "profile": "fenrir-aarch64-checked-call/1",
+      "report": "build/aarch64/check-1794728194-18053/call/report.json",
+      "programs": 14,
+      "tail_constant_stack_instances": 5,
+      "native_comparisons": 436,
+      "rejected_mutants": 8
+    },
+    "differential": {
+      "report": "build/aarch64/check-1794728194-18053/differential/report.json",
+      "cases": "3760",
+      "status": "development-pass",
+      "negative_control": "Control.v: failures = [0; 480; 512; 3280] proved (exactly the falsified cases)"
+    }
+  },
+  "unary": {
+    "node": "v22.23.3",
+    "sourceInventory": {
+      "verification/aarch64/Core.v": "8029e3948e6e8ef88e56d24f657e6601b20aa0b042bedea1ee9c65cdb289c056",
+      "tools/aarch64/compile.mjs": "4f8600b86a562df6b73ac03fa3560e5df8dca8e05fdc89abf49109a19ceaf5de",
+      "tools/aarch64/check.mjs": "6db9790dc0b1e50659b78b344ddcfa9e15d59af87f8c9afc53dc5aedddae86f0",
+      "tools/aarch64/fixtures.mjs": "248d330b8739024e5128954b8fb3dba2c43508434e6ac1f4cfc4347356a09c8c",
+      "tools/tc0/canonical.mjs": "b6dd007121efa752f52bd89042e491c2dc0ba40751c7c2b195bc1aa5342b73e2",
+      "tools/tc0/pure-call-artifact.mjs": "81c4380eab5012474ce0903ed247731f88ff010dc55c404e89427cd736f05226",
+      "runtime/tc0/pure-call-machine.mjs": "0108c9ddd11079be70c19a095dd039538181d2d38b8761ef7f8c8dc0d5673cc4"
+    },
+    "profile": "fenrir-aarch64-checked-unary/1",
+    "status": "development-pass",
+    "versions": {
+      "coqc": "rocq: The Rocq Prover, version 9.3.0",
+      "coqchk": "rocqchk: The Rocq Proof Checker, version 9.3.0",
+      "aarch64-linux-gnu-as": "aarch64-unknown-linux-gnu-as: GNU assembler (GNU Binutils) 2.46",
+      "aarch64-linux-gnu-ld": "aarch64-unknown-linux-gnu-ld: GNU ld (GNU Binutils) 2.46",
+      "aarch64-linux-gnu-objcopy": "aarch64-unknown-linux-gnu-objcopy: GNU objcopy (GNU Binutils) 2.46",
+      "qemu-aarch64": "qemu-aarch64: qemu-aarch64 version 11.1.1"
+    },
+    "nativeCases": 564,
+    "proofInstances": 12,
+    "rejectedMutations": [
+      "immediate",
+      "branch-condition",
+      "success-status"
+    ],
+    "core_sha256": "8029e3948e6e8ef88e56d24f657e6601b20aa0b042bedea1ee9c65cdb289c056",
+    "receipts": [
+      {
+        "profile": "fenrir-aarch64-checked-unary/1",
+        "artifact_sha256": "7e9fb59a575b40699512cfca416b8d38798fdad9002f192bcd471f9e173782b9",
+        "binary_sha256": "67b9e382638cc06044841d8137ffa883bc2ae5288f3b5318348887f39be80183",
+        "binary_bytes": 8,
+        "operations": 0,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ],
+        "module": "Case0"
+      },
+      {
+        "profile": "fenrir-aarch64-checked-unary/1",
+        "artifact_sha256": "45f00912fe7f31d74e5d34e0489c63c08a290047b9d8a2a16fd0e377f7ce534c",
+        "binary_sha256": "1b7f35e374727fe40f61f1dc5e1d8f413e9433bcde64a7fdb970726533077e08",
+        "binary_bytes": 24,
+        "operations": 1,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ],
+        "module": "Case1"
+      },
+      {
+        "profile": "fenrir-aarch64-checked-unary/1",
+        "artifact_sha256": "6f4f5dd58bbdfcecce836995090c720bd8249b2d57ca006d5d7d4c3b414d2fc5",
+        "binary_sha256": "fa84c35de75546a50bc8f1634c624c0ba1d1ea03a6341eb889f351cfbad82ffb",
+        "binary_bytes": 24,
+        "operations": 1,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ],
+        "module": "Case2"
+      },
+      {
+        "profile": "fenrir-aarch64-checked-unary/1",
+        "artifact_sha256": "a7abe832371c6eafd869f48103ec6ca028630558633511483c27399b5df8d816",
+        "binary_sha256": "930ea423d8885b9eaeb0a85f761f3507a623179cbd74e68624668651966487f2",
+        "binary_bytes": 24,
+        "operations": 1,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ],
+        "module": "Case3"
+      },
+      {
+        "profile": "fenrir-aarch64-checked-unary/1",
+        "artifact_sha256": "ceace3674489c53014b7c4fcb7c128916ab5807bbaebd9e715c02de62487e971",
+        "binary_sha256": "3c578c06c4975a55541303d2a3dc0b5fa625a12abbf209a6688fda85091c1802",
+        "binary_bytes": 24,
+        "operations": 1,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ],
+        "module": "Case4"
+      },
+      {
+        "profile": "fenrir-aarch64-checked-unary/1",
+        "artifact_sha256": "db2a2500926fb4704798a6a062e311a016fcd14c041e859e31fe17f443c9162f",
+        "binary_sha256": "89947d4e34e8d604dfc3904e8a95dc320ad03ccfbd244b0e1236b739ec962a57",
+        "binary_bytes": 24,
+        "operations": 1,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ],
+        "module": "Case5"
+      },
+      {
+        "profile": "fenrir-aarch64-checked-unary/1",
+        "artifact_sha256": "87e41b41e8e94cf111f61385551f28af64a2c7ddc2d9b8cbffc67eb29d8c9395",
+        "binary_sha256": "6b60b0c77dd97fa5d4c78f1174e67474c54426c888815c5ae571451150b17115",
+        "binary_bytes": 24,
+        "operations": 1,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ],
+        "module": "Case6"
+      },
+      {
+        "profile": "fenrir-aarch64-checked-unary/1",
+        "artifact_sha256": "b8b0cb7279cbf89ba15011005e32ac7844eeba8bc6e8339ae625305ede0079c0",
+        "binary_sha256": "b210d1980e235cd2c5cf199bb723a8d079c04c71283ccc83614a6fcfddf1a97c",
+        "binary_bytes": 40,
+        "operations": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ],
+        "module": "Case7"
+      },
+      {
+        "profile": "fenrir-aarch64-checked-unary/1",
+        "artifact_sha256": "7e2baae2f7a8bc807213d23682f4501801fa602dc5a7aa72b3d3427258ec4d9a",
+        "binary_sha256": "d5849d51ca789b3f1921a70cef84e1b2f7047a475d98c452c074ca80955b4a19",
+        "binary_bytes": 40,
+        "operations": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ],
+        "module": "Case8"
+      },
+      {
+        "profile": "fenrir-aarch64-checked-unary/1",
+        "artifact_sha256": "62b95450b4916b101972f49bba902e20389e5f39811248a9b53a02b07bb7eb0a",
+        "binary_sha256": "c4850f885a28fa0968ffd6a5e0e980bb7a1bd9984a7c4846b682c35b43e24a21",
+        "binary_bytes": 40,
+        "operations": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ],
+        "module": "Case9"
+      },
+      {
+        "profile": "fenrir-aarch64-checked-unary/1",
+        "artifact_sha256": "f9f45bc9ae30e0731e1bd73a956a80a7dda9fd522bdf236e9132ccda5c82eb18",
+        "binary_sha256": "ac49cd9fd897af80718d99d2ed8ff867cc9f1518dd8267772e20de0508bc587e",
+        "binary_bytes": 56,
+        "operations": 3,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ],
+        "module": "Case10"
+      },
+      {
+        "profile": "fenrir-aarch64-checked-unary/1",
+        "artifact_sha256": "bb6a8c20338e2f6cf048fb02c19694208b3e2a7c7dbf420ecc6845c8e8f3397d",
+        "binary_sha256": "a5a6e9fdc10b200934b8cd9f5650e4c70c584c5ff74b062e90e5a1b5388412e8",
+        "binary_bytes": 200,
+        "operations": 12,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ],
+        "module": "Case11"
+      }
+    ],
+    "claims": {
+      "universal_handwritten_model_proof": true,
+      "exact_byte_identity": true,
+      "coqchk_replay": true,
+      "authoritative_ARM_refinement": false,
+      "full_TC0": false,
+      "whole_process": false,
+      "Shen_oracle_run": false
+    }
+  },
+  "expr": {
+    "schema": "fenrir.aarch64.expr-check/1",
+    "profile": "fenrir-aarch64-checked-expr/1",
+    "result_abi": "fenrir-aarch64-result-abi/1",
+    "status": "development-pass",
+    "qualification": "UNKNOWN",
+    "node": "v22.23.3",
+    "versions": {
+      "coqc": "rocq: The Rocq Prover, version 9.3.0",
+      "coqchk": "rocqchk: The Rocq Proof Checker, version 9.3.0",
+      "as": "aarch64-unknown-linux-gnu-as: GNU assembler (GNU Binutils) 2.46",
+      "ld": "aarch64-unknown-linux-gnu-ld: GNU ld (GNU Binutils) 2.46",
+      "objcopy": "aarch64-unknown-linux-gnu-objcopy: GNU objcopy (GNU Binutils) 2.46",
+      "qemu": "qemu-aarch64: qemu-aarch64 version 11.1.1"
+    },
+    "source_inventory": {
+      "verification/aarch64/Core.v": "8029e3948e6e8ef88e56d24f657e6601b20aa0b042bedea1ee9c65cdb289c056",
+      "verification/aarch64/Expr.v": "d648af3dfcc9efbb9d86900b849b9e00bc256e8351a4f3f1b066744f788cd28f",
+      "verification/aarch64/Machine.v": "52f48da1f18adef8ebe7cb6edea039b4ddb2f5ab92c5be2b1d47aeb0f4413188",
+      "verification/aarch64/Flags.v": "65fb54bf9a0352ea1547c4588cbdc259b36ee9db73ff8900174c6b89a7529faa",
+      "verification/aarch64/Encode.v": "a4bb9789a5438c1ba0e356d3d3dffa28f66b303cff7ece7803a846d325563f09",
+      "verification/aarch64/Compile.v": "20bdc67350519a5820429a20834ba1eff2158aa8f3cff3cca4ecc3d6039b5f2f",
+      "tools/aarch64/expr.mjs": "0e411ae4b033374640c26772a05f9504a4870dd433e6226ea29026213b95d1b5",
+      "tools/aarch64/expr-fixtures.mjs": "c24e918d7a5d7cefa54d419ba85111203c5565bc5e22be82cb4d9eaedbe9fd45",
+      "tools/aarch64/check-expr.mjs": "dffd4fb26b0a1bfea1d025d1bfbe3e68bfb687af6050fb32f7fc57b16b608470",
+      "tools/aarch64/toolchain.mjs": "8044d4b44fe0c7c8c5f12714692931345848c03be5a08e016f7d09fc8a6ea420",
+      "tools/tc0/canonical.mjs": "b6dd007121efa752f52bd89042e491c2dc0ba40751c7c2b195bc1aa5342b73e2",
+      "tools/tc0/pure-call-artifact.mjs": "81c4380eab5012474ce0903ed247731f88ff010dc55c404e89427cd736f05226",
+      "runtime/tc0/pure-call-machine.mjs": "0108c9ddd11079be70c19a095dd039538181d2d38b8761ef7f8c8dc0d5673cc4"
+    },
+    "programs": 70,
+    "proof_instances": 70,
+    "gnu_as_checked": 70,
+    "inputs": 36,
+    "native_comparisons": 2520,
+    "outcomes": {
+      "Ok:int": 1335,
+      "Trap:Overflow": 573,
+      "Trap:DivZero": 77,
+      "Ok:bool": 535
+    },
+    "rejected_mutants": [
+      {
+        "name": "trap-code",
+        "program": "add-sub-intermediate",
+        "instruction": 12,
+        "word": "d2800041"
+      },
+      {
+        "name": "overflow-branch",
+        "program": "add-sub-intermediate",
+        "instruction": 10,
+        "word": "54000086"
+      },
+      {
+        "name": "operand-order",
+        "program": "sub-add-intermediate",
+        "instruction": 9,
+        "word": "eb010000"
+      },
+      {
+        "name": "stack-slot",
+        "program": "let-chain",
+        "instruction": 2,
+        "word": "f9400be0"
+      },
+      {
+        "name": "branch-polarity",
+        "program": "abs",
+        "instruction": 11,
+        "word": "b5000100"
+      },
+      {
+        "name": "divzero-guard",
+        "program": "div-by-x",
+        "instruction": 9,
+        "word": "14000004"
+      },
+      {
+        "name": "mul-overflow-test",
+        "program": "mul-square",
+        "instruction": 9,
+        "word": "5400008e"
+      },
+      {
+        "name": "min-div-guard",
+        "program": "div-by-minus-one",
+        "instruction": 16,
+        "word": "5400008e"
+      },
+      {
+        "name": "compare-condition",
+        "program": "cmp-le",
+        "instruction": 10,
+        "word": "9a9fd7e0"
+      },
+      {
+        "name": "stack-release",
+        "program": "let-shadow",
+        "instruction": 31,
+        "word": "910083ff"
+      }
+    ],
+    "universal_theorems": [
+      "Compile.compile_correct",
+      "Compile.compile_correct_typed",
+      "Expr.type_safety",
+      "Encode.decode_encode",
+      "Encode.image_decodes"
+    ],
+    "assumptions": "Closed under the global context (assumptions.log)",
+    "coqchk": "Modules were successfully checked (coqchk.log)",
+    "claims": {
+      "universal_handwritten_model_proof": true,
+      "exact_byte_identity": true,
+      "coqchk_replay": true,
+      "authoritative_ARM_refinement": false,
+      "json_projection_verified": false,
+      "full_TC0": false,
+      "whole_process": false
+    },
+    "receipts": [
+      {
+        "name": "add-sub-intermediate",
+        "module": "ExprCase0",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "a33746a0e9fbd6dced8dce4f9d6f034b928c25d54459d045daa8abc760e82227",
+        "binary_sha256": "c74abdb71c37b7d329c6b5e6f1f99fbfd89069a2e4bd7173116d65be0925ee30",
+        "binary_bytes": 112,
+        "instructions": 28,
+        "result_type": "I64",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "sub-add-intermediate",
+        "module": "ExprCase1",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "a422606caf72e94ae741ec28e7587b0fc1104891908386071ee69bc4126f2abd",
+        "binary_sha256": "9e768b1465043b1a8c680c108a95e11b2f405cabc9ac63c3d4e6a850b63b4521",
+        "binary_bytes": 112,
+        "instructions": 28,
+        "result_type": "I64",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "mul-square",
+        "module": "ExprCase2",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "42a48f7665831b6edec80d0132fcdd6219297f5132dbf40c9ad1793f78180e48",
+        "binary_sha256": "37e1b2f9c3015226bf4769e62de8481e6b2bd9f8f319ff6a86835f9751999c06",
+        "binary_bytes": 64,
+        "instructions": 16,
+        "result_type": "I64",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "mul-by-three-then-div",
+        "module": "ExprCase3",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "5fe8a9fb0acfe8a6e0a5b30d68bca781e08bacacef8d683ddcd33cdd87ad4061",
+        "binary_sha256": "3c22572279eedbe06b79e74224fbd0b7a8f5961daa3ac1a96279d8497d34e6c0",
+        "binary_bytes": 148,
+        "instructions": 37,
+        "result_type": "I64",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "div-by-x",
+        "module": "ExprCase4",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "651c70eefe92a3f6f223a029e70aff5d1bdefe57bf055af367ac24853899d378",
+        "binary_sha256": "f6b3b861513e2dd8bce3c6c11dee3f51f8672f925a9806aeabb14fe5de5e1396",
+        "binary_bytes": 96,
+        "instructions": 24,
+        "result_type": "I64",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "div-by-minus-one",
+        "module": "ExprCase5",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "2dbdc47d8e77ae18b1e9a1e91920d6a37d4dcbaa4b1d68cbdd059cd7bfe1c497",
+        "binary_sha256": "ac1085554b9f1cbe6f573ad105e2667f8bc0a1d1aac038bfa2e3c9662f99aed6",
+        "binary_bytes": 96,
+        "instructions": 24,
+        "result_type": "I64",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "min-div-x",
+        "module": "ExprCase6",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "d3d45b336008eebb40aa51a2607ae6aa3ce4a4ebf19deb35ff600114ab2e8650",
+        "binary_sha256": "31bb95a0afaf7f89b24b62cd52cf138d8c6ddb63a35c7b31dde82dd90ed0d928",
+        "binary_bytes": 96,
+        "instructions": 24,
+        "result_type": "I64",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "neg",
+        "module": "ExprCase7",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "d52377849cf5943fcb71e3bff724ff95d6e1bf53c935dc51214f48d24544242b",
+        "binary_sha256": "4925e09e29fde7a9780768048a09e05beb367beb707d857d5181fa532e6ffdcb",
+        "binary_bytes": 44,
+        "instructions": 11,
+        "result_type": "I64",
+        "stack_slots": 1,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "abs",
+        "module": "ExprCase8",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "ea87b63b825bf7a5effa8f90e0a5c7d8ed66ac6bf49a8b5bb1f39137fec85222",
+        "binary_sha256": "9521b34e986f476430b032f273c688c0119d467680fc182d361691877184ad34",
+        "binary_bytes": 92,
+        "instructions": 23,
+        "result_type": "I64",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "let-chain",
+        "module": "ExprCase9",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "8f7ffdb114e5d6b7e433415c76cc2883588be572b297860de04d2735463ec477",
+        "binary_sha256": "9781c462fa697a6de02e40580d0ae397e84be59031df1e203691444090ee15e8",
+        "binary_bytes": 164,
+        "instructions": 41,
+        "result_type": "I64",
+        "stack_slots": 4,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "let-shadow",
+        "module": "ExprCase10",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "a3681c553a0d7a30ddbcabfc1d94fa63dbce511c6d76c85ec5e9d8a7fd4a5557",
+        "binary_sha256": "b4b260a0e482045ac1bba3916fe282a94e896021721219d4361c2f0939b38c95",
+        "binary_bytes": 144,
+        "instructions": 36,
+        "result_type": "I64",
+        "stack_slots": 3,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "nested-operands",
+        "module": "ExprCase11",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "60bb6087d40fb44eb7e539805b4d95d785331cd1dabf63e8450d890d5a24a24f",
+        "binary_sha256": "b4aeceebef38e4636e9dcb95fb72473f5bbd98f861884368060594769d5f2f49",
+        "binary_bytes": 312,
+        "instructions": 78,
+        "result_type": "I64",
+        "stack_slots": 4,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "guarded-div",
+        "module": "ExprCase12",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "23b5148a37c6c6fca11cea81c68021236d9b3612e40941b8d0511a0d76cfd421",
+        "binary_sha256": "eadaa15ff1af10683f4aa7af07a2de9a84fe4c7038aecd352260f7d6efc089f5",
+        "binary_bytes": 156,
+        "instructions": 39,
+        "result_type": "I64",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "branch-local-trap",
+        "module": "ExprCase13",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "b83673b90469a2f939ce684c069f550ec6af0b9fef5bc58dd2ac385e166665ae",
+        "binary_sha256": "d30967cde44478e07b3d97daf1ceeec52ae4ce58d78af2f8935f40a0ee5f7c43",
+        "binary_bytes": 160,
+        "instructions": 40,
+        "result_type": "I64",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "big-literals",
+        "module": "ExprCase14",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "52ae626a0967e85d4aa87d28dcc715e6f44acf7aa75e91e3e5887b6ded1339b4",
+        "binary_sha256": "60b96ebd8a437628c93126ce6e2c58af23f2a60d9c722d91362d5e757a74ff64",
+        "binary_bytes": 112,
+        "instructions": 28,
+        "result_type": "I64",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "max-plus-x",
+        "module": "ExprCase15",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "376ca75403f41e8670635eb0d700f8f3942e007cb17d474b01bcf0be9237343c",
+        "binary_sha256": "95629058efe2e726ed1901b428c9ecd964eabc1e7aeaeee273ac8f2bd728a929",
+        "binary_bytes": 68,
+        "instructions": 17,
+        "result_type": "I64",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "div-chain",
+        "module": "ExprCase16",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "6a224976c0c299cedb3398e6c4fbc002fc0d41eb093529ba0e8eea4af99fb976",
+        "binary_sha256": "dd9bc3a4add535cb60ce8496200e1e31ad8201ae6c1bf157c4155a394753b770",
+        "binary_bytes": 188,
+        "instructions": 47,
+        "result_type": "I64",
+        "stack_slots": 3,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "mixed-let-if",
+        "module": "ExprCase17",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "e1ac2464143b55c82394a1df72cd5df57ca9e458e2c9e08b628f0c0be11be414",
+        "binary_sha256": "e68ded864c4af3fdd342091056e88d1e8e1b019a61bdb7ad6bf8d48a154c454f",
+        "binary_bytes": 300,
+        "instructions": 75,
+        "result_type": "I64",
+        "stack_slots": 3,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "cmp-le",
+        "module": "ExprCase18",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "b606a5176c06eefa0680d0ad97c273beab88025c62022e1913e0615836ab9a1c",
+        "binary_sha256": "6393e8a727d428addb412a18d01423cf563dff2f953fd75cecfc9beee7891f84",
+        "binary_bytes": 56,
+        "instructions": 14,
+        "result_type": "Bool",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "cmp-ge-self",
+        "module": "ExprCase19",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "2df9f028912da211a1941a0bdb7cda9b74ff8dcf3a60854aed12ad1f18455ee1",
+        "binary_sha256": "80ea2eacef434455b765d9b0329eaa35ae152c31a390dc07eaa3191083915460",
+        "binary_bytes": 44,
+        "instructions": 11,
+        "result_type": "Bool",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "cmp-gt",
+        "module": "ExprCase20",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "1ff29284493c467d98c2493bb243a2c140f6bc875438dbbef0d6fc9d4a0a1406",
+        "binary_sha256": "8becd1c46d1df56811d784a887aa2d97726bf11cc238f0dda9ab7de05da3c75d",
+        "binary_bytes": 56,
+        "instructions": 14,
+        "result_type": "Bool",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "eq-literal",
+        "module": "ExprCase21",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "d71d36c5da89b3d9698ca0613b75b5562b452e04a8184ddc7f5ea8274988d0dc",
+        "binary_sha256": "3e8d1e8690fbf4f5b406f6248cdec751a6ee3b3dc0e5b26f3790068df49ca590",
+        "binary_bytes": 56,
+        "instructions": 14,
+        "result_type": "Bool",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "not-eq-zero",
+        "module": "ExprCase22",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "f9ce8586311299063936088900088aefb4326a634c177965ef1bf1b361335ba3",
+        "binary_sha256": "08a9b43d4abb2fef408df45a746a3aae310a246bedda2acc823c06ce10f9f47e",
+        "binary_bytes": 64,
+        "instructions": 16,
+        "result_type": "Bool",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "eq-bools",
+        "module": "ExprCase23",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "f902e31171bbd4bd45f5b2e41128565f097dadab6adac7dd3166308196411b70",
+        "binary_sha256": "11fbc04baa625c1b112f20c8231f0b2272fc728bd901beb4d5de553193dd2bdb",
+        "binary_bytes": 108,
+        "instructions": 27,
+        "result_type": "Bool",
+        "stack_slots": 3,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "bool-if",
+        "module": "ExprCase24",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "420276517d8e8feeb57b033bc815fe1a8d2f9d02e77ebd2e316b34dfc17e36e2",
+        "binary_sha256": "4e47776a14dafb431dfbc6f486efedcb77aae3ab6a594b34e2f84c7d594de478",
+        "binary_bytes": 72,
+        "instructions": 18,
+        "result_type": "Bool",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "cmp-traps-first",
+        "module": "ExprCase25",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "c637298f9c70626f217801662b30642b019ba44660eafe378acf939ae90914ee",
+        "binary_sha256": "73ad52958bfc680a0620f6d146e9a666dfd56f44da3c48fe8f21526ddf08a438",
+        "binary_bytes": 100,
+        "instructions": 25,
+        "result_type": "Bool",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "let-bool",
+        "module": "ExprCase26",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "f2af3c439296733761416ad94cdf0dcf06df4c84927e215de9b6b9bcf370f364",
+        "binary_sha256": "690d6e516cfd7ed369b3efaac57e8bf7a4a25a2c757e5f9dc1067ff5903c03a0",
+        "binary_bytes": 148,
+        "instructions": 37,
+        "result_type": "I64",
+        "stack_slots": 3,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "deep-left",
+        "module": "ExprCase27",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "4c461b3dda2420c26b1d47659a920b2ea4a5921aa20eea8a97cc236707dbd0c7",
+        "binary_sha256": "f664787ad6a65503d091cfa9809fddfb76627612ce13e02cffb745d5af99a567",
+        "binary_bytes": 244,
+        "instructions": 61,
+        "result_type": "I64",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "deep-right",
+        "module": "ExprCase28",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "f4e5f261285c487f8a4829589b880b105d4943017307ccbe21f1cafe44d03734",
+        "binary_sha256": "cc791dda5a08b01ed0ce853adc9a583b6390133fededad091a083058200983a1",
+        "binary_bytes": 244,
+        "instructions": 61,
+        "result_type": "I64",
+        "stack_slots": 6,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "eval-order",
+        "module": "ExprCase29",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "7ad647a1e09e107eeb42e07d10206f2cacd455cf4b10617b470812ca15de3d06",
+        "binary_sha256": "61f892e0b358e777b328316aa5175e76fdfcd75149f6b05e0c36a6d10ad5c1b1",
+        "binary_bytes": 168,
+        "instructions": 42,
+        "result_type": "I64",
+        "stack_slots": 3,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-0",
+        "module": "ExprCase30",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "5c946f3c4e4789237940e6a3cb11a69dfc1bc88fe3e9b07783318b2bd84c6901",
+        "binary_sha256": "407e3956d052312973657c0ad613ef26f18fa818afda06f0e2d2d9d0b2f875f9",
+        "binary_bytes": 284,
+        "instructions": 71,
+        "result_type": "I64",
+        "stack_slots": 3,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-1",
+        "module": "ExprCase31",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "bf1ee534a902308f789cee64b74d57c38253e8b0c63e75e3be6a97c6e86c9dfd",
+        "binary_sha256": "8e1b9121a0bd83e074baeee4f9617381aaee023ae9fb053acd248b6896b434a1",
+        "binary_bytes": 24,
+        "instructions": 6,
+        "result_type": "I64",
+        "stack_slots": 1,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-2",
+        "module": "ExprCase32",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "bc04538afd3725ac3bcfffcfaaca2959b1d21b2456d3efdc8fd7fcdfac8e0126",
+        "binary_sha256": "58f7ab54d27b2b78c5d7b669ae8d452d0d5c95cda7a25f02b4de35ee437d3e58",
+        "binary_bytes": 620,
+        "instructions": 155,
+        "result_type": "I64",
+        "stack_slots": 4,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-3",
+        "module": "ExprCase33",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "9ae8b0aad0146e7b08f74cea5c8000147bb1b3697fb8a94a24cde4a13171ee12",
+        "binary_sha256": "bfecc99e0f1eb45c0d6ef198c051b80b119a648701995cd2968bf62ceaa81763",
+        "binary_bytes": 220,
+        "instructions": 55,
+        "result_type": "I64",
+        "stack_slots": 3,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-4",
+        "module": "ExprCase34",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "382c3d63181a90c0a4c069c54da22a6072b0323ecd60dc27a5a9c00faa67a81b",
+        "binary_sha256": "369077d264720e664465d5516a9069c0dba7ea4e277efdd40fb9377da0c56067",
+        "binary_bytes": 108,
+        "instructions": 27,
+        "result_type": "Bool",
+        "stack_slots": 3,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-5",
+        "module": "ExprCase35",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "bf1ee534a902308f789cee64b74d57c38253e8b0c63e75e3be6a97c6e86c9dfd",
+        "binary_sha256": "8e1b9121a0bd83e074baeee4f9617381aaee023ae9fb053acd248b6896b434a1",
+        "binary_bytes": 24,
+        "instructions": 6,
+        "result_type": "I64",
+        "stack_slots": 1,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-6",
+        "module": "ExprCase36",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "4cf1ff0c6a841e90a8732483cafa35be42fc306f6190e4e9f2cca52c080a7bb3",
+        "binary_sha256": "01f78c23124b511eb59228f0ed446fc861a9a2de50e024d0ccae7bb75fb0f695",
+        "binary_bytes": 324,
+        "instructions": 81,
+        "result_type": "I64",
+        "stack_slots": 3,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-7",
+        "module": "ExprCase37",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "a1c253651251db0be1d492fc5948c31b76de4744e10d56294983a7a562fa5bba",
+        "binary_sha256": "1bf2e921673c2e53fdd42ac7ccc885be3568fd4784f5c6d9cde5242a453442ae",
+        "binary_bytes": 68,
+        "instructions": 17,
+        "result_type": "I64",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-8",
+        "module": "ExprCase38",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "893352bfa1413169992c0f8d1f515c0ced346e9591e7b405cd4ab4942b4e2552",
+        "binary_sha256": "d436c65c0af0bc1bd7bc7b83b7d62c41e638076d9649596bfc71097890cf1155",
+        "binary_bytes": 304,
+        "instructions": 76,
+        "result_type": "I64",
+        "stack_slots": 3,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-9",
+        "module": "ExprCase39",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "fa8dfabc51d48bcd505d3545b492f7f94fdf5b546baca58ae63872a93c246fe3",
+        "binary_sha256": "704c17ad332f581c1cb1b0526a612fcec1395f681b1b7945c4f3c6a3bf687fc3",
+        "binary_bytes": 452,
+        "instructions": 113,
+        "result_type": "Bool",
+        "stack_slots": 4,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-10",
+        "module": "ExprCase40",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "117ea874ca7b99e7e34a39b1a2b82b5c5962bb6ec3a6799e81565dbe5a22beea",
+        "binary_sha256": "b7282a33d71857775dfd54ee55ee1a62137113a71c286507497f97e974e149cf",
+        "binary_bytes": 36,
+        "instructions": 9,
+        "result_type": "I64",
+        "stack_slots": 1,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-11",
+        "module": "ExprCase41",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "1ec755cfe51fd5ec0f3c00124aa7bc510e67085ef971af959a8dcc5313acfacb",
+        "binary_sha256": "1918ffe6dec3867337fb779af207197fdd2c56714b1b1076ccd45f63c8d1722f",
+        "binary_bytes": 460,
+        "instructions": 115,
+        "result_type": "I64",
+        "stack_slots": 5,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-12",
+        "module": "ExprCase42",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "e4e6c9b7a6e4028ea988d07808cf9159a004cb9cb3cc95ba0b395ecf741b9ae3",
+        "binary_sha256": "ad96dabd91e18da8d8f1202fa097a1eb68446ad0a9a6c8340da7394015492bbf",
+        "binary_bytes": 360,
+        "instructions": 90,
+        "result_type": "I64",
+        "stack_slots": 3,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-13",
+        "module": "ExprCase43",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "5e66979ee57df46ad79979997176f28f3bd6c767a3222af955c4d852efc5d849",
+        "binary_sha256": "21fbccd6494e6c3536ffd4a2c4be1bcd7a404e1e92bec9cb2de48143b253d729",
+        "binary_bytes": 368,
+        "instructions": 92,
+        "result_type": "I64",
+        "stack_slots": 4,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-14",
+        "module": "ExprCase44",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "03228787ce5ee451399717df347671bfb4c147f774b5d12e143297851dfbfba6",
+        "binary_sha256": "e6568655f251759dee1abae87525fd1e345dffb728534caa92dfbd6cb2e0c071",
+        "binary_bytes": 24,
+        "instructions": 6,
+        "result_type": "Bool",
+        "stack_slots": 1,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-15",
+        "module": "ExprCase45",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "0f4b2aea79b8821fddb49bcfa1664cc2abea7f28529b6775b02fa0ebcf62da5e",
+        "binary_sha256": "a909db34f8026dba6b36d6f96ec94212edb0a8e4042210bfaff8e0be154d7e63",
+        "binary_bytes": 212,
+        "instructions": 53,
+        "result_type": "I64",
+        "stack_slots": 4,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-16",
+        "module": "ExprCase46",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "4b196da32e9b7e93f176b0ac740576cb47e4ff174e767bec0fe510df5e633437",
+        "binary_sha256": "f3d67b1d86df3fed79bbe0c41afcb5464d5120fb172b92e091ccd9c193bdb497",
+        "binary_bytes": 360,
+        "instructions": 90,
+        "result_type": "I64",
+        "stack_slots": 3,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-17",
+        "module": "ExprCase47",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "7f5f50a056564d852cc1174405c8049197a522b1954fb140209eb0e51ccc8072",
+        "binary_sha256": "1ec006699eb2ed945030d4644f627a8d713d080b56355c225b20cdad1ef248bb",
+        "binary_bytes": 36,
+        "instructions": 9,
+        "result_type": "I64",
+        "stack_slots": 1,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-18",
+        "module": "ExprCase48",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "8f2e954a946861655b66ae430c792e2d7161549a033101c6e8104a9ebb4c0d7f",
+        "binary_sha256": "36015eb4655a79645ff153dae78dc9cd5d26306884ccd2953c4d58144acabc42",
+        "binary_bytes": 280,
+        "instructions": 70,
+        "result_type": "I64",
+        "stack_slots": 3,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-19",
+        "module": "ExprCase49",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "8c3e0db65310690b0e135e0ecfd3ffcab2f5bc169a63ddd2bd0eef8d5c3bf7c7",
+        "binary_sha256": "aa25eae90e095bf1f2f3dc90aa30820c9b8a55e1ef5c908ad256fb596cdbf543",
+        "binary_bytes": 228,
+        "instructions": 57,
+        "result_type": "Bool",
+        "stack_slots": 5,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-20",
+        "module": "ExprCase50",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "2443ce7764c186cd4ba0ad48289794ea355934cafc29b9a128164be326000c02",
+        "binary_sha256": "6fa6d9097593fc56d794c97542d334ddb65f75be612548600f3db9e934cb1c2d",
+        "binary_bytes": 36,
+        "instructions": 9,
+        "result_type": "I64",
+        "stack_slots": 1,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-21",
+        "module": "ExprCase51",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "f4979780ecdf7f91ae0f62d6487108ea184446aecc6961f668f650dcda587e4d",
+        "binary_sha256": "4032e7539b3aa5d0d20eae4adf3bb30cf4729f65cc8a6ed3a5c949c4dd925bf0",
+        "binary_bytes": 36,
+        "instructions": 9,
+        "result_type": "I64",
+        "stack_slots": 1,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-22",
+        "module": "ExprCase52",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "2443ce7764c186cd4ba0ad48289794ea355934cafc29b9a128164be326000c02",
+        "binary_sha256": "6fa6d9097593fc56d794c97542d334ddb65f75be612548600f3db9e934cb1c2d",
+        "binary_bytes": 36,
+        "instructions": 9,
+        "result_type": "I64",
+        "stack_slots": 1,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-23",
+        "module": "ExprCase53",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "2d294b8d287b249e2a114cff021eebe466a2e2b41eb3579f977e609fddc3b98b",
+        "binary_sha256": "295c6e21740b9fb010c8e4ec7868cfc2256459b1de68dff97c6a3dafcd30702e",
+        "binary_bytes": 212,
+        "instructions": 53,
+        "result_type": "I64",
+        "stack_slots": 4,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-24",
+        "module": "ExprCase54",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "03228787ce5ee451399717df347671bfb4c147f774b5d12e143297851dfbfba6",
+        "binary_sha256": "e6568655f251759dee1abae87525fd1e345dffb728534caa92dfbd6cb2e0c071",
+        "binary_bytes": 24,
+        "instructions": 6,
+        "result_type": "Bool",
+        "stack_slots": 1,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-25",
+        "module": "ExprCase55",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "1151f2f0c7ce014ea0bb7dd7ae54a6d20bef4fc8a3492d4c0c53377bca5584c3",
+        "binary_sha256": "0cfb6f7eca5b1779634e88c33627e27608bc9be9559fb368683027b5fc0b80d0",
+        "binary_bytes": 396,
+        "instructions": 99,
+        "result_type": "I64",
+        "stack_slots": 4,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-26",
+        "module": "ExprCase56",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "7351fdab3fba7f68b521b787790bc1b1ff662014450caa939891d77464755c95",
+        "binary_sha256": "bfe24bd07fec4d9f46bf9b146db472056558e97c25b204b242d7f105a0284a70",
+        "binary_bytes": 36,
+        "instructions": 9,
+        "result_type": "I64",
+        "stack_slots": 1,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-27",
+        "module": "ExprCase57",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "ef9f78cd832ab439de6816e7afe3df78e8607c853172b8a17eae12ff3fabef12",
+        "binary_sha256": "2115774ae485b255ade2b4b4644dac8064263ac968a284480b8c85b76ffb9dc9",
+        "binary_bytes": 120,
+        "instructions": 30,
+        "result_type": "I64",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-28",
+        "module": "ExprCase58",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "39472719337428234e619a755cb131758e5462ae03b6ffd5cb15897cda1136e5",
+        "binary_sha256": "5a0b644b4b6cccdbfde87e781d676425e97e3e61738b20ccb85783ae41a0d505",
+        "binary_bytes": 544,
+        "instructions": 136,
+        "result_type": "I64",
+        "stack_slots": 5,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-29",
+        "module": "ExprCase59",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "bb87556e1eba8ed680292e4da305dff9af11e6254539c30e0ba33728ff88acaf",
+        "binary_sha256": "8127242724492fd9402bd4dedca2bce0877be82de6e77f3e01fed75b682ebd7f",
+        "binary_bytes": 280,
+        "instructions": 70,
+        "result_type": "Bool",
+        "stack_slots": 5,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-30",
+        "module": "ExprCase60",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "a9f810e374dc173cdbb270530edb31aa267216810fb7652cd996c32e1775add4",
+        "binary_sha256": "6cb2cdf16b2fa9d80472d13fbcaeac42c7b3db631c3337c8deaec79c5b1f760d",
+        "binary_bytes": 316,
+        "instructions": 79,
+        "result_type": "I64",
+        "stack_slots": 4,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-31",
+        "module": "ExprCase61",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "b73c7344c5862e285bd8282c39d126a952567c648182197f22b4abccaf4b2939",
+        "binary_sha256": "6e46790b5b2cd54f504204fbc48d5b0818a419bc78440dc904cc81f783834b93",
+        "binary_bytes": 432,
+        "instructions": 108,
+        "result_type": "I64",
+        "stack_slots": 3,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-32",
+        "module": "ExprCase62",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "4d781ab0d41d03eec8598c08953c329b8c8c9190472c3122b1b0640514432c11",
+        "binary_sha256": "756bcfa01850c7bbf51636f6890515300f18dbdd5bbf7aff6b3f1c6d25ff07ed",
+        "binary_bytes": 36,
+        "instructions": 9,
+        "result_type": "I64",
+        "stack_slots": 1,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-33",
+        "module": "ExprCase63",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "2bad0fd17b56ec05352a71f8b0fb9a532fe1c2b5e866824c016c7812746ba9fa",
+        "binary_sha256": "9408c10dd585f9316a3ba1361d0286445d9c2206a14bd055de6c4204be03ec7f",
+        "binary_bytes": 88,
+        "instructions": 22,
+        "result_type": "I64",
+        "stack_slots": 2,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-34",
+        "module": "ExprCase64",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "03228787ce5ee451399717df347671bfb4c147f774b5d12e143297851dfbfba6",
+        "binary_sha256": "e6568655f251759dee1abae87525fd1e345dffb728534caa92dfbd6cb2e0c071",
+        "binary_bytes": 24,
+        "instructions": 6,
+        "result_type": "Bool",
+        "stack_slots": 1,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-35",
+        "module": "ExprCase65",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "c5ebeecb2910daf1ef76f4fb273e47a9bd26cff4e85f9d56f0fe6764c01eecb4",
+        "binary_sha256": "27a66da92f268ca3127b4fe9bc0557400e9d9d272174a7fbcab3346cd92effd7",
+        "binary_bytes": 416,
+        "instructions": 104,
+        "result_type": "I64",
+        "stack_slots": 4,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-36",
+        "module": "ExprCase66",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "9382d97982a6d185fc78559c173e01d5b69f256618740f074dd40c69b5335848",
+        "binary_sha256": "2f329ab12a30b7f27a412dba24112d79186e60ae8f4494df4e85a568054be2b2",
+        "binary_bytes": 344,
+        "instructions": 86,
+        "result_type": "I64",
+        "stack_slots": 4,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-37",
+        "module": "ExprCase67",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "0f5ddd8c2aaea6221d07f4b32b0674fcc24242e3a3f6a0761386d3072a128137",
+        "binary_sha256": "7aeb11d9be21cd838479433f912806ee5de719b7e9f063b696e2db6319578828",
+        "binary_bytes": 592,
+        "instructions": 148,
+        "result_type": "I64",
+        "stack_slots": 5,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-38",
+        "module": "ExprCase68",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "cee7a329553e47fbe84af1720fcf92d8cef08e8d7ff20abc90b2a51030eeb802",
+        "binary_sha256": "ed57c665b053092fea1911b81f33c7512ebb580ff69ddf64ed62b700b2ab67c9",
+        "binary_bytes": 364,
+        "instructions": 91,
+        "result_type": "I64",
+        "stack_slots": 4,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      },
+      {
+        "name": "gen-39",
+        "module": "ExprCase69",
+        "profile": "fenrir-aarch64-checked-expr/1",
+        "result_abi": "fenrir-aarch64-result-abi/1",
+        "artifact_sha256": "253105b2c8f36bb133c506edf6993fafb35415216290299bab31f9da691633cc",
+        "binary_sha256": "062171aadf6c03f3e3397ab4804e5e7988a6cad2717b6f7c6cc242033436e8d4",
+        "binary_bytes": 340,
+        "instructions": 85,
+        "result_type": "Bool",
+        "stack_slots": 4,
+        "scope": "Function only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle"
+        ]
+      }
+    ]
+  },
+  "call": {
+    "schema": "fenrir.aarch64.call-check/1",
+    "profile": "fenrir-aarch64-checked-call/1",
+    "abi": "fenrir-aarch64-call-abi/1",
+    "status": "development-pass",
+    "qualification": "UNKNOWN",
+    "node": "v22.23.3",
+    "versions": {
+      "coqc": "rocq: The Rocq Prover, version 9.3.0",
+      "coqchk": "rocqchk: The Rocq Proof Checker, version 9.3.0",
+      "as": "aarch64-unknown-linux-gnu-as: GNU assembler (GNU Binutils) 2.46",
+      "ld": "aarch64-unknown-linux-gnu-ld: GNU ld (GNU Binutils) 2.46",
+      "objcopy": "aarch64-unknown-linux-gnu-objcopy: GNU objcopy (GNU Binutils) 2.46",
+      "qemu": "qemu-aarch64: qemu-aarch64 version 11.1.1"
+    },
+    "source_inventory": {
+      "verification/aarch64/Machine.v": "52f48da1f18adef8ebe7cb6edea039b4ddb2f5ab92c5be2b1d47aeb0f4413188",
+      "verification/aarch64/Encode.v": "a4bb9789a5438c1ba0e356d3d3dffa28f66b303cff7ece7803a846d325563f09",
+      "verification/aarch64/Compile.v": "20bdc67350519a5820429a20834ba1eff2158aa8f3cff3cca4ecc3d6039b5f2f",
+      "verification/aarch64/CallCompile.v": "95b0c533d5eed087caaa91a0d6eb50b9e6596ad9bfd945fd672e5091803cc4ab",
+      "tools/aarch64/call.mjs": "d9385c84eb93098e1d3b1cec5cfd605f1a18805c3c34a0a3c5ac1a087f852d90",
+      "tools/aarch64/call-fixtures.mjs": "163b77582738f831bff421871b9870e15e7991760d7f22711b4929d175e29e84",
+      "tools/aarch64/check-call.mjs": "23d1047d91f5f2b515cd90ae8e26831f71a158c5645e19d4198be63f2d3a32ba",
+      "tools/aarch64/expr.mjs": "0e411ae4b033374640c26772a05f9504a4870dd433e6226ea29026213b95d1b5",
+      "tools/tc0/pure-call-artifact.mjs": "81c4380eab5012474ce0903ed247731f88ff010dc55c404e89427cd736f05226",
+      "runtime/tc0/pure-call-machine.mjs": "0108c9ddd11079be70c19a095dd039538181d2d38b8761ef7f8c8dc0d5673cc4"
+    },
+    "programs": 14,
+    "proof_instances": 14,
+    "tail_constant_stack_instances": 5,
+    "gnu_as_checked": 14,
+    "native_comparisons": 436,
+    "outcomes": {
+      "Ok:int": 345,
+      "Ok:bool": 36,
+      "Trap:Overflow": 54,
+      "Trap:DivZero": 1
+    },
+    "rejected_mutants": [
+      {
+        "name": "saved-link-register",
+        "program": "sum-recursive",
+        "instruction": 38,
+        "word": "f81f0ffd",
+        "qemu": "crashed or launcher check failed"
+      },
+      {
+        "name": "link-reload-slot",
+        "program": "sum-recursive",
+        "instruction": 70,
+        "word": "f9400bfe",
+        "qemu": "crashed or launcher check failed"
+      },
+      {
+        "name": "trap-frame-restore",
+        "program": "callee-overflow",
+        "instruction": 8,
+        "word": "91000129",
+        "qemu": "crashed or launcher check failed"
+      },
+      {
+        "name": "frame-base-restore",
+        "program": "callee-divzero",
+        "instruction": 5,
+        "word": "910043e9",
+        "qemu": "crashed or launcher check failed"
+      },
+      {
+        "name": "call-target",
+        "program": "sum-recursive",
+        "instruction": 68,
+        "word": "97ffffe1",
+        "qemu": "crashed or launcher check failed"
+      },
+      {
+        "name": "callee-status-test",
+        "program": "chain",
+        "instruction": 7,
+        "word": "b5000061",
+        "qemu": "different results"
+      },
+      {
+        "name": "tail-frame-release",
+        "program": "count-down-tail",
+        "instruction": 34,
+        "word": "91000129",
+        "qemu": "crashed or launcher check failed"
+      },
+      {
+        "name": "tail-target",
+        "program": "even-odd-mutual-tail",
+        "instruction": 97,
+        "word": "17ffffc6",
+        "qemu": "different results"
+      }
+    ],
+    "universal_theorems": [
+      "CallCompile.call_correct",
+      "CallCompile.tail_calls_constant_stack",
+      "CallCompile.tail_program_correct"
+    ],
+    "claims": {
+      "universal_handwritten_model_proof": true,
+      "exact_byte_identity": true,
+      "coqchk_replay": true,
+      "stack_overflow_covered": false,
+      "authoritative_ARM_refinement": false,
+      "json_projection_verified": false,
+      "whole_process": false
+    },
+    "receipts": [
+      {
+        "name": "sum-recursive",
+        "module": "CallCase0",
+        "inputs": 36,
+        "profile": "fenrir-aarch64-checked-call/1",
+        "abi": "fenrir-aarch64-call-abi/1",
+        "artifact_sha256": "83bf0b4ae45709dd42b7d67fdb92b125ede4640613b039eef8613436ce5fa3b3",
+        "binary_sha256": "ca6d7b55b598e9a30585da2057b7c645097314933e492d4595d4e17611605c5b",
+        "binary_bytes": 348,
+        "instructions": 87,
+        "functions": 2,
+        "entry_offset": 0,
+        "result_type": "I64",
+        "tail_only": false,
+        "table_need": 4,
+        "scope": "Function table only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle",
+          "stack-overflow"
+        ]
+      },
+      {
+        "name": "count-down-tail",
+        "module": "CallCase1",
+        "inputs": 36,
+        "profile": "fenrir-aarch64-checked-call/1",
+        "abi": "fenrir-aarch64-call-abi/1",
+        "artifact_sha256": "b7c7c97f8b34677e6dab81204d87323197fe8c7d2e0aebce5e3959885d008231",
+        "binary_sha256": "681bbc05824aa3d49e9df001168cf5aa440fcbfeb564b27f86d30d796046e687",
+        "binary_bytes": 268,
+        "instructions": 67,
+        "functions": 2,
+        "entry_offset": 0,
+        "result_type": "I64",
+        "tail_only": true,
+        "table_need": 3,
+        "scope": "Function table only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle",
+          "stack-overflow"
+        ]
+      },
+      {
+        "name": "even-odd-mutual-tail",
+        "module": "CallCase2",
+        "inputs": 36,
+        "profile": "fenrir-aarch64-checked-call/1",
+        "abi": "fenrir-aarch64-call-abi/1",
+        "artifact_sha256": "68e3659954283ed39fd2d1a9a4371936c642f62475b5d2555b541a9f4cb5be13",
+        "binary_sha256": "9a940710b96345279939053b28e4e7f68b94167f9e196b4840aca2cd137e7be3",
+        "binary_bytes": 392,
+        "instructions": 98,
+        "functions": 3,
+        "entry_offset": 0,
+        "result_type": "Bool",
+        "tail_only": true,
+        "table_need": 3,
+        "scope": "Function table only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle",
+          "stack-overflow"
+        ]
+      },
+      {
+        "name": "callee-overflow",
+        "module": "CallCase3",
+        "inputs": 36,
+        "profile": "fenrir-aarch64-checked-call/1",
+        "abi": "fenrir-aarch64-call-abi/1",
+        "artifact_sha256": "125a83e9c39d1effe94aa71327da9cef124449d22c6b5a9ea3a15f1471d7c806",
+        "binary_sha256": "5eb11f1072fc4c95a6062bbe63e90baf77d94b31d14b9af88d512835f513408e",
+        "binary_bytes": 172,
+        "instructions": 43,
+        "functions": 2,
+        "entry_offset": 0,
+        "result_type": "I64",
+        "tail_only": false,
+        "table_need": 4,
+        "scope": "Function table only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle",
+          "stack-overflow"
+        ]
+      },
+      {
+        "name": "callee-divzero",
+        "module": "CallCase4",
+        "inputs": 36,
+        "profile": "fenrir-aarch64-checked-call/1",
+        "abi": "fenrir-aarch64-call-abi/1",
+        "artifact_sha256": "a25d255a5a72f21b5973f1a4db9694a5398a421b843b6f297a012dbe2a946443",
+        "binary_sha256": "8e4087811ae0b98fac99878240c88fa18dfe1ff52023a43d29b00a73ebf57458",
+        "binary_bytes": 192,
+        "instructions": 48,
+        "functions": 2,
+        "entry_offset": 0,
+        "result_type": "I64",
+        "tail_only": false,
+        "table_need": 4,
+        "scope": "Function table only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle",
+          "stack-overflow"
+        ]
+      },
+      {
+        "name": "chain",
+        "module": "CallCase5",
+        "inputs": 36,
+        "profile": "fenrir-aarch64-checked-call/1",
+        "abi": "fenrir-aarch64-call-abi/1",
+        "artifact_sha256": "838e47f778f652ed7968e09da918ed819fa58b17c3b6fcb5a8b78efc02878691",
+        "binary_sha256": "4a9bf92e09161cfd4e7ef82f2e519c5ba7edcaa51da85079855f78c55efdd023",
+        "binary_bytes": 308,
+        "instructions": 77,
+        "functions": 3,
+        "entry_offset": 0,
+        "result_type": "I64",
+        "tail_only": false,
+        "table_need": 5,
+        "scope": "Function table only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle",
+          "stack-overflow"
+        ]
+      },
+      {
+        "name": "bool-parameter",
+        "module": "CallCase6",
+        "inputs": 36,
+        "profile": "fenrir-aarch64-checked-call/1",
+        "abi": "fenrir-aarch64-call-abi/1",
+        "artifact_sha256": "fadfe33b12e48211b43674495aa34eb402d880a7a16c214c89f843011d1a228e",
+        "binary_sha256": "5cdde9fd6487c324638bc3e33d69ff9ae2afcadcb4451a770ebc33918661c27d",
+        "binary_bytes": 200,
+        "instructions": 50,
+        "functions": 2,
+        "entry_offset": 0,
+        "result_type": "I64",
+        "tail_only": false,
+        "table_need": 4,
+        "scope": "Function table only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle",
+          "stack-overflow"
+        ]
+      },
+      {
+        "name": "call-in-branch",
+        "module": "CallCase7",
+        "inputs": 36,
+        "profile": "fenrir-aarch64-checked-call/1",
+        "abi": "fenrir-aarch64-call-abi/1",
+        "artifact_sha256": "af3f4e99f82f8c28d5375e23efeadd5ca779d1d8fe8fedad61c63a31eb17b1ec",
+        "binary_sha256": "3341b1b193733e29a3235f5b1e71cf43c52394a4c4a66fddd2b16720e3591435",
+        "binary_bytes": 224,
+        "instructions": 56,
+        "functions": 2,
+        "entry_offset": 0,
+        "result_type": "I64",
+        "tail_only": true,
+        "table_need": 3,
+        "scope": "Function table only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle",
+          "stack-overflow"
+        ]
+      },
+      {
+        "name": "collatz-tail",
+        "module": "CallCase8",
+        "inputs": 36,
+        "profile": "fenrir-aarch64-checked-call/1",
+        "abi": "fenrir-aarch64-call-abi/1",
+        "artifact_sha256": "6e36afb9cc32267d50fc905a6a3b554f0e14c094406b51b9600a63c3718a2904",
+        "binary_sha256": "e56910f2f28472965557b647ab4bf5717cd964865b6639db662031eefa55ac9e",
+        "binary_bytes": 540,
+        "instructions": 135,
+        "functions": 2,
+        "entry_offset": 0,
+        "result_type": "I64",
+        "tail_only": true,
+        "table_need": 4,
+        "scope": "Function table only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle",
+          "stack-overflow"
+        ]
+      },
+      {
+        "name": "let-before-call",
+        "module": "CallCase9",
+        "inputs": 36,
+        "profile": "fenrir-aarch64-checked-call/1",
+        "abi": "fenrir-aarch64-call-abi/1",
+        "artifact_sha256": "65783ee26c7d5615a050eda3408a66362a8275303ff335dd41ed9d9efa2e0f19",
+        "binary_sha256": "ee00a7288b97dd59e31aee90af3b0221e134cbc78d54f229170289875f5d9dfa",
+        "binary_bytes": 184,
+        "instructions": 46,
+        "functions": 2,
+        "entry_offset": 0,
+        "result_type": "I64",
+        "tail_only": false,
+        "table_need": 5,
+        "scope": "Function table only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle",
+          "stack-overflow"
+        ]
+      },
+      {
+        "name": "entry-not-first-in-callee-order",
+        "module": "CallCase10",
+        "inputs": 36,
+        "profile": "fenrir-aarch64-checked-call/1",
+        "abi": "fenrir-aarch64-call-abi/1",
+        "artifact_sha256": "d0e0d80febd58cc7af115c2c7b347d8ae46dc85d3f28fccf7f50eb1420c71af2",
+        "binary_sha256": "b038565be997b93d0a5153859bee749e8ccda3a262ed36849d34cdb27b7944b5",
+        "binary_bytes": 176,
+        "instructions": 44,
+        "functions": 3,
+        "entry_offset": 0,
+        "result_type": "I64",
+        "tail_only": false,
+        "table_need": 3,
+        "scope": "Function table only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle",
+          "stack-overflow"
+        ]
+      },
+      {
+        "name": "fib-recursive",
+        "module": "CallCase11",
+        "inputs": 36,
+        "profile": "fenrir-aarch64-checked-call/1",
+        "abi": "fenrir-aarch64-call-abi/1",
+        "artifact_sha256": "560fe8cc64d22845c81ca21d8b233554dcdcc2917d46b4ee7a8b7e0052d323db",
+        "binary_sha256": "ff769d9c151900c1767c2ee892f42f1f41a589d4f0699337e28b92f51c8fe5a6",
+        "binary_bytes": 412,
+        "instructions": 103,
+        "functions": 2,
+        "entry_offset": 0,
+        "result_type": "I64",
+        "tail_only": false,
+        "table_need": 5,
+        "scope": "Function table only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle",
+          "stack-overflow"
+        ]
+      },
+      {
+        "name": "deep-recursion",
+        "module": "CallCase12",
+        "inputs": 2,
+        "profile": "fenrir-aarch64-checked-call/1",
+        "abi": "fenrir-aarch64-call-abi/1",
+        "artifact_sha256": "9b049962ac59ca7dc7b7606b65b56fbe479d44c620eb414260712cf1f9f41ee5",
+        "binary_sha256": "d132a818217493920331404d938e380c64dc25a55a2f18ebe9c192f99e14d65c",
+        "binary_bytes": 348,
+        "instructions": 87,
+        "functions": 2,
+        "entry_offset": 0,
+        "result_type": "I64",
+        "tail_only": false,
+        "table_need": 4,
+        "scope": "Function table only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle",
+          "stack-overflow"
+        ]
+      },
+      {
+        "name": "long-tail-loop",
+        "module": "CallCase13",
+        "inputs": 2,
+        "profile": "fenrir-aarch64-checked-call/1",
+        "abi": "fenrir-aarch64-call-abi/1",
+        "artifact_sha256": "766dc0f729591a9bfe5610647d751f492548ed036032f05afcc51d1a280cc3f5",
+        "binary_sha256": "365ee36d9f6dfd997031d6d43b893b154a3c4e9768c81ad8f272d702054c559b",
+        "binary_bytes": 268,
+        "instructions": 67,
+        "functions": 2,
+        "entry_offset": 0,
+        "result_type": "I64",
+        "tail_only": true,
+        "table_need": 3,
+        "scope": "Function table only; handwritten instruction model; no Sail/ARM correspondence proof",
+        "open_obligations": [
+          "json-projection",
+          "authoritative-isa-refinement",
+          "loader-and-call-abi",
+          "native-runtime",
+          "process-lifecycle",
+          "stack-overflow"
+        ]
+      }
+    ]
+  },
+  "differential": {
+    "schema": "fenrir.harness.aarch64-differential/1",
+    "status": "development-pass",
+    "qualification": "UNKNOWN",
+    "harness": "Shen",
+    "shen": "shen-jit 0.7 43.6",
+    "rocq": "The Rocq Prover, version 9.3.0",
+    "claim": "The lane-local source semantics (Core.v eval_expr, Expr.v eval_main, CallCompile.v ceval) agrees with models/tc0/pure-call-machine.shen on these cases; tested, not proved",
+    "projection": "tools/aarch64/compile.mjs, expr.mjs and call.mjs, unverified (ARM-02); the same projection the compiler uses",
+    "programs": "94",
+    "inputs": "40",
+    "cases": "3760",
+    "model_outcomes": {
+      "Ok:int": "2293",
+      "Trap:Overflow": "748",
+      "Trap:DivZero": "86",
+      "Ok:bool": "633"
+    },
+    "model_incomplete": "0",
+    "rocq_agreement": "Agreement.v: failures = [] proved over 3760 cases",
+    "negative_control": "Control.v: failures = [0; 480; 512; 3280] proved (exactly the falsified cases)"
+  }
+}

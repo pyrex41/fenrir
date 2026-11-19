@@ -1,7 +1,8 @@
 #!/bin/sh
 # Run the TC1 gate (registered as tc1-qualification in .pi/fenrir-workflow.json). Usage: sh harness/run-tc1-gate.sh
 # It runs the TC0-A gate as one of its rows, so allow about nine minutes.
-# Exit status: 0 verdict PASS, 1 FAIL, 2 anything else (BLOCKED, UNKNOWN).
+# Exit status: 0 PASS, 1 FAIL, 2 BLOCKED/UNKNOWN. With a nonce, exit follows the
+# framed verdict (UNKNOWN on runners outside the legacy qualification profile).
 # Run by the workflow controller (FENRIR_CHECK_NONCE set), it prints only the
 # controller's check record on standard output.
 set -eu

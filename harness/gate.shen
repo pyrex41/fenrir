@@ -192,7 +192,7 @@
   "solo5-guest-agreement" Memo -> (fh.solo5-guest-agreement Memo)
   Name Memo -> (fh.row "UNKNOWN" [(cn "The evaluator has no check named " Name)] [] Memo))
 
-\\ Registered: the manifest is owner-accepted and the workflow's qualification check runs this gate.
+\\ Registered configuration: gate-core also checks the legacy qualification platform.
 (define fh.registered?
   Manifest -> (fh.registered-as "tc0-a-qualification" "harness/run-gate.sh" Manifest))
 
