@@ -103,7 +103,10 @@ pin is rejected even if the actual rows match.
   fault witness projects to a gap, not a semantic rejection. A missing
   immediate store observation after either fault is also indeterminate.
 
-The worker harness reads phase and rows in an independent SQLite transaction.
+The worker harness reads phase and projected rows in an independent SQLite
+transaction: report IDs and digests (not payload bytes), job rows and attempts,
+key/receipt rows, and tenant counters. Equality is of this projection, not of
+report payloads or the SQLite file's bytes.
 The verifier projects matching image pins to the abstract A4 model image and
 checks model responses and observations; it does not infer executions from
 pins alone. The harness also requires an exact verdict for every positive and
@@ -118,3 +121,7 @@ a node crash or a general fault event in this schema. The bounded campaign
 checks the completeness of the planned histories, operation-specific fault
 witnesses, post-restart state, same-key retries, and negative controls outside the
 model, in `host/service/tools/a4-crash-evidence.mjs`.
+This evidence gate also requires strictly overlapping call intervals from one
+monotonic clock, the two distinct front-selected workers, and a final `drained`
+milestone corroborated by the zero-pending query and final v2 observation.
+An admissible trace that omits such a milestone is not campaign evidence.

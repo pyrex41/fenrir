@@ -52,7 +52,10 @@ routing advice, and selects a PID in the active bank: v1 in `v1`/`prepared`,
 no bank in `migrated`, and v2 in `v2`. The transaction fence remains authoritative
 if the phase changes after routing. The supervisor retires the old bank after
 cut-over without restarting the front; retrying the same cut-over resumes that
-retirement. On restart in `v2`, only the matching v2 bank starts. A node/front
+retirement. Restart reads the durable phase before admitting v1. In `v2`, the
+matching v2 bank starts even with the retired v1 descriptor and bundle absent.
+Before `v2`, both bundles are still required and must have matching request
+domains. A node/front
 restart still loses the volatile outbox as in A3.
 
 The pilot boots stock Solo5 v1, migration, and v2 guests on a temporary store.
@@ -61,7 +64,11 @@ batch digests. Each opted-in worker launch checks the phase (and the durable pin
 for v2), loads the pinned descriptor, artifact, image, and tender again, and
 launches private copies of the image and tender from those checked bytes, not
 from the descriptor's original paths. The launch directory and launcher are
-trusted host configuration and the image builder is a trusted source of images.
+trusted host configuration. Admission does not attest how an image or tender was
+built: the privileged operator, image builder, descriptors and binaries at
+initial admission, host filesystem, and private launch directory are trusted.
+Rechecking a durable pin proves identity with the admitted bytes, not
+provenance, correctness, or safety of an operator-supplied executable.
 The migration process is itself the monitored owner. It reads one row at a
 time from a bounded snapshot, stages typed rows, and asks the store to validate
 and atomically install them. A changed snapshot can be explicitly refreshed by
@@ -106,20 +113,31 @@ recorder and independent Linux BEAM processes on disposable SQLite files.
   `node-v1`, `node-prepared`, `node-migrated`, `node-v2`, and
   `worker-v2-before-reply`. Each node row requires the exact OS signal
   receipt, exit 137, a distinct restarted BEAM, and an identical independently
-  observed phase and store before and after the fault. It verifies that the
+  observed phase and store **projection** before and after the fault: report
+  IDs and digests, job rows and attempts, receipt rows, and tenant counters.
+  The observer does not compare payload bytes or bytewise SQLite contents.
+  It verifies that the
   old outbox is empty until retry, and finishes at v2 with every accepted job
   drained. The worker row correlates the actual front-selected worker with
   `w3_commit_before_reply` and a monitor-observed `killed` reason, observes the
   replacement in the same BEAM/front, and independently reads the durable
   receipt before either retry. It checks the old outbox entry survives, the
   dead worker does not publish the new entry, and overlapping same-key retries
-  on distinct v2 workers return the same receipt without changing the store.
+  on distinct v2 workers return the same receipt without changing that
+  projection at the retry boundary.
 - The five histories and six controls are reported in `crash-report.json`.
   Gaps, missing phase observations and invalid fault witnesses are
-  indeterminate. A missing planned row or nonmatching verifier result makes
-  the campaign `UNKNOWN`. The per-boot maintenance PID belongs to the
-  existing privileged `fenrir_node` fixture controller; no operator
-  credential travels in serialized config or customer traffic.
+  indeterminate. All five scenarios must end with a recorded zero-pending
+  query (`drained`) and independent v2 observation with no pending jobs.
+  The worker pilot and crash campaign retain interval endpoints in monotonic
+  microseconds and the two front-selected worker PIDs; their gates check
+  strict overlap, distinct PIDs, the expected bank and the history position.
+  Six omission and substitution controls exercise these checks. Missing
+  evidence, planned rows, or matching verdicts cannot certify the campaign.
+  The per-boot maintenance PID belongs to the existing privileged
+  `fenrir_node` fixture controller; its local command pipe is trusted and
+  can impersonate any fixture tenant. No operator credential travels in
+  customer traffic or is read from serialized config.
 
 ## Remaining work
 
