@@ -77,6 +77,36 @@
         dontFixup = true;
       };
 
+      # Native ARM64 Linux development toolchain. The bootstrap and hash are
+      # those in the pinned Shen/JIT revision's tools/ci-deps.sh. This output
+      # does not change the x86 qualification profile or qualify ARM runs.
+      arm-pkgs = nixpkgs.legacyPackages.aarch64-linux;
+      arm-bootstrap = arm-pkgs.fetchurl {
+        url = "https://github.com/tizoc/shen-jit/releases/download/v0.1/shen-jit-0.1-linux-arm64-static.tar.gz";
+        sha256 = "2aad3cce35a39be0d9f8859122a4ad1582564ba6afad597054b2cfb2011f0f9d";
+      };
+      arm-shen-jit = arm-pkgs.stdenv.mkDerivation {
+        pname = "shen-jit";
+        version = "0.7";
+        src = shen-jit-src;
+        buildPhase = ''
+          mkdir -p .deps/kernel .deps/shen-jit
+          tar -C .deps/kernel --strip-components=1 -xzf ${shen-jit-kernel}
+          tar -C .deps/shen-jit --strip-components=1 -xzf ${arm-bootstrap}
+          make
+          make process
+        '';
+        installPhase = ''
+          mkdir -p $out/bin $out/lib
+          cp build/shen-jit $out/bin/
+          cp lib/*.shen $out/lib/
+          cp build/shen-process.so $out/lib/
+        '';
+        dontStrip = true;
+        dontPatchELF = true;
+        dontFixup = true;
+      };
+
       # Solo5 at the pinned commit, built from source and installed with its own
       # `make install`: bin/ holds solo5-spt, solo5-hvt, solo5-elftool and the
       # x86_64-solo5-none-static-{cc,ld,objcopy} wrappers, which find include/ and
@@ -265,6 +295,7 @@
       '';
     in {
       packages.${system} = { inherit shen-scheme shen-cl shen-jit solo5 solo5-batches hvt-compare yggdrasil link-toolchain erlang; default = link-toolchain; };
+      packages.aarch64-linux.shen-jit = arm-shen-jit;
       checks.${system}.hvt = hvt-vm-test;
       apps.${system} = {
         default = { type = "app"; program = "${link-toolchain}/bin/fenrir-link-toolchain"; };
