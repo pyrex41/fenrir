@@ -113,7 +113,7 @@ unverified = ('false = lists:any(fun(E) -> hd(E) =:= <<"fault">> end, Events), '
               '{fault_fired,false,_} = lists:keyfind(fault_fired,1,maps:get(checks,S)), '
               'not fenrir_campaign:fault_evidence(S)')
 if not gap_baseline and not observe_baseline:
-    submit_context = '_' if baseline else '{_, Tokens}'
+    submit_context = '_' if baseline else '{_, Tokens, _}'
     submit_call = 'fenrir_front:submit(T, K, D, P)' if baseline else 'fixture_submit(Tokens, T, K, D, P)'
     submit = f'command({{submit, T, K, D, P}}, {submit_context}) -> {submit_call};'
     run("unrelated-node-sigkill", "crash_points", "w2_request_before_commit-kill_node-submit",
