@@ -1,6 +1,6 @@
 %% Real stock Solo5 worker fixtures. These are not /2 campaign histories.
 -module(fenrir_a4_workers).
--export([main/1]).
+-export([main/1, observed/2]).
 
 main([Out, Launcher, V1Path, V2Path, Migration]) ->
     try run(Out, Launcher, V1Path, V2Path, Migration) of
@@ -207,27 +207,32 @@ wait_worker(Name, Previous, N) ->
     end.
 
 %% Independent SQLite observer, with rows and durable metadata in one snapshot.
-observed(Db, Expected = {Phase, _, HP, MP}) ->
+observed(Db, Expected) ->
+    {V, U} = case Expected of
+        v1 -> {1, [<<"v1">>]};
+        {P1, _, HP, MP} ->
+            {case P1 of prepared -> 1; _ -> 2 end, [atom_to_binary(P1), hex(HP), hex(MP)]}
+    end,
     {ok, P} = fenrir_store:open_configured(Db, normal),
     try
         [] = rows(P, "BEGIN"),
         [[Schema, Encoded]] = rows(P, "SELECT s.v,u.v FROM meta s,meta u WHERE s.k='schema' AND u.k='upgrade'"),
         {ok, Expected} = fenrir_upgrade_state:decode(Schema, Encoded),
         R = rows(P, "SELECT tenant,id,digest FROM reports ORDER BY tenant,id"),
-        J = case Phase of
-            prepared -> rows(P, "SELECT tenant,id,report,status FROM jobs ORDER BY tenant,id");
+        J = case V of
+            1 -> rows(P, "SELECT tenant,id,report,status FROM jobs ORDER BY tenant,id");
             _ -> rows(P, "SELECT tenant,id,report,status,attempts FROM jobs ORDER BY tenant,id")
         end,
         K0 = "SELECT tenant,key,digest,r_tenant,r_key,r_digest,r_report,r_job,",
-        K = rows(P, K0 ++ (case Phase of prepared -> "1"; _ -> "receipt_version" end) ++
+        K = rows(P, K0 ++ (case V of 1 -> "1"; _ -> "receipt_version" end) ++
                     " FROM request_keys ORDER BY tenant,key"),
         Next = rows(P, "SELECT tenant,next FROM tenants ORDER BY tenant"),
         [] = rows(P, "COMMIT"),
         Stores = [[ [Rest || [T|Rest] <- R, T =:= Tenant],
                     [Rest || [T|Rest] <- J, T =:= Tenant],
-                    [[Key,D,receipt([RT,RK,RD,RR,RJ],V)] || [T,Key,D,RT,RK,RD,RR,RJ,V] <- K, T =:= Tenant],
+                    [[Key,D,receipt([RT,RK,RD,RR,RJ],RV)] || [T,Key,D,RT,RK,RD,RR,RJ,RV] <- K, T =:= Tenant],
                     N] || [Tenant,N] <- Next],
-        [<<"observe">>, Stores, [atom_to_binary(Phase), hex(HP), hex(MP)]]
+        [<<"observe">>, Stores, U]
     after fenrir_sqlite:close(P) end.
 
 rows(P, Q) -> {rows, R} = fenrir_sqlite:exec(P, Q), R.

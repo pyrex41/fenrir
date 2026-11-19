@@ -145,7 +145,11 @@
                                    "a client was told a response that no model state has computed"))
   ["respond-refused" E] Cs -> (sh.result (sh.filter (/. C (shu.outbox-lacks? (shu.event-of E) C)) Cs)
                                          "the service refused a response every model state could deliver")
-  ["crash" _] Cs -> (sh.result (sh.each (/. C (shu.step C [crash] none)) Cs) "crash not admitted")
+  ["crash" "node" _ _ 137] Cs ->
+    (sh.result (sh.each (/. C (shu.step C [crash] none)) Cs) "crash not admitted")
+  ["submit-committed-unpublished" T K D _ _] Cs ->
+    (sh.result (sh.each (/. C (shu.unpublished C [submit T K D])) Cs)
+               "no committed submit without publication was admitted")
   ["observe" Stores U] Cs -> (sh.result (sh.filter (/. C (and (shu.stores-equal? Stores C) (= (sup.u (hd C)) (shu.upgrade-of U)))) Cs)
                                         "the observed stores or upgrade state differ from those of every model state")
   ["upgrade" Step | Rest] Cs ->
@@ -172,6 +176,23 @@
   [ok Cs] -> Cs
   _ -> [])
 
+\\ The observed w3 death occurred after the commit and before the first
+\\ reply. Check the normal model transaction, but retain the prior outbox:
+\\ neither this receipt nor any synthetic crash can publish a response.
+(define shu.unpublished
+  [X M] Label ->
+    (let R (sua.step Label X)
+      (if (and (= (hd (sup.u X)) v2) (cons? R) (cons? (nth 3 R)) (= (hd (nth 3 R)) accepted))
+          (shu.no-publication X (shu.step [X M] Label (nth 3 R)))
+          [])))
+
+(define shu.no-publication
+  [up4 _ [sys _ Outbox _]] [[[up4 U [sys Stores _ Trace]] M]] ->
+    (let State [up4 U [sys Stores Outbox Trace]]
+         Violations (sup.state-violations (shu.step-fn) M State)
+      (if (empty? Violations) [[State M]] [[violated Violations]]))
+  _ Rows -> Rows)
+
 (define shu.run
   [] _ Cs Max -> [accepted Max]
   [E | Es] I Cs Max ->
@@ -191,7 +212,8 @@
          _ (if (and (shu.pin? HP) (shu.pin? MP) (not (= HP MP))) ok (error "bad A4 evidence pins"))
          Events (map (/. E (shu.project E HP MP)) Raw)
          Start [[(sua.initial Tenants) (sup.monitor-initial)]]
-         Gap (shu.gap-at Events 0)
+         RawGap (shu.gap-at Raw 0)
+         Gap (if (cons? RawGap) RawGap (shu.gap-at Events 0))
          Invalid (shu.invalid-at Events 0)
          Missing (shu.unobserved Events 0)
          R (cond ((cons? Gap) [indeterminate (hd Gap) (nth 2 Gap) "recorder gap"])
@@ -219,7 +241,13 @@
     ["observe" Stores [Phase "good"]] where (element? Phase ["prepared" "migrated" "v2"])
   ["upgrade" "begin" | X] _ _ -> ["invalid-observation-or-unsupported-event" ["upgrade" "begin" | X]]
   ["concurrent" [A B]] _ _ -> ["concurrent" [A B]] where (and (shu.parallel-call? A) (shu.parallel-call? B))
-  E _ _ -> E where (not (element? (hd E) ["observe" "concurrent" "fault" "crash"]))
+  ["crash" "node" B A 137] _ _ -> ["crash" "node" B A 137]
+    where (and (integer? B) (integer? A) (> B 0) (> A 0) (not (= B A)))
+  ["submit-committed-unpublished" T K D B A] _ _ -> ["submit-committed-unpublished" T K D B A]
+    where (and (string? B) (string? A) (not (= B "")) (not (= A "")) (not (= B A)))
+  E _ _ -> ["gap" "fault witness missing or invalid"]
+    where (element? (hd E) ["crash" "submit-committed-unpublished"])
+  E _ _ -> E where (not (element? (hd E) ["observe" "concurrent" "fault"]))
   E _ _ -> ["invalid-observation-or-unsupported-event" E])
 
 (define shu.parallel-call?
@@ -231,6 +259,9 @@
 (define shu.gap-at
   [] _ -> none
   [["gap" Why] | _] I -> [I ["gap" Why]]
+  [["concurrent" Group] | Es] I ->
+    (if (cons? (shu.gap-at Group 0)) [I ["gap" "concurrent recorder gap"]]
+        (shu.gap-at Es (+ I 1)))
   [_ | Es] I -> (shu.gap-at Es (+ I 1)))
 
 (define shu.invalid-at
@@ -241,6 +272,11 @@
 (define shu.unobserved
   [] I -> [I []]
   [["observe" _ _]] _ -> none
-  [["upgrade" | X] ["observe" S U] | Es] I -> (shu.unobserved [["observe" S U] | Es] (+ I 1))
-  [["upgrade" | X] | _] I -> [I ["upgrade" | X]]
+  [[Kind | _] ["observe" S U] | Es] I -> (shu.unobserved [["observe" S U] | Es] (+ I 1))
+    where (shu.needs-observation? Kind)
+  [[Kind | X] | _] I -> [I [Kind | X]] where (shu.needs-observation? Kind)
+  [["gap" Why] | _] I -> [I ["gap" Why]]
   [_ | Es] I -> (shu.unobserved Es (+ I 1)))
+
+(define shu.needs-observation?
+  Kind -> (element? Kind ["upgrade" "crash" "submit-committed-unpublished"]))
