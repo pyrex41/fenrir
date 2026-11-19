@@ -1,0 +1,17 @@
+{
+  "schema": "fenrir.service.mutant-predictions/1",
+  "contract": "spec/service/ACCEPTED_JOB.md",
+  "provenance": "Hand-derived from the mutant descriptions in ACCEPTED_JOB.md section 7 before any exploration was run. 'expected' is the property each mutant is aimed at, with the predicted length of its shortest counterexample schedule; 'also' are other properties predicted to fail, with predicted lengths; 'clean' are properties predicted to hold within the bounds. A property in none of the three was not predicted. The harness reports actual against predicted; a mismatch is reported, not hidden.",
+  "mutants": {
+    "volatile-mailbox":        {"expected": {"recovery": 3},  "also": {"atomicity": 1, "response": 1, "progress": 3}, "clean": ["authority", "retry"]},
+    "respond-before-commit":   {"expected": {"response": 1},  "also": {"progress": 2}, "clean": ["authority", "atomicity", "recovery"]},
+    "non-atomic-write":        {"expected": {"atomicity": 1}, "also": {"response": 3, "progress": 4}, "clean": ["authority", "recovery"]},
+    "retry-reapplies":         {"expected": {"retry": 2},     "also": {"atomicity": 2, "response": 2}, "clean": ["authority", "recovery"]},
+    "key-reuse-accepted":      {"expected": {"retry": 2},     "also": {}, "clean": ["authority", "atomicity", "response", "recovery", "progress"]},
+    "cross-tenant-counter":    {"expected": {"authority": 1}, "also": {}, "clean": ["atomicity", "response", "retry", "recovery", "progress"]},
+    "undeduplicated-delivery": {"expected": {"retry": 2, "progress": 3}, "also": {}, "clean": ["authority", "atomicity", "response", "recovery"]},
+    "volatile-status":         {"expected": {"recovery": 3, "progress": 3}, "also": {}, "clean": ["authority", "atomicity", "response", "retry"], "added": "after the first exploration showed recovery.crash-frame never failing on a mutant; predicted before it ran"},
+    "failure-not-terminal":    {"expected": {"progress": 2}, "also": {"retry": 2}, "clean": ["authority", "atomicity", "response", "recovery"], "added": "after the first exploration showed progress.delivery-terminates never failing on a mutant; predicted before it ran"},
+    "equivalent-control":     {"expected": {}, "also": {}, "clean": ["authority", "atomicity", "response", "retry", "recovery", "progress"], "same_graph_as_model": true}
+  }
+}
