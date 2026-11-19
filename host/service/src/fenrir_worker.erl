@@ -154,7 +154,7 @@ session(Program, Scope, S = #{image_info := I}) ->
     OsPid = case erlang:port_info(Port, os_pid) of {os_pid, P} -> P; _ -> undefined end,
     Ctx = #{tender => OsPid, tender_port => Port, worker => self()},
     St0 = #{port => Port, scope => Scope, buf => <<>>, seq => 0, epoch => 0, requests => 0, commit => none, ctx => Ctx,
-            adapter => maps:with([a4_pin, request, migration_token], S),
+            adapter => session_adapter(Scope, S),
             frames => 0, runs => 0, replies => [], tender_os_pid => OsPid},
     try
         {Hello, St1} = expect(St0, $H),
@@ -167,6 +167,10 @@ session(Program, Scope, S = #{image_info := I}) ->
         throw:{fail, Kind, Why, StF} -> kill(Port, OsPid), outcome(Kind, Why, StF);
         throw:{fail, Kind, Why} -> kill(Port, OsPid), outcome(Kind, Why, St0)
     end.
+
+session_adapter(maintenance, #{migration_token := Token}) -> #{migration_token => Token};
+session_adapter({tenant, _}, #{a4_pin := Pin, request := Request}) -> #{a4_pin => Pin, request => Request};
+session_adapter({tenant, _}, _) -> #{}.
 
 boot_time() -> erlang:monotonic_time(microsecond).
 
@@ -217,6 +221,7 @@ host_request(Record, St, I) ->
                     try {E, O, fenrir_value:from_json(V)} catch _:_ -> throw({fail, failed, {'BadSteps', request_value}, St}) end;
                 _ -> throw({fail, failed, {'BadSteps', host_request}, St})
             end,
+    valid_request(Effect, Op, St) orelse throw({fail, failed, {'BadSteps', host_request}, St}),
     fenrir_faults:hit(w2_request_before_commit, maps:get(ctx, St)),
     %% A guest that is already gone gets no commit made on its behalf.
     Port = maps:get(port, St),
@@ -236,6 +241,12 @@ host_request(Record, St, I) ->
         <<"Completed">> -> completed(Records, St4);
         X -> throw({fail, failed, {execution, X}, St4})
     end.
+
+valid_request(<<"Migration">>, Op, #{adapter := #{migration_token := _}}) ->
+    lists:member(Op, [<<"read">>, <<"stage">>, <<"install">>]);
+valid_request(<<"Store">>, <<"commit">>, #{adapter := #{a4_pin := _}, requests := 0}) -> true;
+valid_request(<<"Store">>, <<"commit">>, #{adapter := A}) when map_size(A) =:= 0 -> true;
+valid_request(_, _, _) -> false.
 
 answer(<<"Migration">>, Op, V, St = #{adapter := #{migration_token := Token}}) ->
     fenrir_a4_migration:answer(Op, V, Token, St);
