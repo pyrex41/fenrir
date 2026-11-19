@@ -9,24 +9,32 @@ the handler's one durable operation, `Store.commit`, against SQLite. The host is
 infrastructure with a stated contract, [CONTRACT.md](CONTRACT.md): named assumptions,
 each mapped to the tests that exercise it, none covered by Fenrir's proofs.
 
-**Evidence status: observed history accepted; bounded crash campaign.** Development
-grade, `qualification: UNKNOWN`. Every history a campaign records is checked against the
-A1 model ([harness/service-history.shen](../../harness/service-history.shen)); an accepted
-history says that this recorded execution is consistent with the contract, nothing about
-executions that were not run.
+**PR10 integration status: host-only tests are runnable; the real Solo5 campaign is
+blocked.** See [INTEGRATION.md](INTEGRATION.md) for the missing dependencies and
+the distinction between this worktree and the original runs. The intended campaign's
+evidence is *observed history accepted; bounded crash campaign* (development grade,
+`qualification: UNKNOWN`). An accepted history is one recorded execution consistent
+with the A1 model, not a claim about executions that were not run.
 
 ```
-sh host/service/check.sh          # quick, about 3 minutes here
-sh host/service/check.sh full     # every campaign repeated 5 times, about 7 minutes
+sh host/service/check-host-only.sh  # local OTP/SQLite/codec tests; no guest or history checker
+sh host/service/check.sh quick     # requires shared dependencies in INTEGRATION.md
+sh host/service/check.sh full      # higher campaign bounds; same dependencies
 ```
 
-It builds everything through nix (`nix build .#fenrir-a3-tools`: Erlang/OTP 28.5,
+The host-only runner uses a local C compiler and SQLite headers/library (set
+`SQLITE_PREFIX` if they are not in the compiler's default paths), and Erlang/OTP
+28 on `PATH`. Results are `build/host/service/host-only-*/unit.json`.
+
+The full-stack runner builds everything through nix (`nix build .#fenrir-a3-tools`: Erlang/OTP 28.5,
 SQLite 3.53.3, gcc, node 22, pinned by the flake's nixpkgs input), elaborates the handler
 (or uses the committed artifact copy when the frontend's emit fails; see below), builds
 the guest image, runs the unit tests, the campaigns and the history checker, and writes
 `build/host/service/<run>/report.json`.
 
 ## Architecture as built
+
+This describes the original keen-ptolemy A3 stack, not an end-to-end run on PR10.
 
 ```
 campaign driver (its own BEAM; client, recorder, fault injector, file auditor)

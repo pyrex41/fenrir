@@ -10,8 +10,10 @@ Fenrir side (the handler program, [spec/service/HANDLER.md](../../spec/service/H
 the A1 model) relies on, with the tests that exercise it. Tests are bounded campaigns:
 they can show an assumption broken, they never show it holds.
 
-Evidence status: *observed history accepted; bounded crash campaign*, development grade,
-`qualification: UNKNOWN`.
+Original A3 evidence: *observed history accepted; bounded crash campaign*, development
+grade, `qualification: UNKNOWN`. That campaign has not been rerun on PR10; see
+[INTEGRATION.md](INTEGRATION.md). The table lists the original tests and campaigns,
+not a record that they all ran in this integration.
 
 ## 1 What the host promises the handler (storage contract)
 

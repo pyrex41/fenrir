@@ -14,6 +14,14 @@ mode=${1:-quick}
 case "$mode" in quick|full) ;; *) echo "usage: check.sh [quick|full]" >&2; exit 2 ;; esac
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
+# Fail before asking Nix to build when the service's shared dependencies have
+# not been reconciled. This is not a campaign run or a development verdict.
+for input in harness/solo5.sh tools/solo5/control-durable-build.mjs backends/solo5/pure-call/control.c; do
+  if [ ! -f "$root/$input" ]; then
+    printf 'A3 campaign blocked: missing %s; see host/service/INTEGRATION.md\n' "$input" >&2
+    exit 2
+  fi
+done
 export PATH="$PATH:/nix/var/nix/profiles/default/bin"
 repo=$root
 . "$repo/harness/jit.sh"

@@ -2,17 +2,25 @@
 %% value codec, the storage contract on a real SQLite file, the connection settings,
 %% the capability manifest check and its refusal, and the image identity refusals.
 %%
-%%   erl -noshell -pa EBIN -run fenrir_unit main CONFIG
+%%   erl -noshell -pa EBIN -run fenrir_unit main CONFIG [host-only]
 %% Writes OUT/unit.json: {"tests": [...], "passed": N, "failed": M}.
 -module(fenrir_unit).
 -export([main/1]).
 
-main([ConfigFile]) ->
+main([ConfigFile]) -> run(ConfigFile, full);
+main([ConfigFile, "host-only"]) -> run(ConfigFile, host_only).
+
+run(ConfigFile, Mode) ->
     {ok, [C]} = file:consult(ConfigFile),
     Out = maps:get(out, C),
     ok = filelib:ensure_dir(filename:join(Out, "unit/x")),
     fenrir_faults:init(),
-    Tests = lists:append([vectors(maps:get(root, C)), values(), store(C), settings(C), manifest(C), identity(C)]),
+    Common = [vectors(maps:get(root, C)), values(), store(C), settings(C), artifact_manifest(C)],
+    Extra = case Mode of
+                full -> [image_manifest(C), identity(C)];
+                host_only -> [[t(store_lost_commit_ack, fun() -> lost_commit_ack(C) end)]]
+            end,
+    Tests = lists:append(Common ++ Extra),
     Failed = [T || T = {_, false, _} <- Tests],
     Json = #{<<"tests">> => [#{<<"name">> => iolist_to_binary(io_lib:format("~p", [N])), <<"pass">> => P,
                                <<"detail">> => iolist_to_binary(io_lib:format("~0P", [D, 12]))} || {N, P, D} <- Tests],
@@ -20,7 +28,7 @@ main([ConfigFile]) ->
     ok = file:write_file(filename:join(Out, "unit.json"), json:encode(Json)),
     [io:format("FAIL ~p: ~0P~n", [N, D, 20]) || {N, false, D} <- Failed],
     io:format("unit: ~p passed, ~p failed~n", [length(Tests) - length(Failed), length(Failed)]),
-    halt(0).
+    halt(case Failed of [] -> 0; _ -> 1 end).
 
 t(Name, Fun) ->
     try Fun() of
@@ -161,9 +169,46 @@ settings(C) ->
              R2 = fenrir_store:commit(sub(0, 0, 0)),
              {R =:= busy andalso R2 =:= committed(receipt(0, 0, 0, 0, 0)), {R, R2}} end) end)].
 
+%% Exercise the real SQLite port fault, without making a guest or history claim.
+lost_commit_ack(C) ->
+    Db = filename:join([maps:get(out, C), "unit", "lost-ack.db"]),
+    fenrir_drive:fresh_db(Db),
+    Start = fun() ->
+                {ok, Pid} = fenrir_store:start_link(#{db => Db, tenants => 2, mutant => normal}),
+                unlink(Pid),
+                {Pid, monitor(process, Pid)}
+            end,
+    Wait = fun(Pid, Ref) ->
+               receive {'DOWN', Ref, process, Pid, Reason} -> Reason
+               after 5000 -> error({store_did_not_stop, Pid})
+               end
+           end,
+    Tx = sub(0, 1, 1),
+    {First, FirstRef} = Start(),
+    try
+        ok = fenrir_faults:arm(s3_before_commit, lose_ack, 1),
+        {indeterminate, {port_died, commit, _}} = fenrir_store:commit(Tx),
+        sqlite_port_died = Wait(First, FirstRef),
+        {Second, SecondRef} = Start(),
+        try
+            Snapshot = [[[[0, 1]], [[0, 0, <<"pending">>]], [[1, 1, [0, 1, 1, 0, 0]]], 1], [[], [], [], 0]],
+            Snapshot = fenrir_store:snapshot(),
+            {reply, {data, <<"Reply">>, <<"Recorded">>, [{int, 1}, Receipt]}} = fenrir_store:commit(Tx),
+            Receipt = receipt(0, 1, 1, 0, 0),
+            Snapshot = fenrir_store:snapshot(),
+            true
+        after
+            exit(Second, shutdown),
+            shutdown = Wait(Second, SecondRef)
+        end
+    after
+        exit(First, shutdown),
+        ok = fenrir_faults:disarm()
+    end.
+
 %% ---------- capability manifest ----------
 
-manifest(C) ->
+artifact_manifest(C) ->
     {ok, B} = file:read_file(maps:get(artifact, C)),
     A = json:decode(B),
     Variants =
@@ -185,8 +230,13 @@ manifest(C) ->
                 class_ordinary_not_residual -> {R =:= ok, R}; %% not residual: no host contract needed
                 _ -> {element(1, R) =:= refused, R}
             end
-        end) || {N, V} <- Variants]
-    ++ [t(supervisor_refuses_worker_on_manifest, fun() -> supervisor_refusal(C, add_effect(A)) end)].
+        end) || {N, V} <- Variants].
+
+image_manifest(C) ->
+    [t(supervisor_refuses_worker_on_manifest, fun() ->
+        {ok, B} = file:read_file(maps:get(artifact, C)),
+        supervisor_refusal(C, add_effect(json:decode(B)))
+    end)].
 
 add_effect(A) ->
     Mail = #{<<"name">> => <<"Mail">>, <<"class">> => <<"durable">>,
