@@ -447,8 +447,10 @@ deadlock is an outcome of a run, admissible, not a failure of the machine.
 
 ## 12 What is checked
 
-The JavaScript validator checks §2–§3 on canonical artifacts.
-The fixed Shen typing checker and frontend are not part of this port.
+The JavaScript validator checks §2–§3 on canonical artifacts. The
+[surface frontend](SURFACE.md) emits C1 artifacts and runs them on the Shen
+model. The optional [fixed Shen typing checker](TYPING.md) can also check C1
+artifacts; the scheduler exploration below does not require it.
 
 ```sh
 sh harness/run-tc1-tasks.sh             # hand fixtures, model against the JavaScript implementation

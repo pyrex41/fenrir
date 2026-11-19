@@ -10,7 +10,7 @@
 \\     also written as JSON, read back, and must be accepted again.
 \\   "direct": true exercises the raw checker on unsupported schemas.
 \\   "low_budget": true selects one inference.
-\\   "unsound": true expects the test-only search extension to produce a proof
+\\   "unsound": true or "scope" expects a test-only extension to produce a proof
 \\     that the fixed checker rejects, rather than a search failure.
 
 (set fh.*lib* (cn (hd (tl (value *argv*))) "/"))
@@ -28,7 +28,9 @@
             Input (if (= Given []) (tt.input) Given)
             Limit (if (= (fh.member "low_budget" L) true) 1 2000000)
             D (fh.member "derivation" L)
-            Got (cond ((= (fh.member "unsound" L) true) (tt.unsound (st.check Text) Input Limit))
+            Unsound (fh.member "unsound" L)
+            Got (cond ((= Unsound true) (tt.unsound (st.check Text) Input Limit fenrir-unsound-anything))
+                      ((= Unsound "scope") (tt.unsound (st.check Text) Input Limit fenrir-unsound-scope))
                       ((= (fh.member "direct" L) true) (tt.verdict (tc.check (st.transport Text) Input D)))
                       ((= D []) (tt.validated Text Input Limit))
                       (true (tt.check-structure (st.with-input (st.check Text) Input) Input D)))
@@ -51,12 +53,12 @@
   _ _ _ -> "reject")
 
 (define tt.unsound
-  [ok A] V Limit -> (let On (include [fenrir-unsound-anything])
+  [ok A] V Limit Rule -> (let On (include [Rule])
                          D (ts.derive A V Limit)
-                         Off (preclude [fenrir-unsound-anything])
+                         Off (preclude [Rule])
                       (if (and (cons? D) (= (hd D) "Program") (not (tc.check A V D)))
                           "forgery-rejected" "not-a-rejected-forgery"))
-  _ _ _ -> "bad-fixture")
+  _ _ _ _ -> "bad-fixture")
 
 (define tt.verdict
   true -> "accept"

@@ -4,7 +4,8 @@ Draft 1 • 15 November 2026 • For owner review
 
 **Status.** The typing and effect rules of `tc1-handler-demo/2`, its subsets
 (`tc1-handler-demo/1`, `tc0-a-pure-call-demo/1` and `/2`) and
-`tc1-durable-demo/1` ([DURABLE.md](DURABLE.md) §1–§3),
+`tc1-durable-demo/1` ([DURABLE.md](DURABLE.md) §1–§3) and
+`tc1-task-demo/1` ([CONCURRENCY.md](CONCURRENCY.md) §2–§3),
 written as named inference rules, together with the structural checks that are
 not typing. Nothing here is qualified. The rules restate what
 [EFFECTS.md](EFFECTS.md) §1–§3 and §7 and
@@ -67,7 +68,7 @@ acceptance").
 | --- | --- |
 | S-Transport | UTF-8 JSON with no BOM, no numeric token, no duplicate decoded key, object keys `[A-Za-z_][A-Za-z0-9_]*`, valid escapes and no unpaired surrogate (02 §2). Noncanonical spelling and whitespace are accepted and decoded, as the JavaScript decoder does |
 | S-Shape | Every object closed with exactly its fields (artifact, datatype, constructor, effect, operation, function, input schema, source-map row); each field of the right kind (string, array); identifiers `[A-Za-z_][A-Za-z0-9_]*` of at most 64 characters for datatype, constructor, effect and operation names; every expression an array `[tag, id, ...]` with a tag of the schema and its arity: `unit` 0, `bool` `int` `bytes` `var` 1, `let` `if` 3, `prim` an operator of the schema with its operand count (data operators and `eq` only with data), `tuple` 1–8 operands, `project` 2 with an unsigned index, `construct` at least 2, `match` a scrutinee and at least one arm `[C, [x...], e]`, `emit` 2 with a string label, `lambda` 6 with an empty capture list, `apply` 2, `call` 2 with a string name, `perform` 3, `handle` 3 with an array of clauses `[op, x, e]` (or `[op, x, k, e]` under `/2`), `resume` 2 and `discontinue` 1 with an unsigned binder ID; every effect set an array of strings; every ID an unsigned decimal string |
-| S-Identity | contract, schema and slice are one of `0.2 / tc0-a-pure-call-demo/1 / TC0-A`, `0.2 / tc0-a-pure-call-demo/2 / TC0-A`, `tc1-draft-1 / tc1-handler-demo/1 / TC1-H1`, `tc1-draft-1 / tc1-handler-demo/2 / TC1-H2`, `tc1-draft-1 / tc1-durable-demo/1 / TC1-D1`. Other schema strings return `unsupported`, not a typing judgment |
+| S-Identity | contract, schema and slice are one of `0.2 / tc0-a-pure-call-demo/1 / TC0-A`, `0.2 / tc0-a-pure-call-demo/2 / TC0-A`, `tc1-draft-1 / tc1-handler-demo/1 / TC1-H1`, `tc1-draft-1 / tc1-handler-demo/2 / TC1-H2`, `tc1-draft-1 / tc1-durable-demo/1 / TC1-D1`, `tc1-draft-1 / tc1-task-demo/1 / TC1-C1`. Other schema strings return `unsupported`, not a typing judgment |
 | S-Features | datatype declarations only with data (`/2` and TC1); effect declarations only in TC1 |
 | S-Declarations | at most 16 datatypes, names not `Unit Bool I64 Bytes TrapCode` and unique; 1–16 constructors each, unique within their datatype; at most 8 fields; at most 8 effects, names not `Emit Task Channel Time Resource` and unique; only D1 has a `class` field, exactly `ordinary` or `durable`; 1–8 operations each, unique within their effect; 1–32 functions with unique names (any string) |
 | S-Unique-IDs | function IDs, parameter IDs, expression node IDs and every binder (let, match, lambda, clause, resumption) one set, no ID twice |
@@ -138,7 +139,8 @@ Function  ───────────────────────�
 Σ, the artifact's declarations, is implicit in every rule. The premises of
 Program are the operation-plain, function and entry-plain judgments, in that
 order (§8). The other conditions are checked directly. The entry row is `Emit`
-plus the names of declared durable effects in D1, and only `Emit` otherwise.
+plus the names of declared durable effects in D1, plus `Task` and `Channel` in
+C1, and only `Emit` otherwise.
 Both entry types must be serializable. In D1 the entry input can be any value
 of the declared serializable argument type.
 
@@ -272,8 +274,8 @@ Notes on the rules, each a reading of the contract:
 - **Resumption types** (EFFECTS.md §7): in `op(x, k) => c` with `op : A → B`
   under a handle of type T, `k : Resumption(B, T)`, `resume(k, e)` takes e : B
   and has type T, `discontinue(k)` has type Unit, and c has type T.
-- **The entry** may perform only Emit: every user effect is handled inside the
-  program (EFFECTS.md §3).
+- **The entry** handles ordinary user effects inside the program. See §4 for
+  the permitted residual effects of D1 and C1.
 - **Operation types are serializable** (EFFECTS.md §1), by the Program rule's
   plain premises.
 - **Exhaustiveness**: T-Match and T-Handle require a bijection between arms and
@@ -282,6 +284,25 @@ Notes on the rules, each a reading of the contract:
 - The validator also requires a function body's free bindings to be its
   parameter ("Named function captures"). That follows from the rules: the
   body's context is the parameter alone, and every variable must be bound.
+
+### 6.2 Tasks and channels (C1 only)
+
+The structure pass admits C1 forms and type constructors only under
+`tc1-task-demo/1`, walks nested task result and handle types within the same
+type-depth cap, and reserves their built-in type names in C1 only. C1 keeps
+H2's ordinary effect declarations (no `class` field), not D1's durable classes
+or R1/P1's remote or store rules.
+
+The fixed checker encodes the rules of CONCURRENCY.md §2 as `T-Scope`,
+`T-Spawn`, `T-Await`, `T-Cancel`, `T-Yield`, `T-Channel`, `T-Send`, `T-Receive`,
+and `T-Close`. Scope results, spawned-function results, and channel element
+types each require a plain-type premise. `T-Spawn` includes the closure's latent
+effects and `Task`; `T-Channel` checks capacity `1..8`. The operand effects are
+united with the relevant runtime effect, and resumption uses are threaded in
+operand order. `SendResult` is plain; `P-Result` requires a plain type argument
+for `Outcome(T)` and `ReceiveResult(T)`. The handle types themselves are never
+plain. `T-Match` uses the runtime constructor tables for exhaustiveness;
+`T-Construct` cannot build a runtime result.
 
 ## 7 One-shot resumption as a usage-counting judgment
 
@@ -371,7 +392,7 @@ the D a proof binds is the derivation. This is the same machinery
 - The opt-in frontend loads the rules from source for each accepted artifact.
   This integration does not use the keen branch's heap-image cache.
 
-`typing/unsound.shen` adds three deliberately unsound rule sets to the search
+`typing/unsound.shen` adds four deliberately unsound rule sets to the search
 (any expression has any type; the one-shot rule forgotten; perform without its
 effect), the analogue of `unsound-rule.shen`. Shen takes them silently and
 can find "derivations" of ill-typed programs. The bounded test exercises one
@@ -406,7 +427,13 @@ schemas and invalid artifacts. Its frontend tests verify that strict mode
 re-emits the accepted-job pin byte-for-byte and cannot emit or run remote and
 serving artifacts, while their default path still emits them.
 
-The differential campaign and gate rows from keen are not part of this port;
+For C1 the bounded differential checks all 18 hand artifacts and a
+deterministic stride-100 sample of grammar G (36 of 3,600 programs). It also
+checks a runtime result input, rejects malformed or cross-schema artifacts,
+requires UNKNOWN at one inference, and shows that the fixed checker rejects
+a derivation from an unsound scope rule with no serializability premise.
+
+The full differential campaign and gate rows from keen are not part of this port;
 their historical counts do not establish agreement here. Structural and typing
 checks are ordered differently in the two implementations, so diagnostics
 need not match, and the standalone Shen entry point expects decoded string
@@ -415,6 +442,6 @@ raw-byte checks.
 
 Not proved: checker correctness or completeness, type soundness (including
 progress, preservation and runtime one-shot behavior), or elaborator
-correctness. No remote outcome/must-use, peer serving/read-only, or task/channel
-typing derivations are provided. This is development evidence, not
+correctness. No remote outcome/must-use, peer serving/read-only, or combined
+C1/host typing derivations are provided. This is development evidence, not
 qualification.

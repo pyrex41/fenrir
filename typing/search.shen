@@ -71,6 +71,7 @@
 (define ts.data? -> (tc.data? (value ts.*artifact*)))
 (define ts.handlers? -> (tc.handlers? (value ts.*artifact*)))
 (define ts.resumptions? -> (tc.resumptions? (value ts.*artifact*)))
+(define ts.tasks? -> (tc.tasks? (value ts.*artifact*)))
 
 \\ ---------- side-condition helpers: quoted in, quoted out, none for no answer ----------
 
@@ -116,6 +117,7 @@
 (define ts.table-of
   "TrapCode" -> (map (/. C [C []]) ["Overflow" "DivZero" "Bounds" "InvalidDuration" "TaskLimit" "ChildFailed"])
   ["Data" D] -> (ts.find D (value ts.*datatypes*))
+  T -> (let Table (tc.constructors (value ts.*artifact*) T) (if (= Table []) none Table)) where (ts.tasks?)
   _ -> none)
 
 (define ts.table
@@ -134,7 +136,14 @@
   D -> (ts.q (tc.concat (map (/. Row (hd (tl Row))) (ts.find D (value ts.*datatypes*))))))
 
 (define ts.base?
+  "SendResult" -> (ts.tasks?)
   T -> (element? T ["Unit" "Bool" "I64" "Bytes" "TrapCode"]))
+
+(define ts.result-family?
+  K -> (and (ts.tasks?) (element? K ["Outcome" "ReceiveResult"])))
+
+(define ts.capacity?
+  C -> (element? C ["1" "2" "3" "4" "5" "6" "7" "8"]))
 
 (define ts.member?
   X L -> (element? X (ts.uq L)))
@@ -365,6 +374,65 @@
   _______________________________________________________
   ["discontinue" N Kv] : (ts.j G "Unit" F K D);
 
+  \\ tasks and channels (tc1-task-demo/1)
+  if (ts.tasks?)
+  B : (ts.j G T F1 K1 D1);
+  T : (ts.p [] D2);
+  ["ts.close" "T-Scope" G ["scope" N B] T [F1 ["Task"]] [K1] [D1 D2]] : (ts.out F K D);
+  _______________________________________________________
+  ["scope" N B] : (ts.j G T F K D);
+
+  if (ts.tasks?)
+  E : (ts.j G ["Arrow" "Unit" T Ef] F1 K1 D1);
+  T : (ts.p [] D2);
+  ["ts.close" "T-Spawn" G ["spawn" N E] ["Task" T] [F1 Ef ["Task"]] [K1] [D1 D2]] : (ts.out F K D);
+  _______________________________________________________
+  ["spawn" N E] : (ts.j G ["Task" T] F K D);
+
+  if (ts.tasks?)
+  E : (ts.j G ["Task" T] F1 K1 D1);
+  ["ts.close" "T-Await" G ["await" N E] ["Outcome" T] [F1 ["Task"]] [K1] [D1]] : (ts.out F K D);
+  _______________________________________________________
+  ["await" N E] : (ts.j G ["Outcome" T] F K D);
+
+  if (ts.tasks?)
+  E : (ts.j G ["Task" T] F1 K1 D1);
+  ["ts.close" "T-Cancel" G ["cancel" N E] "Unit" [F1 ["Task"]] [K1] [D1]] : (ts.out F K D);
+  _______________________________________________________
+  ["cancel" N E] : (ts.j G "Unit" F K D);
+
+  if (ts.tasks?)
+  ["ts.close" "T-Yield" G ["yield" N] "Unit" [["Task"]] [] []] : (ts.out F K D);
+  _______________________________________________________
+  ["yield" N] : (ts.j G "Unit" F K D);
+
+  if (ts.tasks?)
+  if (ts.type? T)
+  if (ts.capacity? C)
+  T : (ts.p [] D1);
+  ["ts.close" "T-Channel" G ["channel" N T C] ["Channel" T] [["Channel"]] [] [D1]] : (ts.out F K D);
+  _______________________________________________________
+  ["channel" N T C] : (ts.j G ["Channel" T] F K D);
+
+  if (ts.tasks?)
+  E1 : (ts.j G ["Channel" T] F1 K1 D1);
+  E2 : (ts.j G T F2 K2 D2);
+  ["ts.close" "T-Send" G ["send" N E1 E2] "SendResult" [F1 F2 ["Channel"]] [K1 K2] [D1 D2]] : (ts.out F K D);
+  _______________________________________________________
+  ["send" N E1 E2] : (ts.j G "SendResult" F K D);
+
+  if (ts.tasks?)
+  E : (ts.j G ["Channel" T] F1 K1 D1);
+  ["ts.close" "T-Receive" G ["receive" N E] ["ReceiveResult" T] [F1 ["Channel"]] [K1] [D1]] : (ts.out F K D);
+  _______________________________________________________
+  ["receive" N E] : (ts.j G ["ReceiveResult" T] F K D);
+
+  if (ts.tasks?)
+  E : (ts.j G ["Channel" T] F1 K1 D1);
+  ["ts.close" "T-Close" G ["close" N E] "Unit" [F1 ["Channel"]] [K1] [D1]] : (ts.out F K D);
+  _______________________________________________________
+  ["close" N E] : (ts.j G "Unit" F K D);
+
   \\ plain types
   if (ts.base? T)
   ["ts.pnode" "P-Base" Ps T []] : (ts.is D);
@@ -375,6 +443,12 @@
   ["ts.pnode" "P-Tuple" Ps ["Tuple" | Ts] Ds] : (ts.is D);
   _______________________________________________________
   ["Tuple" | Ts] : (ts.p Ps D);
+
+  if (ts.result-family? K)
+  T : (ts.p Ps D1);
+  ["ts.pnode" "P-Result" Ps [K T] [D1]] : (ts.is D);
+  _______________________________________________________
+  [K T] : (ts.p Ps D);
 
   if (ts.member? Dt Ps)
   ["ts.pnode" "P-Assumed" Ps ["Data" Dt] []] : (ts.is D);
