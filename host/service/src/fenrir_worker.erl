@@ -49,6 +49,11 @@ init_image(Opts = #{a4_pin := Pin, image := Path}) ->
         {ok, _} -> {ok, Opts#{boots => 0}};
         {error, E} -> {stop, E}
     end;
+init_image(Opts = #{a4_v1_pin := Pin, image := Path}) ->
+    case fenrir_a4_image:load(Path, handler_v1, Pin) of
+        {ok, _} -> {ok, Opts#{boots => 0}};
+        {error, E} -> {stop, E}
+    end;
 init_image(Opts) ->
     case check_image(maps:get(image, Opts)) of
         {ok, Image} -> {ok, Opts#{image_info => Image, boots => 0}};
@@ -97,6 +102,19 @@ handle_call({run, Scope, Request}, _From, S = #{a4_pin := Pin, image := Path, a4
         {refused, Why} -> {refused, Why};
         busy -> {refused, phase_check_busy};
         {aborted, Why} -> {refused, Why}
+    end,
+    {reply, Result, S#{boots := maps:get(boots, S) + 1}};
+handle_call({run, Scope, Request}, _From, S = #{a4_v1_pin := Pin, image := Path, a4_launch_dir := Parent}) ->
+    Result = case fenrir_store:routing_phase() of
+        {ok, Phase} when Phase =:= v1; element(1, Phase) =:= prepared ->
+            case fenrir_a4_image:load(Path, handler_v1, Pin) of
+                {ok, Bundle} ->
+                    fenrir_a4_image:with_launch(Bundle, Parent, fun(I) ->
+                        run_handler(Scope, Request, S#{image_info => I})
+                    end);
+                {error, Why} -> {refused, Why}
+            end;
+        _ -> {refused, version_not_in_force}
     end,
     {reply, Result, S#{boots := maps:get(boots, S) + 1}};
 handle_call({run, Scope, Request}, _From, S) ->

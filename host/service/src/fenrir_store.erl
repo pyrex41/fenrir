@@ -22,7 +22,7 @@
 -module(fenrir_store).
 -behaviour(gen_server).
 -export([start_link/1, commit/2, snapshot/0, pending_jobs/0, port_os_pid/0, arm_port/2, info/0, io_counters/0]).
--export([maintenance/1, commit_v2/4, handler_in_force/1]).
+-export([maintenance/1, commit_v2/4, handler_in_force/1, routing_phase/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -export([parse_tx/1, schema/0, read_snapshot/2, open_configured/2]).
 
@@ -53,6 +53,13 @@ commit_v2(Scope, Pin, Request, Tx) ->
     end.
 
 handler_in_force(Pin) -> gen_server:call(?MODULE, {handler_in_force, Pin}, 60000).
+
+%% Read-only routing advice. This is not a grant: the store fences every write
+%% again after taking the write lock, including a request routed just before install.
+routing_phase() ->
+    try gen_server:call(?MODULE, routing_phase, 1000)
+    catch exit:_ -> {error, store_unavailable}
+    end.
 
 schema() ->
     ["CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)",
@@ -158,6 +165,18 @@ handle_call({handler_in_force, Pin}, _From, S = #{a4 := true, port := Port}) ->
     reply_or_stop(Out, S);
 handle_call({handler_in_force, _}, _From, S) ->
     {reply, {refused, v2_disabled}, S};
+handle_call(routing_phase, _From, S = #{a4 := true, port := Port}) ->
+    Out = maintenance_tx(Port, "BEGIN", fun() ->
+        {read, case upgrade_state(Port) of
+            v1 -> {ok, v1};
+            {prepared, _, Pin, _} -> {ok, {prepared, Pin}};
+            {migrated, _, Pin, _} -> {ok, {migrated, Pin}};
+            {v2, _, Pin, _} -> {ok, {v2, Pin}}
+        end}
+    end),
+    reply_or_stop(Out, S);
+handle_call(routing_phase, _From, S) ->
+    {reply, {error, a4_disabled}, S};
 handle_call(snapshot, _From, S = #{a4 := true, port := Port, tenants := N}) ->
     Out = maintenance_tx(Port, fun() ->
         case fenrir_upgrade_state:fence(1, upgrade_state(Port)) of
@@ -548,7 +567,10 @@ receipt_v(2, T, K, D, R, J) ->
     {data, <<"Receipt">>, <<"Receipt2">>, [{int, T}, {int, K}, {int, D}, {int, R}, {int, J}]}.
 
 maintenance_tx(Port, Body) ->
-    try ?Q("BEGIN IMMEDIATE", [], maintenance_begin) of
+    maintenance_tx(Port, "BEGIN IMMEDIATE", Body).
+
+maintenance_tx(Port, Begin, Body) ->
+    try ?Q(Begin, [], maintenance_begin) of
         [] -> maintenance_body(Port, Body)
     catch
         throw:{busy, _} -> busy;

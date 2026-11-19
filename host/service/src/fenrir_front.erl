@@ -27,12 +27,16 @@ start_link(Workers, Bindings) -> gen_server:start_link({local, ?MODULE}, ?MODULE
 submit(Credential, K, D, Payload) ->
     case gen_server:call(?MODULE, {pick_submit, Credential}) of
         {ok, Worker, Scope} -> request(Worker, Scope, {submit, K, D, Payload});
+        unavailable -> {unavailable, #{}};
         denied -> {{refused, unauthorized}, #{}}
     end.
 
 %% Internal host API, not part of authenticated submit ingress.
 deliver(T, J, Ok) ->
-    request(gen_server:call(?MODULE, pick_delivery), {tenant, T}, {complete, J, Ok}).
+    case gen_server:call(?MODULE, pick_delivery) of
+        unavailable -> {unavailable, #{}};
+        Worker -> request(Worker, {tenant, T}, {complete, J, Ok})
+    end.
 
 %% Privileged campaign observations, not a client API.
 respond(Event) -> gen_server:call(?MODULE, {respond, Event}).
@@ -82,7 +86,7 @@ handle_call({pick_submit, Credential}, _From, S = #{bindings := Bindings}) ->
     case fenrir_authority:authenticate(Credential, Bindings) of
         {ok, Scope} ->
             {Worker, S1} = pick(S),
-            {reply, {ok, Worker, Scope}, S1};
+            {reply, case Worker of unavailable -> unavailable; _ -> {ok, Worker, Scope} end, S1};
         denied -> {reply, denied, S}
     end;
 handle_call(pick_delivery, _From, S) ->
@@ -94,6 +98,20 @@ handle_call({respond, E}, _From, S = #{outbox := O}) ->
     {reply, case lists:member(E, O) of true -> ok; false -> not_in_outbox end, S};
 handle_call(outbox, _From, S = #{outbox := O}) -> {reply, O, S}.
 
+pick(S = #{workers := #{v1 := V1, v2 := V2}, next := N}) ->
+    Ws = case fenrir_store:routing_phase() of
+        {ok, v1} -> V1;
+        {ok, {prepared, _}} -> V1;
+        {ok, {v2, _}} -> V2;
+        _ -> []
+    end,
+    %% Use the exact instance, not a registered name that could be rebound
+    %% after the choice. No fallback to the other contract or bank.
+    Live = [P || W <- Ws, P <- [whereis(W)], is_pid(P)],
+    case Live of
+        [] -> {unavailable, S};
+        _ -> {lists:nth(N rem length(Live) + 1, Live), S#{next := N + 1}}
+    end;
 pick(S = #{workers := Ws, next := N}) ->
     {lists:nth(N rem length(Ws) + 1, Ws), S#{next := N + 1}}.
 
