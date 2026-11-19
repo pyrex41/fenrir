@@ -18,7 +18,9 @@ run guests, Erlang and other prerequisites. Do not use those checks as cheap
 smokes. This tool does not make an unsupported runner or toolchain supported.
 `--timeout-seconds N` can only lower the manifest's bound. The child gets a
 private HOME/TMPDIR, and a PATH of absolute directories outside the checkout;
-arbitrary inherited variables and credentials are not passed through.
+an explicit `FENRIR_SOLO5` is forwarded to the check for a prebuilt Solo5
+installation. Arbitrary inherited variables and credentials are not passed
+through.
 
 `PASS`, `FAIL`, `UNKNOWN`, and `BLOCKED` exit `0`, `1`, `2`, and `2`.
 Inspect the JSON for the exact distinction. Development verdicts describe the

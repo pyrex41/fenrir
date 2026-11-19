@@ -136,6 +136,27 @@ test('framework confirms structured evaluator result but never claims qualificat
   assert.match(repeated.summary, /stale/);
 });
 
+test('structured evaluator receives explicit Solo5 without inheriting unrelated variables', async t => {
+  const solo5 = resolve(tmpdir(), 'built Solo5 fixture');
+  const f = await fixture(t, mock({ extra: `
+    if (process.env.FENRIR_SOLO5 !== ${JSON.stringify(solo5)} || process.env.FENRIR_OTHER_TOOL)
+      throw new Error('Wrong child environment');
+  ` }), { gate: true });
+  const previous = { FENRIR_SOLO5: process.env.FENRIR_SOLO5, FENRIR_OTHER_TOOL: process.env.FENRIR_OTHER_TOOL };
+  process.env.FENRIR_SOLO5 = solo5;
+  process.env.FENRIR_OTHER_TOOL = 'must not enter the child';
+  try {
+    const receipt = await f.run();
+    assert.equal(receipt.verdict, 'PASS', receipt.summary);
+    assert.equal(receipt.qualification, 'UNKNOWN');
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
 test('FAIL, BLOCKED and UNKNOWN remain distinct; missing toolchain blocks before launch', async t => {
   for (const [verdict, exit] of [['FAIL', 1], ['BLOCKED', 2], ['UNKNOWN', 2]]) {
     const f = await fixture(t, mock({ report: { verdict, claims: [] }, exit }), { gate: true });
@@ -174,6 +195,30 @@ test('toolchain drift and unresolved evaluator cleanup invalidate structured PAS
   assert.equal(receipt.verdict, 'UNKNOWN');
   assert.equal(receipt.leaseRetained, true);
   await assert.rejects(unresolved.run(), /lease occupied/);
+});
+
+test('unresolved evaluator cleanup keeps the lease despite other evidence failures', async t => {
+  for (const [name, extra, reason] of [
+    ['source drift', `writeFileSync('check.mjs', 'changed');`, /Expected clean source/],
+    ['unsafe log', `
+      import { renameSync } from 'node:fs';
+      const log = process.env.FENRIR_ARTIFACT_DIR + '/stdout.log';
+      renameSync(log, log + '.old');
+      symlinkSync(log + '.old', log);
+    `, /Not a regular file/],
+  ]) {
+    await t.test(name, async t => {
+      const f = await fixture(t, mock({ report: { cleanup: 'unresolved' }, extra }), { gate: true });
+      const receipt = await f.run();
+      assert.equal(receipt.verdict, 'UNKNOWN');
+      assert.match(receipt.summary, reason);
+      assert.equal(receipt.cleanup, 'unresolved');
+      assert.equal(receipt.processGroupCleanup, 'confirmed');
+      assert.equal(receipt.leaseRetained, true);
+      assert.deepEqual(JSON.parse(await readFile(resolve(f.cwd, receipt.receiptPath), 'utf8')), receipt);
+      await assert.rejects(f.run(), /lease occupied/);
+    });
+  }
 });
 
 test('launcher executable drift invalidates an otherwise successful development exit', async t => {

@@ -98,9 +98,6 @@ function frame(bytes, receipt) {
   // accepting JSON.parse silently taking the last value of a duplicate field.
   const keys = [...text.matchAll(/"(?:[^"\\]|\\.)*"(\s*:)?/g)].filter(match => match[1]);
   if (keys.length !== Object.keys(report).length) throw new Error('Duplicate evaluator report keys');
-  if (statuses.get(report.verdict) !== receipt.exitCode || receipt.exitSignal)
-    throw new Error('Evaluator verdict contradicts process exit');
-  if (report.verdict === 'PASS' && !report.evidence.length) throw new Error('Evaluator PASS requires fresh retained evidence');
   return report;
 }
 
@@ -127,7 +124,9 @@ async function retain(root, directory, previous, gate, report, receipt, claims) 
   if (report.verdict === 'PASS' && !sameSet(claims, report.claims)) throw new Error('Evaluator PASS is missing required claims');
 }
 
-export async function runEvidence({ cwd, checkId, head, shenJit, timeoutSeconds, signal, path = process.env.PATH ?? '' }) {
+export async function runEvidence({
+  cwd, checkId, head, shenJit, timeoutSeconds, signal, path = process.env.PATH ?? '', solo5 = process.env.FENRIR_SOLO5,
+}) {
   if (!['linux', 'darwin'].includes(process.platform)) throw new Error('POSIX runner supported only on Linux and macOS');
   if (!/^[a-z][a-z0-9-]{0,63}$/.test(checkId) || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(head))
     throw new Error('A configured check ID and full expected HEAD are required');
@@ -220,7 +219,7 @@ export async function runEvidence({ cwd, checkId, head, shenJit, timeoutSeconds,
       onSpawn: pid => writeFileSync(resolve(directory, 'launch.json'), JSON.stringify({ pid, processGroup: pid, id }),
         { flag: 'wx', mode: 0o600 }),
       timeoutMs: limit * 1000, signal, env: {
-        ...baseEnv, ...(jit && { FENRIR_SHEN_JIT: jit.root }),
+        ...baseEnv, ...(jit && { FENRIR_SHEN_JIT: jit.root }), ...(solo5 && { FENRIR_SOLO5: solo5 }),
         FENRIR_CHECK_ID: checkId, FENRIR_CHECK_NONCE: receipt.nonce, FENRIR_SOURCE_SHA256: before.hash,
         FENRIR_CONFIG_SHA256: hash, FENRIR_ARTIFACT_DIR: directory,
       },
@@ -229,6 +228,15 @@ export async function runEvidence({ cwd, checkId, head, shenJit, timeoutSeconds,
     receipt.execution = execution;
     retainLock = Boolean(result.cleanupIssue);
     receipt.processGroupCleanup = retainLock ? 'unresolved' : 'confirmed';
+    // Cleanup is independent of whether the report can support a verdict.
+    // Read the run-bound frame before log/identity checks can short-circuit.
+    let report, frameError;
+    if (gate) {
+      try {
+        report = frame(stdout, receipt);
+        if (report.cleanup === 'unresolved') retainLock = true;
+      } catch (error) { frameError = error; }
+    }
     receipt.logs = await Promise.all([receipt.stdout, receipt.stderr].map(async path => {
       const { sha256, size } = await inspectFile(await checkedPath(root, path), 8 * 1024 * 1024, { singleLink: true });
       return { path, sha256, bytes: size };
@@ -241,8 +249,9 @@ export async function runEvidence({ cwd, checkId, head, shenJit, timeoutSeconds,
     if (result.issue || result.cleanupIssue || signal?.aborted || result.exitSignal)
       throw new Error(result.issue || result.cleanupIssue || (signal?.aborted ? 'Cancelled' : `Evaluator terminated: ${result.exitSignal}`));
     if (gate) {
-      const report = frame(stdout, { ...receipt, ...execution });
-      if (report.cleanup !== 'confirmed') retainLock = true;
+      if (frameError) throw frameError;
+      if (statuses.get(report.verdict) !== result.exitCode) throw new Error('Evaluator verdict contradicts process exit');
+      if (report.verdict === 'PASS' && !report.evidence.length) throw new Error('Evaluator PASS requires fresh retained evidence');
       await retain(root, directory, previous, gate, report, receipt, claims);
       receipt.evaluator = { verdict: report.verdict, reportedClaims: report.claims, cleanup: report.cleanup, summary: report.summary };
       if (retainLock) throw new Error('Evaluator cleanup unresolved');

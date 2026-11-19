@@ -48,7 +48,7 @@
   Waivers -> (map (/. W ["waiver" W]) Waivers))
 
 \\ The TC0-A gate, run by its own evaluator as a separate process on the same tree.
-\\ Its verdict is this row's status; a report for another HEAD says nothing about this one.
+\\ Its verdict and exit must agree; a report for another HEAD says nothing about this one.
 (define fh.tc0-a-gate
   Memo ->
     (let Report (fh.harness "gate.shen" [(fh.subdir "tc0-a-gate") (value fh.*jit*)] 7200)
@@ -77,7 +77,8 @@
                       [["failures" (json.stringify (fh.member "failures" Report) [])]] Memo)
               (fh.row "UNKNOWN" ["The TC1 handler harness did not report"] [] Memo)))))
 
-\\ Agreement only: each defect has its own row, read from the report kept in Memo.
+\\ Each defect has its own row, read from the report kept in Memo. Agreement alone
+\\ cannot make this row pass when the exhaustive harness reports failure.
 (define fh.tc1-exhaustive
   Memo ->
     (let Report (fh.harness "tc1-exhaustive.shen" [(fh.tc1-bound) (fh.subdir "tc1-exhaustive") "sandbox"] 1800)
@@ -90,9 +91,12 @@
               (if (not (= Agreeing Programs))
                   (fh.row "FAIL" [(make-string "~A of ~A programs agree with the model" Agreeing Programs)]
                           [["disagreements" (json.stringify (fh.member "disagreements" Report) [])]] [["tc1-exhaustive" Report] | Memo])
-                  (fh.row "PASS" [] [["programs" Programs] ["steps" (fh.member "model_steps" Report)]
-                                     ["outcomes" (json.stringify (fh.member "outcomes" Report) [])]]
-                          [["tc1-exhaustive" Report] | Memo]))))))
+                   (if (= (fh.member "status" Report) "development-pass")
+                       (fh.row "PASS" [] [["programs" Programs] ["steps" (fh.member "model_steps" Report)]
+                                          ["outcomes" (json.stringify (fh.member "outcomes" Report) [])]]
+                               [["tc1-exhaustive" Report] | Memo])
+                       (fh.row "FAIL" ["The exhaustive handler harness reported failure despite agreement"]
+                               [] [["tc1-exhaustive" Report] | Memo])))))))
 
 \\ Killed means: completed with a trace different from the model's. Crashes are never kills.
 (define fh.tc1-defect

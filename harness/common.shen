@@ -412,12 +412,37 @@
 (define fh.trim
   S -> (fh.last-nonempty (fh.lines S) ""))
 
-\\ Run one harness program and decode its report.
+\\ A report is usable only with its documented exit. Keep reported failures:
+\\ negative controls and row diagnostics need them, not a crash or timeout.
+(define fh.harness-status-exit
+  "development-pass" -> 0
+  "complete" -> 0
+  "development-fail" -> 1
+  "outside-catalog" -> 1
+  "outside-table" -> 1
+  "incomplete" -> 1
+  "error" -> 1
+  _ -> -1)
+
+(define fh.harness-report-exit
+  "PASS" _ -> 0
+  "DEVELOPMENT-PASS" _ -> 0
+  "FAIL" _ -> 1
+  "BLOCKED" _ -> 2
+  "UNKNOWN" _ -> 2
+  [] Status -> (fh.harness-status-exit Status)
+  _ _ -> -1)
+
+\\ Run one harness program and decode its report if it agrees with the exit.
 \\ Tree is the source tree whose harness, model and implementation are used (with a
 \\ trailing slash); the Shen/JIT executable is fh.*jit*.
 (define fh.harness-in
   Tree Script Args Seconds ->
-    (fh.last-report (hd (tl (fh.exec (value fh.*jit*) (append ["script" (cn Tree (cn "harness/" Script)) (value fh.*lib*) Tree] Args) Seconds)))))
+    (let R (fh.exec (value fh.*jit*) (append ["script" (cn Tree (cn "harness/" Script)) (value fh.*lib*) Tree] Args) Seconds)
+         Code (hd R)
+         Report (fh.last-report (hd (tl R)))
+         Expected (fh.harness-report-exit (fh.member "verdict" Report) (fh.member "status" Report))
+      (if (and (>= Code 0) (= Code Expected)) Report [])))
 
 (define fh.harness
   Script Args Seconds -> (fh.harness-in (value fh.*root*) Script Args Seconds))
