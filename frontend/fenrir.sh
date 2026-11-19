@@ -16,6 +16,8 @@
 # it needs a peer, which only a system of images has. A durable program with a
 # typed host request is also refused by run; with I64 input, run uses the durable
 # model harness when installed and stops at the first host request, if any.
+# FENRIR_REQUIRE_SHEN_TYPING=1 additionally requires the fixed Shen checker.
+# An unsupported schema or unknown search in that mode exits with status 2.
 set -eu
 usage() {
   sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//' >&2
@@ -33,6 +35,11 @@ case $command in
   emit) [ $# -eq 3 ] || usage; set -- emit "$file" "$module" "$3" ;;
   run-artifact) [ $# -eq 2 ] || usage; set -- run-artifact "$file" "$fuel" ;;
   *) usage ;;
+esac
+case ${FENRIR_REQUIRE_SHEN_TYPING:-0} in
+  0) ;;
+  1) set -- require-shen-typing "$@" ;;
+  *) echo "FENRIR_REQUIRE_SHEN_TYPING must be 0 or 1" >&2; exit 2 ;;
 esac
 . "$(dirname "$0")/../harness/jit.sh"
 if [ ! -x "$jit/bin/shen-jit" ]; then

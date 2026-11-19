@@ -37,6 +37,11 @@ sh frontend/fenrir.sh emit FILE.fen OUT.json   # check, then write the artifact
 sh frontend/test.sh                            # the frontend's tests, about a minute
 ```
 
+Set `FENRIR_REQUIRE_SHEN_TYPING=1` to additionally require a derivation
+accepted by the [fixed Shen checker](TYPING.md). The default validator is
+unchanged. Strict mode does not support remote or serving artifacts and
+refuses to emit or run them.
+
 `run` prints each emitted value in order, the outcome, where a trap arose, and
 the number of model steps:
 

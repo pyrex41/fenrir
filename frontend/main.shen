@@ -26,6 +26,8 @@
 (set fh.*root* (cn (hd (tl (tl (value *argv*)))) "/"))
 (set fe.*work* (cn (hd (tl (tl (tl (value *argv*))))) "/"))
 (set fe.*command* (tl (tl (tl (tl (value *argv*))))))
+(set fe.*require-shen-typing* (and (cons? (value fe.*command*)) (= (hd (value fe.*command*)) "require-shen-typing")))
+(if (value fe.*require-shen-typing*) (set fe.*command* (tl (value fe.*command*))) skip)
 (load (cn (value fh.*root*) "harness/common.shen"))
 (load (cn (value fh.*root*) "frontend/reader.shen"))
 (load (cn (value fh.*root*) "frontend/elaborate.shen"))
@@ -59,22 +61,42 @@
 
 \\ The validator's report on the artifact text at Path: a decoded JSON object.
 (define fe.validation
-  Path -> (let R (fh.exec "node" [(cn (value fh.*root*) "frontend/validate.mjs") Path] 120)
+  Path -> (let Args [(cn (value fh.*root*) "frontend/validate.mjs") Path]
+               R (fh.exec "node" (if (value fe.*require-shen-typing*) (append Args ["--with-input"]) Args) 120)
                Report (fh.last-report (hd (tl R)))
             (if (or (= Report []) (not (= (hd R) 0)))
                 (fe.finish 3 (make-string "the artifact validator did not run: ~A~%" (hd (tl (tl R)))))
                 Report)))
 
 \\ Write the artifact, have it validated, and return [Text Report]. A rejection
-\\ of what the elaborator accepted is a defect here or in the validator: the two
-\\ are meant to agree, and the program is not run on the strength of either alone.
+\\ of what the elaborator accepted is a defect here or in the validator.
 (define fe.checked
   Source Artifact ->
     (let Text (json.stringify Artifact [[byte-limit 16777216]])
          Path (cn (value fe.*work*) "artifact.json")
          Written (write-to-file Path Text)
          Report (fe.validation Path)
-      (fe.verdict Source Text Report (fh.member "status" Report))))
+         Checked (fe.verdict Source Text Report (fh.member "status" Report))
+         Typing (fe.require-typing Source Text Report)
+      Checked))
+
+\\ Run only after JavaScript validation. In strict mode both must accept the
+\\ same text and input; a missing/unsupported checker is not a fallback.
+(define fe.require-typing
+  _ _ _ -> true where (not (value fe.*require-shen-typing*))
+  Source Text Report ->
+    (let Loaded (load (cn (value fh.*root*) "typing/validate.shen"))
+         Input (fh.field "input" Report)
+      (fe.typing-verdict Source (tv.validate Text Input 2000000))))
+
+(define fe.typing-verdict
+  _ [valid _] -> true
+  Source [unsupported Schema] ->
+    (fe.finish 2 (make-string "~A: Shen typing does not support schema ~A~%" Source Schema))
+  Source [unknown Why] ->
+    (fe.finish 2 (make-string "~A: Shen typing UNKNOWN: ~A~%" Source Why))
+  Source [Status Check Message] ->
+    (fe.finish 3 (make-string "~A: JavaScript validation accepted, but Shen typing says ~A (~A: ~A)~%" Source Status Check Message)))
 
 (define fe.verdict
   Source Text Report "valid" ->
@@ -228,12 +250,30 @@
   \\ An existing artifact, such as a hand fixture: validated, then run, and reported
   \\ as run reports. This is how the tests compare a surface program with a fixture.
   ["run-artifact" Path Fuel] ->
+    (fe.run-checked-artifact Path (fe.snapshot Path) (fe.natural Fuel 0))
+    where (value fe.*require-shen-typing*)
+  ["run-artifact" Path Fuel] -> (fe.run-checked-artifact Path Path (fe.natural Fuel 0))
+  _ -> (fe.finish 3 (make-string "internal error: frontend/main.shen was started with arguments it does not understand~%")))
+
+\\ In strict mode both validators and the model consume one byte snapshot.
+(define fe.snapshot
+  Path -> (let Result (io.read-file Path 1048577)
+               Snapshot (cn (value fe.*work*) "artifact.json")
+            (fe.save-snapshot Path Result Snapshot)))
+
+(define fe.save-snapshot
+  Source [ok Bytes] Dest ->
+    (if (= (hd (io.write-file Dest Bytes)) ok) Dest
+        (fe.finish 2 (make-string "~A: error: cannot write an artifact snapshot~%" Source)))
+  Source _ _ -> (fe.finish 2 (make-string "~A: error: cannot read an artifact snapshot (file or size limit)~%" Source)))
+
+(define fe.run-checked-artifact
+  Source Path Fuel ->
     (let Text (trap-error (read-file-as-string Path)
-                          (/. E (fe.finish 2 (make-string "~A: error: the file cannot be read~%" Path))))
+                          (/. E (fe.finish 2 (make-string "~A: error: the file cannot be read~%" Source))))
          Report (fe.validation Path)
       (if (= (fh.member "status" Report) "valid")
-          (fe.execute Text (fe.natural Fuel 0))
-          (fe.finish 1 (make-string "~A: error: not a valid artifact (~A)~%" Path (fh.member "message" Report)))))
-  _ -> (fe.finish 3 (make-string "internal error: frontend/main.shen was started with arguments it does not understand~%")))
+          (do (fe.require-typing Source Text Report) (fe.execute Text Fuel))
+          (fe.finish 1 (make-string "~A: error: not a valid artifact (~A)~%" Source (fh.member "message" Report))))))
 
 (fe.command (value fe.*command*))
