@@ -294,7 +294,9 @@ static const char *execution(void) {
 #endif
 }
 #ifdef FGC_V3
-static char graph[FGC_RECORD_MAX];
+/* At most 16 task rows; even a row with two 20-digit IDs fits in 80 bytes.
+ * Leave room in Steps for the graph if the last record enters Deadlock. */
+static char graph[16u * 80u + 2u];
 static int fifo_scheduler;
 static uint64_t epoch_now(void) {return tk_epoch();}
 #else
@@ -387,7 +389,7 @@ int solo5_app_main(const struct solo5_start_info *info) {
             if(n<1 || n>FGC_RUN_MAX)fail(seq,"BadBudget");
             if(!same(execution(),"Running"))fail(seq,"NotRunning");
             if(named && !tk_runnable(task))fail(seq,"NotRunnable");
-            struct text st={steps,0,sizeof steps-256,0};
+            struct text st={steps,0,sizeof steps-256-sizeof graph,0};
             unsigned done=0;
             while(done<n && same(execution(),"Running") && (!named || tk_runnable(task)) && st.cap-st.used>FGC_RECORD_MAX+1){
                 size_t k=0;

@@ -68,6 +68,8 @@ function main() {
   const tools=controlToolchain(option('--solo5',undefined));
   const out=resolve(root,'build/solo5/control-tasks',`${Date.now()}-${process.pid}`);
   const family=enumerateTasks();
+  if(family.truncated||Number(family.count)!==family.cases.length||!family.cases.length)
+    throw new Error('Incomplete grammar G');
   const sample=family.cases.filter((_,i)=>i%stride===0);
   const programs=[
     ...handCases.map(c=>({family:'tc1-task-hand',name:c.name,program:c.program,specs:c.schedules})),
