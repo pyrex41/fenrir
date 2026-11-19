@@ -1,9 +1,7 @@
 # Fenrir AArch64 verification lane
 
-> Integration status: this lane was imported from `claude/keen-ptolemy-w9d7ve`.
-> The flake's `aarch64-verification` output has not yet been integrated into
-> this branch. The recorded runs below are historical, not results on this
-> branch; the complete check remains unrun here.
+> This lane was imported from `claude/keen-ptolemy-w9d7ve`. The recorded runs
+> below are historical Linux x86-64 results, not results from ARM64 CI.
 
 This lane compiles closed subsets of existing TC0-A pure-call artifacts to real
 AArch64 function bytes, proves the compilation in Rocq, and checks the bytes'
@@ -25,12 +23,35 @@ Shen model by test only (below).
 sh verification/aarch64/check.sh
 ```
 
-Every tool comes from the flake (`nix build .#aarch64-verification`, devShell
-`nix develop .#aarch64-verification`): Rocq 9.3.0 (Búri's pin, amendment §3)
-with its standard library V9.2.0, GNU binutils 2.46 for AArch64, qemu-user
-11.1.1 and Node 22; Shen/JIT 0.7 from `.#shen-jit`. The script runs, in a fresh
-`build/aarch64/check-*` directory, and fails on any error, missing tool or
-timeout:
+Run on Linux (`aarch64-linux` or `x86_64-linux`) with Nix flakes enabled.
+The script resolves the host's `.#aarch64-verification` and `.#shen-jit` from
+the checked-in lockfile. The same check runs on GitHub Actions on an ARM64
+runner and an x86-64 runner, both using `qemu-aarch64` for the generated
+executables. That is QEMU user-mode evidence even when the host is ARM64.
+
+### Toolchain contract
+
+- `packages.<system>.aarch64-verification`: a single prefix exposing
+  `bin/rocq` (`rocq compile`), `bin/rocqchk`, and
+  `lib/coq/9.3/user-contrib/Stdlib`. Use `rocqPackages_9_3` from the pinned
+  nixpkgs: Rocq 9.3.0 (Búri's pin, amendment §3) and Stdlib V9.2.0.
+  Ubuntu 24.04's Coq does not provide this `Stdlib` namespace.
+- The same prefix exposes `bin/node` (Node 22), `bin/qemu-aarch64` (QEMU
+  user mode 11.1.1, no KVM needed), and GNU binutils 2.46 `as`, `ld`, and
+  `objcopy` with either the `aarch64-unknown-linux-gnu-` or
+  `aarch64-linux-gnu-` prefix. On x86-64 use AArch64 cross binutils. On ARM64
+  the native binutils lack a prefix, so expose explicit AArch64-prefixed
+  aliases to the native tools. Do not alias unqualified x86-64 tools.
+- `packages.<system>.shen-jit`: the pinned host-native Shen/JIT 0.7 with
+  `bin/shen-jit` and `lib/`, including `shen-process.so` for the differential
+  harness. If exposing a `devShells.<system>.aarch64-verification`, set
+  `ROCQPATH` to the same `user-contrib` directory for direct tool use.
+- `FENRIR_AARCH64_TOOLS` and `FENRIR_SHEN_JIT` can supply absolute install
+  prefixes matching the layout above instead of building either output.
+
+### Checks
+
+The script fails on a missing tool or failed check. It runs:
 
 1. `node --test tests/aarch64/*.test.mjs`;
 2. `node tools/aarch64/check.mjs` — profile `fenrir-aarch64-checked-unary/1` as
@@ -40,8 +61,9 @@ timeout:
 5. `sh harness/run-aarch64-differential.sh` — the source semantics of all three
    profiles against the Shen model.
 
-It writes `summary.json` with links to each report. Status is
-`development-pass`, never a qualification receipt.
+It writes a fresh `build/aarch64/check-*/summary.json` with paths to each
+report. CI uploads `build/aarch64/` separately for each host, including logs
+on failure. Status is `development-pass`, never a qualification receipt.
 
 Latest recorded run, 15 November 2026, with the call profile
 ([validation-2026-11-15-call.json](validation-2026-11-15-call.json)), 6 min 21 s

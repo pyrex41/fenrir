@@ -1,25 +1,58 @@
 name: AArch64 verification development lane
 on:
   push:
-    paths: ['verification/aarch64/**', 'tools/aarch64/**', 'tests/aarch64/**', 'tools/tc0/**', 'runtime/tc0/**', '.github/workflows/aarch64-verification.yml']
+    paths:
+      - 'verification/aarch64/**'
+      - 'tools/aarch64/**'
+      - 'tests/aarch64/**'
+      - 'tools/tc0/**'
+      - 'runtime/tc0/**'
+      - 'models/tc0/**'
+      - 'models/tc1/handler-machine.shen'
+      - 'harness/aarch64-differential.shen'
+      - 'harness/run-aarch64-differential.sh'
+      - 'harness/common.shen'
+      - 'harness/jit.sh'
+      - 'package.json'
+      - 'flake.nix'
+      - 'flake.lock'
+      - '.github/workflows/aarch64-verification.yml'
   pull_request:
-    paths: ['verification/aarch64/**', 'tools/aarch64/**', 'tests/aarch64/**', 'tools/tc0/**', 'runtime/tc0/**', '.github/workflows/aarch64-verification.yml']
+    paths:
+      - 'verification/aarch64/**'
+      - 'tools/aarch64/**'
+      - 'tests/aarch64/**'
+      - 'tools/tc0/**'
+      - 'runtime/tc0/**'
+      - 'models/tc0/**'
+      - 'models/tc1/handler-machine.shen'
+      - 'harness/aarch64-differential.shen'
+      - 'harness/run-aarch64-differential.sh'
+      - 'harness/common.shen'
+      - 'harness/jit.sh'
+      - 'package.json'
+      - 'flake.nix'
+      - 'flake.lock'
+      - '.github/workflows/aarch64-verification.yml'
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   proof-and-native:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04-arm, ubuntu-24.04]
+    runs-on: ${{ matrix.runner }}
+    # Allow cold Nix builds as well as the full proof, QEMU and Shen checks.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - run: sudo apt-get update && sudo apt-get install -y coq binutils-aarch64-linux-gnu qemu-user
-      - run: node --test tests/aarch64/*.test.mjs
-      - run: node tools/aarch64/check.mjs
+      - uses: cachix/install-nix-action@v31
+      - name: Check all AArch64 profiles and Shen differential
+        run: sh verification/aarch64/check.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: aarch64-verification-evidence
+          name: aarch64-verification-evidence-${{ matrix.runner }}
           path: build/aarch64/
