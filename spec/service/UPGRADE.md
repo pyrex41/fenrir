@@ -362,6 +362,7 @@ spt host). Each accepts `replay-retained` for its own counterexample set.
 The Solo5 sample check uses one cold-boot replay per tape; its `quick` mode
 does not repeat the standalone hostile-host or independent rerecording checks.
 None of these commands qualify the OTP host or test power loss.
+See [A4 bounded development evidence](A4_EVIDENCE.md) for observed counts and limits.
 
 As A2: a Fenrir machine is the A4 model with every run (`submit`, `complete`,
 `dispatch` then `land`) executed by running the handler program of the run's version on
