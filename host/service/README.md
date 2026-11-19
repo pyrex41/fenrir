@@ -129,6 +129,8 @@ To reproduce the false evidence on `2cc8d0e`, pass that revision's run config
 and append `--baseline /path/to/baseline-checkout`. To reproduce the follow-up
 recovery snapshot, history gap format and wrong-tender regressions at
 `43eea72`, use that revision's config and append `--gap-baseline /path/to/checkout`.
+To reproduce cross-boot observation substitution at `001db56`, append
+`--observe-baseline /path/to/checkout` to that revision's config.
 
 ## Artifact
 

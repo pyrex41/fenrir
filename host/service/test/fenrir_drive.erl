@@ -128,6 +128,7 @@ probe_died(S, Cmd, Why) ->
 
 abort_probe(S, Cmd, Why) -> {unavailable, record_probe_death(S, Cmd, Why)}.
 
+record_probe_death(S, Cmd, no_node) -> gap(S, <<"probe had no node">>, Cmd);
 record_probe_death(S, _, driver_timeout) -> record_crash(S, <<"node">>);
 record_probe_death(S, Cmd, Why) -> record_crash(gap(S, <<"probe lost node">>, {Cmd, Why}), <<"node">>).
 
@@ -233,13 +234,19 @@ crash(S, _How) -> crashed(kill(S), <<"node">>).
 %% has a separate crash event.
 fault(S, What, Point) -> event(S, [<<"fault">>, What, Point]).
 
+%% Observations are boot-local evidence. A crash that precedes this call can
+%% start a new, required observation (restart/1); a crash during the call
+%% invalidates it. Never substitute an observation from another boot.
 observe(S) -> observe(S, 100).
 observe(S, N) ->
     case call(S, snapshot) of
         {ok, Stores, S1} when is_list(Stores) -> event(S1, [<<"observe">>, Stores]);
         {ok, _NotYet, S1} when N > 0 -> timer:sleep(20), observe(S1, N - 1); %% the store is restarting
-        {ok, Other, S1} -> error({no_snapshot, Other, maps:get(name, S1)});
-        {died, _, S1} -> crashed(S1, <<"node">>)
+        {ok, Other, S1} ->
+            throw({probe_unavailable, observe, gap(S1, <<"observation unavailable">>, Other)});
+        {died, Why, S1} ->
+            {unavailable, S2} = abort_probe(S1, observe, Why),
+            throw({probe_unavailable, observe, S2})
     end.
 
 %% A control command (arm, disarm, fired, pids): {Answer | died, S}; a node found dead

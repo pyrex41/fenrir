@@ -72,6 +72,12 @@ tender PID captured by the worker at spawn, before fault injection. A recorder
 gap, including a timeout during a recovery snapshot, is an evidence error;
 it cannot count as a mutant detection.
 
+A recorded observation must come from the boot that received its snapshot
+request. It can retry while that boot's store restarts. If the node exits before
+the snapshot arrives, the driver records a gap and stops the scenario without
+substituting a snapshot from another boot. An intentional fault before a
+recovery observation still restarts the node and observes the new boot.
+
 ## 4 How a real fault maps to A1
 
 A1's `crash` empties the outbox and keeps the stores; the real outbox is the front's

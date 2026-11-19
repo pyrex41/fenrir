@@ -125,17 +125,13 @@ run_scenario(Ctx, Full, Family, Mutant, Fun) ->
         {start_failed, Why} ->
             #{status => start_failed, detail => Why};
         S1 ->
-            {S2, Checks} = try Fun(S1)
+             {S2, Checks0} = try Fun(S1)
                            catch
                                throw:{probe_unavailable, Probe, State} ->
                                    {State, [check(probe_available, false, Probe) | maps:get(fault_checks, State, [])]};
                                Cl:Er:St -> ?D:kill(S1), erlang:raise(Cl, Er, St)
                            end,
-            S3 = case {maps:get(node, S2), lists:keymember(probe_available, 1, Checks)} of
-                     {none, _} -> S2;
-                     {_, true} -> S2;
-                     {_, false} -> ?D:observe(S2)
-                 end,
+             {S3, Checks} = final_observation(S2, Checks0),
             S4 = ?D:stop(S3),
             Audit = ?D:audit(maps:get(db, S4), ?D:told(S4)),
             Tenants = maps:get(tenants, maps:get(config, Ctx)),
@@ -152,6 +148,17 @@ run_scenario(Ctx, Full, Family, Mutant, Fun) ->
               requests => length(maps:get(latencies, S4)), latencies_us => maps:get(latencies, S4),
               node_start_us => maps:get(node_start_us, S4, 0),
               coverage => maps:get(coverage, S4), us => erlang:monotonic_time(microsecond) - T0}
+    end.
+
+final_observation(S, Checks) ->
+    case {maps:get(node, S), lists:keymember(probe_available, 1, Checks)} of
+        {none, _} -> {S, Checks};
+        {_, true} -> {S, Checks};
+        {_, false} ->
+            try {?D:observe(S), Checks}
+            catch throw:{probe_unavailable, Probe, State} ->
+                {State, [check(probe_available, false, Probe) | Checks]}
+            end
     end.
 
 check(Name, Bool, Detail) -> {Name, Bool =:= true, Detail}.

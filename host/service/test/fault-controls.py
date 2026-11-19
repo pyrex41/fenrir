@@ -7,6 +7,8 @@ To reproduce the false positives at 2cc8d0e, pass that checkout's config and
 append --baseline /path/to/2cc8d0e.
 To reproduce the recovery/format/tender failures at 43eea72, use that run's
 config and append --gap-baseline /path/to/43eea72.
+To reproduce observation substitution at 001db56, append --observe-baseline
+/path/to/001db56 to that revision's run config.
 The control files and histories go into a fresh sibling directory. Neither the
 checkout nor the campaign's original outputs are modified.
 """
@@ -31,8 +33,10 @@ def erl_string(value):
 config = Path(sys.argv[1]).resolve()
 baseline = len(sys.argv) == 4 and sys.argv[2] == "--baseline"
 gap_baseline = len(sys.argv) == 4 and sys.argv[2] == "--gap-baseline"
-assert len(sys.argv) == 2 or baseline or gap_baseline, __doc__
-root = Path(sys.argv[3]).resolve() if baseline or gap_baseline else Path(__file__).resolve().parents[3]
+observe_baseline = len(sys.argv) == 4 and sys.argv[2] == "--observe-baseline"
+any_baseline = baseline or gap_baseline or observe_baseline
+assert len(sys.argv) == 2 or any_baseline, __doc__
+root = Path(sys.argv[3]).resolve() if any_baseline else Path(__file__).resolve().parents[3]
 out = Path(tempfile.mkdtemp(prefix="fault-controls-", dir=config.parent.parent))
 print(out, flush=True)
 service = root / "host/service"
@@ -42,7 +46,8 @@ env = dict(os.environ, FENRIR_SQLITE_PORT=str(sqlite))
 env.setdefault("ERL_FLAGS", "+S 2:2 +SDcpu 1 +SDio 1")
 
 
-def run(name, family, only, filename, old, new, proof_test, history_verdict=None, mutant=False):
+def run(name, family, only, filename, old, new, proof_test, history_verdict=None,
+        mutant=False, positive=False):
     directory = out / name
     ebin = directory / "ebin"
     shutil.copytree(original_ebin, ebin)
@@ -100,13 +105,14 @@ def run(name, family, only, filename, old, new, proof_test, history_verdict=None
                            env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
             verdict = json.loads((verdict_dir / "verdicts.jsonl").read_text())
             assert verdict["verdict"] == history_verdict, verdict
-    print(name + (": reproduced false evidence" if baseline or gap_baseline else ": rejected"), flush=True)
+    result = "reproduced false evidence" if any_baseline else ("accepted" if positive else "rejected")
+    print(f"{name}: {result}", flush=True)
 
 
 unverified = ('false = lists:any(fun(E) -> hd(E) =:= <<"fault">> end, Events), '
               '{fault_fired,false,_} = lists:keyfind(fault_fired,1,maps:get(checks,S)), '
               'not fenrir_campaign:fault_evidence(S)')
-if not gap_baseline:
+if not gap_baseline and not observe_baseline:
     submit = 'command({submit, T, K, D, P}, _) -> fenrir_front:submit(T, K, D, P);'
     run("unrelated-node-sigkill", "crash_points", "w2_request_before_commit-kill_node-submit",
         "fenrir_node.erl", submit,
@@ -128,7 +134,7 @@ decoy = '''    Decoy = open_port({spawn_executable, os:find_executable("sleep")}
     DecoyPid = fenrir_sqlite:os_pid(Decoy),
     true = P =/= DecoyPid,
 '''
-if not gap_baseline:
+if not gap_baseline and not observe_baseline:
     port_action = ('fire(kill_port, #{port := P}) -> kill9(P), ok;' if baseline else
                    '    kill_port(Point, kill_port, P, Port, W);')
     port_fault_event = 'lists:member([<<"fault">>,<<"kill_port">>,<<"s4_after_commit">>],Events) andalso maps:get(checks_ok,S)'
@@ -143,20 +149,20 @@ if not gap_baseline:
          '    kill_port(Point, kill_port, DecoyPid, Decoy, W);'),
         port_fault_event if baseline else unverified)
 
-if not baseline and not gap_baseline:
+if not any_baseline:
     run("unverified-lost-ack", "lost_ack", "", "fenrir_faults.erl",
         'fenrir_sqlite:arm(Port, after_commit, 1)',
         'fenrir_sqlite:arm(Port, after_statement, 1)',
         'true = lists:member({caller_sees_indeterminate,true,indeterminate},maps:get(checks,S)), '
         + unverified)
-if not gap_baseline:
+if not gap_baseline and not observe_baseline:
     run("suppressed-lost-ack", "lost_ack", "", "fenrir_faults.erl",
         'fenrir_sqlite:arm(Port, after_statement, 1)' if baseline else 'fenrir_sqlite:arm(Port, after_commit, 1)',
         'fenrir_sqlite:arm(Port, disarm, 1)',
         ('lists:member([<<"fault">>,<<"sqlite_port">>,<<"lose_ack">>],Events) andalso not maps:get(checks_ok,S)'
          if baseline else unverified))
 
-for command in (("outbox",) if gap_baseline else ("outbox", "snapshot")):
+for command in (() if observe_baseline else ("outbox",) if gap_baseline else ("outbox", "snapshot")):
     handler = {"outbox": "fenrir_front:outbox()", "snapshot": "fenrir_store:snapshot()"}[command]
     # Stall the first instance only; the restarted node must answer observations.
     run(command + "-timeout", "random_schedules", "", "fenrir_node.erl",
@@ -174,7 +180,7 @@ for command in (("outbox",) if gap_baseline else ("outbox", "snapshot")):
          + 'true = lists:member(Gap,maps:get(gaps,S)), lists:member(Gap,Events)'),
          history_verdict=None if baseline else ("rejected" if gap_baseline else "indeterminate"))
 
-if not baseline:
+if not baseline and not observe_baseline:
     run("wrong-tender", "crash_points", "w3_commit_before_reply-kill_tender-submit",
         "fenrir_faults.erl", "    kill_port(Point, kill_tender, P, Port, W);",
         decoy + '    true = port_close(Port),\n    kill_port(Point, kill_tender, DecoyPid, Decoy, W);',
@@ -201,3 +207,54 @@ if not baseline:
          'true = fenrir_campaign:fault_evidence(S), '
          'true = lists:member(Gap,maps:get(gaps,S)), lists:member(Gap,Events)'),
         history_verdict="accepted" if gap_baseline else "indeterminate", mutant=True)
+
+if not baseline and not gap_baseline:
+    def lost_observation(prior_crashes):
+        if observe_baseline:
+            return (
+                f"{prior_crashes + 1} = maps:get(crashes,S), "
+                f"{prior_crashes + 2} = maps:get(boots,S), "
+                '[] = maps:get(gaps,S), true = maps:get(checks_ok,S), '
+                'true = lists:member([<<"crash">>,<<"node">>],Events), '
+                'hd(lists:last(Events)) =:= <<"observe">>'
+            )
+        return (
+            f"{prior_crashes + 1} = maps:get(crashes,S), "
+            f"{prior_crashes + 1} = maps:get(boots,S), "
+            'false = maps:get(checks_ok,S), '
+            '{probe_available,false,observe} = lists:keyfind(probe_available,1,maps:get(checks,S)), '
+            'Gap = [<<"gap">>,<<"probe lost node: {observe,47}">>], '
+            '[Gap] = maps:get(gaps,S), '
+            'lists:sublist(lists:reverse(Events),2) =:= [[<<"crash">>,<<"node">>],Gap]'
+        )
+
+    want = "accepted" if observe_baseline else "indeterminate"
+    run("final-observation-node-exit", "retries", "",
+        "fenrir_node.erl", "command(snapshot, _) -> fenrir_store:snapshot();",
+        '''command(snapshot, _) ->
+    case get(final_observe_control) of
+        true -> erlang:halt(47);
+        _ -> put(final_observe_control, true), fenrir_store:snapshot()
+    end;''',
+        lost_observation(0), history_verdict=want)
+
+    after_drain = '''command(snapshot, _) ->
+    case erase(snapshot_after_drain) of
+        2 -> @ACTION@;
+        _ -> fenrir_store:snapshot()
+    end;'''
+    case_name = "w4_reply_before_response-kill_node-submit"
+    run("recovery-observation-node-exit", "crash_points", case_name,
+        "fenrir_node.erl", "command(snapshot, _) -> fenrir_store:snapshot();",
+        after_drain.replace("@ACTION@", "erlang:halt(47)"),
+        'true = fenrir_campaign:fault_evidence(S), ' + lost_observation(1),
+        history_verdict=want, mutant=True)
+
+    if not observe_baseline:
+        run("same-boot-observation-retry", "crash_points", case_name,
+            "fenrir_node.erl", "command(snapshot, _) -> fenrir_store:snapshot();",
+            after_drain.replace("@ACTION@", "store_restarting"),
+            'true = fenrir_campaign:fault_evidence(S), '
+            '1 = maps:get(crashes,S), 2 = maps:get(boots,S), [] = maps:get(gaps,S), '
+            'true = maps:get(checks_ok,S), hd(lists:last(Events)) =:= <<"observe">>',
+            history_verdict="accepted", mutant=True, positive=True)
