@@ -47,7 +47,7 @@ main([ConfigFile, HistExit]) ->
           <<"normal_stack">> => #{<<"scenarios">> => length(Normal),
                                   <<"histories_accepted">> => count(fun(R) -> maps:get(verdict, R) =:= <<"accepted">> end, Normal),
                                   <<"flagged">> => [flag_json(R) || R <- Normal, maps:get(flagged, R)],
-                                  <<"crashes_injected">> => lists:sum([maps:get(crashes, R, 0) || R <- Normal]),
+                                  <<"node_crashes_observed">> => lists:sum([maps:get(crashes, R, 0) || R <- Normal]),
                                   <<"requests">> => lists:sum([maps:get(requests, R, 0) || R <- Normal]),
                                   <<"a2_run_coverage">> => a2_coverage(C, Normal)},
           <<"host_mutants">> => Mutants,
@@ -55,7 +55,7 @@ main([ConfigFile, HistExit]) ->
           <<"latency">> => #{<<"request_boot_plus_run_us">> => dist(Lat),
                              <<"node_start_us">> => dist(Boots),
                              <<"two_worker_batch_of_2_us">> => dist(lists:sort(TwoW)),
-                             <<"note">> => <<"one request per tender boot (protocol v2 runs one program per boot); request_boot_plus_run_us is the worker's wall time from spawning solo5-spt to Bye and exit, including the SQLite commit; development container, no KVM, not a performance claim">>},
+                             <<"note">> => <<"one request per tender boot (protocol v2 runs one program per boot); request_boot_plus_run_us is the worker's wall time from spawning solo5-spt to Bye and exit, including the SQLite commit; development timings, not a performance claim">>},
           <<"not_covered">> => [<<"power loss and fsync honesty: kill -9 of a process cannot drop the OS page cache, so synchronous=OFF is NOT DETECTED by this campaign">>,
                                 <<"disk corruption, torn sectors, a lying disk">>, <<"SQLite itself">>, <<"OTP itself">>,
                                 <<"isolation between several workers on one store beyond the observed serialized runs (one adapter process serializes commits)">>,
@@ -169,8 +169,8 @@ row(S = #{status := executed, history := Path}, Verdicts) ->
     Verdict = maps:get(<<"verdict">>, V, <<"missing">>),
     Errors = [history_evidence || not valid_history(S, V)] ++
              [recorder_gap || maps:get(gaps, S, missing) =/= []] ++
-             [fault_not_verified || lists:any(fun({N, Ok, _}) ->
-                 not Ok andalso lists:member(N, [fault_fired, sqlite_probe, exception])
+             [fault_not_verified || not fenrir_campaign:fault_evidence(S) orelse lists:any(fun({N, Ok, _}) ->
+                 not Ok andalso lists:member(N, [sqlite_probe, exception])
              end, maps:get(checks, S, []))],
     Reasons = [history || Verdict =:= <<"rejected">>] ++ [audit || not maps:get(audit_clean, S)]
               ++ [checks || not maps:get(checks_ok, S)],
@@ -326,7 +326,11 @@ identities(C, I) ->
            end,
     Sha = fun(F) -> {ok, B} = file:read_file(F), binary:encode_hex(crypto:hash(sha256, B), lowercase) end,
     ToolSource = maps:get(tool_source, C, unknown),
+    {_, HostOS} = os:type(),
     #{<<"a3_tool_source">> => atom_to_binary(ToolSource),
+      <<"host_os">> => atom_to_binary(HostOS),
+      <<"host_arch">> => list_to_binary(string:trim(os:cmd("uname -m"))),
+      <<"erts_target">> => list_to_binary(erlang:system_info(system_architecture)),
       <<"otp_release">> => list_to_binary(erlang:system_info(otp_release)),
       <<"erts">> => list_to_binary(erlang:system_info(version)),
       <<"erl">> => list_to_binary(maps:get(erl, C)),

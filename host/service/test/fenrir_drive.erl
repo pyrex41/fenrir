@@ -12,7 +12,7 @@
 -export([new/2, start/1, stop/1, kill/1, call/2, call/3, cmd/2, backoff/1,
          submit/4, submit_told/4, complete/4, respond/2, crash/2, observe/1, drain/2, fault/3,
          event/2, events/1, told/1, write_history/3, audit/2, retry_submit/5, concurrent/2,
-         fresh_db/1, sqlite_exit/2]).
+         fresh_db/1, sqlite_exit/2, read_probe/2, await_node_exit/1]).
 
 %% Ctx: #{erl, ebin, node_launch, out, config => NodeConfigMap, name}
 new(Ctx, Name) ->
@@ -83,21 +83,50 @@ kill(S = #{node := #{port := Port, pid := Pid}}) ->
 call(S, Cmd) -> call(S, Cmd, fun(_, Acc) -> Acc end).
 call(S = #{node := #{port := Port}}, Cmd, OnNote) ->
     try port_command(Port, term_to_binary(Cmd)) of
-        true -> collect(S, Port, OnNote, S)
-    catch error:badarg -> {died, port_closed, S#{node := none}}
+        true -> collect(S, Port, OnNote, Cmd)
+    catch error:badarg ->
+        receive {Port, {exit_status, St}} -> died(S, St)
+        after 100 -> died(S, port_closed)
+        end
     end;
 call(S = #{node := none}, _Cmd, _OnNote) -> {died, no_node, S}.
 
-collect(S, Port, OnNote, Acc) ->
+collect(S, Port, OnNote, Cmd) ->
+    Timeout = maps:get(call_timeout, maps:get(ctx, S), 120000),
     receive
         {Port, {data, B}} ->
             case binary_to_term(B) of
-                {note, N} -> collect(S, Port, OnNote, OnNote(N, Acc));
-                A -> {ok, A, Acc}
+                {note, N} -> collect(OnNote(N, S), Port, OnNote, Cmd);
+                A -> {ok, A, S}
             end;
-        {Port, {exit_status, St}} -> {died, St, Acc#{node := none}}
-    after 120000 -> {died, driver_timeout, kill(event(Acc, [<<"gap">>, <<"driver timed out">>]))}
+        {Port, {exit_status, St}} -> died(S, St)
+    after Timeout ->
+        Gap = [<<"gap">>, <<"driver timed out">>, print_term(Cmd)],
+        died(kill(event(S, Gap)), driver_timeout, maps:get(pid, maps:get(node, S)))
     end.
+
+died(S, St) -> died(S, St, maps:get(pid, maps:get(node, S))).
+died(S, St, Pid) -> {died, St, S#{node := none, last_node_exit => {maps:get(boots, S), Pid, St}}}.
+
+%% f1 can write a normal answer before the node exits, notably for complete.
+await_node_exit(S = #{node := none}) -> S;
+await_node_exit(S = #{node := #{port := Port}}) ->
+    receive {Port, {exit_status, St}} -> {died, St, S1} = died(S, St), crashed(S1, <<"node">>)
+    after 2000 -> S
+    end.
+
+%% No invented empty outbox or snapshot on transport failure. Keep the
+%% recorder's gap and recover the node, but skip the step that needed the read.
+read_probe(S, Cmd) ->
+    case call(S, Cmd) of
+        {ok, L, S1} when is_list(L) -> {ok, L, S1};
+        {ok, Why, S1} -> {unavailable, event(S1, [<<"gap">>, <<"probe failed">>, print_term({Cmd, Why})])};
+        {died, driver_timeout, S1} -> {unavailable, crashed(S1, <<"node">>)};
+        {died, Why, S1} ->
+            {unavailable, crashed(event(S1, [<<"gap">>, <<"probe lost node">>, print_term({Cmd, Why})]), <<"node">>)}
+    end.
+
+print_term(T) -> iolist_to_binary(io_lib:format("~0p", [T])).
 
 %% ---------- the recorder ----------
 
@@ -187,8 +216,8 @@ complete(S, T, J, Ok) ->
 
 crash(S, _How) -> crashed(kill(S), <<"node">>).
 
-%% An informational fault event (no A1 step): a tender, worker or port program died and
-%% the node survived.
+%% An informational, verified fault event (no A1 step); a node death additionally
+%% has a separate crash event.
 fault(S, What, Point) -> event(S, [<<"fault">>, What, Point]).
 
 observe(S) -> observe(S, 100).

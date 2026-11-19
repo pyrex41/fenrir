@@ -188,7 +188,7 @@ lost_commit_ack(C) ->
     {First, FirstRef} = Start(),
     try
         ok = fenrir_faults:arm(s3_before_commit, lose_ack, 1),
-        {indeterminate, {port_died, commit, _}} = fenrir_store:commit(Tx),
+        {indeterminate, {port_died, commit, {lost_commit_ack, 137}}} = fenrir_store:commit(Tx),
         sqlite_port_died = Wait(First, FirstRef),
         {Second, SecondRef} = Start(),
         try

@@ -16,11 +16,13 @@
  *                                fsync from now, 3 after the n-th statement from now has
  *                                completed but before its answer is written (a lost
  *                                acknowledgment), 4 before the n-th statement from now is
- *                                executed, 0 disarm every fault; answer 'K'. Counters are this process's only.
+ *                                executed, 5 after the n-th successful COMMIT before its
+ *                                answer, 0 disarm every fault; answer 'K'.
  *   'W'                          answer 'R' with the write and fsync counters since open
  *   'C'                          close and exit 0
  * Values: 'n' | 'i' i64(BE) | 't' u32 n bytes | 'b' u32 n bytes.
  * Answers: 'K' | 'R' u32 rows u16 cols value* | 'X' i32 primary i32 extended u32 n message.
+ * Diagnostic (not a SQL answer): 'L' immediately before a kind-5 SIGKILL.
  *
  * Exit status: 0 after 'C' or EOF on stdin; 2 on a malformed request or I/O failure. */
 #include <signal.h>
@@ -74,7 +76,7 @@ static void out_send(void) {
 
 /* ---------- faults ---------- */
 
-static long fault_write = -1, fault_sync = -1, fault_after_stmt = -1, fault_before_stmt = -1;
+static long fault_write = -1, fault_sync = -1, fault_after_stmt = -1, fault_before_stmt = -1, fault_after_commit = -1;
 static unsigned long writes, syncs;
 static void die(void) { kill(getpid(), SIGKILL); _exit(9); }
 
@@ -211,6 +213,13 @@ static void exec_request(void) {
         memcpy(rows + rows_n, out + 4, m); rows_n += m; count++;
     }
     sqlite3_finalize(st);
+    /* Emit a diagnostic, NOT a SQL reply. It identifies the exact operation on
+       this connection; the driver also needs the port's SIGKILL exit status. */
+    if (n == 6 && memcmp(sql, "COMMIT", 6) == 0 &&
+        fault_after_commit > 0 && --fault_after_commit == 0) {
+        out_reset(); out_u8('L'); out_send();
+        die();
+    }
     if (fault_after_stmt > 0 && --fault_after_stmt == 0) die();
     out_reset(); out_u8('R'); out_u32(count); out_u16((unsigned)cols); out_bytes(rows ? rows : (unsigned char *)"", rows_n); out_send();
     free(rows);
@@ -240,9 +249,10 @@ int main(void) {
         case 'F': {
             unsigned char kind; uint32_t n;
             if (!take(&kind, 1) || !take_u32(&n) || n < 1) _exit(2);
-            if (kind == 0) fault_write = fault_sync = fault_after_stmt = fault_before_stmt = -1;
+            if (kind == 0) fault_write = fault_sync = fault_after_stmt = fault_before_stmt = fault_after_commit = -1;
             else if (kind == 1) fault_write = n; else if (kind == 2) fault_sync = n;
-            else if (kind == 3) fault_after_stmt = n; else if (kind == 4) fault_before_stmt = n; else _exit(2);
+            else if (kind == 3) fault_after_stmt = n; else if (kind == 4) fault_before_stmt = n;
+            else if (kind == 5) fault_after_commit = n; else _exit(2);
             answer_ok();
             break;
         }

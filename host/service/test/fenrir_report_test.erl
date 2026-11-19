@@ -39,6 +39,15 @@ checks(Root, Mode) ->
         not maps:get(<<"as_expected">>, M) andalso maps:get(<<"caught_by_sqlite_audit">>, M) =:= []
     end,
     OnlyBadHistory = [R#{audit_clean => true} || R <- Rows],
+    FaultRow = lists:keyfind("normal/crash_points/w1_before_request-kill_node-submit-1", 1,
+                             [{maps:get(name, R), R} || R <- Rows]),
+    {_, Fault} = FaultRow,
+    [{fault_fired, true, {Point, Action, Pids, Same, Disarm, Proof}}] = maps:get(checks, Fault),
+    Replace = fun(R, New, Rs) -> [case X =:= R of true -> New; false -> X end || X <- Rs] end,
+    FailFault = fun(Detail) -> not Complete(C, Replace(Fault, Fault#{checks :=
+        [{fault_fired, true, Detail}]}, Rows), V, Neg) end,
+    Lost = hd([R || R = #{family := lost_ack, mutant := normal} <- Rows]),
+    Random = hd([R || R = #{family := random_schedules, mutant := normal} <- Rows]),
     TestCases = [
         {exact_scope, Complete(C, Rows, V, Neg)},
         {missing_family, not Complete(C, Partial, WithFreshVerdicts(Partial), Neg)},
@@ -66,6 +75,17 @@ checks(Root, Mode) ->
         {no_faults_fired, not Complete(C, NoFault, WithFreshVerdicts(NoFault), Neg)},
         {sweep_limit, not Complete(C, Boundary, WithFreshVerdicts(Boundary), Neg)},
         {sweep_hole, not Complete(C, Hole, WithFreshVerdicts(Hole), Neg)},
+        {wrong_node, FailFault({Point, Action, Pids, Same, Disarm, {Point, Action, 2, {matched, 137}}})},
+        {unrelated_sigkill, FailFault({Point, Action, Pids, Same, Disarm, {Point, Action, 1, {missing, 137}}})},
+        {wrong_point, FailFault({w2_request_before_commit, Action, Pids, Same, Disarm,
+                                  {w2_request_before_commit, Action, 1, {matched, 137}}})},
+        {wrong_action, FailFault({Point, halt_node, Pids, Same, Disarm, {Point, halt_node, 1, {matched, 86}}})},
+        {suppressed_node_kill, FailFault({Point, Action, Pids, true, Disarm, Proof})},
+        {legacy_pre_action_hook, not Complete(C, Replace(Fault, Fault#{checks :=
+            [{fault_fired, true, Point}]}, Rows), V, Neg)},
+        {lost_ack_without_proof, not Complete(C, Replace(Lost, Lost#{checks := []}, Rows), V, Neg)},
+        {random_timeout_gap, not Complete(C, Replace(Random, Random#{gaps :=
+            [[<<"gap">>, <<"driver timed out">>, <<"outbox">>]]}, Rows), V, Neg)},
         {pid_change_without_sigkill, fenrir_campaign:sweep_result(submit, aborted, {true, true}, 1, ok, false) =:= unverified},
         {request_did_not_apply, fenrir_campaign:sweep_result(complete, delivered, {false, true}, none, ok, false) =:= unverified}
     ],
@@ -73,8 +93,27 @@ checks(Root, Mode) ->
 
 row(M, F, Name) ->
     #{mutant => M, family => F, name => Name, status => executed, events => 1, gaps => [],
-      history => "/synthetic/" ++ Name, checks_ok => true, checks => [],
+      history => "/synthetic/" ++ Name, checks_ok => true, checks => fault_checks(F, Name),
       audit_clean => lists:member(M, [normal, equivalent_control, sync_off])}.
+
+fault_checks(crash_points, Name) ->
+    [_, _, Case] = string:split(Name, "/", all),
+    [P, A, _, _] = string:split(Case, "-", all),
+    Point = list_to_atom(P), Action = list_to_atom(A),
+    {Same, Target, Exit} = case Action of
+        kill_node -> {false, 1, {matched, 137}};
+        halt_node -> {false, 1, {matched, 86}};
+        kill_tender -> {true, 3, {sigkill, "<0.4.0>"}};
+        kill_worker -> {true, "<0.4.0>", killed};
+        kill_port -> {true, 2, {sigkill, "<0.5.0>"}};
+        kill_store -> {true, "<0.5.0>", killed}
+    end,
+    Pids = #{beam => 1, sqlite_port => 2, worker => "<0.4.0>", store => "<0.5.0>"},
+    [{fault_fired, true, {Point, Action, Pids, Same, ok, {Point, Action, Target, Exit}}}];
+fault_checks(lost_ack, _) ->
+    [{fault_fired, true, {s3_before_commit, lose_ack, #{sqlite_port => 2}, true, ok,
+                         {s3_before_commit, lose_ack, 2, lost_commit_ack}}}];
+fault_checks(_, _) -> [].
 
 failed_mutant(R = #{mutant := volatile_mailbox}) -> maps:remove(history, R#{status := start_failed, detail => test});
 failed_mutant(R) -> R.

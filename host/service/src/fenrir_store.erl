@@ -199,8 +199,8 @@ run_tx({tx, T, Guard, Writes}, S, Transactional) ->
             try body(T, Guard, Writes, S, Transactional) of
                 {done, Reply} -> {reply, Reply};
                 {commit, Reply} ->
-                    hit(s3_before_commit, S),
-                    finish(Port, Reply, S, Transactional)
+                    Fault = hit(s3_before_commit, S),
+                    finish(Port, Reply, S, Transactional, Fault)
             catch
                 throw:{busy, _} -> rollback(Port), busy;
                 throw:{port_died, Phase, R} -> {aborted, {port_died, Phase, R}};
@@ -208,13 +208,13 @@ run_tx({tx, T, Guard, Writes}, S, Transactional) ->
             end
     end.
 
-finish(_Port, Reply, S, false) -> hit(s4_after_commit, S), {reply, Reply};
-finish(Port, Reply, S, true) ->
+finish(_Port, Reply, S, false, _) -> hit(s4_after_commit, S), {reply, Reply};
+finish(Port, Reply, S, true, Fault) ->
     case fenrir_sqlite:exec(Port, "COMMIT", []) of
         {rows, _} -> hit(s4_after_commit, S), after_commit(Reply, S);
         {sqlite_error, B, _, _} when B =:= busy; B =:= locked -> rollback(Port), busy;
         {sqlite_error, C, E, M} -> rollback(Port), {aborted, {commit_failed, C, E, M}};
-        {port_died, R} -> {indeterminate, {port_died, commit, R}}
+        {port_died, R} -> fenrir_faults:lost_ack(Fault, R), {indeterminate, {port_died, commit, R}}
     end.
 
 %% two_transactions mutant: the job record is written by a second transaction.

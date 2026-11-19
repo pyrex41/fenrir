@@ -112,7 +112,7 @@ session(Program, S = #{image_info := I}) ->
     Port = open_port({spawn_executable, maps:get(launcher, S)},
                      [binary, exit_status, use_stdio, {args, [maps:get(<<"tender">>, I), maps:get(<<"image">>, I), Console]}]),
     OsPid = case erlang:port_info(Port, os_pid) of {os_pid, P} -> P; _ -> undefined end,
-    Ctx = #{tender => OsPid, worker => self()},
+    Ctx = #{tender => OsPid, tender_port => Port, worker => self()},
     St0 = #{port => Port, buf => <<>>, seq => 0, epoch => 0, requests => 0, commit => none, ctx => Ctx,
             frames => 0, runs => 0, replies => []},
     try

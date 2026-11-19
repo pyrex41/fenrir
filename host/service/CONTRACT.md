@@ -23,8 +23,8 @@ not a record that they all ran in this integration.
 | **A-ATOM** | One commit is one SQLite transaction (`BEGIN IMMEDIATE` … `COMMIT`): after any crash the file holds either all of a commit's writes or none of them | `fenrir_store:run_tx/3` | `sqlite_kills`: kill -9 of the SQLite port program before the n-th statement, before the n-th file write and before the n-th fsync of the request's transaction, for every n until the request completes unharmed; `crash_points` s1–s4; the audit of the SQLite file after every crash; mutants `two_transactions`, `no_transaction` |
 | **A-SERIAL** | Transactions on a store are serial: `BEGIN IMMEDIATE` takes the write lock before the guard is read, so a transaction never upgrades a read lock and no two commits interleave; the adapter is one process with one connection | `fenrir_store` | `busy`; `two_workers` (2 workers, concurrent pairs; observed only, see §6) |
 | **A-DUR** | A reported commit survives a crash of every host process: WAL journal, `synchronous=FULL` (the WAL is fsynced before `COMMIT` returns), both read back at open and the adapter refuses to start otherwise | `fenrir_store:open_configured/2` | unit `settings_wal_full`; every crash scenario (process crashes only). **Power loss is not tested** (§6); mutant `sync_off` is NOT DETECTED by this campaign |
-| **A-BUSY** | `SQLITE_BUSY` (another connection holds the write lock; 50 ms busy timeout) is the outcome `busy`: nothing applied, retryable; never reported as success or as a rollback of committed work | `fenrir_store:run_tx/3`, `finish/4` | `busy` (submit and delivery); unit `settings_busy_is_distinct_outcome`; mutant `busy_as_success` |
-| **A-INDET** | A commit whose acknowledgment is lost (the `COMMIT` statement was sent and no answer came back) is reported as `indeterminate`, never as a rollback; a retry with the same key returns the recorded receipt and makes no second mutation | `fenrir_store:finish/4`; `fenrir_worker:outcome/3`; `fenrir_front` | `lost_ack` (the port program kills itself after `COMMIT` completes, before answering); `sqlite_kills` during the commit's writes and fsync; `crash_points` w3, w4, s3 |
+| **A-BUSY** | `SQLITE_BUSY` (another connection holds the write lock; 50 ms busy timeout) is the outcome `busy`: nothing applied, retryable; never reported as success or as a rollback of committed work | `fenrir_store:run_tx/3`, `finish/5` | `busy` (submit and delivery); unit `settings_busy_is_distinct_outcome`; mutant `busy_as_success` |
+| **A-INDET** | A commit whose acknowledgment is lost (the `COMMIT` statement was sent and no answer came back) is reported as `indeterminate`, never as a rollback; a retry with the same key returns the recorded receipt and makes no second mutation | `fenrir_store:finish/5`; `fenrir_worker:outcome/3`; `fenrir_front` | `lost_ack` (the port program kills itself after `COMMIT` completes, before answering); `sqlite_kills` during the commit's writes and fsync; `crash_points` w3, w4, s3 |
 | **A-TENANT** | Per-tenant isolation in the schema: every table is keyed by tenant; a commit touches only the rows of the tenant its capability names; a capability naming no tenant is `Unauthorized` | `fenrir_store:schema/0` | unit `unknown_tenant_unauthorized`, `negative_tenant_unauthorized`, `tenants_are_separate`; every `observe` (A1 `authority.frame` through store equality) |
 | **A-DEDUP** | The request-key table (key, payload digest, receipt) is consulted inside the same transaction as the writes | `fenrir_store:guard_check/4` | `retries`; mutant `no_dedup` |
 | **A-JOBS** | Job records are durable rows; the runner delivers every pending job at least once (it re-reads pending jobs from SQLite on every pass) and the `Pending` guard absorbs duplicates | `fenrir_runner`, `fenrir_store` | `duplicates` (each job delivered twice with opposite outcomes, plus deliveries of finished and unknown jobs); every crash scenario ends with a drained runner; mutant `volatile_mailbox` |
@@ -54,9 +54,18 @@ not a record that they all ran in this integration.
 
 Actions: `kill_tender` (kill -9 of solo5-spt), `kill_worker` (exit kill), `kill_store`
 (exit kill of the adapter process), `kill_port` (kill -9 of the port program),
-`kill_node` (kill -9 of the BEAM OS process), `halt_node` (`erlang:halt(137,
+`kill_node` (kill -9 of the BEAM OS process), `halt_node` (`erlang:halt(86,
 [{flush,false}])`). After a node death the driver audits the file as the crash left it and
 restarts the node from it.
+
+Each named injection requires evidence for the armed point, action and target:
+the original BEAM exit status plus its fault receipt, a monitored Erlang process
+death, or the exact OS port's SIGKILL wait status. A lost acknowledgment also
+requires the port's post-COMMIT diagnostic (not a SQL reply), SIGKILL, and the
+expected state change before the retry. `no_transaction` and
+`respond_before_commit` do not run `lost_ack`: neither has a COMMIT whose
+acknowledgment controls the response to the target request. They still run their
+other mutant scenarios.
 
 ## 4 How a real fault maps to A1
 

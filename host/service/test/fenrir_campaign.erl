@@ -7,7 +7,8 @@
 %%   erl -noshell -pa EBIN -run fenrir_campaign main CONFIG
 %% CONFIG: one Erlang map (consulted), see host/service/check.sh.
 -module(fenrir_campaign).
--export([main/1, declared_scope/1, scope_config/1, fixture_paths/1, sweep_name/2, sweep_result/6]).
+-export([main/1, declared_scope/1, scope_config/1, fixture_paths/1, sweep_name/2, sweep_result/6,
+         fault_evidence/1]).
 
 -define(D, fenrir_drive).
 -define(SQLITE_LIMIT, 40).
@@ -39,7 +40,7 @@ declared_scope(C) ->
         ++ [{normal, F, repeat_name(R)} || F <- [retries, duplicates, two_workers], R <- Rs]
         ++ [{normal, crash_points, crash_name(Point, Action, Op, R)} || {Point, Action, Op} <- crash_matrix(), R <- Rs]
         ++ [{normal, F, op_name(Op, R)} || F <- [busy, lost_ack], Op <- [submit, complete], R <- Rs]
-        ++ [{M, F, N} || M <- mutants(), {F, N} <- mutant_cases(P)],
+        ++ [{M, F, N} || M <- mutants(), {F, N} <- mutant_cases(M, P)],
     Sweeps = [{normal, K, Op, R} || {K, Op, R} <- normal_sweeps(P)]
         ++ [{M, before_statement, submit, 1} || M <- mutants()],
     #{cases => [{M, F, full_name(M, F, N)} || {M, F, N} <- Static],
@@ -58,11 +59,11 @@ normal_sweeps(C) ->
     [{K, Op, R} || K <- [before_statement, write, sync], Op <- [submit, complete],
                    R <- lists:seq(1, maps:get(sqlite_kill_repeats, C, 1))].
 
-mutant_cases(C) ->
+mutant_cases(M, C) ->
     [{retries, repeat_name(1)}, {duplicates, repeat_name(1)}, {busy, op_name(submit, 1)},
      {crash_points, crash_name(f1_after_response, kill_node, submit, 1)},
-     {crash_points, crash_name(w4_reply_before_response, kill_node, submit, 1)},
-     {lost_ack, op_name(submit, 1)}]
+     {crash_points, crash_name(w4_reply_before_response, kill_node, submit, 1)}]
+    ++ [{lost_ack, op_name(submit, 1)} || lost_ack_applies(M)]
     ++ [{random_schedules, seed_name(I)} || I <- mutant_seeds(C)].
 
 mutant_seeds(C) -> lists:seq(1, maps:get(mutant_random_schedules, C, 3)).
@@ -93,7 +94,8 @@ main([ConfigFile]) ->
     halt(0).
 
 ctx(C, Mutant, Workers) ->
-    #{erl => maps:get(erl, C), ebin => maps:get(ebin, C), node_launch => maps:get(node_launch, C),
+    (maps:with([call_timeout], C))#{
+      erl => maps:get(erl, C), ebin => maps:get(ebin, C), node_launch => maps:get(node_launch, C),
       sqlite_port => maps:get(sqlite_port, C), out => maps:get(out, C),
       sqlite_observer => filename:join([maps:get(root, C), "host", "service", "test", "sqlite-exit-observer.sh"]),
       config => #{tenants => maps:get(tenants, C, 3), image => maps:get(image, C), launcher => maps:get(launcher, C),
@@ -175,10 +177,15 @@ mutant_suite(Mutant, C) ->
     Ctx = ctx(C, Mutant, 1),
     [retries(Ctx, 1), duplicates(Ctx, 1), busy(Ctx, submit, 1),
      crash_point(Ctx, f1_after_response, kill_node, submit, 1),
-     crash_point(Ctx, w4_reply_before_response, kill_node, submit, 1),
-     lost_ack(Ctx, submit, 1)]
+     crash_point(Ctx, w4_reply_before_response, kill_node, submit, 1)]
+    ++ [lost_ack(Ctx, submit, 1) || lost_ack_applies(Mutant)]
     ++ sqlite_kills(Ctx, before_statement, submit, 1)
     ++ [random_schedule(Ctx, Seed, 10) || Seed <- mutant_seeds(C)].
+
+%% No target COMMIT exists for no_transaction; respond_before_commit delivers
+%% the answer before the deferred COMMIT. Neither can exercise a lost COMMIT
+%% acknowledgment on the synchronous request path.
+lost_ack_applies(M) -> M =/= no_transaction andalso M =/= respond_before_commit.
 
 %% ---------- hand traces (spec/service/hand-traces.json) ----------
 
@@ -276,8 +283,16 @@ random_schedule(Ctx, Seed, Len) ->
       end).
 
 random_step(S) ->
-    Outbox = case ?D:call(S, outbox) of {ok, O, _} -> O; _ -> [] end,
-    Next = case ?D:call(S, snapshot) of {ok, St, _} -> [N || [_, _, _, N] <- St]; _ -> [0, 0, 0] end,
+    case ?D:read_probe(S, outbox) of
+        {unavailable, S1} -> S1;
+        {ok, Outbox, S1} ->
+            case ?D:read_probe(S1, snapshot) of
+                {unavailable, S2} -> S2;
+                {ok, Snap, S2} -> random_step(S2, Outbox, [N || [_, _, _, N] <- Snap])
+            end
+    end.
+
+random_step(S, Outbox, Next) ->
     case rand:uniform(12) of
         X when X =< 5 -> element(2, ?D:submit(S, rand:uniform(2) - 1, rand:uniform(2) - 1, rand:uniform(2) - 1));
         X when X =< 7 ->
@@ -359,31 +374,96 @@ crash_point(Ctx, Point, Action, Op, R) ->
       fun(S0) ->
               {T, S1} = prefix(S0, R),
               Before = snapshot_of(S1),
-              {ok, S2} = ?D:cmd(S1, {arm, Point, Action, 1}),
+              {W, Pids, S2} = arm_fault(S1, Point, Action),
               {Out, Target, S3} = target(S2, Op, T, R),
-              {FiredList, S3a} = ?D:cmd(S3, fired),
-              NodeDied = maps:get(crashes, S3a) > maps:get(crashes, S2),
-              Fired = NodeDied orelse (is_list(FiredList) andalso FiredList =/= []),
-              {_, S3b} = ?D:cmd(S3a, disarm),
-              S4 = note_fault(S3b, Fired andalso not NodeDied, Action, Point),
-              Outcome = classify(Out, NodeDied),
+              {S4, FaultCheck} = verify_fault(S2, S3, W, Point, Action, Pids),
+              Outcome = classify(Out),
               {S5, Retry} = recover(S4, Target),
               After = snapshot_of(S5),
               Diag = case Retry of gave_up -> {element(1, ?D:cmd(S5, diag)), lists:sublist(maps:get(whys, S5, []), 3)}; _ -> none end,
-              {S5, [check(fault_fired, Fired, Point),
+               {S5, [FaultCheck,
                     check(outcome_as_predicted, lists:member(Outcome, predicted(Point, Action, Op)), {Outcome, predicted(Point, Action, Op)}),
                     check(retry_definite, Retry =/= gave_up, {Retry, Diag}),
                     check(no_pending_job_after_drain, no_pending(After), After),
                     check(accepted_work_kept, kept(Before, After), {Before, After})]}
       end).
 
-note_fault(S, true, Action, Point) -> ?D:fault(S, atom_to_binary(Action), atom_to_binary(Point));
-note_fault(S, _, _, _) -> S.
+arm_fault(S, Point, Action) ->
+    W = filename:join(maps:get(dir, S), "fault-receipt"),
+    case file:delete(W) of ok -> ok; {error, enoent} -> ok end,
+    {ok, Pids, S1} = ?D:call(S, pids),
+    {ok, S2} = ?D:cmd(S1, {arm, Point, Action, 1, W}),
+    {W, Pids, S2}.
 
-classify({accepted, _}, _) -> answered;
-classify({conflict, _, _}, _) -> answered;
-classify(delivered, _) -> answered;
-classify(Out, _) -> Out.
+verify_fault(Before, S, W, Point, Action, Pids) ->
+    NodeAction = Action =:= kill_node orelse Action =:= halt_node,
+    S1 = case Point =:= f1_after_response andalso NodeAction andalso same_boot(Before, S) of
+             true -> ?D:await_node_exit(S);
+             false -> S
+         end,
+    {Proof, S2} = case NodeAction of
+        true ->
+            Beam = maps:get(beam, Pids),
+            Boot = maps:get(boots, Before),
+            Expected = iolist_to_binary(io_lib:format("~s ~s ~B", [Point, Action, Beam])),
+            Exit = case maps:get(last_node_exit, S1, none) of {Boot, Beam, Status} -> Status; _ -> none end,
+            Witness = case file:read_file(W) of {ok, Expected} -> matched; Other -> Other end,
+            {{Point, Action, Beam, {Witness, Exit}}, S1};
+        false ->
+            case same_boot(Before, S1) of
+                true -> ?D:cmd(S1, {fired, W});
+                false -> {node_died, S1}
+            end
+    end,
+    {Disarm, S3} = ?D:cmd(S2, disarm),
+    SameBoot = same_boot(Before, S3),
+    Detail = {Point, Action, Pids, SameBoot, Disarm, Proof},
+    Fired = valid_fault(Detail),
+    S4 = case Fired of
+             true -> ?D:fault(S3, atom_to_binary(Action), atom_to_binary(Point));
+             false -> S3
+         end,
+    {S4, check(fault_fired, Fired, Detail)}.
+
+same_boot(S1, S2) -> maps:get(boots, S1) =:= maps:get(boots, S2).
+
+valid_fault({P, kill_node, #{beam := B}, false, ok, {P, kill_node, B, {matched, 137}}}) -> is_os_pid(B);
+valid_fault({P, halt_node, #{beam := B}, false, ok, {P, halt_node, B, {matched, 86}}}) -> is_os_pid(B);
+valid_fault({P, kill_tender, #{worker := W}, true, ok, {P, kill_tender, T, {sigkill, W}}}) ->
+    is_os_pid(T) andalso is_list(W);
+valid_fault({P, kill_port, #{sqlite_port := T, store := W}, true, ok, {P, kill_port, T, {sigkill, W}}}) ->
+    is_os_pid(T) andalso is_list(W);
+valid_fault({P, kill_worker, #{worker := T}, true, ok, {P, kill_worker, T, killed}}) -> is_list(T);
+valid_fault({P, kill_store, #{store := T}, true, ok, {P, kill_store, T, killed}}) -> is_list(T);
+valid_fault({s3_before_commit, lose_ack, #{sqlite_port := T}, true, ok,
+             {s3_before_commit, lose_ack, T, lost_commit_ack}}) -> is_os_pid(T);
+valid_fault(_) -> false.
+
+is_os_pid(P) -> is_integer(P) andalso P > 0.
+
+%% Report validation must also reject old or absent fault checks, not merely
+%% explicitly false checks. Match the proof's exact point/action to the case.
+fault_evidence(#{family := crash_points, mutant := M, name := Name, checks := Checks}) ->
+    case lists:keyfind(fault_fired, 1, Checks) of
+        {_, true, {P, A, _, _, _, _} = Detail} ->
+            lists:any(fun({P0, A0, Op}) ->
+                P =:= P0 andalso A =:= A0 andalso
+                lists:any(fun(R) -> Name =:= full_name(M, crash_points, crash_name(P, A, Op, R)) end,
+                          lists:seq(1, repeats(scope_config(full))))
+            end, crash_matrix()) andalso valid_fault(Detail);
+        _ -> false
+    end;
+fault_evidence(#{family := lost_ack, checks := Checks}) ->
+    case lists:keyfind(fault_fired, 1, Checks) of
+        {_, true, {s3_before_commit, lose_ack, _, _, _, _} = Detail} -> valid_fault(Detail);
+        _ -> false
+    end;
+fault_evidence(#{family := F}) -> F =/= crash_points andalso F =/= lost_ack.
+
+classify({accepted, _}) -> answered;
+classify({conflict, _, _}) -> answered;
+classify(delivered) -> answered;
+classify(Out) -> Out.
 
 %% A seeded prefix: 1 + R mod 2 accepted submits on tenant T = R mod 3 (keys 0 and 1
 %% only, so the faulted submit's key 2 is always fresh and reaches the writes), told.
@@ -520,10 +600,9 @@ lost_ack(Ctx, Op, R) ->
       fun(S0) ->
               {T, S1} = prefix(S0, R),
               Before = snapshot_of(S1),
-              {ok, S2} = ?D:cmd(S1, {arm, s3_before_commit, lose_ack, 1}),
-              {Out, Target, S3} = target(S2, Op, T, R),
-              S4 = ?D:fault(S3, <<"sqlite_port">>, <<"lose_ack">>),
-              {_, S5} = ?D:cmd(S4, disarm),
+               {W, Pids, S2} = arm_fault(S1, s3_before_commit, lose_ack),
+               {Out, Target, S3} = target(S2, Op, T, R),
+               {S5, FaultCheck} = verify_fault(S2, S3, W, s3_before_commit, lose_ack, Pids),
               Mid = snapshot_of(S5),
               S6 = ?D:observe(S5),
               {Retry, S7} = case Target of
@@ -531,17 +610,25 @@ lost_ack(Ctx, Op, R) ->
                                 {complete, _, J, Ok} -> retry_complete(S6, T, J, Ok, 5)
                             end,
               After = snapshot_of(S7),
-              Committed = Mid =/= Before,
-              Receipt = case Target of
-                            {submit, _, K2, D2} -> [Rc || [_, _, Keys, _] <- [lists:nth(T + 1, After)], [K3, D3, Rc] <- Keys, {K3, D3} =:= {K2, D2}];
-                            _ -> none
-                        end,
-              {S7, [check(caller_sees_indeterminate, Out =:= indeterminate, Out),
-                    check(commit_survived_lost_ack, Committed, {Before, Mid}),
-                    check(retry_returns_recorded_receipt,
-                          case Target of {submit, _, _, _} -> [element(2, Retry)] =:= Receipt; _ -> Retry =:= delivered end, {Retry, Receipt}),
-                    check(no_second_mutation, Mid =:= After, {Mid, After})]}
-      end).
+               {Expected, ExpectedRetry} = lost_ack_expected(Target, Before),
+               Committed = is_list(Mid) andalso Mid =:= Expected,
+               {S7, [FaultCheck, check(caller_sees_indeterminate, Out =:= indeterminate, Out),
+                     check(commit_survived_lost_ack, Committed, {Expected, Mid}),
+                     check(retry_returns_recorded_receipt, Retry =:= ExpectedRetry, {Retry, ExpectedRetry}),
+                     check(no_second_mutation, is_list(Mid) andalso Mid =:= After, {Mid, After})]}
+       end).
+
+lost_ack_expected({submit, T, K, D}, Before) when is_list(Before) ->
+    {Prefix, [[R, J, Keys, N] | Tail]} = lists:split(T, Before),
+    Receipt = [T, K, D, N, N],
+    Row = [R ++ [[N, D]], J ++ [[N, N, <<"pending">>]], Keys ++ [[K, D, Receipt]], N + 1],
+    {Prefix ++ [Row | Tail], {accepted, Receipt}};
+lost_ack_expected({complete, T, J, Ok}, Before) when is_list(Before) ->
+    {Prefix, [[R, Jobs, Keys, N] | Tail]} = lists:split(T, Before),
+    Status = case Ok of true -> <<"done">>; false -> <<"failed">> end,
+    Row = [R, [case Row of [J, Report, _] -> [J, Report, Status]; _ -> Row end || Row <- Jobs], Keys, N],
+    {Prefix ++ [Row | Tail], delivered};
+lost_ack_expected(_, _) -> {unavailable, unavailable}.
 
 %% ---------- busy: a second connection holds the write lock ----------
 

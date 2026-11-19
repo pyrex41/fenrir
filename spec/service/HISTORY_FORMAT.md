@@ -31,7 +31,7 @@ job]`, an event is `["accepted", receipt]` or `["conflict", tenant, key]`, a sto
 | `["respond", EVENT]` | the client was told EVENT (the front confirmed it was in its outbox) | `[respond EVENT]` |
 | `["respond-refused", EVENT]` | the front refused to deliver EVENT: not in its outbox | none; EVENT must not be in the model's outbox |
 | `["crash", "node"]` | the service node (the BEAM OS process) died: kill -9, `erlang:halt`, or found dead; it was restarted from the SQLite file | `[crash]` |
-| `["fault", WHAT, POINT]` | a tender, worker, store process or SQLite port program died and the node survived | none (informational; the faulted request's own outcome says what it did) |
+| `["fault", WHAT, POINT]` | the driver verified the named injection at that point; for a verified node injection this accompanies a separate `crash` event | none (informational; the faulted request's own outcome says what it did) |
 | `["observe", STORES]` | the stores as the service's API reported them (one read transaction) | none; the model's stores must equal STORES |
 | `["drained"]` | the job runner found no pending job | none; the model must have no pending job |
 | `["concurrent", [EVENT...]]` | submits/deliveries issued at once over several workers | the members in some order |

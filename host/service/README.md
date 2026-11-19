@@ -119,6 +119,15 @@ gives that run's replies), `random_schedules`, `retries`, `duplicates`, `crash_p
 (9 fault points × the kills that apply × {submit, delivery}: 60 combinations), `sqlite_kills`, `lost_ack`, `busy`,
 `two_workers`, and the host mutants. The report's `campaigns` member has the exact counts.
 
+On the same host, run `python3 host/service/test/fault-controls.py build/host/service/RUN/config.term`
+after `check.sh` to repeat the diagnostic controls. Each builds a disposable module
+variant that kills an unrelated node or process, suppresses a kill or a lost
+acknowledgment, or stalls an outbox/snapshot read. The controls require unverified
+injections to leave no `fault` event and require stalled reads to leave recorder gaps.
+They are not additional campaign coverage.
+To reproduce the false evidence on `2cc8d0e`, pass that revision's run config
+and append `--baseline /path/to/baseline-checkout`.
+
 ## Artifact
 
 The handler is elaborated by `sh frontend/fenrir.sh emit examples/service/accepted-job.fen`,

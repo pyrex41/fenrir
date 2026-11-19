@@ -58,11 +58,12 @@ command(pending, _) -> fenrir_store:pending_jobs();
 command({run_jobs, Opts}, Chan) ->
     N = fenrir_runner:run_once(fun(Note) -> send(Chan, {note, Note}) end, Opts),
     {jobs_done, N};
-command({arm, Point, Action, Count}, _) -> fenrir_faults:arm(Point, Action, Count);
+command({arm, Point, Action, Count, Witness}, _) -> fenrir_faults:arm(Point, Action, Count, Witness);
 command(disarm, _) -> fenrir_faults:disarm(), catch fenrir_store:arm_port(disarm, 1), ok;
 command({arm_port, Kind, N}, _) -> fenrir_store:arm_port(Kind, N);
-command(fired, _) -> fenrir_faults:fired();
-command(pids, _) -> #{beam => list_to_integer(os:getpid()), sqlite_port => fenrir_store:port_os_pid()};
+command({fired, Witness}, _) -> fenrir_faults:fired(Witness);
+command(pids, _) -> #{beam => list_to_integer(os:getpid()), sqlite_port => fenrir_store:port_os_pid(),
+                     worker => pid_string(whereis(w1)), store => pid_string(whereis(fenrir_store))};
 command({concurrent, Requests}, _) -> concurrent(Requests);
 command(ping, _) -> pong;
 command(diag, _) ->
@@ -71,6 +72,9 @@ command(diag, _) ->
       worker_sup => catch erlang:process_info(Sup, [current_stacktrace, message_queue_len, status]),
       w1 => whereis(w1)};
 command(stop, _) -> ok.
+
+pid_string(P) when is_pid(P) -> pid_to_list(P);
+pid_string(undefined) -> undefined.
 
 %% Run requests at once, one caller process each (the workers are picked round-robin).
 concurrent(Requests) ->

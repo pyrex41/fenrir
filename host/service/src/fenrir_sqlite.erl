@@ -35,9 +35,9 @@ exec(Port, Sql, Params) ->
     S = unicode:characters_to_binary(Sql),
     call(Port, <<$E, (byte_size(S)):32, S/binary, (length(Params)):16, (<< <<(param(P))/binary>> || P <- Params >>)/binary>>).
 
-%% Kind: write | sync | after_statement | before_statement; N >= 1 counted from now.
+%% Kind: write | sync | after_statement | before_statement | after_commit.
 arm(Port, Kind, N) when is_integer(N), N >= 1 ->
-    K = case Kind of disarm -> 0; write -> 1; sync -> 2; after_statement -> 3; before_statement -> 4 end,
+    K = case Kind of disarm -> 0; write -> 1; sync -> 2; after_statement -> 3; before_statement -> 4; after_commit -> 5 end,
     call(Port, <<$F, K, N:32>>).
 
 counters(Port) ->
@@ -71,6 +71,11 @@ call(Port, Req) ->
 wait(Port) ->
     receive
         {Port, {data, <<$K>>}} -> ok;
+        {Port, {data, <<$L>>}} ->
+            receive
+                {Port, {exit_status, S}} -> {port_died, {lost_commit_ack, S}}
+            after ?TIMEOUT -> {port_died, timeout}
+            end;
         {Port, {data, <<$R, N:32, C:16, Rest/binary>>}} -> {rows, rows(N, C, Rest)};
         {Port, {data, <<$X, P:32, E:32, L:32, M:L/binary>>}} -> {sqlite_error, code(P), E, M};
         {Port, {data, Other}} -> {port_died, {garbage, Other}};
