@@ -22,6 +22,7 @@
 -module(fenrir_store).
 -behaviour(gen_server).
 -export([start_link/1, commit/2, snapshot/0, pending_jobs/0, port_os_pid/0, arm_port/2, info/0, io_counters/0]).
+-export([maintenance/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -export([parse_tx/1, schema/0, read_snapshot/2, open_configured/2]).
 
@@ -39,6 +40,11 @@ port_os_pid() -> gen_server:call(?MODULE, port_os_pid).
 arm_port(Kind, N) -> gen_server:call(?MODULE, {arm_port, Kind, N}).
 info() -> gen_server:call(?MODULE, info).
 io_counters() -> gen_server:call(?MODULE, io_counters).
+%% Adapter-only development interface, not exposed by the service node or worker.
+maintenance(Request) ->
+    try gen_server:call(?MODULE, {maintenance, Request}, 60000)
+    catch exit:Reason -> {indeterminate, {store_call, Reason}}
+    end.
 
 schema() ->
     ["CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)",
@@ -58,10 +64,22 @@ init(Opts) ->
     Path = maps:get(db, Opts),
     Tenants = maps:get(tenants, Opts),
     Mutant = maps:get(mutant, Opts, normal),
+    Operator = maps:get(maintenance_operator, Opts, none),
+    case Operator =:= none orelse (Mutant =:= normal andalso local_alive(Operator)) of
+        true -> init_store(Path, Tenants, Mutant, Operator);
+        false -> {stop, invalid_maintenance_operator}
+    end.
+
+init_store(Path, Tenants, Mutant, Operator) ->
     case open_configured(Path, Mutant) of
         {ok, Port} ->
-            ok = ensure_schema(Port, Tenants),
-            {ok, #{port => Port, tenants => Tenants, mutant => Mutant, deferred => []}};
+            try ensure_schema(Port, Tenants, Mutant) of
+                ok -> {ok, #{port => Port, tenants => Tenants, mutant => Mutant, deferred => [],
+                             operator => Operator, operator_monitor => watch_operator(Operator), maintenance => none}}
+            catch throw:Why ->
+                fenrir_sqlite:close(Port),
+                {stop, {store_schema, Why}}
+            end;
         {error, E} -> {stop, E}
     end.
 
@@ -88,14 +106,6 @@ configure(Port, Mutant) ->
         _ -> fenrir_sqlite:close(Port), {error, {connection_settings, Bad}}
     end.
 
-ensure_schema(Port, Tenants) ->
-    {rows, _} = fenrir_sqlite:exec(Port, "BEGIN IMMEDIATE"),
-    [{rows, _} = fenrir_sqlite:exec(Port, S) || S <- schema()],
-    {rows, _} = fenrir_sqlite:exec(Port, "INSERT OR IGNORE INTO meta VALUES ('schema','fenrir.host.service-store/1')"),
-    [{rows, _} = fenrir_sqlite:exec(Port, "INSERT OR IGNORE INTO tenants VALUES (?1, 0)", [T]) || T <- lists:seq(0, Tenants - 1)],
-    {rows, _} = fenrir_sqlite:exec(Port, "COMMIT"),
-    ok.
-
 handle_call({commit, Scope, TxValue}, _From, S0 = #{tenants := N}) ->
     case parse_tx(TxValue) of
         {ok, {tx, T, Guard, Writes}} when Scope =:= {tenant, T}, T >= 0, T < N ->
@@ -108,6 +118,9 @@ handle_call({commit, Scope, TxValue}, _From, S0 = #{tenants := N}) ->
         {ok, _} -> {reply, {aborted, unauthorized_scope}, S0};
         error -> {reply, {aborted, malformed_tx}, S0}
     end;
+handle_call({maintenance, Request}, {Caller, _}, S) ->
+    {Out, S1} = maintenance_call(Caller, Request, S),
+    reply_or_stop(Out, S1);
 handle_call(snapshot, _From, S0) ->
     S = flush_deferred(S0),
     Snap = read_snapshot(maps:get(port, S), maps:get(tenants, S)),
@@ -134,6 +147,10 @@ handle_call(info, _From, S) -> {reply, maps:with([tenants, mutant], S), S}.
 handle_cast(_, S) -> {noreply, S}.
 
 handle_info(flush, S) -> {noreply, flush_deferred(S)};
+handle_info({'DOWN', Ref, process, _, _}, S = #{operator_monitor := Ref}) ->
+    {noreply, clear_session(S#{operator := none, operator_monitor := none})};
+handle_info({'DOWN', Ref, process, _, _}, S = #{maintenance := #{monitor := Ref}}) ->
+    {noreply, S#{maintenance := none}};
 handle_info({Port, {exit_status, St}}, S = #{port := Port}) -> {stop, {sqlite_port_exit, St}, S};
 handle_info({'EXIT', Port, R}, S = #{port := Port}) -> {stop, {sqlite_port_exit, R}, S};
 handle_info(_, S) -> {noreply, S}.
@@ -185,6 +202,209 @@ q(Port, Sql, Params, Phase) ->
         {port_died, R} -> throw({port_died, Phase, R})
     end.
 
+%% One-time adoption of legacy A3 metadata in the same transaction as initialization.
+%% For adopted stores an absent/invalid phase is not equivalent to v1.
+ensure_schema(Port, Tenants, Mutant) ->
+    ?Q("BEGIN IMMEDIATE", [], init_begin),
+    case ?Q("PRAGMA user_version", [], init_metadata) of
+        [[0]] -> adopt_legacy(Port);
+        [[1]] -> ok;
+        _ -> throw(invalid_metadata_format)
+    end,
+    State = upgrade_state(Port),
+    case State of
+        v1 ->
+            [?Q("INSERT OR IGNORE INTO tenants VALUES (?1, 0)", [T], init_tenant) ||
+                T <- lists:seq(0, Tenants - 1)];
+        {prepared, _, _, _} when Mutant =:= normal ->
+            %% Do not expand the tenant domain of an in-progress preparation
+            %% as a side effect of restarting with different configuration.
+            Expected = [[T] || T <- lists:seq(0, Tenants - 1)],
+            case ?Q("SELECT tenant FROM tenants ORDER BY tenant", [], init_tenant) of
+                Expected -> ok;
+                _ -> throw(prepared_tenant_domain_changed)
+            end;
+        _ -> throw({unsupported_store_phase, element(1, State)})
+    end,
+    ?Q("COMMIT", [], init_commit),
+    ok.
+
+adopt_legacy(Port) ->
+    case ?Q("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+            [], init_metadata) of
+        [] ->
+            [?Q(Sql, [], init_schema) || Sql <- schema()],
+            ?Q("INSERT INTO meta VALUES ('schema', ?1)", [fenrir_upgrade_state:schema(1)], init_schema);
+        [[<<"jobs">>], [<<"meta">>], [<<"reports">>], [<<"request_keys">>], [<<"tenants">>]] ->
+            case ?Q("SELECT k, v FROM meta ORDER BY k", [], init_metadata) of
+                [[<<"schema">>, <<"fenrir.host.service-store/1">>]] -> ok;
+                _ -> throw(invalid_legacy_metadata)
+            end;
+        _ -> throw(invalid_legacy_schema)
+    end,
+    ?Q("INSERT INTO meta VALUES ('upgrade','v1')", [], init_metadata),
+    ?Q("PRAGMA user_version=1", [], init_metadata),
+    ok.
+
+upgrade_state(Port) ->
+    case ?Q("SELECT k, v FROM meta WHERE k IN ('schema','upgrade') ORDER BY k", [], version_fence) of
+        [[<<"schema">>, Schema], [<<"upgrade">>, Phase]] ->
+            case fenrir_upgrade_state:decode(Schema, Phase) of
+                {ok, State} -> State;
+                {error, Why} -> throw({invalid_store_version, Why})
+            end;
+        _ -> throw({invalid_store_version, missing_upgrade_metadata})
+    end.
+
+%% ---------- isolated A4 maintenance (no installation or guest entrypoint) ----------
+
+local_alive(Pid) when is_pid(Pid), node(Pid) =:= node() -> is_process_alive(Pid);
+local_alive(_) -> false.
+
+watch_operator(none) -> none;
+watch_operator(Pid) -> monitor(process, Pid).
+
+maintenance_call(Caller, Request, S = #{operator := Operator}) ->
+    case local_alive(Operator) of
+        true -> maintenance_live(Caller, Request, S);
+        false -> {{refused, unauthorized_maintenance}, clear_session(S)}
+    end.
+
+maintenance_live(Caller, Request, S = #{operator := Caller, port := Port}) ->
+    case Request of
+        state -> {maintenance_tx(Port, fun() -> {read, {ok, upgrade_state(Port)}} end), S};
+        {prepare, Handler, Migration} ->
+            case fenrir_upgrade_state:prepare(Handler, Migration) of
+                {ok, Prepared} ->
+                    {maintenance_tx(Port, fun() ->
+                        case upgrade_state(Port) of
+                            v1 -> set_upgrade_state(Port, Prepared), {write, {ok, Prepared}};
+                            _ -> {read, {refused, wrong_phase}}
+                        end
+                    end), S};
+                {error, Why} -> {{refused, Why}, S}
+            end;
+        {abort, Id} ->
+            Outcome = maintenance_tx(Port, fun() ->
+                case upgrade_state(Port) of
+                    {prepared, Id, _, _} -> set_upgrade_state(Port, v1), {write, ok};
+                    _ -> {read, {refused, wrong_preparation}}
+                end
+            end),
+            {Outcome, case Outcome of ok -> clear_session(S); _ -> S end};
+        {open, Id, Pin, Owner} ->
+            open_session(Port, Id, Pin, Owner, S);
+        _ -> session_call(Caller, Request, S)
+    end;
+maintenance_live(Caller, Request, S) -> session_call(Caller, Request, S).
+
+set_upgrade_state(Port, Prepared) ->
+    ?Q("UPDATE meta SET v = ?1 WHERE k = 'upgrade'", [fenrir_upgrade_state:encode(Prepared)], maintenance_metadata),
+    ok.
+
+open_session(Port, Id, Pin, Owner, S0) ->
+    S = case maps:get(maintenance, S0) of
+            #{owner := Prior} -> case local_alive(Prior) of true -> S0; false -> clear_session(S0) end;
+            none -> S0
+        end,
+    case {maps:get(maintenance, S), local_alive(Owner)} of
+        {_, false} -> {{refused, invalid_session_owner}, S};
+        {none, true} ->
+            Outcome = maintenance_tx(Port, fun() ->
+                case upgrade_state(Port) of
+                    {prepared, Id, _, Pin} = Prepared ->
+                        {read, {ok, Prepared, maintenance_snapshot(Port)}};
+                    _ -> {read, {refused, wrong_preparation_or_image}}
+                end
+            end),
+            case Outcome of
+                {ok, Prep, Snapshot} ->
+                    Token = make_ref(),
+                    Ref = monitor(process, Owner),
+                    {{ok, Token}, S#{maintenance := #{owner => Owner, monitor => Ref, token => Token,
+                                                     prep => Prep, snapshot => Snapshot}}};
+                Other -> {Other, S}
+            end;
+        _ -> {{refused, session_active}, S}
+    end.
+
+session_call(Owner, {read, Token}, S = #{port := Port, maintenance :=
+        #{owner := Owner, token := Token, prep := Prep, snapshot := {_, Jobs, Keys, _}}}) ->
+    Outcome = maintenance_tx(Port, fun() ->
+        case upgrade_state(Port) of
+            Prep -> {read, {ok, Jobs, Keys}};
+            _ -> {read, {refused, wrong_preparation}}
+        end
+    end),
+    {Outcome, case Outcome of {refused, wrong_preparation} -> clear_session(S); _ -> S end};
+session_call(Owner, {validate_install, Token, Jobs, Keys}, S = #{port := Port, maintenance :=
+        #{owner := Owner, token := Token, prep := Prep, snapshot := Snapshot}}) ->
+    %% Transactional dry run only. The future writer must do the same checks
+    %% inside its own installation transaction, not rely on this result.
+    Outcome = maintenance_tx(Port, fun() ->
+        {read, case upgrade_state(Port) of
+            Prep ->
+                case maintenance_snapshot(Port) of
+                    Snapshot -> validate_projection(Snapshot, Jobs, Keys);
+                    _ -> {refused, snapshot_changed}
+                end;
+            _ -> {refused, wrong_preparation}
+        end}
+    end),
+    {Outcome, clear_session(S)};
+session_call(Owner, {close, Token}, S = #{maintenance := #{owner := Owner, token := Token}}) ->
+    {ok, clear_session(S)};
+session_call(_, _, S) -> {{refused, unauthorized_maintenance}, S}.
+
+clear_session(S = #{maintenance := #{monitor := Ref}}) ->
+    demonitor(Ref, [flush]),
+    S#{maintenance := none};
+clear_session(S) -> S.
+
+maintenance_snapshot(Port) ->
+    {?Q("SELECT tenant,id,digest,payload FROM reports ORDER BY tenant,id", [], maintenance_snapshot),
+     ?Q("SELECT tenant,id,report,status FROM jobs ORDER BY tenant,id", [], maintenance_snapshot),
+     ?Q("SELECT tenant,key,digest,r_tenant,r_key,r_digest,r_report,r_job FROM request_keys ORDER BY tenant,key",
+        [], maintenance_snapshot),
+     ?Q("SELECT tenant,next FROM tenants ORDER BY tenant", [], maintenance_snapshot)}.
+
+validate_projection({_, OldJobs, OldKeys, _}, Jobs, Keys) ->
+    Expected = [[T, I, R, Status, case Status of <<"pending">> -> 0; _ -> 1 end]
+                || [T, I, R, Status] <- OldJobs],
+    %% Key rows carry the original receipt fields, all of which must be equal.
+    case Jobs =:= Expected andalso Keys =:= OldKeys of
+        true -> {ok, validated_only};
+        false -> {refused, invalid_projection}
+    end.
+
+maintenance_tx(Port, Body) ->
+    try ?Q("BEGIN IMMEDIATE", [], maintenance_begin) of
+        [] -> maintenance_body(Port, Body)
+    catch
+        throw:{busy, _} -> busy;
+        throw:Why -> {aborted, Why}
+    end.
+
+maintenance_body(Port, Body) ->
+    try
+        case Body() of
+            {read, Result} -> ?Q("ROLLBACK", [], maintenance_read_end), Result;
+            {write, Result} -> maintenance_commit(Port, Result)
+        end
+    catch
+        throw:{busy, _} -> rollback(Port), busy;
+        throw:{port_died, _, _} = Why -> {aborted, Why};
+        throw:Why -> rollback(Port), {aborted, Why}
+    end.
+
+maintenance_commit(Port, Result) ->
+    try ?Q("COMMIT", [], maintenance_commit) of [] -> Result
+    catch
+        throw:{port_died, _, _} = Why -> {indeterminate, Why};
+        throw:{busy, _} -> rollback(Port), busy;
+        throw:Why -> rollback(Port), {aborted, Why}
+    end.
+
 do_commit(Tx, S = #{mutant := respond_before_commit}) -> early_reply(Tx, S);
 do_commit(Tx, S = #{mutant := no_transaction}) -> {run_tx(Tx, S, false), S};
 do_commit(Tx, S) -> {run_tx(Tx, S, true), S}.
@@ -210,12 +430,21 @@ run_tx({tx, T, Guard, Writes}, S, Transactional) ->
         {aborted, _} = A -> A;
         ok ->
             hit(s1_after_begin, S),
-            try body(T, Guard, Writes, S, Transactional) of
+            try
+                %% This path is A3/v1 only. Neither the guest constructor nor
+                %% its claimed tenant can select the contract that is in force.
+                case fenrir_upgrade_state:fence(1, upgrade_state(Port)) of
+                    ok -> body(T, Guard, Writes, S, Transactional);
+                    {error, FenceWhy} -> throw({version_fence, FenceWhy})
+                end
+            of
                 {done, Reply} -> {reply, Reply};
                 {commit, Reply} ->
                     Fault = hit(s3_before_commit, S),
                     finish(Port, Reply, S, Transactional, Fault)
             catch
+                throw:{version_fence, Why} -> rollback(Port), {aborted, Why};
+                throw:{invalid_store_version, Why} -> rollback(Port), {aborted, {invalid_store_version, Why}};
                 throw:{busy, _} -> rollback(Port), busy;
                 throw:{port_died, Phase, R} -> {aborted, {port_died, Phase, R}};
                 throw:{sql_error, Phase, C, E, M} -> rollback(Port), {aborted, {sql_error, Phase, C, E, M}}
