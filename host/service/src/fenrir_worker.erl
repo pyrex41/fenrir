@@ -25,6 +25,10 @@
 -export([start_link/2, run/2, run/3, check_image/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -define(FRAME_TIMEOUT, 10000).
 -define(RUN_STEPS, 64).
 
@@ -211,7 +215,9 @@ completed(Records, St) ->
     end.
 
 %% After Bye: nothing more on ctlout, and the tender exits 0.
-finish(St = #{port := Port}) ->
+finish(St = #{buf := Buf}) when Buf =/= <<>> ->
+    throw({fail, failed, 'TrailingOutput', St});
+finish(St = #{port := Port, buf := <<>>}) ->
     receive
         {Port, {data, _}} -> throw({fail, failed, 'TrailingOutput', St});
         {Port, {exit_status, 0}} -> ok;
@@ -274,3 +280,50 @@ records(J, St, N) ->
         true -> {Steps, St#{epoch := E0 + length(Steps)}};
         false -> throw({fail, failed, 'BadSteps', St})
     end.
+
+-ifdef(TEST).
+
+%% Model port messages directly to control the read boundaries independently of
+%% the OS. The Bye bytes are the spec's bye-seq-86 vector.
+bye_output_test_() ->
+    Bye = <<"FGC1 GB 00000086 00000079\n"
+            "{\"digest\":\"febaad5103a8d849\",\"epoch\":\"84\",\"execution\":\"Completed\",\"kind\":\"Bye\"}\n">>,
+    <<Header:26/binary, Body/binary>> = Bye,
+    <<Payload:79/binary, LF/binary>> = Body,
+    ExtraFrame = <<"FGC1 GB 00000087 00000079\n", Body/binary>>,
+    Digest = <<"FGC1 GD 00000085 00000079\n"
+               "{\"digest\":\"463bdef321c45ce8\",\"epoch\":\"2\",\"execution\":\"Running\",\"kind\":\"Digest\"}\n">>,
+    Exit = {exit_status, 0},
+    [
+     {"clean Bye", ?_assertEqual(ok, bye_output([], [{data, Bye}, Exit]))},
+     {"fragmented Bye", ?_assertEqual(ok, bye_output([], [{data, Header}, {data, Payload}, {data, LF}, Exit]))},
+     {"two frames consumed in order", ?_assertEqual(ok, bye_output([$D], [{data, <<Digest/binary, Bye/binary>>}, Exit]))},
+     {"byte buffered after Bye", ?_assertThrow({fail, failed, 'TrailingOutput', _},
+                                                bye_output([], [{data, <<Bye/binary, 0>>}, Exit]))},
+     {"frame buffered after Bye", ?_assertThrow({fail, failed, 'TrailingOutput', _},
+                                                 bye_output([], [{data, <<Bye/binary, ExtraFrame/binary>>}, Exit]))},
+     {"byte buffered after fragmented Bye", ?_assertThrow({fail, failed, 'TrailingOutput', _},
+                                                           bye_output([], [{data, Header}, {data, <<Body/binary, 0>>}, Exit]))},
+     {"byte received separately after Bye", ?_assertThrow({fail, failed, 'TrailingOutput', _},
+                                                           bye_output([], [{data, Bye}, {data, <<0>>}, Exit]))},
+     {"nonzero exit after clean Bye", ?_assertThrow({fail, failed, {'TenderFailure', 1}, _},
+                                                    bye_output([], [{data, Bye}, {exit_status, 1}]))}
+    ].
+
+bye_output(PreviousTypes, Messages) ->
+    Port = make_ref(),
+    [self() ! {Port, M} || M <- Messages],
+    St0 = #{port => Port, buf => <<>>, seq => 86 - length(PreviousTypes), frames => 0},
+    try
+        St1 = lists:foldl(fun(Type, St) ->
+                              {_, Parsed} = expect(St, Type),
+                              Parsed#{seq := maps:get(seq, Parsed) + 1}
+                          end, St0, PreviousTypes),
+        {#{<<"execution">> := <<"Completed">>}, St2} = expect(St1, $B),
+        finish(St2)
+    after
+        %% Trailing data can fail before the queued exit status is consumed.
+        receive {Port, {exit_status, _}} -> ok after 0 -> ok end
+    end.
+
+-endif.
