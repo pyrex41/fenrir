@@ -22,9 +22,11 @@
     shen-jit-src = { url = "git+https://github.com/tizoc/shen-jit?rev=2f4b48bf9aabc2b93379d15f1818e4209137eb60"; flake = false; };
     # Solo5 v0.9.3, the commit tools/solo5/freerun.mjs pins as SOLO5_COMMIT.
     solo5-src = { url = "git+https://github.com/Solo5/solo5?ref=refs/tags/v0.9.3&rev=38e0c348be231a2a3c59510a5caabf562792679f"; flake = false; };
+    # The V9.2.0 standard library source used by the historical Rocq 9.3 run.
+    rocq-stdlib-src = { url = "git+https://github.com/rocq-prover/stdlib?ref=refs/tags/V9.2.0&rev=8dd155bc10529814202f8f4c643e5ae6c2c88fa6"; flake = false; };
   };
 
-  outputs = { self, nixpkgs, shen-cl-src, yggdrasil-src, shen-jit-src, solo5-src }:
+  outputs = { self, nixpkgs, shen-cl-src, yggdrasil-src, shen-jit-src, solo5-src, rocq-stdlib-src }:
     let
       system = "x86_64-linux"; # shen-scheme v0.26 ships a Linux x86-64 binary only
       pkgs = nixpkgs.legacyPackages.${system};
@@ -273,23 +275,59 @@
         echo "shen-cl:   ${shen-cl}"
         echo "yggdrasil: ${yggdrasil}/bin/yggdrasil"
       '';
+
+      # Toolchain for the AArch64 proof lane, not a qualification epoch.
+      mkAarch64Verification = hostPkgs:
+        let
+          rocq = hostPkgs.rocqPackages_9_3;
+          stdlib = rocq.stdlib.overrideAttrs (_: { src = rocq-stdlib-src; });
+          # Cross binutils on x86-64 already have the target prefix. On ARM64
+          # supply aliases to the native tools, not unqualified commands on PATH.
+          binutils =
+            if hostPkgs.stdenv.hostPlatform.isAarch64 then
+              hostPkgs.runCommand "fenrir-aarch64-binutils" { } ''
+                mkdir -p "$out/bin"
+                for tool in as ld objcopy; do
+                  ln -s "${hostPkgs.binutils-unwrapped}/bin/$tool" "$out/bin/aarch64-unknown-linux-gnu-$tool"
+                done
+              ''
+            else hostPkgs.pkgsCross.aarch64-multiplatform.buildPackages.binutils;
+        in hostPkgs.buildEnv {
+          name = "fenrir-aarch64-verification-tools";
+          paths = [ rocq.rocq-core stdlib binutils hostPkgs.qemu-user hostPkgs.nodejs_22 ];
+          pathsToLink = [ "/bin" "/lib" "/share" ];
+        };
+      aarch64-verification = mkAarch64Verification pkgs;
+      arm-aarch64-verification = mkAarch64Verification arm-pkgs;
+      mkAarch64VerificationShell = hostPkgs: tools: jit: hostPkgs.mkShell {
+        packages = [ tools jit ];
+        ROCQPATH = "${tools}/lib/coq/9.3/user-contrib";
+        FENRIR_AARCH64_TOOLS = "${tools}";
+        FENRIR_SHEN_JIT = "${jit}";
+      };
     in {
-      packages.${system} = { inherit shen-scheme shen-cl shen-jit solo5 solo5-batches hvt-compare yggdrasil link-toolchain erlang; default = link-toolchain; };
+      packages.${system} = { inherit shen-scheme shen-cl shen-jit solo5 solo5-batches hvt-compare yggdrasil link-toolchain erlang aarch64-verification; default = link-toolchain; };
       # Development only: the x86 gate and HVT comparison are not exported here.
-      packages.aarch64-linux = { shen-jit = arm-shen-jit; solo5 = arm-solo5; };
-      devShells.aarch64-linux.default = arm-pkgs.mkShell {
-        packages = [ arm-pkgs.nodejs_22 arm-shen-jit arm-solo5 ];
-        FENRIR_SHEN_JIT = "${arm-shen-jit}";
-        FENRIR_SOLO5 = "${arm-solo5}";
+      packages.aarch64-linux = { shen-jit = arm-shen-jit; solo5 = arm-solo5; aarch64-verification = arm-aarch64-verification; };
+      devShells.aarch64-linux = {
+        default = arm-pkgs.mkShell {
+          packages = [ arm-pkgs.nodejs_22 arm-shen-jit arm-solo5 ];
+          FENRIR_SHEN_JIT = "${arm-shen-jit}";
+          FENRIR_SOLO5 = "${arm-solo5}";
+        };
+        aarch64-verification = mkAarch64VerificationShell arm-pkgs arm-aarch64-verification arm-shen-jit;
       };
       checks.${system}.hvt = hvt-vm-test;
       apps.${system} = {
         default = { type = "app"; program = "${link-toolchain}/bin/fenrir-link-toolchain"; };
         hvt-compare = { type = "app"; program = "${hvt-compare}/bin/fenrir-hvt-compare"; };
       };
-      devShells.${system}.default = pkgs.mkShell {
-        packages = [ pkgs.nodejs_22 pkgs.python3 pkgs.sbcl pkgs.go_1_27 shen-scheme yggdrasil erlang ];
-        FENRIR_SHEN_CL = "${shen-cl}";
+      devShells.${system} = {
+        default = pkgs.mkShell {
+          packages = [ pkgs.nodejs_22 pkgs.python3 pkgs.sbcl pkgs.go_1_27 shen-scheme yggdrasil erlang ];
+          FENRIR_SHEN_CL = "${shen-cl}";
+        };
+        aarch64-verification = mkAarch64VerificationShell pkgs aarch64-verification shen-jit;
       };
     };
 }
