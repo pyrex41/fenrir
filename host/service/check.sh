@@ -6,9 +6,10 @@
 #
 #   sh host/service/check.sh [quick|full]     (default quick)
 #
-# Builds everything through nix (the flake's fenrir-a3-tools: Erlang/OTP, SQLite, gcc,
-# node), writes build/host/service/<run>/report.json and prints it. Exit 0 exactly when
-# the report's status is development-pass.
+# Uses the flake's fenrir-a3-tools (Erlang/OTP, SQLite, gcc, node) by default.
+# FENRIR_A3_TOOLS can name a prebuilt prefix with the same bin/include/lib layout;
+# the report distinguishes this from the Nix package. Writes and prints
+# build/host/service/<run>/report.json. Exit 0 only on development-pass.
 set -eu
 mode=${1:-quick}
 case "$mode" in quick|full) ;; *) echo "usage: check.sh [quick|full]" >&2; exit 2 ;; esac
@@ -24,16 +25,35 @@ for input in harness/solo5.sh tools/solo5/control-durable-build.mjs backends/sol
 done
 export PATH="$PATH:/nix/var/nix/profiles/default/bin"
 repo=$root
+# jit.sh derives its default prefix from $0, which is in host/service here.
+# Supply the repository-relative fallback explicitly if Nix is not available.
+if [ -z "${FENRIR_SHEN_JIT:-}" ] && ! command -v nix >/dev/null 2>&1; then
+  FENRIR_SHEN_JIT="$repo/build/toolchain/shen-jit-0.7"
+fi
 . "$repo/harness/jit.sh"
 root=$repo # jit.sh sets root from $0, which is two levels down here
 . "$repo/harness/solo5.sh"
 FENRIR_SHEN_JIT=$jit
 export FENRIR_SHEN_JIT
-tools=$(cd "$root" && nix build --no-link --print-out-paths .#fenrir-a3-tools)
-if [ -z "$FENRIR_SOLO5" ] || [ ! -x "$FENRIR_SOLO5/tenders/spt/solo5-spt" ]; then
-  echo '{"status":"development-fail","reason":"BLOCKED: no Solo5 (harness/solo5.sh)"}'
-  exit 1
+if [ -z "${FENRIR_SOLO5:-}" ] ||
+   { [ ! -x "$FENRIR_SOLO5/tenders/spt/solo5-spt" ] && [ ! -x "$FENRIR_SOLO5/bin/solo5-spt" ]; }; then
+  echo 'A3 campaign blocked: no installed or checkout Solo5 spt tender (harness/solo5.sh)' >&2
+  exit 2
 fi
+if [ -n "${FENRIR_A3_TOOLS:-}" ]; then
+  tools=$(cd "$FENRIR_A3_TOOLS" && pwd)
+  tool_source=explicit_prefix
+else
+  tools=$(cd "$root" && nix build --no-link --print-out-paths .#fenrir-a3-tools)
+  tool_source=nix_build
+fi
+for tool in gcc erl erlc node; do
+  if [ ! -x "$tools/bin/$tool" ]; then
+    printf 'A3 campaign blocked: missing %s/bin/%s\n' "$tools" "$tool" >&2
+    exit 2
+  fi
+done
+export PATH="$tools/bin:$PATH"
 out="$root/build/host/service/$(date +%s)-$$"
 ebin="$out/ebin"
 mkdir -p "$ebin" "$out/bin"
@@ -90,7 +110,7 @@ cat > "$out/config.term" <<EOF
   mutants => [volatile_mailbox, respond_before_commit, two_transactions, busy_as_success, no_dedup,
               no_transaction, sync_off, equivalent_control],
   families => ${FENRIR_A3_FAMILIES:-all},
-  mode => $mode, artifact_source => "$source"}.
+  mode => $mode, artifact_source => "$source", tool_source => $tool_source}.
 EOF
 erl() { "$tools/bin/erl" -noshell -noinput -pa "$ebin" "$@" < /dev/null; }
 
