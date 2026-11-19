@@ -44,109 +44,89 @@
         '';
       };
 
-      # Shen/JIT builds itself from the kernel release and an earlier Shen/JIT release,
-      # which its tools/ci-deps.sh names with these hashes. bin/shen-jit is the runtime
-      # with its image appended, so it must not be stripped or patched after the build.
-      shen-jit-kernel = pkgs.fetchurl {
-        url = "https://github.com/Shen-Language/shen-sources/releases/download/shen-43.6/ShenOSKernel-43.6.tar.gz";
-        sha256 = "61d1795755a57da252ba8108cdfccc680f95a04bfd395a54f533ab6724647ef5";
-      };
-      shen-jit-bootstrap = pkgs.fetchurl {
-        url = "https://github.com/tizoc/shen-jit/releases/download/v0.1/shen-jit-0.1-linux-x86_64-static.tar.gz";
-        sha256 = "4e569fe92e24a722afe406807e7ad3271fd2d6cc4b7744c981536f732e2953bd";
-      };
-      shen-jit = pkgs.stdenv.mkDerivation {
-        pname = "shen-jit";
-        version = "0.7";
-        src = shen-jit-src;
-        buildPhase = ''
-          mkdir -p .deps/kernel .deps/shen-jit
-          tar -C .deps/kernel --strip-components=1 -xzf ${shen-jit-kernel}
-          tar -C .deps/shen-jit --strip-components=1 -xzf ${shen-jit-bootstrap}
-          make
-          make process
-        '';
-        installPhase = ''
-          mkdir -p $out/bin $out/lib
-          cp build/shen-jit $out/bin/
-          cp lib/*.shen $out/lib/
-          cp build/shen-process.so $out/lib/
-        '';
-        dontStrip = true;
-        dontPatchELF = true;
-        dontFixup = true;
-      };
-
-      # Native ARM64 Linux development toolchain. The bootstrap and hash are
-      # those in the pinned Shen/JIT revision's tools/ci-deps.sh. This output
-      # does not change the x86 qualification profile or qualify ARM runs.
+      # Shen/JIT bootstraps from the kernel and a native v0.1 executable, with
+      # the hashes in the pinned source's tools/ci-deps.sh. Fetch both using
+      # the build platform's nixpkgs, even though the kernel archive is shared.
       arm-pkgs = nixpkgs.legacyPackages.aarch64-linux;
-      arm-bootstrap = arm-pkgs.fetchurl {
-        url = "https://github.com/tizoc/shen-jit/releases/download/v0.1/shen-jit-0.1-linux-arm64-static.tar.gz";
-        sha256 = "2aad3cce35a39be0d9f8859122a4ad1582564ba6afad597054b2cfb2011f0f9d";
-      };
-      arm-shen-jit = arm-pkgs.stdenv.mkDerivation {
-        pname = "shen-jit";
-        version = "0.7";
-        src = shen-jit-src;
-        buildPhase = ''
-          mkdir -p .deps/kernel .deps/shen-jit
-          tar -C .deps/kernel --strip-components=1 -xzf ${shen-jit-kernel}
-          tar -C .deps/shen-jit --strip-components=1 -xzf ${arm-bootstrap}
-          make
-          make process
-        '';
-        installPhase = ''
-          mkdir -p $out/bin $out/lib
-          cp build/shen-jit $out/bin/
-          cp lib/*.shen $out/lib/
-          cp build/shen-process.so $out/lib/
-        '';
-        dontStrip = true;
-        dontPatchELF = true;
-        dontFixup = true;
-      };
+      mkShenJit = pkgs: bootstrapArch: bootstrapHash:
+        let
+          kernel = pkgs.fetchurl {
+            url = "https://github.com/Shen-Language/shen-sources/releases/download/shen-43.6/ShenOSKernel-43.6.tar.gz";
+            sha256 = "61d1795755a57da252ba8108cdfccc680f95a04bfd395a54f533ab6724647ef5";
+          };
+          bootstrap = pkgs.fetchurl {
+            url = "https://github.com/tizoc/shen-jit/releases/download/v0.1/shen-jit-0.1-linux-${bootstrapArch}-static.tar.gz";
+            sha256 = bootstrapHash;
+          };
+        in pkgs.stdenv.mkDerivation {
+          pname = "shen-jit";
+          version = "0.7";
+          src = shen-jit-src;
+          buildPhase = ''
+            mkdir -p .deps/kernel .deps/shen-jit
+            tar -C .deps/kernel --strip-components=1 -xzf ${kernel}
+            tar -C .deps/shen-jit --strip-components=1 -xzf ${bootstrap}
+            make
+            make process
+          '';
+          installPhase = ''
+            mkdir -p $out/bin $out/lib
+            cp build/shen-jit $out/bin/
+            cp lib/*.shen $out/lib/
+            cp build/shen-process.so $out/lib/
+          '';
+          # The Shen image is appended to the executable and must stay intact.
+          dontStrip = true;
+          dontPatchELF = true;
+          dontFixup = true;
+        };
+      shen-jit = mkShenJit pkgs "x86_64" "4e569fe92e24a722afe406807e7ad3271fd2d6cc4b7744c981536f732e2953bd";
+      arm-shen-jit = mkShenJit arm-pkgs "arm64" "2aad3cce35a39be0d9f8859122a4ad1582564ba6afad597054b2cfb2011f0f9d";
 
       # Solo5 at the pinned commit, built from source and installed with its own
       # `make install`: bin/ holds solo5-spt, solo5-hvt, solo5-elftool and the
-      # x86_64-solo5-none-static-{cc,ld,objcopy} wrappers, which find include/ and
+      # <arch>-solo5-none-static-{cc,ld,objcopy} wrappers, which find include/ and
       # lib/ relative to themselves. The wrappers call the target compiler by name,
       # so it is configured as store paths: the unwrapped gcc with the unwrapped
       # binutils, because a guest is freestanding and must not pick up the nixpkgs
       # wrapper's hardening flags or glibc search paths. SOLO5_COMMIT is what
       # tools/solo5/freerun.mjs checks in place of a git HEAD.
       # nixpkgs carries solo5 0.10.1, not this commit, so it is not used.
-      solo5-target-cc = pkgs.writeShellScript "solo5-target-cc" ''
-        exec ${pkgs.stdenv.cc.cc}/bin/gcc -B${pkgs.binutils-unwrapped}/bin/ "$@"
-      '';
-      solo5 = pkgs.stdenv.mkDerivation {
-        pname = "solo5";
-        version = "0.9.3";
-        src = solo5-src;
-        nativeBuildInputs = [ pkgs.pkg-config ];
-        buildInputs = [ pkgs.libseccomp ];
-        # Host tools as position-independent executables, as the distribution
-        # compilers build them; otherwise configure.sh pins the spt tender at 1 GB.
-        env.NIX_CFLAGS_COMPILE = "-fPIE -Wno-error=address"; # hvt_main.c:114 under this gcc
-        env.NIX_CFLAGS_LINK = "-pie";
-        configurePhase = ''
-          # No .git in the fetched source; this is what a release tarball carries.
-          printf '#define SOLO5_VERSION "v0.9.3"\n' > include/version.h.distrib
-          TARGET_CC=${solo5-target-cc} \
-          TARGET_LD=${pkgs.binutils-unwrapped}/bin/ld \
-          TARGET_OBJCOPY=${pkgs.binutils-unwrapped}/bin/objcopy \
-            sh configure.sh --prefix=$out
-        '';
-        buildPhase = "make";
-        installPhase = ''
-          make install
-          for w in $out/bin/*-solo5-none-static-*; do
-            sed -i '2i PATH=${pkgs.coreutils}/bin:${pkgs.findutils}/bin:$PATH' $w
-          done
-          printf '%s\n' ${solo5-src.rev} > $out/SOLO5_COMMIT
-        '';
-        dontStrip = true; # the guest bindings in lib/ are linked into every image
-      };
+      mkSolo5 = pkgs:
+        let
+          target-cc = pkgs.writeShellScript "solo5-target-cc" ''
+            exec ${pkgs.stdenv.cc.cc}/bin/gcc -B${pkgs.binutils-unwrapped}/bin/ "$@"
+          '';
+        in pkgs.stdenv.mkDerivation {
+          pname = "solo5";
+          version = "0.9.3";
+          src = solo5-src;
+          nativeBuildInputs = [ pkgs.pkg-config ];
+          buildInputs = [ pkgs.libseccomp ];
+          # Host tools as position-independent executables, as the distribution
+          # compilers build them; otherwise configure.sh pins the spt tender at 1 GB.
+          env.NIX_CFLAGS_COMPILE = "-fPIE -Wno-error=address"; # hvt_main.c:114 under this gcc
+          env.NIX_CFLAGS_LINK = "-pie";
+          configurePhase = ''
+            # No .git in the fetched source; this is what a release tarball carries.
+            printf '#define SOLO5_VERSION "v0.9.3"\n' > include/version.h.distrib
+            TARGET_CC=${target-cc} \
+            TARGET_LD=${pkgs.binutils-unwrapped}/bin/ld \
+            TARGET_OBJCOPY=${pkgs.binutils-unwrapped}/bin/objcopy \
+              sh configure.sh --prefix=$out
+          '';
+          buildPhase = "make";
+          installPhase = ''
+            make install
+            for w in $out/bin/*-solo5-none-static-*; do
+              sed -i '2i PATH=${pkgs.coreutils}/bin:${pkgs.findutils}/bin:$PATH' $w
+            done
+            printf '%s\n' ${solo5-src.rev} > $out/SOLO5_COMMIT
+          '';
+          dontStrip = true; # the guest bindings in lib/ are linked into every image
+        };
+      solo5 = mkSolo5 pkgs;
+      arm-solo5 = mkSolo5 arm-pkgs;
 
       # Guest batches for the hvt check, built here so the VM needs neither node nor
       # a compiler: the TC1 handler fixtures with the TC0-A hand cases (43 programs),
@@ -295,7 +275,13 @@
       '';
     in {
       packages.${system} = { inherit shen-scheme shen-cl shen-jit solo5 solo5-batches hvt-compare yggdrasil link-toolchain erlang; default = link-toolchain; };
-      packages.aarch64-linux.shen-jit = arm-shen-jit;
+      # Development only: the x86 gate and HVT comparison are not exported here.
+      packages.aarch64-linux = { shen-jit = arm-shen-jit; solo5 = arm-solo5; };
+      devShells.aarch64-linux.default = arm-pkgs.mkShell {
+        packages = [ arm-pkgs.nodejs_22 arm-shen-jit arm-solo5 ];
+        FENRIR_SHEN_JIT = "${arm-shen-jit}";
+        FENRIR_SOLO5 = "${arm-solo5}";
+      };
       checks.${system}.hvt = hvt-vm-test;
       apps.${system} = {
         default = { type = "app"; program = "${link-toolchain}/bin/fenrir-link-toolchain"; };

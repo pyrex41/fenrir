@@ -470,6 +470,26 @@ nix build .#shen-jit                   # the pinned Shen/JIT with its libraries
 The flake also still builds shen-scheme v0.26, shen-cl and Yggdrasil, which the
 gate no longer uses.
 
+### ARM64 Linux development
+
+On an ARM64 Linux machine (Nix system `aarch64-linux`), the flake provides
+Shen/JIT 0.7, the stock Solo5 0.9.3 build and its
+`aarch64-solo5-none-static-*` guest toolchain. The development shell sets
+`FENRIR_SHEN_JIT` and `FENRIR_SOLO5` and provides Node 22:
+
+```sh
+nix build --no-link .#shen-jit .#solo5
+nix develop --command sh harness/run-solo5-pure-call.sh 4
+nix develop --command sh harness/run-solo5-pure-call.sh tc1
+```
+
+Run these commands from ARM64 Linux, not directly from macOS. The runtime
+commands use `spt` (Linux seccomp, no KVM); the stock build also includes
+`hvt`, whose execution requires a usable ARM64 `/dev/kvm`. The ARM64 flake
+does not export the x86-64 HVT comparison or the legacy Shen ports. This is
+development support only; it does not change the x86-64 qualification profile
+or establish any ARM64 qualification.
+
 For Go host tests, pinned toolchain instructions and optional explicit Shen/Node
 integration vectors, use the [native host README](tools/solo5/native-arithmetic/README.md).
 Live commands additionally require the exact images and reviewed isolation/cleanup
