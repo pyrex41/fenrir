@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Transport only: hand one artifact file to the artifact validator
 // (tools/tc0/pure-call-artifact.mjs) and report its verdict as one JSON line.
-// No rule about artifacts lives here. Entry input is the harness's fixed ["int","0"].
+// No rule about artifacts lives here. The validator chooses a typed probe for
+// a durable entry request; other schemas use the fixed ["int","0"].
 //
 //   node frontend/validate.mjs ARTIFACT.json
 //
@@ -13,7 +14,7 @@
 // The exit status is 0 whenever a verdict was reached.
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {validatePureCallArtifact,InvalidPureCallArtifact,PureCallValidationLimit} from '../tools/tc0/pure-call-artifact.mjs';
+import {validateFrontendArtifact,InvalidPureCallArtifact,PureCallValidationLimit} from '../tools/tc0/pure-call-artifact.mjs';
 import {encode,EncodingError,EncodingLimit} from '../tools/tc0/canonical.mjs';
 
 const path=process.argv[2];
@@ -21,7 +22,7 @@ if(!path||process.argv.length!==3){console.error('usage: node frontend/validate.
 const bytes=readFileSync(path);
 let report;
 try {
-  const {artifact,node_count}=validatePureCallArtifact(bytes,['int','0']);
+  const {artifact,node_count}=validateFrontendArtifact(bytes);
   const canonical=encode(artifact);
   report={status:'valid',nodes:node_count,functions:String(artifact.functions.length),canonical:canonical.equals(bytes),
     sha256:createHash('sha256').update(canonical).digest('hex')};

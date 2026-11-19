@@ -13,7 +13,9 @@
 # rejected, 2 usage or a file problem, 3 a defect in the frontend, 4 the step
 # budget ran out. A program whose main leaves a remote effect to the system
 # (spec/tc1/SURFACE.md) is checked and emitted, but run refuses it with status 2:
-# it needs a peer, which only a system of images has.
+# it needs a peer, which only a system of images has. A durable program with a
+# typed host request is also refused by run; with I64 input, run uses the durable
+# model harness when installed and stops at the first host request, if any.
 set -eu
 usage() {
   sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//' >&2

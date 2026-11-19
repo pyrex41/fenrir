@@ -1,0 +1,6 @@
+\\ A residual request can appear inside an expression; run waits rather than
+\\ pretending there was a reply.
+\\ > host request 0: Store.put 41
+\\ > outcome: none (waiting for the host's reply; run has no host)
+(effect Store durable (put I64 --> I64))
+(define main {I64 --> I64} input -> (+ (perform Store put 41) 1))

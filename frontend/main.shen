@@ -14,7 +14,7 @@
 \\ Loading prints a line per definition on standard output, so the result goes to
 \\ a file and the exit status says how to read it:
 \\   0 done   1 the program was rejected   2 a file could not be read or written,
-\\   or the program leaves a remote effect to the system and cannot run alone
+\\   or the program cannot run alone (it needs its host, peer, or model)
 \\   3 a defect in the frontend            4 the step budget ran out
 \\
 \\ The stages are kept apart on purpose. The elaborator produces an artifact; the
@@ -145,6 +145,43 @@
 (define fe.left-to-the-system
   Artifact -> (remove "Emit" (fh.field "effects" (fe.entry-function (fh.field "entry" Artifact) (fh.field "functions" Artifact)))))
 
+\\ The durable harness is optional for check/emit and for running older slices.
+\\ Run the D1 model with no replies: the first HostRequest ends the run.
+(define fe.execute-durable
+  Artifact Fuel ->
+    (let Takes (fh.field "type" (fh.field "input_schema" Artifact))
+         Fixed (if (= Takes "I64") true
+                   (fe.finish 2 (make-string "this program cannot be run alone: the entry takes a request its host supplies, and run has only I64 input 0. check and emit work on it~%")))
+         Ready (trap-error (load (cn (value fh.*root*) "harness/tc1-durable-common.shen"))
+                           (/. E (fe.finish 2 (make-string "cannot run TC1-D1 without the durable model harness (~A). check and emit work on it~%" (error-to-string E)))))
+         Run (dh.run Artifact ["int" "0"] [replies] Fuel)
+         Steps (nth 2 Run)
+         Text (fe.durable-observations Steps)
+      (cond ((= (hd Run) "Completed")
+              (let Outcome (fh.model-outcome Steps)
+                (fe.finish 0 (cn Text (make-string "outcome: ~A~%~Asteps: ~A~%" (fe.show-outcome Outcome) (fe.trap-line Outcome Steps Artifact) (length Steps))))))
+            ((= (hd Run) "AwaitingHost")
+              (fe.finish 0 (cn Text (make-string "outcome: none (waiting for the host's reply; run has no host)~%steps: ~A~%" (length Steps)))))
+            ((= (hd Run) "BudgetExhausted")
+              (fe.finish 4 (cn Text (make-string "outcome: none (stopped after the budget of ~A steps; set FENRIR_FUEL to raise it)~%" Fuel))))
+            (true (fe.finish 3 (make-string "unexpected durable model execution: ~A~%" (hd Run)))))))
+
+(define fe.host-event
+  Event -> (if (= (fh.field "kind" Event) "HostRequest")
+               (make-string "host request ~A: ~A.~A ~A~%" (fh.field "seq" Event) (fh.field "effect" Event)
+                           (fh.field "operation" Event) (fe.show-value (fh.field "value" Event)))
+               (fe.emit-lines [Event])))
+
+(define fe.durable-observations
+  [] -> ""
+  [Step | Steps] ->
+    (cn (fe.durable-event-lines (fh.field "events" Step))
+        (fe.durable-observations Steps)))
+
+(define fe.durable-event-lines
+  [] -> ""
+  [E | Es] -> (cn (fe.host-event E) (fe.durable-event-lines Es)))
+
 \\ Run the artifact decoded from Text and report emissions in order, the outcome
 \\ and the number of model steps. Entry input is the harness's fixed 0.
 \\ A program that leaves a remote effect to the system is not run here: the
@@ -153,7 +190,13 @@
 (define fe.execute
   Text Fuel ->
     (let Artifact (json.parse Text [[byte-limit 16777216]])
-         Entered (if (= (fh.field "schema_version" Artifact) "tc1-handler-demo/4")
+       (if (= (fh.field "schema_version" Artifact) "tc1-durable-demo/1")
+           (fe.execute-durable Artifact Fuel)
+           (fe.execute-handler Artifact Fuel))))
+
+(define fe.execute-handler
+  Artifact Fuel ->
+    (let Entered (if (= (fh.field "schema_version" Artifact) "tc1-handler-demo/4")
                      (fe.finish 2 (make-string "this program cannot be run alone: it serves a remote effect, and its implementations run inside a peer image, once for each request (sh harness/run-tc1-remote-run.sh builds and runs one). check and emit work on it~%"))
                      true)
          Far (fe.left-to-the-system Artifact)

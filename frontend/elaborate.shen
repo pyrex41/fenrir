@@ -1039,7 +1039,7 @@
   _ [] -> []
   K [F | Fs] -> (if (= (fe.kind F) K) [F | (fe.of-kind K Fs)] (fe.of-kind K Fs)))
 
-\\ Effect declarations of both classes, in source order.
+\\ Effect declarations of all classes, in source order.
 (define fe.effect-forms
   [] -> []
   [F | Fs] -> (if (element? (fe.kind F) ["effect" "remote-effect"]) [F | (fe.effect-forms Fs)] (fe.effect-forms Fs)))
@@ -1134,12 +1134,26 @@
 
 \\ [Name Operations Class ReadOnlyOperationNames].
 (define fe.effect
-  [list L C [[sym _ _ Kind] [sym _ _ Name] | Operations]] ->
+  [list L C [[sym _ _ "effect"] [sym _ _ Name] [sym DL DC "durable"] | Operations]] ->
+    (if (or (value fe.*serving*) (cons? (value fe.*remote*)))
+        (fe.fail DL DC "durable effects cannot be combined with remote-effect or serve in one artifact")
+        (fe.local-effect L C Name Operations "durable"))
+  [list L C [[sym _ _ "effect"] [sym _ _ Name] [sym _ _ "ordinary"] | Operations]] ->
+    (fe.local-effect L C Name Operations "ordinary")
+  [list _ _ [[sym _ _ "effect"] _ [sym L C Word] | _]] ->
+    (fe.fail L C (make-string "~A is not an effect class: an effect is written (effect Name (operation A --> B) ...), or (effect Name durable (operation A --> B) ...) for one the host discharges" Word))
+  [list L C [[sym _ _ "effect"] [sym _ _ Name] | Operations]] ->
+    (fe.local-effect L C Name Operations "ordinary")
+  [list L C [[sym _ _ "remote-effect"] [sym _ _ Name] | Operations]] ->
     (if (and (> (length Operations) 0) (< (length Operations) 9))
-        (if (= Kind "effect")
-            [Name (fe.operations Name Operations []) "ordinary" []]
-            (let Ops (fe.remote-operations Name Operations [])
-              [Name (map (/. O (hd O)) Ops) "remote" (map (/. O (hd (hd O))) (fe.keep-if (/. O (hd (tl O))) Ops))]))
+        (let Ops (fe.remote-operations Name Operations [])
+          [Name (map (/. O (hd O)) Ops) "remote" (map (/. O (hd (hd O))) (fe.keep-if (/. O (hd (tl O))) Ops))])
+        (fe.fail L C (make-string "effect ~A must declare 1 to 8 operations" Name))))
+
+(define fe.local-effect
+  L C Name Operations Class ->
+    (if (and (> (length Operations) 0) (< (length Operations) 9))
+        [Name (fe.operations Name Operations []) Class []]
         (fe.fail L C (make-string "effect ~A must declare 1 to 8 operations" Name))))
 
 (define fe.keep-if
@@ -1233,30 +1247,34 @@
 \\ ---------- the program ----------
 
 (define fe.check-entry
-  Functions Results ->
+  Functions Results Durable ->
     (let Main (fe.binding "main" Functions)
          Present (if (= Main none)
                      (fe.fail 1 1 "the program has no entry function: define main, written (define main {I64 --> ResultType} input -> body)")
                      true)
          L (nth 4 Main)
          C (nth 5 Main)
-         Input (if (= (nth 2 Main) "I64") true
-                   (fe.fail L C (make-string "the entry function main must take I64 (it is run with input 0), but it takes ~A" (fe.show-type (nth 2 Main)))))
+          Input (cond ((= (nth 2 Main) "I64") true)
+                      ((and (cons? Durable) (fe.plain? (nth 2 Main) [])) true)
+                      ((cons? Durable)
+                        (fe.fail L C (make-string "the entry function main must take a serializable argument (the request its host supplies), but it takes ~A" (fe.show-type (nth 2 Main)))))
+                      (true (fe.fail L C (make-string "the entry function main must take I64 (it is run with input 0), but it takes ~A" (fe.show-type (nth 2 Main))))))
          Output (if (fe.plain? (nth 3 Main) []) true
                     (fe.fail L C (make-string "the entry function main must return a serializable value, but its result type ~A contains a function" (fe.show-type (nth 3 Main)))))
-      (fe.check-handled (fe.entry-effects Functions Results))))
+       (fe.check-handled (fe.entry-effects Functions Results) Durable)))
 
 (define fe.entry-effects
   [["main" | _] | _] [[_ Effects] | _] -> Effects
   [_ | Fs] [_ | Rs] -> (fe.entry-effects Fs Rs))
 
-\\ Only Emit and remote effects may remain at the entry: every ordinary effect is
-\\ handled inside the program, and a remote effect is discharged by the system.
+\\ Every ordinary effect must be handled. Depending on the slice, remote effects
+\\ are discharged by the system or durable effects by the host; the two never mix.
 (define fe.check-handled
-  [] -> true
-  [["Emit" | _] | Rest] -> (fe.check-handled Rest)
-  [[Name | _] | Rest] -> (fe.check-handled Rest) where (not (= (fe.lookup Name (value fe.*remote*)) none))
-  [[Name L C Cause] | _] ->
+  [] _ -> true
+  [["Emit" | _] | Rest] Durable -> (fe.check-handled Rest Durable)
+  [[Name | _] | Rest] Durable -> (fe.check-handled Rest Durable)
+    where (or (element? Name Durable) (not (= (fe.lookup Name (value fe.*remote*)) none)))
+  [[Name L C Cause] | _] _ ->
     (fe.fail L C (make-string "effect ~A is not handled: it comes from ~A, and no (handle ~A ...) encloses that on the way from the entry function main" Name Cause Name)))
 
 (define fe.source-map
@@ -1267,16 +1285,16 @@
 (define fe.datatype-object
   [Name Constructors] -> [object ["constructors" (map (/. K [object ["fields" (hd (tl K))] ["name" (hd K)]]) Constructors)] ["name" Name]])
 
-\\ Schema /2: a name and operations. Schema /3 (Remote true): the class as well,
-\\ and read_only on each operation of a remote effect.
+\\ Schema /2: a name and operations. R1/P1 and D1 also carry the class;
+\\ only remote operations carry read_only.
 (define fe.effect-object
   false [Name Ops _ _] -> [object ["name" Name]
                                   ["operations" (map (/. O [object ["argument_type" (nth 2 O)] ["name" (hd O)] ["result_type" (nth 3 O)]]) Ops)]]
-  true [Name Ops "ordinary" _] -> [object ["class" "ordinary"] ["name" Name]
-                                          ["operations" (map (/. O [object ["argument_type" (nth 2 O)] ["name" (hd O)] ["result_type" (nth 3 O)]]) Ops)]]
   true [Name Ops "remote" ReadOnly] ->
     [object ["class" "remote"] ["name" Name]
-            ["operations" (map (/. O [object ["argument_type" (nth 2 O)] ["name" (hd O)] ["read_only" (element? (hd O) ReadOnly)] ["result_type" (nth 3 O)]]) Ops)]])
+             ["operations" (map (/. O [object ["argument_type" (nth 2 O)] ["name" (hd O)] ["read_only" (element? (hd O) ReadOnly)] ["result_type" (nth 3 O)]]) Ops)]]
+  true [Name Ops Class _] -> [object ["class" Class] ["name" Name]
+                                    ["operations" (map (/. O [object ["argument_type" (nth 2 O)] ["name" (hd O)] ["result_type" (nth 3 O)]]) Ops)]])
 
 (define fe.limit
   Forms What Max -> (if (> (length Forms) Max)
@@ -1305,6 +1323,8 @@
          Effects (set fe.*effects* (map (/. E [(hd E) (hd (tl E))]) Declared))
          Remote (set fe.*remote* (map (/. E [(hd E) (nth 4 E)]) (fe.keep-if (/. E (= (nth 3 E) "remote")) Declared)))
          Far (cons? Remote)
+         Durable (fe.keys (fe.keep-if (/. E (= (nth 3 E) "durable")) Declared))
+         D1 (cons? Durable)
          Clash (map (/. F (if (and Far (= (fe.declared-name F) "RemoteResult"))
                               (fe.reject F "RemoteResult names the outcomes of a remote perform and cannot be declared in a program that has a remote-effect")
                               true))
@@ -1321,11 +1341,11 @@
          Settled (fe.fixed-point Functions)
          Strict (do (set fe.*strict* true) (set fe.*next* 0) (set fe.*locations* []))
          Results (fe.pass Functions)
-         Entry (if Serving (fe.check-serving Functions Results) (fe.check-entry Functions Results))
+         Entry (if Serving (fe.check-serving Functions Results) (fe.check-entry Functions Results Durable))
       (if Serving
           [object ["contract_version" "tc1-draft-1"]
                   ["datatypes" (map (/. D (fe.datatype-object D)) (tl Datatypes))]
-                  ["effects" (map (/. E (fe.effect-object Far E)) Declared)]
+                   ["effects" (map (/. E (fe.effect-object Far E)) Declared)]
                   ["functions" (map (/. R (hd R)) Results)]
                   ["module" Module]
                   ["schema_version" "tc1-handler-demo/4"]
@@ -1334,11 +1354,11 @@
                   ["source_map" (fe.source-map File (value fe.*locations*) [])]]
       [object ["contract_version" "tc1-draft-1"]
               ["datatypes" (map (/. D (fe.datatype-object D)) (tl Datatypes))]
-              ["effects" (map (/. E (fe.effect-object Far E)) Declared)]
+               ["effects" (map (/. E (fe.effect-object (or Far D1) E)) Declared)]
               ["entry" "main"]
               ["functions" (map (/. R (hd R)) Results)]
-              ["input_schema" [object ["type" "I64"]]]
+               ["input_schema" [object ["type" (nth 2 (fe.binding "main" Functions))]]]
               ["module" Module]
-              ["schema_version" (if Far "tc1-handler-demo/3" "tc1-handler-demo/2")]
-              ["slice" (if Far "TC1-R1" "TC1-H2")]
+               ["schema_version" (cond (Far "tc1-handler-demo/3") (D1 "tc1-durable-demo/1") (true "tc1-handler-demo/2"))]
+               ["slice" (cond (Far "TC1-R1") (D1 "TC1-D1") (true "TC1-H2"))]
               ["source_map" (fe.source-map File (value fe.*locations*) [])]])))

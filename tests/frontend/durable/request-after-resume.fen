@@ -1,0 +1,11 @@
+\\ The ordinary effect stays handled even though its clause makes a host request.
+\\ > emit "body": 5
+\\ > host request 0: Store.put 5
+\\ > outcome: none (waiting for the host's reply; run has no host)
+(effect Tx (begin Unit --> Unit))
+(effect Store durable (put I64 --> I64))
+(define main {I64 --> I64}
+  input -> (handle Tx
+             ((begin u k) -> (let r (resume k unit)
+                               (do (perform Store put r) r)))
+             (do (perform Tx begin unit) (emit "body" 5) 5)))

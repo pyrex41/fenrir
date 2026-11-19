@@ -27,6 +27,8 @@
 #               lines of its header, or says "\\ expect FILE:LINE:COLUMN TEXT" and
 #               is rejected there, FILE being the file of that directory the
 #               problem is in: the program, or a file it includes
+#   durable     re-emit the pinned service artifact, and check D1 programs;
+#               run I64 entries when the durable model harness is available
 #   Solo5       the examples, elaborated, run in the Solo5 guest and agree with
 #               the model step for step (harness/solo5-pure-call.shen). Skipped,
 #               and said so, when FENRIR_SOLO5 is not set and build/vendor/solo5
@@ -174,6 +176,44 @@ for file in tests/frontend/include/*.fen; do
   fi
 done
 
+durable=0
+file=examples/service/accepted-job.fen
+durable=$((durable + 1))
+if ! sh "$fenrir" emit "$file" "$work/accepted-job.json" > "$work/out" 2> "$work/err" ||
+   ! cmp -s "$work/accepted-job.json" host/service/artifacts/accepted-job.json ||
+   ! grep -Fq "artifact sha256 $(cat host/service/artifacts/accepted-job.sha256)" "$work/out"; then
+  fail "$file" "emit must reproduce the pinned artifact and SHA-256" "$(cat "$work/out" "$work/err")"
+fi
+for mode in run run-artifact; do
+  input=$file
+  if [ "$mode" = run-artifact ]; then input="$work/accepted-job.json"; fi
+  status=0
+  sh "$fenrir" "$mode" "$input" > "$work/out" 2> "$work/err" || status=$?
+  if [ "$status" -ne 2 ] || ! grep -Fq 'entry takes a request its host supplies' "$work/err"; then
+    fail "$file" "$mode must refuse a host-supplied request instead of running the validation probe" "$(cat "$work/out" "$work/err")"
+  fi
+done
+for file in tests/frontend/durable/*.fen; do
+  durable=$((durable + 1))
+  status=0
+  sh "$fenrir" emit "$file" "$work/durable.json" > "$work/out" 2> "$work/err" || status=$?
+  if [ "$status" -ne 0 ] || ! grep -Fq '"schema_version":"tc1-durable-demo/1","slice":"TC1-D1"' "$work/durable.json"; then
+    fail "$file" "emit: expected TC1-D1" "$(cat "$work/out" "$work/err")"
+    continue
+  fi
+  status=0
+  sh "$fenrir" run "$file" > "$work/out" 2> "$work/err" || status=$?
+  if [ -f harness/tc1-durable-common.shen ] && [ -f models/tc1/durable-machine.shen ]; then
+    sed -n 's/^\\\\ > //p' "$file" > "$work/expected"
+    observed "$work/out" > "$work/observed"
+    if [ "$status" -ne 0 ] || [ ! -s "$work/expected" ] || ! cmp -s "$work/expected" "$work/observed"; then
+      fail "$file" "status $status; expected:" "$(cat "$work/expected")" "got:" "$(cat "$work/out" "$work/err")"
+    fi
+  elif [ "$status" -ne 2 ] || ! grep -Fq 'cannot run TC1-D1 without the durable model harness' "$work/err"; then
+    fail "$file" "run must refuse when the model harness is missing" "$(cat "$work/out" "$work/err")"
+  fi
+done
+
 # The guest and the harness both stop at 200 steps, so longer programs are
 # compared over their first 200 steps only.
 if [ -n "${FENRIR_SOLO5:-}" ] || [ -x "$root/build/vendor/solo5/tenders/spt/solo5-spt" ]; then
@@ -193,6 +233,6 @@ else
   solo5="skipped (FENRIR_SOLO5 is not set and build/vendor/solo5 is not built)"
 fi
 
-printf 'frontend tests: %s accepted programs, %s rejected programs, %s round trips, %s stable artifacts, %s remote programs, %s programs with includes; Solo5: %s; failures: %s\n' \
-  "$accepted" "$rejected" "$roundtrips" "$stable" "$remote" "$included" "$solo5" "$failures"
+printf 'frontend tests: %s accepted programs, %s rejected programs, %s round trips, %s stable artifacts, %s remote programs, %s programs with includes, %s durable programs; Solo5: %s; failures: %s\n' \
+  "$accepted" "$rejected" "$roundtrips" "$stable" "$remote" "$included" "$durable" "$solo5" "$failures"
 [ "$failures" -eq 0 ]

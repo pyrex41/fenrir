@@ -29,6 +29,9 @@
 // only Emit and the store effects unhandled, and the function of a READ-ONLY operation may
 // not have StoreWrite in its effect set (owner ruling of 16 November 2026 on §12.10
 // question 13). A serving program performs no remote operation.
+// Schema tc1-durable-demo/1 (TC1-D1) extends /2 independently of /3 and /4.
+// Its effect classes are ordinary and durable, and only Emit and declared
+// durable effects may remain in the entry's effect row.
 import {decode,encode,decimal} from './canonical.mjs';
 export class InvalidPureCallArtifact extends Error {}
 export class PureCallValidationLimit extends Error {}
@@ -37,6 +40,7 @@ export const TC1_HANDLER_SCHEMA='tc1-handler-demo/1';
 export const TC1_RESUMPTION_SCHEMA='tc1-handler-demo/2';
 export const TC1_REMOTE_SCHEMA='tc1-handler-demo/3';
 export const TC1_SERVING_SCHEMA='tc1-handler-demo/4';
+export const TC1_DURABLE_SCHEMA='tc1-durable-demo/1';
 // The peer's store: the two effects a serving program is given, with their one operation each.
 export const STORE_EFFECTS=Object.freeze({StoreRead:Object.freeze({name:'get',argument_type:'I64',result_type:'I64'}),
   StoreWrite:Object.freeze({name:'put',argument_type:Object.freeze(['Tuple','I64','I64']),result_type:'Unit'})});
@@ -51,6 +55,7 @@ export function mentionsStoreWrite(artifact){
   artifact.datatypes.some(d=>d.constructors.some(c=>c.fields.some(inType)));
 }
 export const EFFECT_CLASSES=Object.freeze(['ordinary','remote']);
+const DURABLE_EFFECT_CLASSES=Object.freeze(['ordinary','durable']);
 // The outcome of a remote perform: the datatype name its values carry, and its constructors.
 export const REMOTE_RESULT='RemoteResult';
 export const REMOTE_OUTCOMES=Object.freeze(['reply','not_delivered','timed_out']);
@@ -68,21 +73,75 @@ const ids=a=>[...a].sort((x,y)=>BigInt(x)<BigInt(y)?-1:BigInt(x)>BigInt(y)?1:0);
 const arities={add:2,sub:2,mul:2,div:2,neg:1,lt:2,le:2,gt:2,ge:2,not:1,bytes_length:1,bytes_index:2,bytes_concat:2,eq:2};
 const dataPrimitives=new Set(['bytes_length','bytes_index','bytes_concat','eq']);
 const dataTags=new Set(['bytes','tuple','project','construct','match']);
+
+// Find a smallest witness within the value depth and size bounds; ties use
+// declaration order. Memoize failed recursive searches as well as successes;
+// shared witness subtrees still count toward the size cap.
+function probeInput(type,datatypes,maxDepth,maxNodes){
+ const builtin={Unit:['unit'],Bool:['bool',false],I64:['int','0'],Bytes:['bytes',''],TrapCode:['data','TrapCode','Overflow']};
+ const memo=[];
+ function probe(t,depth){
+  if(depth>maxDepth)return null;
+  const row=memo[depth]??(memo[depth]=new Map());if(row.has(t))return row.get(t);
+  const compound=(head,fields)=>{
+   const value=[...head];let size=1;
+   for(const field of fields){
+    const child=probe(field,depth+1);
+    if(!child||size+child.size>maxNodes)return null;
+    size+=child.size;value.push(child.value);
+   }
+   return {value,size};
+  };
+  let result=null;
+  if(typeof t==='string'&&Object.hasOwn(builtin,t))result={value:builtin[t],size:1};
+  else if(t[0]==='Tuple')result=compound(['tuple'],t.slice(1));
+  else if(t[0]==='Data'){
+   for(const c of datatypes.get(t[1]).constructors){
+    const candidate=compound(['data',t[1],c.name],c.fields);
+    if(candidate&&(!result||candidate.size<result.size))result=candidate;
+    if(result?.size===1)break;
+   }
+  }
+  row.set(t,result);return result;
+ }
+ return probe(type,0)?.value;
+}
+
+// The frontend has no real host request at check/emit time. This explicitly
+// selects a typed probe while retaining the same validator, including value checks.
+const DURABLE_INPUT_PROBE=Symbol('durable input probe');
+export function validateFrontendArtifact(bytes){
+ return validatePureCallArtifact(bytes,DURABLE_INPUT_PROBE);
+}
+
+// D1 capability manifest, from a validated artifact rather than from a run.
+// PR10's remote and serving effects belong to a different ABI.
+export function residualEffects(artifact){
+ if(artifact.schema_version!==TC1_DURABLE_SCHEMA)return [];
+ const entry=artifact.functions.find(f=>f.name===artifact.entry);
+ return artifact.effects.filter(d=>d.class==='durable'&&entry.effects.includes(d.name));
+}
+
 export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,maxBytes=256,maxValueNodes=1000}={}){
  for(const n of [maxNodes,maxDepth,maxBytes,maxValueNodes])if(!Number.isSafeInteger(n)||n<1)throw new TypeError('Invalid cap');
  const a=decode(bytes),serving=a?.schema_version===TC1_SERVING_SCHEMA;
  object(a,serving?['contract_version','schema_version','slice','module','datatypes','effects','functions','serves','source_map']:['contract_version','schema_version','slice','module','datatypes','effects','functions','entry','input_schema','source_map']);
- const remote=serving||a.schema_version===TC1_REMOTE_SCHEMA,resumptions=remote||a.schema_version===TC1_RESUMPTION_SCHEMA,handlers=resumptions||a.schema_version===TC1_HANDLER_SCHEMA;
- if(handlers?(a.contract_version!=='tc1-draft-1'||a.slice!==(serving?'TC1-P1':remote?'TC1-R1':resumptions?'TC1-H2':'TC1-H1')):(a.contract_version!=='0.2'||!PURE_CALL_SCHEMAS.includes(a.schema_version)||a.slice!=='TC0-A'))fail('Identity');text(a.module);
+ const remote=serving||a.schema_version===TC1_REMOTE_SCHEMA,durable=a.schema_version===TC1_DURABLE_SCHEMA;
+ const resumptions=remote||durable||a.schema_version===TC1_RESUMPTION_SCHEMA,handlers=resumptions||a.schema_version===TC1_HANDLER_SCHEMA;
+ if(handlers?(a.contract_version!=='tc1-draft-1'||a.slice!==(serving?'TC1-P1':remote?'TC1-R1':durable?'TC1-D1':resumptions?'TC1-H2':'TC1-H1')):(a.contract_version!=='0.2'||!PURE_CALL_SCHEMAS.includes(a.schema_version)||a.slice!=='TC0-A'))fail('Identity');text(a.module);
  const data=handlers||a.schema_version==='tc0-a-pure-call-demo/2';
  if(array(a.effects).length&&!handlers)fail('Effect declarations unsupported');
+ if(a.effects.length>8&&durable)fail('Effect count');
  // Effect sets: at most Emit before TC1; under TC1 any declared effect or Emit, in
  // unsigned UTF-8 byte order with no duplicates (one canonical spelling per set).
  const declared=new Map();
+ // In D1 a datatype field can be an arrow naming a declared effect even
+ // though its operation types are checked only after the datatype table.
+ const effectNames=durable?new Set(a.effects.map(d=>d?.name)):declared;
  function effects(v){
   array(v);
   if(!handlers){if(v.length>1||(v.length===1&&v[0]!=='Emit'))fail('Effect set');return;}
-  v.forEach((k,i)=>{text(k);if(k!=='Emit'&&!declared.has(k)&&!(serving&&Object.hasOwn(STORE_EFFECTS,k)))fail('Effect set');if(i&&Buffer.compare(Buffer.from(v[i-1]),Buffer.from(k))>=0)fail('Effect set order');});
+  v.forEach((k,i)=>{text(k);if(k!=='Emit'&&!effectNames.has(k)&&!(serving&&Object.hasOwn(STORE_EFFECTS,k)))fail('Effect set');if(i&&Buffer.compare(Buffer.from(v[i-1]),Buffer.from(k))>=0)fail('Effect set order');});
  }
  if(array(a.datatypes).length&&!data)fail('Declarations unsupported');
  // Datatype table: closed declarations, unique names, constructors in declared order.
@@ -112,10 +171,10 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
  }
  // Effect declarations: operations A -> B. In this slice A and B are serializable
  // types, so no closure crosses an operation boundary.
- if(a.effects.length>8)fail('Effect count');
- // Under schema /3 a declaration states its class, and an operation of a remote effect
- // states whether it is read-only. Older schemas have ordinary effects only.
- for(const d of a.effects){object(d,remote?['name','class','operations']:['name','operations']);if(remote&&!EFFECT_CLASSES.includes(d.class))fail('Effect class');const far=d.class==='remote';identifier(d.name);if(RESERVED_EFFECTS.includes(d.name)||(serving&&Object.hasOwn(STORE_EFFECTS,d.name))||declared.has(d.name))fail('Effect name');
+ if(!durable&&a.effects.length>8)fail('Effect count');
+ // R1/P1 and D1 have closed, distinct class sets. Only remote operations
+ // can carry read_only, and H1/H2 have no class field.
+ for(const d of a.effects){object(d,remote||durable?['name','class','operations']:['name','operations']);if((remote&&!EFFECT_CLASSES.includes(d.class))||(durable&&!DURABLE_EFFECT_CLASSES.includes(d.class)))fail('Effect class');const far=d.class==='remote';identifier(d.name);if(RESERVED_EFFECTS.includes(d.name)||(serving&&Object.hasOwn(STORE_EFFECTS,d.name))||declared.has(d.name))fail('Effect name');
   if(!array(d.operations).length||d.operations.length>8)fail('Operation count');const seen=new Set();
   for(const o of d.operations){object(o,far?['name','argument_type','result_type','read_only']:['name','argument_type','result_type']);if(far&&typeof o.read_only!=='boolean')fail('Operation read_only');identifier(o.name);if(seen.has(o.name))fail('Duplicate operation');seen.add(o.name);type(o.argument_type);type(o.result_type);if(!plain(o.argument_type)||!plain(o.result_type))fail('Operation types must be serializable');}
   declared.set(d.name,d);}
@@ -134,8 +193,16 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
  if(!array(a.functions).length||a.functions.length>32)fail('Function count');
  for(const f of a.functions){object(f,['id','name','parameter_id','argument_type','result_type','effects','body']);fresh(f.id,true);fresh(f.parameter_id);text(f.name);if(functions.has(f.name))fail('Duplicate function name');type(f.argument_type);type(f.result_type);effects(f.effects);functions.set(f.name,f);}
  if(!serving){
- const entry=functions.get(a.entry);if(!entry)fail('Entry');if(entry.effects.some(k=>k!=='Emit'&&declared.get(k).class!=='remote'))fail('Entry must handle every user effect');if(!plain(entry.argument_type)||!plain(entry.result_type))fail('Serializable entry');object(a.input_schema,['type']);if(!same(a.input_schema.type,entry.argument_type))fail('Input schema');value(input,entry.argument_type);
+  const entry=functions.get(a.entry);if(!entry)fail('Entry');
+  if(entry.effects.some(k=>k!=='Emit'&&!(remote&&declared.get(k)?.class==='remote')&&!(durable&&declared.get(k)?.class==='durable')))fail('Entry must handle every user effect');
+  if(!plain(entry.argument_type)||!plain(entry.result_type))fail('Serializable entry');object(a.input_schema,['type']);if(!same(a.input_schema.type,entry.argument_type))fail('Input schema');
+  if(input===DURABLE_INPUT_PROBE){
+   input=durable?probeInput(entry.argument_type,datatypes,maxDepth,maxValueNodes):['int','0'];
+   if(!input)throw new PureCallValidationLimit('No bounded durable entry input');
+  }
+  value(input,entry.argument_type);
  }
+ if(input===DURABLE_INPUT_PROBE)input=['int','0']; // Serving artifacts have no entry input.
  const union=rows=>new Set(rows.flatMap(r=>[...r.effects]));
  const free=rows=>new Set(rows.flatMap(r=>[...r.free]));
  const primitive={add:['I64','I64','I64'],sub:['I64','I64','I64'],mul:['I64','I64','I64'],div:['I64','I64','I64'],neg:['I64','I64'],lt:['I64','I64','Bool'],le:['I64','I64','Bool'],gt:['I64','I64','Bool'],ge:['I64','I64','Bool'],not:['Bool','Bool'],bytes_length:['Bytes','I64'],bytes_index:['Bytes','I64','I64'],bytes_concat:['Bytes','Bytes','Bytes']};
