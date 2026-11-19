@@ -47,8 +47,15 @@
 \\ to [migrated Img]. U stays [prepared Img] (v1 serving) in between; a crash loses the
 \\ item and leaves the store half migrated.
 
+\\ Converting a tenant twice (migrate offered again after a crash) leaves a converted
+\\ job as it is.
+(define umu.mig-job-once
+  [J R St] -> (sua.mig-job [J R St])
+  E -> E)
+
 (define umu.migrate-one
-  T Stores -> (svc.replace T (sua.mig-store (svc.store T Stores)) Stores))
+  T Stores -> (let S (svc.store T Stores)
+                (svc.replace T [store (svc.reports S) (map (/. J (umu.mig-job-once J)) (svc.jobs S)) (svc.keys S) (svc.next S)] Stores)))
 
 (define umu.partial-step
   [migrate] [up4 [prepared Img] [sys Stores Outbox Trace]] ->
@@ -138,9 +145,76 @@
 
 \\ ---------- (i) volatile-upgrade-state ----------
 
+\\ After such a crash the operator may begin and migrate again; the second migration
+\\ leaves the jobs it already converted as they are (the model's migration is defined on
+\\ schema-1 stores only).
 (define umu.volatile-upgrade-step
   [crash] [up4 _ [sys Stores _ Trace]] -> [ok [up4 [v1] [sys Stores [] Trace]] none]
+  [migrate] [up4 [prepared Img] [sys Stores Outbox Trace]] ->
+    [ok [up4 [migrated Img] [sys (umu.migrate-all 0 Stores) Outbox Trace]] none]
   L S -> (sua.step L S))
+
+(define umu.migrate-all
+  T Stores -> Stores where (= T (length Stores))
+  T Stores -> (umu.migrate-all (+ T 1) (umu.migrate-one T Stores)))
+
+\\ ---------- v2 code that is wrong (aimed at A1's properties across the upgrade) ----------
+\\ Tx2 L T Stores gives [Stores' Result]: v2's transaction replaced, for every v2 run
+\\ (atomic or landing) once v2 is in force.
+
+(define umu.commit2
+  Tx2 L U [sys Stores Outbox Trace] ->
+    (let Done (Tx2 L (sua.label-tenant L) Stores)
+         Resp (sua.reply L (nth 2 Done))
+      [ok [up4 U [sys (hd Done) (sua.add-event Resp Outbox) Trace]] Resp]))
+
+(define umu.v2-step
+  Tx2 L [up4 [v2 Img] Sys] -> (umu.commit2 Tx2 L [v2 Img] Sys) where (sua.request? L (svc.stores Sys))
+  Tx2 [land I] [up4 [v2 Img] [sys Stores Outbox Trace]] ->
+    (let Run (nth (+ I 1) (sua.runs Outbox))
+      (if (= (nth 2 Run) 2)
+          (umu.commit2 Tx2 (nth 3 Run) [v2 Img] [sys Stores (sua.drop-run I Outbox) Trace])
+          (sua.step [land I] [up4 [v2 Img] [sys Stores Outbox Trace]])))
+    where (and (integer? I) (>= I 0) (< I (length (sua.runs Outbox))))
+  _ L S -> (sua.step L S))
+
+(define umu.model-tx2
+  L T Stores -> (let Done (sua.tx 2 L (svc.store T Stores)) [(svc.replace T (hd Done) Stores) (nth 2 Done)]))
+
+\\ (j) v2-shared-counter: v2 allocates ids from one counter for all tenants, so a new
+\\ key under T advances every tenant's counter.
+(define umu.shared-counter-tx2
+  [submit T K D] T Stores ->
+    (let New (= (svc.lookup K (svc.keys (svc.store T Stores))) none)
+         Done (umu.model-tx2 [submit T K D] T Stores)
+      (if New [(smu.bump-others T 0 (hd Done)) (nth 2 Done)] Done))
+  L T Stores -> (umu.model-tx2 L T Stores))
+
+\\ (k) v2-duplicate-delivery-counted: the attempt is counted outside the Pending guard.
+(define umu.count-always
+  J Ok [J R pending A] -> (sua.finish2 J Ok [J R pending A])
+  J _ [J R St A] -> [J R St (+ A 1)]
+  _ _ E -> E)
+
+(define umu.count-always-tx2
+  [complete T J Ok] T Stores ->
+    (let S (svc.store T Stores)
+      [(svc.replace T [store (svc.reports S) (map (/. E (umu.count-always J Ok E)) (svc.jobs S)) (svc.keys S) (svc.next S)] Stores) none])
+  L T Stores -> (umu.model-tx2 L T Stores))
+
+\\ (l) v2-retry-reapplies: v2 runs the mutation again for a recorded key with the same
+\\ digest (A1's retry-reapplies, in v2 code).
+(define umu.reapply-tx2
+  [submit T K D] T Stores ->
+    (let S (svc.store T Stores)
+      (if (= (svc.lookup K (svc.keys S)) none)
+          (umu.model-tx2 [submit T K D] T Stores)
+          (if (= (nth 2 (svc.lookup K (svc.keys S))) D)
+              (let Fresh [store (svc.reports S) (svc.jobs S) (smu.drop-key K (svc.keys S)) (svc.next S)]
+                   Done (sua.submit2 T K D Fresh)
+                [(svc.replace T (hd Done) Stores) (nth 2 Done)])
+              (umu.model-tx2 [submit T K D] T Stores))))
+  L T Stores -> (umu.model-tx2 L T Stores))
 
 \\ ---------- equivalent control ----------
 \\ The migration by explicit recursion with the status tested by cases, and the v2
@@ -179,10 +253,13 @@
   "deliver-to-v1" -> [machine "deliver-to-v1" (/. L S (umu.v1-delivery-step L S)) (/. P S (sua.labels P S))]
   "no-manifest-check" -> [machine "no-manifest-check" (/. L S (umu.no-manifest-step L S)) (/. P S (sua.labels P S))]
   "volatile-upgrade-state" -> [machine "volatile-upgrade-state" (/. L S (umu.volatile-upgrade-step L S)) (/. P S (sua.labels P S))]
+  "v2-shared-counter" -> [machine "v2-shared-counter" (/. L S (umu.v2-step (/. A B C (umu.shared-counter-tx2 A B C)) L S)) (/. P S (sua.labels P S))]
+  "v2-duplicate-delivery-counted" -> [machine "v2-duplicate-delivery-counted" (/. L S (umu.v2-step (/. A B C (umu.count-always-tx2 A B C)) L S)) (/. P S (sua.labels P S))]
+  "v2-retry-reapplies" -> [machine "v2-retry-reapplies" (/. L S (umu.v2-step (/. A B C (umu.reapply-tx2 A B C)) L S)) (/. P S (sua.labels P S))]
   "equivalent-control" -> [machine "equivalent-control" (/. L S (umu.control-step L S)) (/. P S (sua.labels P S))]
   Name -> (error "service-upgrade: unknown machine ~A" Name))
 
 (define umu.mutant-names
   -> ["migration-drops-pending" "migration-not-atomic" "cutover-before-migration" "stale-v1-commit"
       "keys-not-migrated" "receipt-rewritten" "deliver-to-v1" "no-manifest-check" "volatile-upgrade-state"
-      "equivalent-control"])
+      "v2-shared-counter" "v2-duplicate-delivery-counted" "v2-retry-reapplies" "equivalent-control"])
