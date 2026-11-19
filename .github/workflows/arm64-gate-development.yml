@@ -1,0 +1,137 @@
+name: ARM64 G1 or TC1 development measurement
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_head:
+        description: Exact reviewed 40-character commit SHA (must match the selected ref)
+        type: string
+        required: true
+      gate:
+        description: Development rows to measure (TC1 includes same-run G1)
+        type: choice
+        required: true
+        default: g1
+        options:
+          - g1
+          - tc1
+
+permissions:
+  contents: read
+
+concurrency:
+  group: arm64-gate-development-${{ github.repository }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  measure:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 95
+    env:
+      EXPECTED_HEAD: ${{ inputs.expected_head }}
+      MEASUREMENT_GATE: ${{ inputs.gate }}
+    steps:
+      - name: Verify dispatch binding before checkout
+        run: |
+          [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
+          [[ "$EXPECTED_HEAD" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_HEAD" == "$GITHUB_SHA" && "$EXPECTED_HEAD" == "$GITHUB_WORKFLOW_SHA" ]]
+          [[ "$MEASUREMENT_GATE" == g1 || "$MEASUREMENT_GATE" == tc1 ]]
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Check source and namespace support before realizing any toolchain
+        timeout-minutes: 2
+        run: |
+          mkdir -p build/arm64-gate-ci
+          {
+            printf 'head=%s workflow=%s gate=%s qualification=UNKNOWN\n' \
+              "$GITHUB_SHA" "$GITHUB_WORKFLOW_SHA" "$MEASUREMENT_GATE"
+            printf 'image_os=%s image_version=%s\n' "${ImageOS:-unknown}" "${ImageVersion:-unknown}"
+            uname -srm
+            test "$(git rev-parse --verify 'HEAD^{commit}')" = "$EXPECTED_HEAD"
+            test -z "$(git status --porcelain=v1 --untracked-files=all --ignore-submodules=none)"
+            status=0
+            if [[ "$(uname -s)/$(uname -m)" != Linux/aarch64 ]]; then
+              echo 'BLOCKED: runner is not ARM64 Linux'
+              exit 2
+            fi
+            if ! unshare -n -- true; then
+              echo 'BLOCKED: unshare -n on the runner PATH'
+              status=2
+            fi
+            if ! env -i PATH=/usr/bin:/bin unshare -n -- true; then
+              echo 'BLOCKED: unshare -n on the candidate PATH'
+              status=2
+            fi
+            exit "$status"
+          } 2>&1 | tee build/arm64-gate-ci/runner.log
+      - name: Install Nix from the checksummed public installer
+        timeout-minutes: 8
+        run: |
+          # Do not configure a GitHub token, trusted user, or private cache.
+          installer=$(mktemp "$RUNNER_TEMP/fenrir-nix-install.XXXXXXXX")
+          curl --fail --silent --show-error --location --proto '=https' --max-time 60 \
+            https://releases.nixos.org/nix/nix-2.28.5/install -o "$installer"
+          printf '%s  %s\n' e5d03b6c1198685fb0b6101736a19c8c98ad4da9463cf314bd2a36e0de472138 "$installer" \
+            | sha256sum --check
+          env -i PATH=/usr/bin:/bin HOME="$HOME" USER="$USER" CI=1 \
+            sh "$installer" --daemon --yes 2>&1 | tee build/arm64-gate-ci/nix-install.log
+          # The capture's child has a private HOME and strips NIX_CONFIG.
+          # Enable the Nix CLI features in package-manager config, not by
+          # passing ambient credentials or changing any isolation setting.
+          printf '\nextra-experimental-features = nix-command flakes\n' \
+            | sudo -n tee -a /etc/nix/nix.conf >/dev/null
+      - name: Realize locked ARM64 outputs
+        timeout-minutes: 25
+        env:
+          NIX_CONFIG: experimental-features = nix-command flakes
+        run: |
+          out=build/arm64-gate-ci
+          # shellcheck disable=SC1091
+          source /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+          nix --version | tee "$out/nix-version.log"
+          cp flake.lock "$out/flake.lock"
+          attrs=(.#packages.aarch64-linux.shen-jit .#packages.aarch64-linux.solo5)
+          if [[ "$MEASUREMENT_GATE" == tc1 ]]; then attrs+=(.#packages.aarch64-linux.erlang); fi
+          nix build --no-update-lock-file --no-write-lock-file --no-link --print-out-paths -L \
+            "${attrs[@]}" 2> >(tee "$out/nix-build.log" >&2) | tee "$out/nix-outputs.txt"
+          mapfile -t paths < "$out/nix-outputs.txt"
+          test "${#paths[@]}" -eq "${#attrs[@]}"
+          nix path-info --json "${paths[@]}" > "$out/nix-paths.json"
+      - name: Run bounded development capture (internal preflight is required)
+        timeout-minutes: 53
+        run: |
+          out=build/arm64-gate-ci
+          # shellcheck disable=SC1091
+          source /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+          test "$(git rev-parse --verify 'HEAD^{commit}')" = "$EXPECTED_HEAD"
+          test -z "$(git status --porcelain=v1 --untracked-files=all --ignore-submodules=none)"
+          # env -i supplies only the process environment needed to launch the
+          # locked shell. The capture itself further strips the child environment.
+          env -i PATH="$PATH" HOME="$HOME" USER="$USER" LANG=C.UTF-8 \
+            NIX_REMOTE=daemon NIX_CONFIG='experimental-features = nix-command flakes' \
+            nix develop --no-update-lock-file --no-write-lock-file .#default --command \
+              node tools/evidence/run.mjs "arm-development-$MEASUREMENT_GATE" \
+                --head "$EXPECTED_HEAD" --timeout-seconds 2700 \
+            2> >(tee "$out/capture-driver.stderr.log" >&2) | tee "$out/capture-receipt.json"
+      - name: Retain development diagnostics and receipt files
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: arm64-development-${{ github.sha }}-${{ github.run_attempt }}
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            build/arm64-gate-ci/
+            build/evidence-runs/*/receipt.json
+            build/evidence-runs/*/stdout.log
+            build/evidence-runs/*/stderr.log
+            build/evidence-runs/*/launch.json
+            build/evidence-runs/*/evaluator-gate.json
+            build/evidence-runs/*/evaluator-nested-g1.json

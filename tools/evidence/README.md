@@ -95,6 +95,53 @@ receipt credits claims; old repair waivers, when observed, are diagnostic
 only. See the [review proposal](../../campaigns/arm64/QUALIFICATION_PROPOSAL.md)
 for unmet admission requirements.
 
+### Opt-in GitHub Actions measurement
+
+The [manual ARM workflow](../../.github/workflows/arm64-gate-development.yml)
+requires the full reviewed commit SHA and runs only when that SHA matches
+both the dispatched code and workflow. It does not run on pushes, pull
+requests, labels, or comments. It uses a hosted ARM64 VM job, read-only
+contents permissions, no persisted checkout credential, and no organization
+secrets, write token, or private cache. The Nix bootstrap uses a checksummed
+public installer; all tools are realized from the checkout's locked flake.
+The checkout is not elevated to run the gates.
+
+`unshare -n` needs `CAP_SYS_ADMIN` in the current user namespace
+([`unshare(2)`](https://man7.org/linux/man-pages/man2/unshare.2.html)).
+The ordinary hosted runner account is **expected to be blocked**; this exact
+runner image has not been measured. The workflow probes both PATHs before
+any Nix realization and retains the reason in `runner.log` if blocked (there is
+no evaluator receipt when the gate is never launched). A passing early probe
+still needs the capture's own preflight. No `sudo` for measurement, capability
+changes, namespace wrappers, relaxed seccomp, privileged containers, or
+unsandboxed fallback. Elevated operations are limited to Nix installation
+and enabling the Nix CLI features in its configuration. If blocked, use the
+reviewed native ARM host procedure above; don't change the runner security
+policy in this workflow. Artifact
+retention is seven days. A job hard timeout or cancellation can prevent the
+upload; missing output is not evidence.
+
+GitHub [requires a manual workflow to exist on the repository's default
+branch](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
+`--ref` selects the branch after registration; it cannot bootstrap a
+branch-only workflow in the upstream repository. Once available on the
+default branch, a maintainer can dispatch the exact reviewed branch by
+supplying its SHA:
+
+```sh
+gh workflow run arm64-gate-development.yml --ref REVIEWED_BRANCH \
+  -f expected_head=FULL_COMMIT -f gate=tc1
+```
+
+Without an upstream merge, an authorized maintainer could use a disposable
+scratch repository **only if copying the source is approved**, setting its
+default branch to the exact reviewed commit without rebasing, adding secrets,
+or including a self-hosted runner. Review the other workflow triggers before
+publication, or keep Actions disabled until the default branch is seeded.
+This would test hosted infrastructure using the same SHA, not establish
+upstream authority or overcome the likely namespace blocker. An unpublished
+local SHA cannot be dispatched on GitHub.
+
 Fast tests (temporary commits and mock evaluators, no language qualification):
 
 ```sh
