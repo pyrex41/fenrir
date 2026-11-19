@@ -22,7 +22,7 @@
 -module(fenrir_store).
 -behaviour(gen_server).
 -export([start_link/1, commit/2, snapshot/0, pending_jobs/0, port_os_pid/0, arm_port/2, info/0, io_counters/0]).
--export([maintenance/1, commit_v2/4]).
+-export([maintenance/1, commit_v2/4, handler_in_force/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -export([parse_tx/1, schema/0, read_snapshot/2, open_configured/2]).
 
@@ -51,6 +51,8 @@ commit_v2(Scope, Pin, Request, Tx) ->
     try gen_server:call(?MODULE, {commit_v2, Scope, Pin, Request, Tx}, 60000)
     catch exit:Reason -> {indeterminate, {store_call, Reason}}
     end.
+
+handler_in_force(Pin) -> gen_server:call(?MODULE, {handler_in_force, Pin}, 60000).
 
 schema() ->
     ["CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)",
@@ -145,6 +147,17 @@ handle_call({commit_v2, Scope, Pin, Request, Tx}, _From,
     end;
 handle_call({commit_v2, _, _, _, _}, _From, S) ->
     {reply, {aborted, v2_disabled}, S};
+handle_call({handler_in_force, Pin}, _From, S = #{a4 := true, port := Port}) ->
+    Out = maintenance_tx(Port, fun() ->
+        case upgrade_state(Port) of
+            {v2, _, Pin, _} -> {read, ok};
+            {v2, _, _, _} -> {read, {refused, wrong_handler_image}};
+            _ -> {read, {refused, version_not_in_force}}
+        end
+    end),
+    reply_or_stop(Out, S);
+handle_call({handler_in_force, _}, _From, S) ->
+    {reply, {refused, v2_disabled}, S};
 handle_call(snapshot, _From, S = #{a4 := true, port := Port, tenants := N}) ->
     Out = maintenance_tx(Port, fun() ->
         case fenrir_upgrade_state:fence(1, upgrade_state(Port)) of
@@ -387,16 +400,33 @@ session_call(Owner, {read, Token}, S = #{port := Port, maintenance :=
         end
     end),
     {Outcome, case Outcome of {refused, wrong_preparation} -> clear_session(S); _ -> S end};
+session_call(Owner, {migration_in_force, Token, Id, Pin}, S = #{port := Port, maintenance :=
+        #{owner := Owner, token := Token, prep := Prep = {prepared, Id, _, Pin}}}) ->
+    {maintenance_tx(Port, fun() ->
+         case upgrade_state(Port) of Prep -> {read, ok}; _ -> {read, {refused, wrong_preparation}} end
+     end), S};
+session_call(Owner, {refresh, Token}, S = #{port := Port, maintenance :=
+        Session = #{owner := Owner, token := Token, prep := Prep}}) ->
+    Out = maintenance_tx(Port, fun() ->
+        case upgrade_state(Port) of
+            Prep -> {read, {ok, maintenance_snapshot(Port)}};
+            _ -> {read, {refused, wrong_preparation}}
+        end
+    end),
+    case Out of
+        {ok, Snapshot} -> {ok, S#{maintenance := Session#{snapshot := Snapshot}}};
+        _ -> {Out, S}
+    end;
 session_call(Owner, {Mode, Token, Jobs, Keys}, S = #{port := Port, maintenance :=
         #{owner := Owner, token := Token, prep := Prep, snapshot := Snapshot}})
-  when Mode =:= validate_install; Mode =:= install ->
+  when Mode =:= validate_install; Mode =:= install; Mode =:= install_retryable ->
     Outcome = maintenance_tx(Port, fun() ->
         case upgrade_state(Port) of
             Prep ->
                 case maintenance_snapshot(Port) of
                     Snapshot ->
                         case validate_projection(Snapshot, Jobs, Keys) of
-                            {ok, validated_only} when Mode =:= install -> install_v2(Port, Prep);
+                            {ok, validated_only} when Mode =/= validate_install -> install_v2(Port, Prep);
                             Result -> {read, Result}
                         end;
                     _ -> {read, {refused, snapshot_changed}}
@@ -404,7 +434,13 @@ session_call(Owner, {Mode, Token, Jobs, Keys}, S = #{port := Port, maintenance :
             _ -> {read, {refused, wrong_preparation}}
         end
     end),
-    {Outcome, clear_session(S)};
+    %% The same admitted live execution may retry a changed snapshot, but
+    %% must refresh it explicitly; every other install outcome closes it.
+    {Outcome, case {Mode, Outcome} of
+                  {install_retryable, {refused, snapshot_changed}} ->
+                      S#{maintenance := (maps:get(maintenance, S))#{snapshot := stale}};
+                  _ -> clear_session(S)
+              end};
 session_call(Owner, {close, Token}, S = #{maintenance := #{owner := Owner, token := Token}}) ->
     {ok, clear_session(S)};
 session_call(_, _, S) -> {{refused, unauthorized_maintenance}, S}.
@@ -415,6 +451,10 @@ clear_session(S = #{maintenance := #{monitor := Ref}}) ->
 clear_session(S) -> S.
 
 maintenance_snapshot(Port) ->
+    [[JobCount, KeyCount, Bytes]] = ?Q("SELECT (SELECT count(*) FROM jobs), (SELECT count(*) FROM request_keys),"
+                                         " (SELECT coalesce(sum(length(payload)),0) FROM reports)",
+                                         [], maintenance_snapshot_limit),
+    (JobCount + KeyCount =< 128 andalso Bytes =< 4194304) orelse throw(migration_snapshot_limit),
     {?Q("SELECT tenant,id,digest,payload FROM reports ORDER BY tenant,id", [], maintenance_snapshot),
      ?Q("SELECT tenant,id,report,status FROM jobs ORDER BY tenant,id", [], maintenance_snapshot),
      ?Q("SELECT tenant,key,digest,r_tenant,r_key,r_digest,r_report,r_job FROM request_keys ORDER BY tenant,key",

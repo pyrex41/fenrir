@@ -5,5 +5,6 @@
   {applications, [kernel, stdlib, crypto]},
   {mod, {fenrir_service_app, []}},
   {env, []},
-  {modules, [fenrir_service_app, fenrir_service_sup, fenrir_store, fenrir_upgrade_state, fenrir_sqlite, fenrir_worker, fenrir_proto,
+  {modules, [fenrir_service_app, fenrir_service_sup, fenrir_store, fenrir_upgrade_state, fenrir_sqlite, fenrir_worker,
+             fenrir_a4_image, fenrir_a4_upgrade, fenrir_a4_migration, fenrir_proto,
              fenrir_value, fenrir_manifest, fenrir_authority, fenrir_front, fenrir_runner, fenrir_holder, fenrir_faults, fenrir_node]}]}.

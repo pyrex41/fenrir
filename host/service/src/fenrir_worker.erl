@@ -22,7 +22,7 @@
 %% Reply type, so a busy store cannot be told to the program).
 -module(fenrir_worker).
 -behaviour(gen_server).
--export([start_link/2, run/3, check_image/1]).
+-export([start_link/2, run/3, check_image/1, run_migration/4]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
@@ -42,6 +42,14 @@ run(Worker, Scope, Request) -> gen_server:call(Worker, {run, Scope, Request}, 12
 
 init(Opts) ->
     process_flag(trap_exit, true),
+    init_image(Opts).
+
+init_image(Opts = #{a4_pin := Pin, image := Path}) ->
+    case fenrir_a4_image:load(Path, handler_v2, Pin) of
+        {ok, _} -> {ok, Opts#{boots => 0}};
+        {error, E} -> {stop, E}
+    end;
+init_image(Opts) ->
     case check_image(maps:get(image, Opts)) of
         {ok, Image} -> {ok, Opts#{image_info => Image, boots => 0}};
         {error, E} -> {stop, E}
@@ -76,14 +84,44 @@ same_sha(File, Want, What) ->
         _ -> throw({identity, {missing, What}})
     end.
 
-handle_call({run, Scope, Request}, _From, S = #{image_info := I}) ->
+handle_call({run, Scope, Request}, _From, S = #{a4_pin := Pin, image := Path, a4_launch_dir := Parent}) ->
+    Result = case fenrir_store:handler_in_force(Pin) of
+        ok ->
+            case fenrir_a4_image:load(Path, handler_v2, Pin) of
+                {ok, Bundle} ->
+                    fenrir_a4_image:with_launch(Bundle, Parent, fun(I) ->
+                        run_handler(Scope, Request, S#{image_info => I, request => Request})
+                    end);
+                {error, Why} -> {refused, Why}
+            end;
+        {refused, Why} -> {refused, Why};
+        busy -> {refused, phase_check_busy};
+        {aborted, Why} -> {refused, Why}
+    end,
+    {reply, Result, S#{boots := maps:get(boots, S) + 1}};
+handle_call({run, Scope, Request}, _From, S) ->
+    Result = run_handler(Scope, Request, S),
+    {reply, Result, S#{boots := maps:get(boots, S) + 1}}.
+
+run_handler(Scope, Request, S = #{image_info := I}) ->
     case entry(Scope, Request, I) of
         {ok, Program} ->
             T0 = erlang:monotonic_time(microsecond),
             Result = session(Program, Scope, S),
             T1 = erlang:monotonic_time(microsecond),
-            {reply, stats(Result, T1 - T0), S#{boots := maps:get(boots, S) + 1}};
-        {refused, Why} -> {reply, {refused, Why}, S}
+            stats(Result, T1 - T0);
+        {refused, Why} -> {refused, Why}
+    end.
+
+%% Called by the already-bound migration session owner, not by the ingress.
+run_migration(Path, Id, Pin, Opts = #{migration_token := Token, a4_launch_dir := Parent}) ->
+    case {fenrir_store:maintenance({migration_in_force, Token, Id, Pin}), fenrir_a4_image:load(Path, migration, Pin)} of
+        {ok, {ok, Bundle}} ->
+            fenrir_a4_image:with_launch(Bundle, Parent, fun(I) ->
+                session(0, maintenance, Opts#{image_info => I, name => migration})
+            end);
+        {ok, {error, Why}} -> {refused, Why};
+        {Error, _} -> Error
     end.
 
 handle_cast(_, S) -> {noreply, S}.
@@ -116,6 +154,7 @@ session(Program, Scope, S = #{image_info := I}) ->
     OsPid = case erlang:port_info(Port, os_pid) of {os_pid, P} -> P; _ -> undefined end,
     Ctx = #{tender => OsPid, tender_port => Port, worker => self()},
     St0 = #{port => Port, scope => Scope, buf => <<>>, seq => 0, epoch => 0, requests => 0, commit => none, ctx => Ctx,
+            adapter => maps:with([a4_pin, request, migration_token], S),
             frames => 0, runs => 0, replies => [], tender_os_pid => OsPid},
     try
         {Hello, St1} = expect(St0, $H),
@@ -148,6 +187,8 @@ outcome(Kind, Why, St) ->
         end,
     {O, Why, summary(St)}.
 
+summary(St = #{adapter := #{a4_pin := _}}) ->
+    (maps:with([frames, runs, requests, commit, replies, tender_os_pid], St))#{contract_version => 2};
 summary(St) -> maps:with([frames, runs, requests, commit, replies, tender_os_pid], St).
 
 kill(Port, OsPid) ->
@@ -170,10 +211,10 @@ drive(St, I) ->
 
 host_request(Record, St, I) ->
     Seq = maps:get(requests, St),
-    Value = case [E || E <- maps:get(<<"events">>, Record), maps:get(<<"kind">>, E) =:= <<"HostRequest">>] of
-                [#{<<"seq">> := SeqB, <<"effect">> := <<"Store">>, <<"operation">> := <<"commit">>, <<"value">> := V}] ->
+    {Effect, Op, Value} = case [E || E <- maps:get(<<"events">>, Record), maps:get(<<"kind">>, E) =:= <<"HostRequest">>] of
+                [#{<<"seq">> := SeqB, <<"effect">> := E, <<"operation">> := O, <<"value">> := V}] ->
                     SeqB =:= integer_to_binary(Seq) orelse throw({fail, failed, {'BadSteps', request_seq}, St}),
-                    try fenrir_value:from_json(V) catch _:_ -> throw({fail, failed, {'BadSteps', request_value}, St}) end;
+                    try {E, O, fenrir_value:from_json(V)} catch _:_ -> throw({fail, failed, {'BadSteps', request_value}, St}) end;
                 _ -> throw({fail, failed, {'BadSteps', host_request}, St})
             end,
     fenrir_faults:hit(w2_request_before_commit, maps:get(ctx, St)),
@@ -182,7 +223,7 @@ host_request(Record, St, I) ->
     receive {Port, {exit_status, N}} -> throw({fail, failed, {tender_exit, N}, St})
     after 0 -> ok
     end,
-    {Reply, St1} = commit_reply(fenrir_store:commit(maps:get(scope, St), Value), St),
+    {Reply, St1} = answer(Effect, Op, Value, St),
     fenrir_faults:hit(w3_commit_before_reply, maps:get(ctx, St1)),
     {J, St2} = request(St1, $A, fenrir_proto:reply_payload(Seq, Reply), $S),
     {Records, St3} = records(J, St2, 1),
@@ -195,6 +236,14 @@ host_request(Record, St, I) ->
         <<"Completed">> -> completed(Records, St4);
         X -> throw({fail, failed, {execution, X}, St4})
     end.
+
+answer(<<"Migration">>, Op, V, St = #{adapter := #{migration_token := Token}}) ->
+    fenrir_a4_migration:answer(Op, V, Token, St);
+answer(<<"Store">>, <<"commit">>, V, St = #{adapter := #{a4_pin := Pin, request := Request}, requests := 0}) ->
+    commit_reply(fenrir_store:commit_v2(maps:get(scope, St), Pin, Request, V), St);
+answer(<<"Store">>, <<"commit">>, V, St = #{adapter := A}) when map_size(A) =:= 0 ->
+    commit_reply(fenrir_store:commit(maps:get(scope, St), V), St);
+answer(_, _, _, St) -> throw({fail, failed, {'BadSteps', host_request}, St}).
 
 %% Busy or denied describes this operation only. It cannot undo evidence of a
 %% prior reply in the same session, even though the pinned handler needs one call.
@@ -214,6 +263,7 @@ completed(Records, St) ->
     case Out of
         [[<<"Ok">>, V]] ->
             Value = try fenrir_value:from_json(V) catch _:_ -> throw({fail, failed, {'BadSteps', outcome}, St}) end,
+            ok = check_outcome(Value, St),
             {Bye, St1} = request(St, $X, fenrir_proto:terminate_payload(), $B),
             <<"Completed">> = maps:get(<<"execution">>, Bye),
             ok = finish(St1),
@@ -221,6 +271,29 @@ completed(Records, St) ->
         [[<<"Trap">>, C]] -> throw({fail, failed, {trap, C}, St});
         _ -> throw({fail, failed, {'BadSteps', no_outcome}, St})
     end.
+
+check_outcome(Value, St = #{adapter := #{migration_token := _}}) ->
+    case maps:get(migration_result, St, none) of
+        Value -> ok;
+        _ -> throw({fail, failed, migration_outcome_mismatch, St})
+    end;
+check_outcome(Value, St = #{adapter := #{a4_pin := _, request := Request}, replies := [Reply]}) ->
+    case checked_response(Request, fenrir_value:decode(Reply)) of
+        Value -> ok;
+        _ -> throw({fail, failed, response_not_bound_to_store, St})
+    end;
+check_outcome(_, #{adapter := A}) when map_size(A) =:= 0 -> ok;
+check_outcome(_, St) -> throw({fail, failed, missing_store_reply, St}).
+
+checked_response({submit, _, _, _}, {data, <<"Reply">>, <<"Committed">>, [Rc]}) ->
+    {data, <<"Response">>, <<"Accepted">>, [Rc]};
+checked_response({submit, _, D, _}, {data, <<"Reply">>, <<"Recorded">>, [{int, D}, Rc]}) ->
+    {data, <<"Response">>, <<"Accepted">>, [Rc]};
+checked_response({submit, K, _, _}, {data, <<"Reply">>, <<"Recorded">>, [_, {data, <<"Receipt">>, _, [T | _]}]}) ->
+    {data, <<"Response">>, <<"Conflict">>, [T, {int, K}]};
+checked_response({complete, _, _}, {data, <<"Reply">>, C, []}) when C =:= <<"Applied">>; C =:= <<"Skipped">> ->
+    {data, <<"Response">>, <<"Delivered">>, []};
+checked_response(_, _) -> none.
 
 %% After Bye: nothing more on ctlout, and the tender exits 0.
 finish(St = #{buf := Buf}) when Buf =/= <<>> ->

@@ -377,8 +377,8 @@ install_rollback(Db, Opts) ->
     {reply, _} = submit(0, 1),
     {ok, Prep} = prep(),
     Install = install_input(Prep),
-    %% BEGIN, phase, four snapshot reads, then the first ALTER TABLE.
-    ok = fenrir_store:arm_port(after_statement, 7),
+    %% BEGIN, phase, snapshot limits, four snapshot reads, then first ALTER TABLE.
+    ok = fenrir_store:arm_port(after_statement, 8),
     {aborted, {port_died, migration_jobs, 137}} = m(Install),
     observe_store_exit(P, Mon),
     _ = start(Opts),

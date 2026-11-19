@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Stage A3: build the Solo5 guest image of the accepted-job handler for the OTP host.
 //
-//   node host/service/tools/build-image.mjs ARTIFACT.json OUTDIR TENANTS KEYS DIGESTS JOBS
+//   node host/service/tools/build-image.mjs ARTIFACT.json OUTDIR TENANTS KEYS DIGESTS JOBS [--v2]
+//   node host/service/tools/build-image.mjs ARTIFACT.json OUTDIR --migration
 //
 // Control protocol v2 lowers each entry input INTO the image (spec/solo5/pure-call-control-v2.md
 // section 3: one image entry is one (artifact, input) pair; Init selects an entry by index).
@@ -24,8 +25,11 @@ import {encode} from '../../../tools/tc0/canonical.mjs';
 const root=resolve(import.meta.dirname,'../../..');
 const sha=b=>createHash('sha256').update(b).digest('hex');
 const [artifactPath,outDir,...nums]=process.argv.slice(2);
+const role=nums.length===1&&nums[0]==='--migration'?'migration':
+  nums.length===5&&nums[4]==='--v2'?'handler-v2':'handler-v1';
 const [tenants,keys,digests,jobs]=nums.map(Number);
-if(!artifactPath||!outDir||![tenants,keys,digests,jobs].every(n=>Number.isSafeInteger(n)&&n>=1&&n<=64))
+if(!artifactPath||!outDir||(role!=='migration'&&(nums.length!==(role==='handler-v2'?5:4)||
+  ![tenants,keys,digests,jobs].every(n=>Number.isSafeInteger(n)&&n>=1&&n<=64))))
   throw new Error('usage: build-image.mjs ARTIFACT OUTDIR TENANTS KEYS DIGESTS JOBS (each 1..64)');
 if(digests>256)throw new Error('a digest is one octet');
 const bytes=readFileSync(resolve(artifactPath));
@@ -34,10 +38,13 @@ const int=n=>['int',String(n)];
 const cap=t=>['data','Cap','Tenant',int(t)];
 const hex=d=>d.toString(16).padStart(2,'0');
 const entries=[];
+if(role==='migration')entries.push({request:['migrate'],input:['unit']});
+else{
 for(let t=0;t<tenants;t++)for(let k=0;k<keys;k++)for(let d=0;d<digests;d++)
   entries.push({request:['submit',t,k,d],input:['data','Command','Submit',cap(t),int(k),int(d),['bytes',hex(d)]]});
 for(let t=0;t<tenants;t++)for(let j=0;j<jobs;j++)for(const ok of [true,false])
   entries.push({request:['complete',t,j,ok],input:['data','Command','Complete',cap(t),int(j),['bool',ok]]});
+}
 if(entries.length>4096)throw new Error('more than 4096 entries');
 const checked=validatePureCallArtifact(encode(program),entries[0].input);
 mkdirSync(resolve(outDir),{recursive:true});
@@ -50,13 +57,14 @@ const batch=JSON.parse(readFileSync(resolve(batchDir,'batch.json'),'utf8'));
 const artifactSha=sha(encode(checked.artifact));
 if(!batch.programs.every(p=>p.artifact_sha256===artifactSha))throw new Error('artifact identity drift');
 writeFileSync(resolve(outDir,'image.json'),JSON.stringify({
-  schema:'fenrir.host.service-image/1',
+  schema:role==='handler-v1'?'fenrir.host.service-image/1':'fenrir.host.service-image/2',
   image:batch.control,image_sha256:batch.control_sha256,tender:batch.tender,tender_sha256:batch.tender_sha256,
   solo5_identity:batch.solo5_identity,batch_sha256:batch.batch_sha256,batch_dir:batchDir,
   protocol:'fenrir.solo5.pure-call-control/2',machine_profile:'fenrir.solo5.pure-call-machine/2',
   programs:batch.programs.length,fuel:'5000',
   artifact_sha256:artifactSha,artifact_file_sha256:sha(bytes),artifact_schema:checked.artifact.schema_version,
-  domain:{tenants,keys,digests,jobs},
+  ...(role==='handler-v1'?{}:{role}),
+  domain:role==='migration'?{}:{tenants,keys,digests,jobs},
   residual_effects:residualEffects(checked.artifact),
   datatypes:checked.artifact.datatypes,
   entries:entries.map((e,i)=>({request:e.request,program:i,input_sha256:batch.programs[i].input_sha256}))})+'\n');

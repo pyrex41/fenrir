@@ -40,7 +40,9 @@ outbox() -> gen_server:call(?MODULE, outbox).
 
 request(Worker, Scope, Req) ->
     Outcome = try fenrir_worker:run(Worker, Scope, Req) of
-                  {ok, V, St} -> {response(V, Scope, Req), St};
+                  {ok, V, St} -> {response_for_worker(V, Scope, Req, St), St};
+                  {refused, version_not_in_force} -> {unavailable, #{}};
+                  {aborted, version_not_in_force, St} -> {unavailable, St};
                   {refused, Why} -> {{refused, Why}, #{}};
                   {failed, Why, St} -> {aborted, St#{why => Why}};
                   {O, Why, St} -> {O, St#{why => Why}}
@@ -56,6 +58,12 @@ request(Worker, Scope, Req) ->
         _ -> ok
     end,
     {Out, Stats#{worker => Worker}}.
+
+response_for_worker({data, <<"Response">>, <<"Accepted">>,
+        [{data, <<"Receipt">>, <<"Receipt2">>, [{int, T}, {int, K}, {int, D}, {int, R}, {int, J}]}]},
+        {tenant, T}, {submit, K, D, _}, #{contract_version := 2}) ->
+    {accepted, [T, K, D, R, J, 2]};
+response_for_worker(V, Scope, Req, _) -> response(V, Scope, Req).
 
 response({data, <<"Response">>, <<"Accepted">>,
           [{data, <<"Receipt">>, <<"Receipt">>, [{int, T}, {int, K}, {int, D}, {int, R}, {int, J}]}]},
