@@ -22,7 +22,7 @@
 -module(fenrir_store).
 -behaviour(gen_server).
 -export([start_link/1, commit/2, snapshot/0, pending_jobs/0, port_os_pid/0, arm_port/2, info/0, io_counters/0]).
--export([maintenance/1]).
+-export([maintenance/1, commit_v2/4]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -export([parse_tx/1, schema/0, read_snapshot/2, open_configured/2]).
 
@@ -43,6 +43,12 @@ io_counters() -> gen_server:call(?MODULE, io_counters).
 %% Adapter-only development interface, not exposed by the service node or worker.
 maintenance(Request) ->
     try gen_server:call(?MODULE, {maintenance, Request}, 60000)
+    catch exit:Reason -> {indeterminate, {store_call, Reason}}
+    end.
+%% Adapter-only v2 entry. Scope, pin and request come from trusted host code;
+%% only Tx is decoded from a guest. No A3 worker calls this function.
+commit_v2(Scope, Pin, Request, Tx) ->
+    try gen_server:call(?MODULE, {commit_v2, Scope, Pin, Request, Tx}, 60000)
     catch exit:Reason -> {indeterminate, {store_call, Reason}}
     end.
 
@@ -73,9 +79,11 @@ init(Opts) ->
 init_store(Path, Tenants, Mutant, Operator) ->
     case open_configured(Path, Mutant) of
         {ok, Port} ->
-            try ensure_schema(Port, Tenants, Mutant) of
+            A4 = Operator =/= none,
+            try ensure_schema(Port, Tenants, Mutant, A4) of
                 ok -> {ok, #{port => Port, tenants => Tenants, mutant => Mutant, deferred => [],
-                             operator => Operator, operator_monitor => watch_operator(Operator), maintenance => none}}
+                             a4 => A4, operator => Operator, operator_monitor => watch_operator(Operator),
+                             maintenance => none}}
             catch throw:Why ->
                 fenrir_sqlite:close(Port),
                 {stop, {store_schema, Why}}
@@ -121,6 +129,30 @@ handle_call({commit, Scope, TxValue}, _From, S0 = #{tenants := N}) ->
 handle_call({maintenance, Request}, {Caller, _}, S) ->
     {Out, S1} = maintenance_call(Caller, Request, S),
     reply_or_stop(Out, S1);
+handle_call({commit_v2, Scope, Pin, Request, Tx}, _From,
+            S = #{a4 := true, tenants := N, port := Port}) ->
+    case check_v2_request(Scope, Request, Tx, N) of
+        {ok, T} ->
+            Out = maintenance_tx(Port, fun() ->
+                case upgrade_state(Port) of
+                    {v2, _, Pin, _} -> do_v2(Port, T, Request);
+                    {v2, _, _, _} -> {read, {aborted, wrong_handler_image}};
+                    _ -> {read, {aborted, version_not_in_force}}
+                end
+            end),
+            reply_or_stop(Out, S);
+        {error, Why} -> {reply, {aborted, Why}, S}
+    end;
+handle_call({commit_v2, _, _, _, _}, _From, S) ->
+    {reply, {aborted, v2_disabled}, S};
+handle_call(snapshot, _From, S = #{a4 := true, port := Port, tenants := N}) ->
+    Out = maintenance_tx(Port, fun() ->
+        case fenrir_upgrade_state:fence(1, upgrade_state(Port)) of
+            ok -> {read, snapshot_rows(Port, N)};
+            {error, _} -> {read, {refused, v1_snapshot_unavailable}}
+        end
+    end),
+    reply_or_stop(Out, S);
 handle_call(snapshot, _From, S0) ->
     S = flush_deferred(S0),
     Snap = read_snapshot(maps:get(port, S), maps:get(tenants, S)),
@@ -204,7 +236,7 @@ q(Port, Sql, Params, Phase) ->
 
 %% One-time adoption of legacy A3 metadata in the same transaction as initialization.
 %% For adopted stores an absent/invalid phase is not equivalent to v1.
-ensure_schema(Port, Tenants, Mutant) ->
+ensure_schema(Port, Tenants, Mutant, A4) ->
     ?Q("BEGIN IMMEDIATE", [], init_begin),
     case ?Q("PRAGMA user_version", [], init_metadata) of
         [[0]] -> adopt_legacy(Port);
@@ -219,15 +251,22 @@ ensure_schema(Port, Tenants, Mutant) ->
         {prepared, _, _, _} when Mutant =:= normal ->
             %% Do not expand the tenant domain of an in-progress preparation
             %% as a side effect of restarting with different configuration.
-            Expected = [[T] || T <- lists:seq(0, Tenants - 1)],
-            case ?Q("SELECT tenant FROM tenants ORDER BY tenant", [], init_tenant) of
-                Expected -> ok;
-                _ -> throw(prepared_tenant_domain_changed)
-            end;
+            ensure_upgrade_tenants(Port, Tenants);
+        {Phase, _, _, _} when A4, (Phase =:= migrated orelse Phase =:= v2) ->
+            ensure_upgrade_tenants(Port, Tenants),
+            ?Q("SELECT attempts FROM jobs LIMIT 0", [], init_schema),
+            ?Q("SELECT receipt_version FROM request_keys LIMIT 0", [], init_schema);
         _ -> throw({unsupported_store_phase, element(1, State)})
     end,
     ?Q("COMMIT", [], init_commit),
     ok.
+
+ensure_upgrade_tenants(Port, Tenants) ->
+    Expected = [[T] || T <- lists:seq(0, Tenants - 1)],
+    case ?Q("SELECT tenant FROM tenants ORDER BY tenant", [], init_tenant) of
+        Expected -> ok;
+        _ -> throw(prepared_tenant_domain_changed)
+    end.
 
 adopt_legacy(Port) ->
     case ?Q("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
@@ -294,6 +333,15 @@ maintenance_live(Caller, Request, S = #{operator := Caller, port := Port}) ->
                 end
             end),
             {Outcome, case Outcome of ok -> clear_session(S); _ -> S end};
+        {cut_over, Id, HandlerPin} ->
+            {maintenance_tx(Port, fun() ->
+                case upgrade_state(Port) of
+                    {migrated, Id, HandlerPin, MigrationPin} ->
+                        set_upgrade_state(Port, {v2, Id, HandlerPin, MigrationPin}),
+                        {write, ok};
+                    _ -> {read, {refused, wrong_preparation_or_image}}
+                end
+            end), S};
         {open, Id, Pin, Owner} ->
             open_session(Port, Id, Pin, Owner, S);
         _ -> session_call(Caller, Request, S)
@@ -339,19 +387,22 @@ session_call(Owner, {read, Token}, S = #{port := Port, maintenance :=
         end
     end),
     {Outcome, case Outcome of {refused, wrong_preparation} -> clear_session(S); _ -> S end};
-session_call(Owner, {validate_install, Token, Jobs, Keys}, S = #{port := Port, maintenance :=
-        #{owner := Owner, token := Token, prep := Prep, snapshot := Snapshot}}) ->
-    %% Transactional dry run only. The future writer must do the same checks
-    %% inside its own installation transaction, not rely on this result.
+session_call(Owner, {Mode, Token, Jobs, Keys}, S = #{port := Port, maintenance :=
+        #{owner := Owner, token := Token, prep := Prep, snapshot := Snapshot}})
+  when Mode =:= validate_install; Mode =:= install ->
     Outcome = maintenance_tx(Port, fun() ->
-        {read, case upgrade_state(Port) of
+        case upgrade_state(Port) of
             Prep ->
                 case maintenance_snapshot(Port) of
-                    Snapshot -> validate_projection(Snapshot, Jobs, Keys);
-                    _ -> {refused, snapshot_changed}
+                    Snapshot ->
+                        case validate_projection(Snapshot, Jobs, Keys) of
+                            {ok, validated_only} when Mode =:= install -> install_v2(Port, Prep);
+                            Result -> {read, Result}
+                        end;
+                    _ -> {read, {refused, snapshot_changed}}
                 end;
-            _ -> {refused, wrong_preparation}
-        end}
+            _ -> {read, {refused, wrong_preparation}}
+        end
     end),
     {Outcome, clear_session(S)};
 session_call(Owner, {close, Token}, S = #{maintenance := #{owner := Owner, token := Token}}) ->
@@ -378,6 +429,83 @@ validate_projection({_, OldJobs, OldKeys, _}, Jobs, Keys) ->
         true -> {ok, validated_only};
         false -> {refused, invalid_projection}
     end.
+
+%% Exact projection was compared under this write lock. Apply it in-place:
+%% all old keys keep the v1 receipt form; reports and counters are untouched.
+install_v2(Port, {prepared, Id, Handler, Migration}) ->
+    ?Q("ALTER TABLE jobs ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts IN (0,1))",
+       [], migration_jobs),
+    ?Q("UPDATE jobs SET attempts=1 WHERE status IN ('done','failed')", [], migration_attempts),
+    ?Q("ALTER TABLE request_keys ADD COLUMN receipt_version INTEGER NOT NULL DEFAULT 1 CHECK(receipt_version IN (1,2))",
+       [], migration_keys),
+    ?Q("UPDATE meta SET v=?1 WHERE k='schema'", [fenrir_upgrade_state:schema(2)], migration_schema),
+    set_upgrade_state(Port, {migrated, Id, Handler, Migration}),
+    {write, {ok, installed}}.
+
+%% Bind the allowed v2 write set to the host's original request, not just the
+%% tenant claimed by the guest. The isolated slice admits exactly the two
+%% pinned handler shapes (not a general-purpose v2 Store implementation).
+check_v2_request({tenant, T}, Request, {data, <<"Tx">>, <<"Tx2">>, [Cap, G, Ws]}, N)
+  when is_integer(T), T >= 0, T < N ->
+    case Cap of
+        {data, <<"Cap">>, <<"Tenant">>, [{int, T}]} ->
+            try {guard(G), writes_v2(Ws)} of
+                Shape ->
+                    case v2_matches(Request, Shape) of
+                        true -> {ok, T};
+                        false -> {error, request_mismatch}
+                    end
+            catch error:function_clause -> {error, malformed_tx}
+            end;
+        _ -> {error, unauthorized_scope}
+    end;
+check_v2_request(_, _, _, _) -> {error, malformed_tx_or_scope}.
+
+writes_v2({data, <<"Writes">>, <<"Done">>, []}) -> [];
+writes_v2({data, <<"Writes">>, <<"Then">>, [W, Ws]}) -> [write_v2(W) | writes_v2(Ws)].
+write_v2({data, <<"Write">>, <<"StageJob2">>, [{int, 0}]}) -> stage_job;
+write_v2({data, <<"Write">>, <<"CountAttempt">>, [{int, J}]}) -> {count_attempt, J};
+write_v2(W = {data, <<"Write">>, Name, _})
+  when Name =:= <<"Finish">>; Name =:= <<"PutReport">>; Name =:= <<"RecordKey">> -> write(W).
+
+v2_matches({submit, K, D, P}, {{once, K}, [stage_job, {put_report, D, P}, {record_key, K, D}]}) ->
+    i64(K) andalso i64(D) andalso is_binary(P);
+v2_matches({complete, J, Ok}, {{pending, J}, [{finish, J, Ok}, {count_attempt, J}]}) ->
+    i64(J) andalso is_boolean(Ok);
+v2_matches(_, _) -> false.
+
+i64(N) -> is_integer(N) andalso N >= -9223372036854775808 andalso N =< 9223372036854775807.
+
+do_v2(Port, T, {submit, K, D, P}) ->
+    case ?Q("SELECT digest, r_tenant, r_key, r_digest, r_report, r_job, receipt_version FROM request_keys"
+            " WHERE tenant=?1 AND key=?2", [T, K], guard) of
+        [] ->
+            N = case ?Q("SELECT next FROM tenants WHERE tenant=?1", [T], tenant) of
+                    [[Next]] when is_integer(Next) -> Next;
+                    _ -> throw(invalid_tenant_counter)
+                end,
+            case i64(N + 1) of false -> throw(counter_exhausted); true -> ok end,
+            ?Q("INSERT INTO reports (tenant,id,digest,payload) VALUES (?1,?2,?3,?4)", [T, N, D, {blob, P}], put_report),
+            ?Q("INSERT INTO jobs (tenant,id,report,status,attempts) VALUES (?1,?2,?2,'pending',0)", [T, N], stage_job),
+            ?Q("INSERT INTO request_keys VALUES (?1,?2,?3,?1,?2,?3,?4,?4,2)", [T, K, D, N], record_key),
+            ?Q("UPDATE tenants SET next=?2 WHERE tenant=?1", [T, N + 1], next),
+            {write, {reply, {data, <<"Reply">>, <<"Committed">>, [receipt_v(2, T, K, D, N, N)]}}};
+        [[Recorded, T, K, Recorded, R, J, V]] when V =:= 1; V =:= 2 ->
+            {read, {reply, {data, <<"Reply">>, <<"Recorded">>, [{int, Recorded}, receipt_v(V, T, K, Recorded, R, J)]}}};
+        _ -> throw(invalid_receipt)
+    end;
+do_v2(Port, T, {complete, J, Ok}) ->
+    case ?Q("SELECT attempts FROM jobs WHERE tenant=?1 AND id=?2 AND status='pending'", [T, J], guard) of
+        [] -> {read, {reply, reply(<<"Skipped">>)}};
+        [[0]] ->
+            ?Q("UPDATE jobs SET status=?3, attempts=1 WHERE tenant=?1 AND id=?2", [T, J, status(Ok)], finish),
+            {write, {reply, reply(<<"Applied">>)}};
+        _ -> throw(invalid_pending_attempts)
+    end.
+
+receipt_v(1, T, K, D, R, J) -> receipt(T, K, D, R, J);
+receipt_v(2, T, K, D, R, J) ->
+    {data, <<"Receipt">>, <<"Receipt2">>, [{int, T}, {int, K}, {int, D}, {int, R}, {int, J}]}.
 
 maintenance_tx(Port, Body) ->
     try ?Q("BEGIN IMMEDIATE", [], maintenance_begin) of
@@ -631,12 +759,16 @@ flush_deferred(S = #{deferred := Txs}) ->
 %% [Reports, Jobs, Keys, Next]. Read in one read transaction.
 read_snapshot(Port, Tenants) ->
     {rows, _} = fenrir_sqlite:exec(Port, "BEGIN"),
+    Snapshot = snapshot_rows(Port, Tenants),
+    {rows, _} = fenrir_sqlite:exec(Port, "COMMIT"),
+    Snapshot.
+
+snapshot_rows(Port, Tenants) ->
     {rows, Reps} = fenrir_sqlite:exec(Port, "SELECT tenant, id, digest FROM reports ORDER BY tenant, id"),
     {rows, Jobs} = fenrir_sqlite:exec(Port, "SELECT tenant, id, report, status FROM jobs ORDER BY tenant, id"),
     {rows, Keys} = fenrir_sqlite:exec(Port, "SELECT tenant, key, digest, r_tenant, r_key, r_digest, r_report, r_job"
                                              " FROM request_keys ORDER BY tenant, key"),
     {rows, Next} = fenrir_sqlite:exec(Port, "SELECT tenant, next FROM tenants ORDER BY tenant"),
-    {rows, _} = fenrir_sqlite:exec(Port, "COMMIT"),
     [[[[I, D] || [T1, I, D] <- Reps, T1 =:= T],
       [[I, R, St] || [T1, I, R, St] <- Jobs, T1 =:= T],
       [[K, D, [A, B, C, E, F]] || [T1, K, D, A, B, C, E, F] <- Keys, T1 =:= T],

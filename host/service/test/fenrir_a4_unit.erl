@@ -12,6 +12,10 @@ tests(C) ->
      {a4_unauthorized_call_does_not_revoke, fun authorization_transition/0},
      {a4_durable_preparation, fun() -> fixture(C, "a4-restart", fun restart/2) end},
      {a4_exact_snapshot_and_projection, fun() -> fixture(C, "a4-snapshot", fun projection/2) end},
+     {a4_atomic_install_and_v2, fun() -> fixture(C, "a4-install", fun install_and_use/2) end},
+     {a4_partial_install_rolls_back, fun() -> fixture(C, "a4-install-rollback", fun install_rollback/2) end},
+     {a4_install_lost_ack, fun() -> fixture(C, "a4-install-lost-ack", fun install_lost_ack/2) end},
+     {a4_v1_install_race, fun() -> fixture(C, "a4-install-race", fun install_race/2) end},
      {a4_maintenance_lost_ack, fun() -> fixture(C, "a4-lost-ack", fun lost_ack/2) end},
      {a4_legacy_adoption, fun() -> fixture(C, "a4-legacy", fun legacy/2) end}].
 
@@ -112,10 +116,13 @@ fence(Db, Opts) ->
     with_port(Db, fun(P) ->
         [] = sql(P, "INSERT INTO meta VALUES ('upgrade',?1)", [fenrir_upgrade_state:encode(phase(Prep, v2))])
     end),
+    {refused, v1_snapshot_unavailable} = fenrir_store:snapshot(),
+    [] = set_phase(Db, 1, Prep),
     Before = fenrir_store:snapshot(),
+    [] = set_phase(Db, 2, phase(Prep, v2)),
     stop(Pid),
     {error, {store_schema, {unsupported_store_phase, v2}}} =
-        gen_server:start({local, fenrir_store}, fenrir_store, Opts, []),
+        gen_server:start({local, fenrir_store}, fenrir_store, maps:remove(maintenance_operator, Opts), []),
     true.
 
 as_owner() ->
@@ -276,6 +283,150 @@ projection(Db, Opts) ->
 
 jobs_v2(Jobs) ->
     [[T, J, R, St, case St of <<"pending">> -> 0; <<"failed">> -> 1 end] || [T, J, R, St] <- Jobs].
+
+v2_tx(T, Request) ->
+    {Guard, Writes} = case Request of
+        {submit, K, D, Payload} ->
+            {data(<<"Guard">>, <<"Once">>, [i(K)]),
+             [data(<<"Write">>, <<"StageJob2">>, [i(0)]),
+              data(<<"Write">>, <<"PutReport">>, [i(D), {bytes, Payload}]),
+              data(<<"Write">>, <<"RecordKey">>, [i(K), i(D)])]};
+        {complete, J, Ok} ->
+            {data(<<"Guard">>, <<"Pending">>, [i(J)]),
+             [data(<<"Write">>, <<"Finish">>, [i(J), {bool, Ok}]),
+              data(<<"Write">>, <<"CountAttempt">>, [i(J)])]}
+    end,
+    Ws = lists:foldr(fun(W, Acc) -> data(<<"Writes">>, <<"Then">>, [W, Acc]) end,
+                     data(<<"Writes">>, <<"Done">>, []), Writes),
+    data(<<"Tx">>, <<"Tx2">>, [data(<<"Cap">>, <<"Tenant">>, [i(T)]), Guard, Ws]).
+
+v2(T, Pin, R) -> fenrir_store:commit_v2({tenant, T}, Pin, R, v2_tx(T, R)).
+
+install_input(Prep) ->
+    {ok, Token} = open(Prep, self()),
+    {ok, Jobs, Keys} = m({read, Token}),
+    {install, Token, jobs_v2(Jobs), Keys}.
+
+install_and_use(Db, Opts) ->
+    P = start(Opts),
+    R1 = {submit, 1, 1, <<"body">>},
+    R2 = {submit, 2, 1, <<"body">>},
+    H = pin(<<"handler">>),
+    {reply, {data, <<"Reply">>, <<"Committed">>, [Old]}} = submit(0, 1),
+    {reply, _} = submit(1, 1),
+    with_port(Db, fun(Port) ->
+        [] = sql(Port, "UPDATE jobs SET status='failed' WHERE tenant=1 AND id=0", [])
+    end),
+    {ok, {prepared, Id, H, _} = Prep} = prep(),
+    {refused, wrong_preparation_or_image} = m({cut_over, Id, H}),
+    {aborted, version_not_in_force} = v2(0, H, R2),
+    Stale = install_input(Prep),
+    {reply, _} = submit(1, 2),
+    {refused, snapshot_changed} = m(Stale),
+    {install, BadToken, BadJobs, Keys} = install_input(Prep),
+    {refused, invalid_projection} = m({install, BadToken, tl(BadJobs), Keys}),
+    Good = install_input(Prep),
+    Other = as_owner(),
+    try {refused, unauthorized_maintenance} = ask(Other, Good)
+    after exit(Other, kill) end,
+    {ok, installed} = m(Good),
+    {refused, unauthorized_maintenance} = m(Good),
+    Migrated = phase(Prep, migrated),
+    {ok, Migrated} = m(state),
+    {refused, v1_snapshot_unavailable} = fenrir_store:snapshot(),
+    {aborted, version_not_in_force} = submit(0, 1),
+    {aborted, version_not_in_force} = v2(0, H, R1),
+    {refused, wrong_preparation} = m({abort, Id}),
+    stop(P),
+    P2 = start(Opts),
+    {ok, Migrated} = m(state),
+    {refused, wrong_preparation_or_image} = m({cut_over, Id, pin(<<"different-handler">>)}),
+    ok = m({cut_over, Id, H}),
+    {aborted, wrong_handler_image} = v2(0, pin(<<"different-handler">>), R2),
+    {aborted, unauthorized_scope} = fenrir_store:commit_v2({tenant, 0}, H, R2, v2_tx(1, R2)),
+    {aborted, request_mismatch} = fenrir_store:commit_v2({tenant, 0}, H, R2, v2_tx(0, R1)),
+    {aborted, request_mismatch} =
+        fenrir_store:commit_v2({tenant, 0}, H, {submit, 2, 1, <<"changed">>}, v2_tx(0, R2)),
+    {aborted, malformed_tx_or_scope} = fenrir_store:commit_v2({tenant, 0}, H, R2, tx(0, 2)),
+    {aborted, version_not_in_force} = submit(0, 2),
+    {reply, {data, <<"Reply">>, <<"Recorded">>, [{int, 1}, Old]}} = v2(0, H, R1),
+    {reply, {data, <<"Reply">>, <<"Committed">>, [New]}} = v2(0, H, R2),
+    {data, <<"Receipt">>, <<"Receipt2">>, [{int, 0}, {int, 2}, {int, 1}, {int, 1}, {int, 1}]} = New,
+    {reply, {data, <<"Reply">>, <<"Recorded">>, [{int, 1}, New]}} = v2(0, H, R2),
+    {reply, {data, <<"Reply">>, <<"Applied">>, []}} = v2(0, H, {complete, 0, true}),
+    {reply, {data, <<"Reply">>, <<"Skipped">>, []}} = v2(0, H, {complete, 0, false}),
+    with_port(Db, fun(Port) ->
+        [[0, 0, <<"done">>, 1], [0, 1, <<"pending">>, 0],
+         [1, 0, <<"failed">>, 1], [1, 1, <<"pending">>, 0]] =
+            sql(Port, "SELECT tenant,id,status,attempts FROM jobs ORDER BY tenant,id", []),
+        [[0, 1, 1], [0, 2, 2], [1, 1, 1], [1, 2, 1]] =
+            sql(Port, "SELECT tenant,key,receipt_version FROM request_keys ORDER BY tenant,key", []),
+        [[0, 2], [1, 2]] = sql(Port, "SELECT tenant,next FROM tenants ORDER BY tenant", []),
+        [[{blob, <<"body">>}]] = sql(Port, "SELECT payload FROM reports WHERE tenant=0 AND id=0", [])
+    end),
+    stop(P2),
+    _ = start(Opts),
+    V2 = phase(Prep, v2),
+    {ok, V2} = m(state),
+    {reply, {data, <<"Reply">>, <<"Recorded">>, [{int, 1}, New]}} = v2(0, H, R2),
+    true.
+
+install_rollback(Db, Opts) ->
+    P = start(Opts),
+    Mon = monitor(process, P),
+    {reply, _} = submit(0, 1),
+    {ok, Prep} = prep(),
+    Install = install_input(Prep),
+    %% BEGIN, phase, four snapshot reads, then the first ALTER TABLE.
+    ok = fenrir_store:arm_port(after_statement, 7),
+    {aborted, {port_died, migration_jobs, 137}} = m(Install),
+    observe_store_exit(P, Mon),
+    _ = start(Opts),
+    {ok, Prep} = m(state),
+    with_port(Db, fun(Port) ->
+        [] = sql(Port, "SELECT name FROM pragma_table_info('jobs') WHERE name='attempts'", []),
+        [] = sql(Port, "SELECT name FROM pragma_table_info('request_keys') WHERE name='receipt_version'", [])
+    end),
+    {reply, _} = submit(0, 1),
+    true.
+
+install_lost_ack(_Db, Opts) ->
+    P = start(Opts),
+    Mon = monitor(process, P),
+    {reply, _} = submit(0, 1),
+    {ok, Prep} = prep(),
+    Install = install_input(Prep),
+    ok = fenrir_store:arm_port(after_commit, 1),
+    {indeterminate, {port_died, maintenance_commit, {lost_commit_ack, 137}}} = m(Install),
+    observe_store_exit(P, Mon),
+    _ = start(Opts),
+    Migrated = phase(Prep, migrated),
+    {ok, Migrated} = m(state),
+    {refused, unauthorized_maintenance} = m(Install),
+    {aborted, version_not_in_force} = submit(0, 1),
+    true.
+
+install_race(_Db, Opts) ->
+    _ = start(Opts),
+    {reply, _} = submit(0, 1),
+    {ok, Prep} = prep(),
+    Install = install_input(Prep),
+    Parent = self(),
+    Worker = spawn(fun() -> receive go -> Parent ! {self(), submit(1, 1)} end end),
+    try
+        Worker ! go,
+        M = m(Install),
+        V1 = receive {Worker, Out} -> Out after 5000 -> error(v1_race_timeout) end,
+        Migrated = phase(Prep, migrated),
+        case {M, V1} of
+            {{ok, installed}, {aborted, version_not_in_force}} -> {ok, Migrated} = m(state);
+            {{refused, snapshot_changed}, {reply, _}} -> {ok, Prep} = m(state)
+        end,
+        true
+    after exit(Worker, kill) end.
+
+observe_store_exit(P, Mon) ->
+    receive {'DOWN', Mon, process, P, sqlite_port_died} -> ok after 5000 -> error(store_not_stopped) end.
 
 lost_ack(_Db, Opts) ->
     P = start(Opts),
