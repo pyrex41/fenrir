@@ -1,6 +1,6 @@
-# A4 host port: adapter slice only
+# A4 host port: adapter and sequential worker pilot
 
-The service node and worker still run A3/v1. The adapter reads the durable
+The default service node and supervisor still run A3/v1. The adapter reads the durable
 schema and phase after `BEGIN IMMEDIATE` and before the v1 tenant guard, and
 refuses stale v1 requests (including receipt retries) in `migrated` or `v2`.
 Malformed metadata fails closed; the default A3 adapter cannot reopen a store
@@ -36,19 +36,33 @@ handler contracts are fenced until the operator cuts over using the exact
 generation and handler pin. A lost commit acknowledgement remains indeterminate;
 reopen the opted-in adapter and read durable state to resolve it.
 
-The isolated `commit_v2/4` entry accepts a host-derived tenant scope, admitted
+The `commit_v2/4` entry accepts a host-derived tenant scope, admitted
 handler pin and original request, plus a `Tx2` value. It checks the two exact
 accepted-job write shapes against the host request (including payload and job ID),
 and checks the durable phase and handler pin inside the write transaction.
 It preserves v1 receipts on retries, creates v2 receipts for new keys, and
 finishes a pending job and counts its attempt in one transaction. The
-unversioned snapshot API refuses after installation. No service-node API or
-worker calls `commit_v2/4`; do not run the migration guest on this adapter.
+unversioned snapshot API refuses after installation.
 
-Do not count the A4 model/guest checks or the adapter fixtures as full-stack A4
-history or crash-campaign evidence. Tests perform actual adapter upgrades on
-temporary stores with trusted fixture projections; no deployed worker served
-v2 and no upgrade ran through a guest.
+The opt-in worker pilot boots stock Solo5 v1, migration, and v2 guests on a
+temporary store. `fenrir_a4_upgrade` admits the exact source-bound migration and
+v2 contracts, checks the request table and input-bound batch digest, then uses
+the existing OTP operator/session capability. Each v2 launch checks the pin in
+force and loads the pinned descriptor, artifact, image, and tender again; it
+launches private copies of the image and tender from those checked bytes, not
+from the descriptor's original paths. The launch directory and launcher are
+trusted host configuration and the image builder is a trusted source of images.
+The migration process is itself the monitored owner. It reads one row at a
+time from a bounded snapshot, stages typed rows, and asks the store to validate
+and atomically install them. A changed snapshot can be explicitly refreshed by
+the same admitted owner. It does not send maintenance authority to the guest.
+
+Run `sh host/service/check-a4-workers.sh` on ARM64 Linux with the explicit
+tool prefixes named in the script. The pilot compares each v2 guest's response
+to its one store reply before the front will publish it, and records one `/2`
+history with independent SQLite phase and store observations. The report
+requires the verifier's exit and exactly the expected verdict for every
+control. No crash campaign is claimed for this pilot.
 
 ## Development checks
 
@@ -66,39 +80,26 @@ v2 and no upgrade ran through a guest.
 - `host/service/test/fault-controls.py` on that quick campaign: all eleven
   fault/observation substitutions were rejected and the same-boot observation
   retry was accepted.
+- The real worker pilot migrated four rows with ten host requests, returned an
+  old receipt unchanged, issued and retried a new v2 receipt, preserved job
+  state across restart, refused unauthorized migration and submit, and refused
+  a substituted descriptor. The sequential `/2` checker admitted the observed
+  history; its seven controls cover wrong pins, gaps, skipped observations,
+  claimed faults, lost work, altered receipts, and wrong unavailability.
 
 ## Remaining work
 
 Remaining host work from keen-ptolemy `4c4454c`, not a cherry-pick:
 
-1. **Preserve scoped ingress and publication.** `fenrir_front:submit/4` authenticates
-   a credential before choosing a worker and supplies a host-derived `{tenant,T}`
-   separately from the request to `fenrir_worker:run/3`. Keep that API, the trusted
-   `deliver/3` path, the worker's request binding, and per-operation scope checks
-   inside the store. Add an exact scoped decoder for v2 receipts while retaining the
-   v1 receipt decoder for v2 retries of pre-upgrade keys. A stale-worker campaign
-   must not reintroduce the upstream `request_on/2` path on unauthenticated
-   tenant-bearing requests. Test unauthorized submission, cross-tenant guest
-   requests and response mismatch under both handler versions.
-2. **Give migration its own host-owned capability.** Upstream
-   `fenrir_store:migration/2` uses one adapter-wide `{Rows,Staged}` session;
-   `migration_read(0,…)` replaces it and the calls do not identify its owner.
-   Isolate privileged maintenance from the customer and delivery paths. Bind
-   `read/stage/install` in the host to the admitted migration image, one live
-   migration execution, and the exact durable preparation it started under.
-   Invalidate on death, abort or replacement; reject cross-session operations,
-   handler-originated migration effects and installs after a replacement
-   preparation. These are host checks, not guest parameters.
-   Replace the adapter fixture's full-row snapshot/read with bounded,
-   per-row staging and typed reply size checks at the actual worker boundary.
-3. **Bind the running worker to admitted bytes.** The adapter persists and checks
-   pins but does not verify artifacts itself. Revalidate the exact admitted bytes
-   at every launch/restart, with no mutable path substitution or version fallback.
-   Select and replace workers on the host without weakening the adapter fence;
-   map stale outcomes to unavailable without publishing a receipt. Exercise
-   descriptor replacement and recovery at each durable phase with real workers.
-4. **Retain the A3 evidence rules when adding `/2`.** Keep `/1` strict and add
-   separate `/2` histories and negative fixtures. Port the A4 matrix into the
+1. **Integrate supervisory cut-over and recovery.** The pilot explicitly
+   restarts the front with v2 worker names; it does not automatically route
+   traffic by durable phase, preserve a live outbox across worker replacement,
+   manage the maintenance operator under the default supervisor, or recover
+   hosting automatically across each upgrade phase. Keep the existing OTP
+   credential-to-scope binding and the trusted delivery path. Do not add the
+   upstream unscoped `request_on/2`.
+2. **Port the A4 campaign, not only its checker.** The `/2` pilot is sequential
+   and does not accept crash, fault, or concurrent-group events. Port the A4 matrix into the
    current campaign driver and report, with a planned denominator, per-row
    exit/verdict and tender/image identity, observed fault effects, and explicit
    recorder gaps carried across restart. A missing row, lost or unobserved
@@ -106,7 +107,7 @@ Remaining host work from keen-ptolemy `4c4454c`, not a cherry-pick:
    the normal path or count as a mutant caught. Run equivalent controls as
    healthy cases and require semantic counterexamples for genuine mutants.
    Do not re-pin the gate from the upstream report; there is no local A4 host
-   evidence to pin.
+   campaign evidence to pin.
 
 Power-loss/fsync qualification is out of scope. The proposed experiment needs
 separate approval; no such experiment is required by the model or guest

@@ -192,7 +192,17 @@
     (let _ (set sh.*model-steps* 0)
          _ (set sh.*predicate-checks* 0)
          H (sh.norm (json.parse (read-file-as-string File) [[byte-limit 67108864]]))
-         Tenants (fh.field "tenants" H)
+      (sh.check-schema (fh.field "schema" H) File H)))
+
+(define sh.check-schema
+  "fenrir.service.history/1" File H -> (sh.check-file-1 File H)
+  "fenrir.service.history/2" File H -> (shu.check File H [["history" File]
+            ["scenario" (fh.field "scenario" H)] ["schema" "fenrir.service.history/2"]])
+  _ _ _ -> (error "unknown service history schema"))
+
+(define sh.check-file-1
+  File H ->
+    (let Tenants (fh.field "tenants" H)
          Events (fh.field "events" H)
          Expect (trap-error (fh.field "expect" H) (/. E "none"))
          Start [[(svc.initial Tenants) (svcp.monitor-initial)]]
@@ -230,4 +240,5 @@
   [] -> ""
   [L | Ls] -> (cn L (cn (make-string "~%") (sh.join Ls))))
 
+(load (cn (value fh.*root*) "harness/service-history-upgrade.shen"))
 (sh.main (value sx.*mode*))

@@ -18,11 +18,14 @@ gcc -std=c11 -O2 -Wall -Wextra -Werror -D_POSIX_C_SOURCE=200809L \
 erlc -Wall -Werror -o "$out/ebin" "$here"/src/*.erl "$here"/test/fenrir_a4_workers.erl
 export FENRIR_SQLITE_PORT="$out/fenrir_sqlite_port"
 for artifact in accepted-job accepted-job-v2 migrate-v1-v2; do
-    sh frontend/fenrir.sh emit "examples/service/$artifact.fen" "$out/$artifact.json"
+    sh frontend/fenrir.sh emit "examples/service/$artifact.fen" "$out/$artifact.json" >&2
 done
 v1=$(node "$here/tools/build-image.mjs" "$out/accepted-job.json" "$out/v1" 2 3 2 4)
 v2=$(node "$here/tools/build-image.mjs" "$out/accepted-job-v2.json" "$out/v2" 2 3 2 4 --v2)
 migration=$(node "$here/tools/build-image.mjs" "$out/migrate-v1-v2.json" "$out/migration" --migration)
 echo "output: $out" >&2
 erl -noshell -noinput -pa "$out/ebin" -run fenrir_a4_workers main \
-    "$out" "$here/priv/spt-launch" "$v1" "$v2" "$migration"
+    "$out" "$here/priv/spt-launch" "$v1" "$v2" "$migration" >&2
+node "$here/tools/a4-history-controls.mjs" fixtures "$out"
+sh harness/run-service-history.sh "$out/history-list.txt" "$out/verifier" >"$out/verdicts.stdout"
+node "$here/tools/a4-history-controls.mjs" verify "$out"

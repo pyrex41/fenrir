@@ -26,6 +26,7 @@ run(Out, Launcher, V1Path, V2Path, Migration) ->
     {delivered, _} = fenrir_front:deliver(1, 0, false),
     {refused, _} = fenrir_a4_upgrade:prepare(Migration, V2Path),
     {ok, Prep = {prepared, Id, Pin, MP}} = fenrir_a4_upgrade:prepare(V2Path, Migration),
+    Prepared = observed(Db, Prep),
     %% A copied descriptor with a changed request table must not be admitted.
     {ok, Descr} = file:read_file(V2Path),
     Descriptor = json:decode(Descr),
@@ -41,9 +42,11 @@ run(Out, Launcher, V1Path, V2Path, Migration) ->
         fenrir_a4_upgrade:migrate(Id, Migration, Opts),
     true = MigrationRequests =:= 10,
     {ok, {migrated, Id, Pin, MP}} = fenrir_store:maintenance(state),
+    Migrated = observed(Db, {migrated, Id, Pin, MP}),
     {unavailable, _} = fenrir_front:submit(C0, 0, 1, <<1>>),
     {refused, version_not_in_force} = fenrir_worker:run(a4v2, {tenant, 0}, {submit, 0, 1, <<1>>}),
     ok = fenrir_a4_upgrade:cut_over(Id, V2Path),
+    CutOver = observed(Db, {v2, Id, Pin, MP}),
     ok = gen_server:stop(Front),
     {ok, Front2} = fenrir_front:start_link([a4v2], Bindings),
     {{refused, unauthorized}, _} = fenrir_front:submit(<<0:256>>, 1, 0, <<0>>),
@@ -53,6 +56,22 @@ run(Out, Launcher, V1Path, V2Path, Migration) ->
     {delivered, _} = fenrir_front:deliver(0, 0, true),
     {delivered, _} = fenrir_front:deliver(0, 0, false),
     true = lists:member({accepted, New}, fenrir_front:outbox()),
+    Final = observed(Db, {v2, Id, Pin, MP}),
+    Events = [[<<"submit">>,0,0,1,[<<"accepted">>,Old]],
+              [<<"submit">>,1,0,1,[<<"accepted">>,[1,0,1,0,0]]],
+              [<<"complete">>,1,0,false,[<<"delivered">>]],
+              [<<"upgrade">>,<<"begin">>,hex(Pin),hex(MP),[<<"ok">>]], Prepared,
+              [<<"upgrade">>,<<"migrate">>,[<<"ok">>]], Migrated,
+              [<<"submit">>,0,0,1,[<<"unavailable">>]],
+              [<<"upgrade">>,<<"cut-over">>,[<<"ok">>]], CutOver,
+              [<<"submit">>,0,0,1,[<<"accepted">>,Old]],
+              [<<"submit">>,0,1,0,[<<"accepted">>,New]],
+              [<<"submit">>,0,1,1,[<<"conflict">>,0,1]],
+              [<<"complete">>,0,0,true,[<<"delivered">>]],
+              [<<"complete">>,0,0,false,[<<"delivered">>]], Final],
+    History = #{schema => <<"fenrir.service.history/2">>, scenario => <<"a4-worker-upgrade">>,
+                handler_pin => hex(Pin), migration_pin => hex(MP), tenants => 2, events => Events},
+    ok = file:write_file(filename:join(Out, "history.json"), json:encode(History)),
     %% An equivalent descriptor at the same path must still fail the durable pin.
     ok = file:write_file(V2Path, <<Descr/binary, "\n">>),
     {{refused, durable_image_pin_mismatch}, _} = fenrir_front:submit(C0, 2, 0, <<0>>),
@@ -70,13 +89,43 @@ run(Out, Launcher, V1Path, V2Path, Migration) ->
     ok = gen_server:stop(V2Again),
     ok = gen_server:stop(Store2),
     {ok, []} = file:list_dir(maps:get(a4_launch_dir, Opts)),
-    ok = file:write_file(filename:join(Out, "report.json"), json:encode(
-        #{status => <<"development-pass">>, qualification => <<"UNKNOWN">>,
-          scope => <<"A4 bounded worker fixture; not a history campaign">>,
+    ok = file:write_file(filename:join(Out, "worker.json"), json:encode(
+        #{status => <<"worker-fixture-pass">>, qualification => <<"UNKNOWN">>,
+          scope => <<"A4 bounded worker fixture; no crash campaign">>,
           migration_requests => MigrationRequests,
           handler_pin => binary:encode_hex(Pin, lowercase), migration_pin => binary:encode_hex(MP, lowercase)})),
     io:format("A4 worker fixture passed (~p migration requests)~n", [MigrationRequests]),
     ok.
+
+hex(B) -> binary:encode_hex(B, lowercase).
+
+%% Independent SQLite observer, with rows and durable metadata in one snapshot.
+observed(Db, Expected = {Phase, _, HP, MP}) ->
+    {ok, P} = fenrir_store:open_configured(Db, normal),
+    try
+        [] = rows(P, "BEGIN"),
+        [[Schema, Encoded]] = rows(P, "SELECT s.v,u.v FROM meta s,meta u WHERE s.k='schema' AND u.k='upgrade'"),
+        {ok, Expected} = fenrir_upgrade_state:decode(Schema, Encoded),
+        R = rows(P, "SELECT tenant,id,digest FROM reports ORDER BY tenant,id"),
+        J = case Phase of
+            prepared -> rows(P, "SELECT tenant,id,report,status FROM jobs ORDER BY tenant,id");
+            _ -> rows(P, "SELECT tenant,id,report,status,attempts FROM jobs ORDER BY tenant,id")
+        end,
+        K0 = "SELECT tenant,key,digest,r_tenant,r_key,r_digest,r_report,r_job,",
+        K = rows(P, K0 ++ (case Phase of prepared -> "1"; _ -> "receipt_version" end) ++
+                    " FROM request_keys ORDER BY tenant,key"),
+        Next = rows(P, "SELECT tenant,next FROM tenants ORDER BY tenant"),
+        [] = rows(P, "COMMIT"),
+        Stores = [[ [Rest || [T|Rest] <- R, T =:= Tenant],
+                    [Rest || [T|Rest] <- J, T =:= Tenant],
+                    [[Key,D,receipt([RT,RK,RD,RR,RJ],V)] || [T,Key,D,RT,RK,RD,RR,RJ,V] <- K, T =:= Tenant],
+                    N] || [Tenant,N] <- Next],
+        [<<"observe">>, Stores, [atom_to_binary(Phase), hex(HP), hex(MP)]]
+    after fenrir_sqlite:close(P) end.
+
+rows(P, Q) -> {rows, R} = fenrir_sqlite:exec(P, Q), R.
+receipt(R, 1) -> R;
+receipt(R, 2) -> R ++ [2].
 
 foreign(Fun) ->
     Parent = self(),

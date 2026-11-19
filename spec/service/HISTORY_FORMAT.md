@@ -63,3 +63,34 @@ those faults. Only the death of the node (which takes the front with it) is A1's
   property checks that the *observed* stores fail (a diagnostic, not part of the verdict).
 - **indeterminate**: the history records a gap, or the set of consistent model states
   exceeds the checker's bound (4,096). Never an acceptance.
+
+## 4 Sequential A4 pilot (`fenrir.service.history/2`)
+
+This is the history of an explicitly orchestrated v1 → v2 worker fixture,
+not a crash campaign. In addition to `schema`, `scenario`, `tenants` and
+`events`, it has `handler_pin` and `migration_pin`: distinct lowercase
+256-hex strings (digest of descriptor, canonical artifact, image and tender,
+concatenated in that order). An observation or begin event carrying a different
+pin is rejected even if the actual rows match.
+
+- `["upgrade","begin",HANDLER_PIN,MIGRATION_PIN,["ok"]]` records successful
+  preparation. Other phase transitions use
+  `["upgrade","migrate",OUT]`, `["upgrade","cut-over",OUT]` or
+  `["upgrade","abort",OUT]`; `OUT` records `ok`, `busy`, `aborted`, `changed`,
+  `refused`, or `indeterminate` as a one-element array.
+- Every upgrade event needs a following `["observe",STORES,STATE]`, and
+  the history must end in such an observation. `STATE` is `["v1"]` or
+  `[PHASE,HANDLER_PIN,MIGRATION_PIN]` with `prepared`, `migrated`, or `v2`.
+  Rows retain the v1 store shape before install. Thereafter each job appends
+  its attempt count and each v2 receipt appends `2`; v1 receipts stay unchanged.
+- Sequential submits and deliveries use §2's shapes, plus `["unavailable"]`
+  in the `migrated` phase (neither protocol in force). Unsupported concurrent,
+  crash and fault claims cannot pass this checker. A recorder gap anywhere or
+  a missing required observation is indeterminate, not a mutant rejection.
+
+The worker harness reads phase and rows in an independent SQLite transaction.
+The verifier projects matching image pins to the abstract A4 model image and
+checks model responses and observations; it does not infer executions from
+pins alone. The harness also requires an exact verdict for every positive and
+negative control, and successful child exits. The `/1` verifier remains a separate
+branch for A3 and receives no new permissive event forms.
