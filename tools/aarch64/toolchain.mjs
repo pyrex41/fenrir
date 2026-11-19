@@ -21,10 +21,12 @@ export function tool(name) {
   }
   throw new Error(`Missing tool for ${name}: tried ${CANDIDATES[name].map(c => c[0]).join(', ')}`);
 }
-export function run(name, args, {cwd, ok = true, timeout = 300000} = {}) {
+export function run(name, args, {cwd, ok = true, timeout = 300000, allowSignals = []} = {}) {
   const t = tool(name);
   const r = spawnSync(t.exe, [...t.pre, ...args], {cwd, timeout, maxBuffer: 64 * 1024 * 1024});
-  if (r.error || r.signal) throw new Error(`${t.exe}: ${r.error || r.signal}`);
+  // A timeout can carry both an error and a signal. Spawn errors never count
+  // as a guest result, even when a caller expects a deliberate guest fault.
+  if (r.error || (r.signal && !allowSignals.includes(r.signal))) throw new Error(`${t.exe}: ${r.error || r.signal}`);
   if (ok && r.status !== 0) throw new Error(`${t.exe} ${args.join(' ')}: ${r.stderr}\n${r.stdout}`);
   return r;
 }

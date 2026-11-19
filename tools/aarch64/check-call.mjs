@@ -34,7 +34,7 @@ const universal = audit.find(a => a.file === 'CallCompile.v').output;
 assert.equal((universal.match(/Closed under the global context/g) || []).length, 3, 'call_correct, tail_calls_constant_stack, tail_program_correct must be closed');
 
 const boundary = [...VALUES, 5n, -7n, 1000n];
-function native(binary, dir, inputs, offset, resultType) {
+function native(binary, dir, inputs, offset, resultType, {mutant = false} = {}) {
   writeFileSync(resolve(dir, 'code.bin'), binary);
   const asm = `.global _start
 .text
@@ -61,8 +61,8 @@ loop:
  b.ne failed
  mov x0, #0
  b exit
-failed:
- mov x0, #1
+ failed:
+  mov x0, #42
 exit:
  mov x8, #93
  svc #0
@@ -80,9 +80,13 @@ outputs: .skip ${inputs.length * 16}
   writeFileSync(resolve(dir, 'runner.s'), asm);
   run('as', ['-o', 'runner.o', 'runner.s'], {cwd: dir});
   run('ld', ['-o', 'runner', 'runner.o'], {cwd: dir});
-  let r;
-  try { r = run('qemu', ['./runner'], {cwd: dir, ok: false, timeout: 120000}); } catch { return null; } // a fault is a divergence
-  if (r.status !== 0 || r.stdout.length !== inputs.length * 16) return null;
+  const r = run('qemu', ['./runner'], {
+    cwd: dir, ok: false, timeout: 120000,
+    allowSignals: mutant ? ['SIGSEGV', 'SIGBUS', 'SIGILL'] : [],
+  });
+  if (r.signal || r.status === 42) return null; // guest fault or launcher check
+  assert.equal(r.status, 0, `unexpected QEMU exit: ${r.stderr}`);
+  assert.equal(r.stdout.length, inputs.length * 16, 'incomplete AArch64 launcher output');
   return inputs.map((_, i) => {
     const v = r.stdout.readBigInt64LE(i * 16), tag = r.stdout.readBigUInt64LE(i * 16 + 8);
     if (tag === 0n) return resultType === 'Bool' ? (v === 0n || v === 1n ? ['Ok', ['bool', v === 1n]] : ['InvalidBool', String(v)]) : ['Ok', ['int', String(v)]];
@@ -148,7 +152,7 @@ for (const [name, program, nth, find, change] of MUTANTS) {
   const identityProof = text.split('\n').findIndex(l => l.startsWith('Lemma image_identity')) + 2;
   assert.match(r.stderr.toString(), new RegExp(`line ${identityProof}, [^]*Unable to unify`), `${name}: failed for another reason`);
   const dir = resolve(out, `mutant-${name}`); mkdirSync(dir);
-  const observed = native(binary, dir, boundary, good.manifest.entry_offset, good.manifest.result_type);
+  const observed = native(binary, dir, boundary, good.manifest.entry_offset, good.manifest.result_type, {mutant: true});
   assert.notDeepEqual(observed, expectedOf(good.artifact, boundary), `${name}: survived QEMU`);
   rejected.push({name, program, instruction: k, word: encodeInstr(code[k]).toString(16), qemu: observed === null ? 'crashed or launcher check failed' : 'different results'});
   console.log(`mutant ${name}: proof rejected, QEMU diverged (${observed === null ? 'crash/launcher check' : 'results'})`);
@@ -159,7 +163,7 @@ writeFileSync(resolve(out, 'coqchk.log'), checked.stdout.toString() + checked.st
 assert(audit.every(a => !/Axioms:/.test(a.output)), 'unexpected axioms');
 writeFileSync(resolve(out, 'assumptions.log'), audit.map(a => `== ${a.file}\n${a.output}`).join('\n'));
 const sources = ['verification/aarch64/Machine.v', 'verification/aarch64/Encode.v', 'verification/aarch64/Compile.v', 'verification/aarch64/CallCompile.v',
-  'tools/aarch64/call.mjs', 'tools/aarch64/call-fixtures.mjs', 'tools/aarch64/check-call.mjs', 'tools/aarch64/expr.mjs',
+  'tools/aarch64/call.mjs', 'tools/aarch64/call-fixtures.mjs', 'tools/aarch64/check-call.mjs', 'tools/aarch64/expr.mjs', 'tools/aarch64/toolchain.mjs',
   'tools/tc0/pure-call-artifact.mjs', 'runtime/tc0/pure-call-machine.mjs'];
 const report = {schema: 'fenrir.aarch64.call-check/1', profile: CALL_PROFILE, abi: CALL_ABI,
   status: 'development-pass', qualification: 'UNKNOWN', node: process.version, versions: versions(),
