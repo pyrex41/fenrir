@@ -2,9 +2,9 @@
 \\ spec/tc1/EFFECTS.md. Registered as the check tc1-qualification in
 \\ .pi/fenrir-workflow.json, with the manifest spec/tc1/tc1-requirements.json, by the
 \\ owner's instruction of 2026-11-15; see campaigns/tc1/TC1_GATE_REGISTRATION.md.
-\\ The verdict counts as a qualification only while the manifest is owner-accepted
-\\ and the workflow configuration names this evaluator; otherwise the report says
-\\ authority UNREGISTERED and qualification UNKNOWN.
+\\ The verdict counts as a qualification only on the legacy Linux x86-64 runner
+\\ with an owner-accepted manifest and matching workflow registration. Otherwise
+\\ the report says authority UNREGISTERED and qualification UNKNOWN.
 \\
 \\   shen-jit script harness/tc1-gate.shen LIBDIR ROOT OUTDIR SHEN_JIT_EXECUTABLE [NONCE CHECK_ID SOURCE_SHA256 CONFIG_SHA256]
 \\

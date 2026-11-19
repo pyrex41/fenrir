@@ -6,7 +6,7 @@
 \\
 \\ A gate file supplies three things and then calls fh.gate-main:
 \\   fh.check        Name Memo -> row     its row checks, by the manifest's check names
-\\   fh.registered?  Manifest -> boolean  whether its verdict counts as a qualification
+\\   fh.registered?  Manifest -> boolean  whether the legacy check is registered
 \\   its manifest path, manifest schema, report schema, evaluator path and label
 \\ Here: the row format, the checks every gate needs (source identity, pinned
 \\ toolchain, unit suite, Solo5 guest batches), row evaluation, aggregation, the
@@ -15,8 +15,8 @@
 \\ Aggregation: any required FAIL gives FAIL; else any BLOCKED gives BLOCKED; else
 \\ any UNKNOWN gives UNKNOWN; else PASS. An evaluator error, a check that does not
 \\ report, or a check the gate does not know is UNKNOWN. A verdict counts as a
-\\ qualification only while fh.registered? holds; otherwise the report says
-\\ authority UNREGISTERED and qualification UNKNOWN.
+\\ qualification only while fh.registered? holds on the legacy Linux x86-64
+\\ runner; otherwise the report says authority UNREGISTERED and qualification UNKNOWN.
 \\ The comparisons themselves are the other harness programs, each run as its
 \\ own process so one cannot disturb another.
 \\ With the four controller arguments the controller's check record is printed too.
@@ -163,6 +163,13 @@
   "FAIL" -> 1
   _ -> 2)
 
+\\ Neither a host flake output nor Pi registration expands the reviewed platform.
+\\ Be strict about the successful uname result: missing, partial or malformed
+\\ output is not evidence. This is a trusted-runner observation, not attestation.
+(define fh.legacy-runner?
+  [0 "Linux x86_64c#10;" _] -> true
+  _ -> false)
+
 \\ Evaluate the manifest at ManifestPath and report. ManifestSchema is the schema the
 \\ manifest must declare, ReportSchema the schema of the report, Evaluator the gate
 \\ file, Label the gate's name in the controller's summary.
@@ -187,13 +194,19 @@
                    Rows0)
           Verdict (fh.verdict Rows)
           Claims (fh.claims (tl (fh.field "claims" Manifest)) (fh.field "claim_prerequisites" Manifest) Rows)
-          Registered (fh.registered? Manifest)
+           Host (trap-error (fh.exec "uname" ["-sm"] 30) (/. E [-1 "" "platform probe failed"]))
+           Supported (fh.legacy-runner? Host)
+           Registered (and Supported (fh.registered? Manifest))
+           Controller (value fh.*controller*)
           Passing (make-string "~A/~A" (fh.count-status "PASS" true Rows 0) (- (length Rows) (fh.count-optional Rows 0)))
           Report [object ["schema" ReportSchema]
                          ["authority" (if Registered "owner-accepted, registered" "UNREGISTERED")]
-                         ["qualification" (if Registered Verdict "UNKNOWN")]
+                          ["qualification" (if Registered Verdict "UNKNOWN")]
+                          ["runner" [object ["uname_sm" (hd (tl Host))] ["uname_exit" (str (hd Host))]
+                                            ["legacy_qualification_platform" Supported]]]
                          ["verdict" Verdict]
-                         ["claims" Claims]
+                          ["claims" (if Supported Claims [])]
+                          ["development_claims" (if Supported [] Claims)]
                          ["waivers" (fh.waivers Memo)]
                          ["head" (fh.member-in "head" Memo)]
                          ["manifest" ManifestPath]
@@ -205,8 +218,12 @@
           Text (json.stringify Report [[byte-limit 4194304]])
           Written (write-to-file (cn (value fh.*out*) "gate.json") (cn Text "c#10;"))
        (do (output "~A~%" Text)
-           (fh.controller-record (value fh.*controller*) Label Registered Verdict Claims Passing (fh.waivers Memo))
-           (shen-jit.exit (fh.exit-status Verdict)))))
+            (fh.controller-record Controller
+              (if Supported Label (cn Label " (legacy qualification requires Linux x86_64)"))
+              Registered Verdict Claims Passing (fh.waivers Memo))
+            \\ A bare run has a development verdict, including when TC1 calls G1.
+            \\ A framed run must exit consistently with its credited verdict.
+            (shen-jit.exit (fh.exit-status (if (and (cons? Controller) (not Registered)) "UNKNOWN" Verdict))))))
 
 \\ The registration rule both gates use: the manifest is owner-accepted and the workflow
 \\ configuration has a check named CheckId whose command runs Runner.
