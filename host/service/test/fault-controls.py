@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Diagnostic controls using real service nodes and one source mutation per run.
+"""Diagnostic controls using real service nodes and isolated source mutations.
 
 Run on the same host as check.sh: python3 host/service/test/fault-controls.py \
     build/host/service/RUN/config.term
 To reproduce the false positives at 2cc8d0e, pass that checkout's config and
 append --baseline /path/to/2cc8d0e.
+To reproduce the recovery/format/tender failures at 43eea72, use that run's
+config and append --gap-baseline /path/to/43eea72.
 The control files and histories go into a fresh sibling directory. Neither the
 checkout nor the campaign's original outputs are modified.
 """
+import json
 import os
 from pathlib import Path
 import shutil
@@ -27,8 +30,9 @@ def erl_string(value):
 
 config = Path(sys.argv[1]).resolve()
 baseline = len(sys.argv) == 4 and sys.argv[2] == "--baseline"
-assert len(sys.argv) == 2 or baseline, __doc__
-root = Path(sys.argv[3]).resolve() if baseline else Path(__file__).resolve().parents[3]
+gap_baseline = len(sys.argv) == 4 and sys.argv[2] == "--gap-baseline"
+assert len(sys.argv) == 2 or baseline or gap_baseline, __doc__
+root = Path(sys.argv[3]).resolve() if baseline or gap_baseline else Path(__file__).resolve().parents[3]
 out = Path(tempfile.mkdtemp(prefix="fault-controls-", dir=config.parent.parent))
 print(out, flush=True)
 service = root / "host/service"
@@ -38,14 +42,24 @@ env = dict(os.environ, FENRIR_SQLITE_PORT=str(sqlite))
 env.setdefault("ERL_FLAGS", "+S 2:2 +SDcpu 1 +SDio 1")
 
 
-def run(name, family, only, filename, old, new, proof_test):
+def run(name, family, only, filename, old, new, proof_test, history_verdict=None, mutant=False):
     directory = out / name
     ebin = directory / "ebin"
     shutil.copytree(original_ebin, ebin)
     source = directory / filename
     source.write_text(replace_once((service / "src" / filename).read_text(), old,
                                    new.replace("@MARKER@", erl_string(directory / "stalled"))))
+    if mutant:
+        source.write_text(replace_once(source.read_text(), "    {jobs_done, N};",
+                                       "    case N of 0 -> put(snapshot_after_drain, 2); _ -> ok end,\n"
+                                       "    {jobs_done, N};"))
     sources = [source]
+    if mutant:
+        campaign = directory / "fenrir_campaign.erl"
+        campaign.write_text(replace_once((service / "test/fenrir_campaign.erl").read_text(),
+                                         "Ctx = ctx(C, normal, 1),",
+                                         "Ctx = ctx(C, equivalent_control, 1),"))
+        sources.append(campaign)
     if baseline and family == "random_schedules":
         # The older driver has a fixed two-minute timeout. Change only its
         # duration, not how it handles the timeout.
@@ -79,16 +93,24 @@ def run(name, family, only, filename, old, new, proof_test):
             + proof_test + " end, Rows), "
             "true = (length(Rows) =:= " + ("2" if family == "lost_ack" else "1") + "), halt().",
         ], env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
-    print(name + (": reproduced false evidence" if baseline else ": rejected"), flush=True)
+        if history_verdict is not None:
+            verdict_dir = directory / "verdicts"
+            subprocess.run(["sh", root / "harness/run-service-history.sh",
+                            directory / "histories.txt", verdict_dir],
+                           env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
+            verdict = json.loads((verdict_dir / "verdicts.jsonl").read_text())
+            assert verdict["verdict"] == history_verdict, verdict
+    print(name + (": reproduced false evidence" if baseline or gap_baseline else ": rejected"), flush=True)
 
 
 unverified = ('false = lists:any(fun(E) -> hd(E) =:= <<"fault">> end, Events), '
               '{fault_fired,false,_} = lists:keyfind(fault_fired,1,maps:get(checks,S)), '
               'not fenrir_campaign:fault_evidence(S)')
-submit = 'command({submit, T, K, D, P}, _) -> fenrir_front:submit(T, K, D, P);'
-run("unrelated-node-sigkill", "crash_points", "w2_request_before_commit-kill_node-submit",
-    "fenrir_node.erl", submit,
-    '''command({submit, T, 2, D, P}, _) ->
+if not gap_baseline:
+    submit = 'command({submit, T, K, D, P}, _) -> fenrir_front:submit(T, K, D, P);'
+    run("unrelated-node-sigkill", "crash_points", "w2_request_before_commit-kill_node-submit",
+        "fenrir_node.erl", submit,
+        '''command({submit, T, 2, D, P}, _) ->
     case file:read_file(@MARKER@) of
         {error, enoent} ->
             ok = file:write_file(@MARKER@, <<"once">>),
@@ -96,43 +118,45 @@ run("unrelated-node-sigkill", "crash_points", "w2_request_before_commit-kill_nod
         {ok, _} -> fenrir_front:submit(T, 2, D, P)
     end;
 '''
-    + submit,
-    'true = (maps:get(crashes,S) =:= 1), ' +
-    ('{fault_fired,true,_} = lists:keyfind(fault_fired,1,maps:get(checks,S)), is_list(Events)'
-     if baseline else unverified))
+        + submit,
+        'true = (maps:get(crashes,S) =:= 1), ' +
+        ('{fault_fired,true,_} = lists:keyfind(fault_fired,1,maps:get(checks,S)), is_list(Events)'
+         if baseline else unverified))
 
-port_action = ('fire(kill_port, #{port := P}) -> kill9(P), ok;' if baseline else
-               '    kill_port(Point, kill_port, P, Port, W);')
-port_fault_event = 'lists:member([<<"fault">>,<<"kill_port">>,<<"s4_after_commit">>],Events) andalso maps:get(checks_ok,S)'
-run("suppressed-kill", "crash_points", "s4_after_commit-kill_port-submit",
-    "fenrir_faults.erl", port_action,
-    'fire(kill_port, #{port := _}) -> ok;' if baseline else '    _ = {Point, P, Port, W}, ok;',
-    port_fault_event if baseline else unverified)
 decoy = '''    Decoy = open_port({spawn_executable, os:find_executable("sleep")},
                       [{args, ["30"]}, exit_status]),
     DecoyPid = fenrir_sqlite:os_pid(Decoy),
     true = P =/= DecoyPid,
 '''
-run("wrong-process", "crash_points", "s4_after_commit-kill_port-submit",
-    "fenrir_faults.erl", port_action,
-    ('fire(kill_port, #{port := P}) ->\n' + decoy + '    kill9(DecoyPid);' if baseline else
-     decoy + '    true = erlang:port_info(Port) =/= undefined,\n'
-     '    kill_port(Point, kill_port, DecoyPid, Decoy, W);'),
-    port_fault_event if baseline else unverified)
+if not gap_baseline:
+    port_action = ('fire(kill_port, #{port := P}) -> kill9(P), ok;' if baseline else
+                   '    kill_port(Point, kill_port, P, Port, W);')
+    port_fault_event = 'lists:member([<<"fault">>,<<"kill_port">>,<<"s4_after_commit">>],Events) andalso maps:get(checks_ok,S)'
+    run("suppressed-kill", "crash_points", "s4_after_commit-kill_port-submit",
+        "fenrir_faults.erl", port_action,
+        'fire(kill_port, #{port := _}) -> ok;' if baseline else '    _ = {Point, P, Port, W}, ok;',
+        port_fault_event if baseline else unverified)
+    run("wrong-process", "crash_points", "s4_after_commit-kill_port-submit",
+        "fenrir_faults.erl", port_action,
+        ('fire(kill_port, #{port := P}) ->\n' + decoy + '    kill9(DecoyPid);' if baseline else
+         decoy + '    true = erlang:port_info(Port) =/= undefined,\n'
+         '    kill_port(Point, kill_port, DecoyPid, Decoy, W);'),
+        port_fault_event if baseline else unverified)
 
-if not baseline:
+if not baseline and not gap_baseline:
     run("unverified-lost-ack", "lost_ack", "", "fenrir_faults.erl",
         'fenrir_sqlite:arm(Port, after_commit, 1)',
         'fenrir_sqlite:arm(Port, after_statement, 1)',
         'true = lists:member({caller_sees_indeterminate,true,indeterminate},maps:get(checks,S)), '
         + unverified)
-run("suppressed-lost-ack", "lost_ack", "", "fenrir_faults.erl",
-    'fenrir_sqlite:arm(Port, after_statement, 1)' if baseline else 'fenrir_sqlite:arm(Port, after_commit, 1)',
-    'fenrir_sqlite:arm(Port, disarm, 1)',
-    ('lists:member([<<"fault">>,<<"sqlite_port">>,<<"lose_ack">>],Events) andalso not maps:get(checks_ok,S)'
-     if baseline else unverified))
+if not gap_baseline:
+    run("suppressed-lost-ack", "lost_ack", "", "fenrir_faults.erl",
+        'fenrir_sqlite:arm(Port, after_statement, 1)' if baseline else 'fenrir_sqlite:arm(Port, after_commit, 1)',
+        'fenrir_sqlite:arm(Port, disarm, 1)',
+        ('lists:member([<<"fault">>,<<"sqlite_port">>,<<"lose_ack">>],Events) andalso not maps:get(checks_ok,S)'
+         if baseline else unverified))
 
-for command in ("outbox", "snapshot"):
+for command in (("outbox",) if gap_baseline else ("outbox", "snapshot")):
     handler = {"outbox": "fenrir_front:outbox()", "snapshot": "fenrir_store:snapshot()"}[command]
     # Stall the first instance only; the restarted node must answer observations.
     run(command + "-timeout", "random_schedules", "", "fenrir_node.erl",
@@ -145,5 +169,35 @@ for command in ("outbox", "snapshot"):
     end;''',
         ('[] = maps:get(gaps,S), '
          'false = lists:any(fun(E) -> hd(E) =:= <<"gap">> end, Events), maps:get(checks_ok,S)'
-         if baseline else f'Gap = [<<"gap">>,<<"driver timed out">>,<<"{command}">>], '
-         'true = lists:member(Gap,maps:get(gaps,S)), lists:member(Gap,Events)'))
+         if baseline else (f'Gap = [<<"gap">>,<<"driver timed out">>,<<"{command}">>], '
+                           if gap_baseline else f'Gap = [<<"gap">>,<<"driver timed out: {command}">>], ')
+         + 'true = lists:member(Gap,maps:get(gaps,S)), lists:member(Gap,Events)'),
+         history_verdict=None if baseline else ("rejected" if gap_baseline else "indeterminate"))
+
+if not baseline:
+    run("wrong-tender", "crash_points", "w3_commit_before_reply-kill_tender-submit",
+        "fenrir_faults.erl", "    kill_port(Point, kill_tender, P, Port, W);",
+        decoy + '    true = port_close(Port),\n    kill_port(Point, kill_tender, DecoyPid, Decoy, W);',
+        ('{fault_fired,true,_} = lists:keyfind(fault_fired,1,maps:get(checks,S)), maps:get(checks_ok,S) '
+         'andalso lists:member([<<"fault">>,<<"kill_tender">>,<<"w3_commit_before_reply">>],Events)'
+         if gap_baseline else unverified))
+    run("recovery-snapshot-timeout", "crash_points", "w4_reply_before_response-kill_node-submit",
+        "fenrir_node.erl",
+        "command(snapshot, _) -> fenrir_store:snapshot();",
+        '''command(snapshot, _) ->
+    case get(snapshot_after_drain) of
+        1 -> timer:sleep(infinity);
+        2 -> put(snapshot_after_drain, 1), fenrir_store:snapshot();
+        _ -> fenrir_store:snapshot()
+    end;''',
+        ('[] = maps:get(gaps,S), '
+         '{fault_fired,true,_} = lists:keyfind(fault_fired,1,maps:get(checks,S)), '
+         '{no_pending_job_after_drain,false,unavailable} = '
+         'lists:keyfind(no_pending_job_after_drain,1,maps:get(checks,S)), '
+         'true = (maps:get(mutant,S) =:= equivalent_control), is_list(Events)'
+         if gap_baseline else
+         'Gap = [<<"gap">>,<<"driver timed out: snapshot">>], '
+         '{probe_available,false,snapshot} = lists:keyfind(probe_available,1,maps:get(checks,S)), '
+         'true = fenrir_campaign:fault_evidence(S), '
+         'true = lists:member(Gap,maps:get(gaps,S)), lists:member(Gap,Events)'),
+        history_verdict="accepted" if gap_baseline else "indeterminate", mutant=True)

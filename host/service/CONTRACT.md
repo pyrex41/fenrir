@@ -67,6 +67,11 @@ expected state change before the retry. `no_transaction` and
 acknowledgment controls the response to the target request. They still run their
 other mutant scenarios.
 
+For tender kills the driver compares the hook's PID with the active request's
+tender PID captured by the worker at spawn, before fault injection. A recorder
+gap, including a timeout during a recovery snapshot, is an evidence error;
+it cannot count as a mutant detection.
+
 ## 4 How a real fault maps to A1
 
 A1's `crash` empties the outbox and keeps the stores; the real outbox is the front's

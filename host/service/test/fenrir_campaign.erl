@@ -125,8 +125,17 @@ run_scenario(Ctx, Full, Family, Mutant, Fun) ->
         {start_failed, Why} ->
             #{status => start_failed, detail => Why};
         S1 ->
-            {S2, Checks} = try Fun(S1) catch Cl:Er:St -> ?D:kill(S1), erlang:raise(Cl, Er, St) end,
-            S3 = case maps:get(node, S2) of none -> S2; _ -> ?D:observe(S2) end,
+            {S2, Checks} = try Fun(S1)
+                           catch
+                               throw:{probe_unavailable, Probe, State} ->
+                                   {State, [check(probe_available, false, Probe) | maps:get(fault_checks, State, [])]};
+                               Cl:Er:St -> ?D:kill(S1), erlang:raise(Cl, Er, St)
+                           end,
+            S3 = case {maps:get(node, S2), lists:keymember(probe_available, 1, Checks)} of
+                     {none, _} -> S2;
+                     {_, true} -> S2;
+                     {_, false} -> ?D:observe(S2)
+                 end,
             S4 = ?D:stop(S3),
             Audit = ?D:audit(maps:get(db, S4), ?D:told(S4)),
             Tenants = maps:get(tenants, maps:get(config, Ctx)),
@@ -194,22 +203,28 @@ hand_trace(Ctx, Tenants, T) ->
     scenario(Ctx, hand_traces, Name, #{tenants => Tenants},
       fun(S0) ->
               {S, Resps, Disabled} = hand_steps(S0, maps:get(<<"schedule">>, T), [], 0),
-              Outbox = case ?D:call(S, outbox) of {ok, O, _} -> O; _ -> [] end,
-              Final = [snapshot_of(S), [ev(E) || E <- Outbox], [ev(E) || E <- lists:reverse(?D:told(S))]],
+              {Outbox, S1} = require_probe(outbox, ?D:read_probe(S, outbox)),
+              {Snap, S2} = snapshot_of(S1),
+              Final = [Snap, [ev(E) || E <- Outbox], [ev(E) || E <- lists:reverse(?D:told(S2))]],
               case maps:get(<<"disabled_at">>, T, none) of
-                  none -> {S, [check(responses_as_derived_by_hand, Resps =:= maps:get(<<"responses">>, T), Resps),
+                  none -> {S2, [check(responses_as_derived_by_hand, Resps =:= maps:get(<<"responses">>, T), Resps),
                                check(final_state_as_derived_by_hand, json:decode(iolist_to_binary(json:encode(Final))) =:= maps:get(<<"final">>, T), Final)]};
-                  N -> {S, [check(disabled_at_as_derived_by_hand, Disabled =:= N, Disabled)]}
+                  N -> {S2, [check(disabled_at_as_derived_by_hand, Disabled =:= N, Disabled)]}
               end
       end).
 
 snapshot_of(S) -> snapshot_of(S, 100).
 snapshot_of(S, N) ->
     case ?D:call(S, snapshot) of
-        {ok, St, _} when is_list(St) -> St;
-        {ok, _, _} when N > 0 -> timer:sleep(20), snapshot_of(S, N - 1); %% the store is restarting
-        _ -> unavailable
+        {ok, St, S1} when is_list(St) -> {St, S1};
+        {ok, _, S1} when N > 0 -> timer:sleep(20), snapshot_of(S1, N - 1); %% the store is restarting
+        {ok, Why, S1} ->
+            require_probe(snapshot, {unavailable, ?D:gap(S1, <<"snapshot unavailable">>, Why)});
+        {died, Why, S1} -> require_probe(snapshot, ?D:abort_probe(S1, snapshot, Why))
     end.
+
+require_probe(_, {ok, Answer, S}) -> {Answer, S};
+require_probe(Probe, {unavailable, S}) -> throw({probe_unavailable, Probe, S}).
 
 ev({accepted, R}) -> [<<"accepted">>, R];
 ev({conflict, T, K}) -> [<<"conflict">>, T, K].
@@ -321,8 +336,8 @@ retries(Ctx, R) ->
                           {S5, [check({same_receipt_on_retry, T, K}, O1 =:= O2 andalso O2 =:= O3 andalso O3 =:= O5, [O1, O2, O3, O5]),
                                 check({conflict_on_other_payload, T, K}, O4 =:= {conflict, T, K}, O4) | CA]}
                   end, {S0, []}, Pairs),
-              Snap = snapshot_of(S),
-              {S, [check(one_report_per_key, [length(Reps) || [Reps, _, _, _] <- Snap] =:= [3, 3, 3], Snap) | Checks]}
+               {Snap, SF} = snapshot_of(S),
+               {SF, [check(one_report_per_key, [length(Reps) || [Reps, _, _, _] <- Snap] =:= [3, 3, 3], Snap) | Checks]}
       end).
 
 duplicates(Ctx, R) ->
@@ -334,10 +349,10 @@ duplicates(Ctx, R) ->
               {_, S4} = ?D:complete(S3, R rem 3, 0, false),
               {_, S5} = ?D:complete(S4, R rem 3, 7, true),
               S6 = ?D:drain(S5, #{duplicate => true}),
-              Snap = snapshot_of(S6),
+               {Snap, S7} = snapshot_of(S6),
               [_, Jobs, _, _] = lists:nth(R rem 3 + 1, Snap),
               Expected = [[J, J, case fenrir_runner:outcome(R rem 3, J) of true -> <<"done">>; false -> <<"failed">> end] || J <- [0, 1, 2]],
-              {S6, [check(first_delivery_decides_status, Jobs =:= Expected, Jobs)]}
+               {S7, [check(first_delivery_decides_status, Jobs =:= Expected, Jobs)]}
       end).
 
 %% ---------- crash injection at named points ----------
@@ -373,15 +388,20 @@ crash_point(Ctx, Point, Action, Op, R) ->
     scenario(Ctx, crash_points, Name,
       fun(S0) ->
               {T, S1} = prefix(S0, R),
-              Before = snapshot_of(S1),
-              {W, Pids, S2} = arm_fault(S1, Point, Action),
+              {Before, SB} = snapshot_of(S1),
+              {W, Pids, S2} = arm_fault(SB, Point, Action),
               {Out, Target, S3} = target(S2, Op, T, R),
               {S4, FaultCheck} = verify_fault(S2, S3, W, Point, Action, Pids),
               Outcome = classify(Out),
               {S5, Retry} = recover(S4, Target),
-              After = snapshot_of(S5),
-              Diag = case Retry of gave_up -> {element(1, ?D:cmd(S5, diag)), lists:sublist(maps:get(whys, S5, []), 3)}; _ -> none end,
-               {S5, [FaultCheck,
+              {After, S6} = snapshot_of(S5),
+              {Diag, SF} = case Retry of
+                               gave_up ->
+                                   {D, State} = ?D:cmd(S6, diag),
+                                   {{D, lists:sublist(maps:get(whys, State, []), 3)}, State};
+                               _ -> {none, S6}
+                           end,
+              {SF, [FaultCheck,
                     check(outcome_as_predicted, lists:member(Outcome, predicted(Point, Action, Op)), {Outcome, predicted(Point, Action, Op)}),
                     check(retry_definite, Retry =/= gave_up, {Retry, Diag}),
                     check(no_pending_job_after_drain, no_pending(After), After),
@@ -391,7 +411,7 @@ crash_point(Ctx, Point, Action, Op, R) ->
 arm_fault(S, Point, Action) ->
     W = filename:join(maps:get(dir, S), "fault-receipt"),
     case file:delete(W) of ok -> ok; {error, enoent} -> ok end,
-    {ok, Pids, S1} = ?D:call(S, pids),
+    {Pids, S1} = pids(S),
     {ok, S2} = ?D:cmd(S1, {arm, Point, Action, 1, W}),
     {W, Pids, S2}.
 
@@ -417,19 +437,23 @@ verify_fault(Before, S, W, Point, Action, Pids) ->
     end,
     {Disarm, S3} = ?D:cmd(S2, disarm),
     SameBoot = same_boot(Before, S3),
-    Detail = {Point, Action, Pids, SameBoot, Disarm, Proof},
+    %% The worker's outcome independently carries the tender PID captured
+    %% when the active request's session opened, not the hook's PID claim.
+    Targets = Pids#{tender => maps:get(last_tender, S, none)},
+    Detail = {Point, Action, Targets, SameBoot, Disarm, Proof},
     Fired = valid_fault(Detail),
     S4 = case Fired of
              true -> ?D:fault(S3, atom_to_binary(Action), atom_to_binary(Point));
              false -> S3
          end,
-    {S4, check(fault_fired, Fired, Detail)}.
+    FaultCheck = check(fault_fired, Fired, Detail),
+    {S4#{fault_checks => [FaultCheck]}, FaultCheck}.
 
 same_boot(S1, S2) -> maps:get(boots, S1) =:= maps:get(boots, S2).
 
 valid_fault({P, kill_node, #{beam := B}, false, ok, {P, kill_node, B, {matched, 137}}}) -> is_os_pid(B);
 valid_fault({P, halt_node, #{beam := B}, false, ok, {P, halt_node, B, {matched, 86}}}) -> is_os_pid(B);
-valid_fault({P, kill_tender, #{worker := W}, true, ok, {P, kill_tender, T, {sigkill, W}}}) ->
+valid_fault({P, kill_tender, #{worker := W, tender := T}, true, ok, {P, kill_tender, T, {sigkill, W}}}) ->
     is_os_pid(T) andalso is_list(W);
 valid_fault({P, kill_port, #{sqlite_port := T, store := W}, true, ok, {P, kill_port, T, {sigkill, W}}}) ->
     is_os_pid(T) andalso is_list(W);
@@ -513,13 +537,13 @@ sqlite_kills(Ctx, Kind, Op, R, N, Acc) ->
     Res = scenario(Ctx#{observe_sqlite_exit => true}, sqlite_kills, Name,
             fun(S0) ->
                     {T, S1} = prefix(S0, R),
-                    Before = await_prefix(S1, T, 1 + R rem 2, 100),
-                    Pid0 = pids(S1),
-                    {ok, S2} = ?D:cmd(S1, {arm_port, Kind, N}),
+                    {Before, SB} = await_prefix(S1, T, 1 + R rem 2, 100),
+                    {Pid0, SP} = pids(SB),
+                    {ok, S2} = ?D:cmd(SP, {arm_port, Kind, N}),
                     {Out, Target, S3} = target(S2, Op, T, R),
-                    Pid1 = pids(S3),
+                    {Pid1, SN} = pids(S3),
                     %% Disarm the port explicitly: the generic disarm command ignores port errors.
-                    {Disarm, S4} = ?D:cmd(S3, {arm_port, disarm, 1}),
+                    {Disarm, S4} = ?D:cmd(SN, {arm_port, disarm, 1}),
                     Died = maps:get(sqlite_port, Pid0) =/= maps:get(sqlite_port, Pid1),
                     SameNode = maps:get(crashes, S4) =:= maps:get(crashes, S2),
                     Exit = ?D:sqlite_exit(S3, maps:get(sqlite_port, Pid0)),
@@ -527,8 +551,8 @@ sqlite_kills(Ctx, Kind, Op, R, N, Acc) ->
                     Probe = sweep_result(Op, Out, {Died, SameNode}, Exit, Disarm, Applied),
                     S6 = case Probe of fired -> ?D:fault(S4, <<"sqlite_port">>, atom_to_binary(Kind)); _ -> S4 end,
                     {S7, Retry} = recover(S6, Target),
-                    After = snapshot_of(S7),
-                    {S7, [check(sqlite_probe, Probe =/= unverified, {Probe, Out, Died, SameNode, Exit, Disarm, Applied}),
+                    {After, SF} = snapshot_of(S7),
+                    {SF, [check(sqlite_probe, Probe =/= unverified, {Probe, Out, Died, SameNode, Exit, Disarm, Applied}),
                           check(retry_definite, Retry =/= gave_up, Retry),
                           check(no_pending_job_after_drain, no_pending(After), After),
                           check(accepted_work_kept, kept(Before, After), {Before, After})]}
@@ -572,25 +596,23 @@ sweep_result(_, _, _, _, _, _) -> unverified.
 
 %% The early-reply mutant can still be flushing the setup requests. Do not
 %% arm while they are pending; count statements only in the targeted request.
-await_prefix(S, _, _, 0) -> error({sqlite_prefix_not_committed, maps:get(name, S)});
+await_prefix(S, T, Count, 0) ->
+    require_probe(sqlite_prefix, {unavailable, ?D:gap(S, <<"sqlite prefix unavailable">>, {T, Count})});
 await_prefix(S, T, Count, N) ->
-    Snap = snapshot_of(S),
-    case Snap of
-        L when is_list(L) ->
-            case lists:nth(T + 1, L) of
-                [Reports, _, Keys, Count] when length(Reports) =:= Count, length(Keys) =:= Count -> L;
-                _ -> timer:sleep(20), await_prefix(S, T, Count, N - 1)
-            end;
-        Other -> error({sqlite_prefix_snapshot_unavailable, Other})
+    {Snap, S1} = snapshot_of(S),
+    case lists:nth(T + 1, Snap) of
+        [Reports, _, Keys, Count] when length(Reports) =:= Count, length(Keys) =:= Count -> {Snap, S1};
+        _ -> timer:sleep(20), await_prefix(S1, T, Count, N - 1)
     end.
 
 %% The node's process ids, once its store is up again (it restarts after a port death).
 pids(S) -> pids(S, 50).
-pids(S, 0) -> error({no_pids, maps:get(name, S)});
 pids(S, N) ->
     case ?D:call(S, pids) of
-        {ok, #{sqlite_port := P} = M, _} when is_integer(P) -> M;
-        _ -> timer:sleep(20), pids(S, N - 1)
+        {ok, #{sqlite_port := P} = M, S1} when is_integer(P) -> {M, S1};
+        {ok, _, S1} when N > 0 -> timer:sleep(20), pids(S1, N - 1);
+        {ok, Why, S1} -> require_probe(pids, {unavailable, ?D:gap(S1, <<"process IDs unavailable">>, Why)});
+        {died, Why, S1} -> require_probe(pids, ?D:abort_probe(S1, pids, Why))
     end.
 
 %% ---------- lost acknowledgment ----------
@@ -599,20 +621,20 @@ lost_ack(Ctx, Op, R) ->
     scenario(Ctx, lost_ack, op_name(Op, R),
       fun(S0) ->
               {T, S1} = prefix(S0, R),
-              Before = snapshot_of(S1),
-               {W, Pids, S2} = arm_fault(S1, s3_before_commit, lose_ack),
+               {Before, SB} = snapshot_of(S1),
+               {W, Pids, S2} = arm_fault(SB, s3_before_commit, lose_ack),
                {Out, Target, S3} = target(S2, Op, T, R),
                {S5, FaultCheck} = verify_fault(S2, S3, W, s3_before_commit, lose_ack, Pids),
-              Mid = snapshot_of(S5),
-              S6 = ?D:observe(S5),
+               {Mid, SM} = snapshot_of(S5),
+               S6 = ?D:observe(SM),
               {Retry, S7} = case Target of
                                 {submit, _, K, D} -> ?D:retry_submit(S6, T, K, D, 5);
                                 {complete, _, J, Ok} -> retry_complete(S6, T, J, Ok, 5)
                             end,
-              After = snapshot_of(S7),
+               {After, SF} = snapshot_of(S7),
                {Expected, ExpectedRetry} = lost_ack_expected(Target, Before),
                Committed = is_list(Mid) andalso Mid =:= Expected,
-               {S7, [FaultCheck, check(caller_sees_indeterminate, Out =:= indeterminate, Out),
+               {SF, [FaultCheck, check(caller_sees_indeterminate, Out =:= indeterminate, Out),
                      check(commit_survived_lost_ack, Committed, {Expected, Mid}),
                      check(retry_returns_recorded_receipt, Retry =:= ExpectedRetry, {Retry, ExpectedRetry}),
                      check(no_second_mutation, is_list(Mid) andalso Mid =:= After, {Mid, After})]}
@@ -636,15 +658,18 @@ busy(Ctx, Op, R) ->
     scenario(Ctx, busy, op_name(Op, R),
       fun(S0) ->
               {T, S1} = prefix(S0, R),
-              Before = snapshot_of(S1),
+               {Before, SB} = snapshot_of(S1),
               {ok, P} = fenrir_sqlite:open(maps:get(db, S1)),
               {rows, _} = fenrir_sqlite:exec(P, "PRAGMA busy_timeout=0"),
               {rows, _} = fenrir_sqlite:exec(P, "BEGIN IMMEDIATE"),
-              {Out, Target, S2} = target(S1, Op, T, R),
-              Mid = snapshot_of(S2),
-              S3 = ?D:observe(S2),
-              {rows, _} = fenrir_sqlite:exec(P, "ROLLBACK"),
-              fenrir_sqlite:close(P),
+               {Out, Target, S2} = target(SB, Op, T, R),
+               %% Release the lock even when the post-request snapshot is unavailable.
+               {Mid, SM} = try snapshot_of(S2)
+                           after
+                               fenrir_sqlite:exec(P, "ROLLBACK"),
+                               fenrir_sqlite:close(P)
+                           end,
+               S3 = ?D:observe(SM),
               {Retry, S4} = case Target of
                                 {submit, _, K, D} -> ?D:retry_submit(S3, T, K, D, 5);
                                 {complete, _, J, Ok} -> retry_complete(S3, T, J, Ok, 5)

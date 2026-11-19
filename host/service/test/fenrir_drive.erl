@@ -12,7 +12,7 @@
 -export([new/2, start/1, stop/1, kill/1, call/2, call/3, cmd/2, backoff/1,
          submit/4, submit_told/4, complete/4, respond/2, crash/2, observe/1, drain/2, fault/3,
          event/2, events/1, told/1, write_history/3, audit/2, retry_submit/5, concurrent/2,
-         fresh_db/1, sqlite_exit/2, read_probe/2, await_node_exit/1]).
+         fresh_db/1, sqlite_exit/2, read_probe/2, abort_probe/3, gap/3, await_node_exit/1]).
 
 %% Ctx: #{erl, ebin, node_launch, out, config => NodeConfigMap, name}
 new(Ctx, Name) ->
@@ -101,8 +101,7 @@ collect(S, Port, OnNote, Cmd) ->
             end;
         {Port, {exit_status, St}} -> died(S, St)
     after Timeout ->
-        Gap = [<<"gap">>, <<"driver timed out">>, print_term(Cmd)],
-        died(kill(event(S, Gap)), driver_timeout, maps:get(pid, maps:get(node, S)))
+        died(kill(gap(S, <<"driver timed out">>, Cmd)), driver_timeout, maps:get(pid, maps:get(node, S)))
     end.
 
 died(S, St) -> died(S, St, maps:get(pid, maps:get(node, S))).
@@ -120,11 +119,20 @@ await_node_exit(S = #{node := #{port := Port}}) ->
 read_probe(S, Cmd) ->
     case call(S, Cmd) of
         {ok, L, S1} when is_list(L) -> {ok, L, S1};
-        {ok, Why, S1} -> {unavailable, event(S1, [<<"gap">>, <<"probe failed">>, print_term({Cmd, Why})])};
-        {died, driver_timeout, S1} -> {unavailable, crashed(S1, <<"node">>)};
-        {died, Why, S1} ->
-            {unavailable, crashed(event(S1, [<<"gap">>, <<"probe lost node">>, print_term({Cmd, Why})]), <<"node">>)}
+        {ok, Why, S1} -> {unavailable, gap(S1, <<"probe failed">>, {Cmd, Why})};
+        {died, Why, S1} -> probe_died(S1, Cmd, Why)
     end.
+
+probe_died(S, Cmd, Why) ->
+    {unavailable, restart(record_probe_death(S, Cmd, Why))}.
+
+abort_probe(S, Cmd, Why) -> {unavailable, record_probe_death(S, Cmd, Why)}.
+
+record_probe_death(S, _, driver_timeout) -> record_crash(S, <<"node">>);
+record_probe_death(S, Cmd, Why) -> record_crash(gap(S, <<"probe lost node">>, {Cmd, Why}), <<"node">>).
+
+gap(S, Message, Detail) ->
+    event(S, [<<"gap">>, <<Message/binary, ": ", (print_term(Detail))/binary>>]).
 
 print_term(T) -> iolist_to_binary(io_lib:format("~0p", [T])).
 
@@ -146,11 +154,15 @@ out_json(_) -> [<<"other">>].
 
 %% After the node died during a command: record the crash, audit the file as the crash
 %% left it, restart from the SQLite file.
-crashed(S0, What) ->
+crashed(S, What) -> restart(record_crash(S, What)).
+
+record_crash(S0, What) ->
     S1 = event(S0#{crashes := maps:get(crashes, S0) + 1}, [<<"crash">>, What]),
     Audit = audit(maps:get(db, S1), told(S1)),
-    S2 = S1#{audits => [{after_crash, Audit} | maps:get(audits, S1, [])]},
-    case start(S2) of
+    S1#{audits => [{after_crash, Audit} | maps:get(audits, S1, [])]}.
+
+restart(S) ->
+    case start(S) of
         {start_failed, Why} -> error({restart_failed, Why});
         S3 -> observe(S3)
     end.
@@ -174,7 +186,8 @@ note_stats(S, Req, Stats) ->
           end,
     Lat = case maps:get(us, Stats, none) of none -> maps:get(latencies, S); Us -> [Us | maps:get(latencies, S)] end,
     Whys = case maps:get(why, Stats, none) of none -> maps:get(whys, S, []); W -> [W | maps:get(whys, S, [])] end,
-    S#{coverage := Cov, latencies := Lat, whys => Whys}.
+    S#{coverage := Cov, latencies := Lat, whys => Whys,
+       last_tender => maps:get(tender_os_pid, Stats, none)}.
 
 respond(S, E) ->
     EJ = out_json(E),

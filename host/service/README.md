@@ -126,7 +126,9 @@ acknowledgment, or stalls an outbox/snapshot read. The controls require unverifi
 injections to leave no `fault` event and require stalled reads to leave recorder gaps.
 They are not additional campaign coverage.
 To reproduce the false evidence on `2cc8d0e`, pass that revision's run config
-and append `--baseline /path/to/baseline-checkout`.
+and append `--baseline /path/to/baseline-checkout`. To reproduce the follow-up
+recovery snapshot, history gap format and wrong-tender regressions at
+`43eea72`, use that revision's config and append `--gap-baseline /path/to/checkout`.
 
 ## Artifact
 

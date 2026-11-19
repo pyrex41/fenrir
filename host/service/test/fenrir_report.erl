@@ -169,6 +169,7 @@ row(S = #{status := executed, history := Path}, Verdicts) ->
     Verdict = maps:get(<<"verdict">>, V, <<"missing">>),
     Errors = [history_evidence || not valid_history(S, V)] ++
              [recorder_gap || maps:get(gaps, S, missing) =/= []] ++
+             [probe_unavailable || lists:member(false, [Ok || {probe_available, Ok, _} <- maps:get(checks, S, [])])] ++
              [fault_not_verified || not fenrir_campaign:fault_evidence(S) orelse lists:any(fun({N, Ok, _}) ->
                  not Ok andalso lists:member(N, [sqlite_probe, exception])
              end, maps:get(checks, S, []))],

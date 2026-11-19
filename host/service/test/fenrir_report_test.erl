@@ -48,6 +48,10 @@ checks(Root, Mode) ->
         [{fault_fired, true, Detail}]}, Rows), V, Neg) end,
     Lost = hd([R || R = #{family := lost_ack, mutant := normal} <- Rows]),
     Random = hd([R || R = #{family := random_schedules, mutant := normal} <- Rows]),
+    Recovery = hd([R || R = #{family := crash_points, mutant := volatile_mailbox} <- OnlyBadHistory]),
+    RecoveryChecks = [{probe_available, false, snapshot} | maps:get(checks, Recovery)],
+    RecoveryRows = Replace(Recovery, Recovery#{checks := RecoveryChecks, checks_ok := false,
+        gaps := [[<<"gap">>, <<"driver timed out: snapshot">>]]}, OnlyBadHistory),
     TestCases = [
         {exact_scope, Complete(C, Rows, V, Neg)},
         {missing_family, not Complete(C, Partial, WithFreshVerdicts(Partial), Neg)},
@@ -85,7 +89,12 @@ checks(Root, Mode) ->
             [{fault_fired, true, Point}]}, Rows), V, Neg)},
         {lost_ack_without_proof, not Complete(C, Replace(Lost, Lost#{checks := []}, Rows), V, Neg)},
         {random_timeout_gap, not Complete(C, Replace(Random, Random#{gaps :=
-            [[<<"gap">>, <<"driver timed out">>, <<"outbox">>]]}, Rows), V, Neg)},
+            [[<<"gap">>, <<"driver timed out: outbox">>]]}, Rows), V, Neg)},
+        {recovery_timeout_is_not_a_mutant_kill, begin
+            MR = MutantReport(volatile_mailbox, RecoveryRows, WithFreshVerdicts(RecoveryRows)),
+            maps:get(<<"result">>, MR) =:= <<"UNKNOWN: scenario evidence errors">> andalso
+                maps:get(<<"caught_by_scenario_checks">>, MR) =:= []
+        end},
         {pid_change_without_sigkill, fenrir_campaign:sweep_result(submit, aborted, {true, true}, 1, ok, false) =:= unverified},
         {request_did_not_apply, fenrir_campaign:sweep_result(complete, delivered, {false, true}, none, ok, false) =:= unverified}
     ],
@@ -108,7 +117,7 @@ fault_checks(crash_points, Name) ->
         kill_port -> {true, 2, {sigkill, "<0.5.0>"}};
         kill_store -> {true, "<0.5.0>", killed}
     end,
-    Pids = #{beam => 1, sqlite_port => 2, worker => "<0.4.0>", store => "<0.5.0>"},
+    Pids = #{beam => 1, sqlite_port => 2, tender => 3, worker => "<0.4.0>", store => "<0.5.0>"},
     [{fault_fired, true, {Point, Action, Pids, Same, ok, {Point, Action, Target, Exit}}}];
 fault_checks(lost_ack, _) ->
     [{fault_fired, true, {s3_before_commit, lose_ack, #{sqlite_port => 2}, true, ok,

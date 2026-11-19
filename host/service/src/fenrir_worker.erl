@@ -114,7 +114,7 @@ session(Program, S = #{image_info := I}) ->
     OsPid = case erlang:port_info(Port, os_pid) of {os_pid, P} -> P; _ -> undefined end,
     Ctx = #{tender => OsPid, tender_port => Port, worker => self()},
     St0 = #{port => Port, buf => <<>>, seq => 0, epoch => 0, requests => 0, commit => none, ctx => Ctx,
-            frames => 0, runs => 0, replies => []},
+            frames => 0, runs => 0, replies => [], tender_os_pid => OsPid},
     try
         {Hello, St1} = expect(St0, $H),
         ok = check_hello(Hello, I),
@@ -146,7 +146,7 @@ outcome(Kind, Why, St) ->
         end,
     {O, Why, summary(St)}.
 
-summary(St) -> maps:with([frames, runs, requests, commit, replies], St).
+summary(St) -> maps:with([frames, runs, requests, commit, replies, tender_os_pid], St).
 
 kill(Port, OsPid) ->
     catch port_close(Port),
