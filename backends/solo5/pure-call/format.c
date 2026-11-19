@@ -39,10 +39,16 @@ static void outcome(struct writer *w,const struct pc_event *e) {
     else {text(w,"[\"Ok\",");value(w,e->value,0);text(w,"]");}
 }
 static void event(struct writer *w,const struct pc_event *e) {
-    static const char *kinds[]={"Invoke","Emit","Commit","ScopeExit","TaskTermination"};
-    if(e->kind<0 || e->kind>PE_TASK_TERMINATION){w->bad=1;return;}
+    static const char *kinds[]={"Invoke","Emit","Commit","ScopeExit","TaskTermination","HostRequest","HostReply"};
+    if(e->kind<0 || e->kind>PE_HOST_REPLY){w->bad=1;return;}
     text(w,"{\"kind\":");quote(w,kinds[e->kind]);text(w,",\"task\":\"0\"");
-    if(e->kind<=PE_COMMIT){
+    if(e->kind>=PE_HOST_REQUEST){
+        /* TC1-D1 (DURABLE.md section 7): kind, task, node, seq, then effect and operation
+         * for a request, then the value. */
+        text(w,",\"node\":\"");natural(w,e->node);text(w,"\",\"seq\":\"");natural(w,e->seq);text(w,"\"");
+        if(e->kind==PE_HOST_REQUEST){text(w,",\"effect\":");quote(w,e->label);text(w,",\"operation\":");quote(w,e->operation);}
+        text(w,",\"value\":");value(w,e->value,0);
+    } else if(e->kind<=PE_COMMIT){
         text(w,",\"node\":\"");natural(w,e->node);text(w,"\"");
         if(e->kind!=PE_EMIT)text(w,",\"operation\":\"emit\"");
         if(e->kind!=PE_COMMIT){text(w,",\"label\":");quote(w,e->label);}
@@ -54,12 +60,12 @@ static void event(struct writer *w,const struct pc_event *e) {
     text(w,"}");
 }
 size_t pc_format_sample(const struct pc_sample *s,char *out,size_t cap) {
-    static const char *controls[]={"Eval","Value","Ready","Unwind","Join","Terminate","Terminal","Abandon"};
+    static const char *controls[]={"Eval","Value","Ready","Unwind","Join","Terminate","Terminal","Abandon","HostWait"};
     static const char *rules[]={"Dispatch","Ready","LetReturn","IfReturn","MatchReturn","ReturnReturn",
                                 "CollectReturn","UnwindFrame","Value","Unwind","Join","Terminate",
-                                "HandleReturn","ClauseReturn","ClauseExitReturn","ResumeReturn","DiscontinueReturn","AbandonFrame"};
+                                "HandleReturn","ClauseReturn","ClauseExitReturn","ResumeReturn","DiscontinueReturn","AbandonFrame","HostReply"};
     static const char *sites[]={"RootJoinEntry","Join","Terminate"};
-    if(!s || !out || !cap || s->after<0 || s->after>PC_ABANDON || s->rule<0 || s->rule>PR_ABANDON_FRAME ||
+    if(!s || !out || !cap || s->after<0 || s->after>PC_HOSTWAIT || s->rule<0 || s->rule>PR_HOST_REPLY ||
        s->machine_site< -1 || s->machine_site>PS_TERMINATE || s->event_count>3)return 0;
     struct writer w={out,0,cap,0};
     text(&w,"{\"after\":");quote(&w,controls[s->after]);

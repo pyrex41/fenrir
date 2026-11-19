@@ -2,7 +2,10 @@
  * Independent TC0-A pure-call candidate (schemas /1 and /2) for a Solo5 guest:
  * calls, closures, tuples, datatypes, match, bytes, eq, checked I64, emit; and TC1
  * user effects: handle, perform, and explicit one-shot resume/discontinue
- * (spec/tc1/EFFECTS.md).
+ * (spec/tc1/EFFECTS.md); and TC1-D1 durable effects: a perform of a durable effect with
+ * no active handler stops the machine in HostWait until the host replies
+ * (spec/tc1/DURABLE.md). TC1-D1 fields are appended; legacy lowerings set them to zero
+ * and legacy control, rule and event numbers are unchanged.
  * No oracle imports, no expected traces. */
 #ifndef FENRIR_PC_MACHINE_H
 #define FENRIR_PC_MACHINE_H
@@ -26,13 +29,25 @@ struct pc_node {
     unsigned index,child_count; const int *children;
     unsigned arm_count; const struct pc_arm *arms;
     unsigned free_count; const uint64_t *free;
+    /* TC1-D1: for a perform of a durable effect (integer 1), its result type as a
+     * descriptor (below); 0 otherwise. */
+    const char *type;
 };
+/* TC1-D1 type descriptors: U Unit, B Bool, I I64, Y Bytes, K TrapCode, T<n> then n
+ * descriptors (a tuple, n 1..8), D<index>; a declared datatype of the program. */
+struct pc_constructor { const char *name; unsigned field_count; const char *const *fields; };
+struct pc_datatype { const char *name; unsigned constructor_count; const struct pc_constructor *constructors; };
 struct pc_function { uint64_t parameter; int body; };
 struct pc_program {
     const struct pc_node *nodes; unsigned node_count;
     const struct pc_function *functions; unsigned function_count,entry;
-    int input_tag; int64_t input_integer; /* PV_UNIT, PV_BOOL or PV_INT */
+    int input_tag; int64_t input_integer; /* PV_UNIT, PV_BOOL or PV_INT, or PC_INPUT_VALUE */
+    /* TC1-D1: with input_tag PC_INPUT_VALUE the input is input_value, a canonical JSON value
+     * of type input_type, parsed and checked at pc_init. */
+    const char *input_value,*input_type;
+    const struct pc_datatype *datatypes; unsigned datatype_count;
 };
+#define PC_INPUT_VALUE 100
 enum pc_vtag { PV_UNIT,PV_BOOL,PV_INT,PV_BYTES,PV_TUPLE,PV_DATA,PV_CLOSURE,PV_RESUMPTION };
 struct pc_env;
 struct pc_segment;
@@ -44,17 +59,19 @@ struct pc_value {
     const struct pc_segment *segment;
 };
 struct pc_env { uint64_t id; const struct pc_value *value; const struct pc_env *parent; };
-enum pc_control { PC_EVAL,PC_VALUE,PC_READY,PC_UNWIND,PC_JOIN,PC_TERMINATE,PC_TERMINAL,PC_ABANDON };
+enum pc_control { PC_EVAL,PC_VALUE,PC_READY,PC_UNWIND,PC_JOIN,PC_TERMINATE,PC_TERMINAL,PC_ABANDON,PC_HOSTWAIT };
 enum pc_trap { PC_NO_TRAP,PC_OVERFLOW,PC_DIVZERO,PC_BOUNDS };
 enum pc_frame_kind { PF_LET,PF_IF,PF_MATCH,PF_RETURN,PF_COLLECT,
                      PF_HANDLE,PF_CLAUSE,PF_CLAUSE_EXIT,PF_RESUME,PF_DISCONTINUE };
 enum pc_rule { PR_DISPATCH,PR_READY,PR_LET_RETURN,PR_IF_RETURN,PR_MATCH_RETURN,PR_RETURN_RETURN,
                PR_COLLECT_RETURN,PR_UNWIND_FRAME,PR_VALUE,PR_UNWIND,PR_JOIN,PR_TERMINATE,
                PR_HANDLE_RETURN,PR_CLAUSE_RETURN,PR_CLAUSE_EXIT_RETURN,PR_RESUME_RETURN,
-               PR_DISCONTINUE_RETURN,PR_ABANDON_FRAME };
+               PR_DISCONTINUE_RETURN,PR_ABANDON_FRAME,PR_HOST_REPLY };
 enum pc_machine_site { PS_ROOT_JOIN_ENTRY,PS_JOIN,PS_TERMINATE };
-enum pc_event_kind { PE_INVOKE,PE_EMIT,PE_COMMIT,PE_SCOPE_EXIT,PE_TASK_TERMINATION };
-struct pc_event { int kind; uint64_t node; const char *label; const struct pc_value *value; int trap; };
+enum pc_event_kind { PE_INVOKE,PE_EMIT,PE_COMMIT,PE_SCOPE_EXIT,PE_TASK_TERMINATION,PE_HOST_REQUEST,PE_HOST_REPLY };
+/* label: emit label, or a host request's effect; operation: a host request's operation;
+ * seq: a host request's or reply's sequence number. */
+struct pc_event { int kind; uint64_t node; const char *label; const struct pc_value *value; int trap; const char *operation; uint64_t seq; };
 struct pc_sample {
     uint64_t epoch,node; int machine_site,rule,after; unsigned depth,event_count;
     struct pc_event events[3];
@@ -74,6 +91,7 @@ struct pc_machine {
     const struct pc_value *ready[PC_MAX_OPERANDS];
     unsigned depth; uint64_t epoch;
     struct pc_frame frames[PC_MAX_FRAMES];
+    uint64_t requests; /* TC1-D1: host requests made so far */
 };
 /* 1 ok; -1 invalid program/state or exhausted guest memory (infrastructure, never a trap). */
 int pc_init(struct pc_machine *,const struct pc_program *,int reverse_operands,int wrap_overflow);
@@ -85,6 +103,12 @@ int pc_start(struct pc_machine *,const struct pc_program *,unsigned function,con
  * value. 0 when the memory is exhausted. Valid until the next pc_init or pc_start. */
 const struct pc_value *pc_scalar(int tag,int64_t integer);
 int pc_step(struct pc_machine *,struct pc_sample *);
+/* TC1-D1. In HostWait pc_step returns -1: only the host's reply can move the machine.
+ * pc_reply parses the canonical JSON value text[0..n) and checks it against the pending
+ * operation's result type: 1 and the HostReply step; 0 when the reply is malformed or
+ * ill-typed (the host's contract violation: no step); -1 not waiting, or guest limits. */
+int pc_reply(struct pc_machine *,const char *text,size_t n,struct pc_sample *);
+int pc_host_wait(const struct pc_machine *);
 /* Canonical-shaped sample JSON. Returns bytes written (excluding NUL) or 0 on cap/shape error. */
 size_t pc_format_sample(const struct pc_sample *,char *,size_t);
 #endif
