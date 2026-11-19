@@ -72,7 +72,8 @@ tool prefixes named in the script. The pilot compares each v2 guest's response
 to its one store reply before the front will publish it, and records two `/2`
 histories with independent SQLite phase and store observations. The report
 requires the verifier's exit and exactly the expected verdict for every
-control. No crash campaign is claimed for this pilot.
+control. A separate finite crash phase of the same command uses an external
+recorder and independent Linux BEAM processes on disposable SQLite files.
 
 ## Development checks
 
@@ -101,29 +102,43 @@ control. No crash campaign is claimed for this pilot.
   calls used distinct v2 workers and tenant credentials. The `/2` checker
   admitted both histories and required exact verdicts for ten controls, including
   a forged cross-tenant concurrent result, outbox loss, and false rollback.
+- The finite ARM64 crash campaign has exactly five planned rows:
+  `node-v1`, `node-prepared`, `node-migrated`, `node-v2`, and
+  `worker-v2-before-reply`. Each node row requires the exact OS signal
+  receipt, exit 137, a distinct restarted BEAM, and an identical independently
+  observed phase and store before and after the fault. It verifies that the
+  old outbox is empty until retry, and finishes at v2 with every accepted job
+  drained. The worker row correlates the actual front-selected worker with
+  `w3_commit_before_reply` and a monitor-observed `killed` reason, observes the
+  replacement in the same BEAM/front, and independently reads the durable
+  receipt before either retry. It checks the old outbox entry survives, the
+  dead worker does not publish the new entry, and overlapping same-key retries
+  on distinct v2 workers return the same receipt without changing the store.
+- The five histories and six controls are reported in `crash-report.json`.
+  Gaps, missing phase observations and invalid fault witnesses are
+  indeterminate. A missing planned row or nonmatching verifier result makes
+  the campaign `UNKNOWN`. The per-boot maintenance PID belongs to the
+  existing privileged `fenrir_node` fixture controller; no operator
+  credential travels in serialized config or customer traffic.
 
 ## Remaining work
 
 Remaining host work from keen-ptolemy `4c4454c`, not a cherry-pick:
 
-1. **Operational lifecycle.** The opted-in supervisor depends on an external,
-   live host maintenance PID. It does not provision operator identity or
-   expose maintenance on the node controller. Failed/indeterminate retirement
-   is explicit and operator retries are required (the durable fence and routing
-   remain in force). Verify recovery from a full node crash at every phase,
-   and from a worker killed with an in-flight post-commit reply.
-2. **Port the A4 campaign, not only its checker.** The `/2` pilot admits bounded
-   pairs of successful calls and indeterminate cut-over followed by a required
-   durable observation. It does not admit arbitrary injected fault markers,
-   concurrent phase transitions, or node-crash events. Port the A4 matrix into the
-   current campaign driver and report, with a planned denominator, per-row
-   exit/verdict and tender/image identity, observed fault effects, and explicit
-   recorder gaps carried across restart. A missing row, lost or unobserved
-   fault, infrastructure failure, or missing verifier verdict cannot certify
-   the normal path or count as a mutant caught. Run equivalent controls as
-   healthy cases and require semantic counterexamples for genuine mutants.
-   Do not re-pin the gate from the upstream report; there is no local A4 host
-   campaign evidence to pin.
+1. **Operational lifecycle.** The opted-in application supervisor still
+   depends on an external, live host maintenance PID outside the fixture.
+   Operator provisioning/replacement is not part of this campaign.
+   Failed/indeterminate retirement remains explicit and operator retry is
+   required. Hard kills can leave disposable private launch copies; production
+   reaping/quota behavior was not qualified.
+2. **Broader fault and concurrency matrix.** The node tests kill at durable
+   phase boundaries, not between the individual SQL operations or during
+   migration, cut-over, or live request publication. The committed/pre-reply
+   worker fault is one v2 submit workload; the concurrent retry case checks two
+   overlapping calls, not arbitrary groups or phase-transition races. There
+   is no A4 host mutant campaign or qualified gate row. Any broader campaign
+   must retain exact denominator, witnessed target/exit, independent store
+   observations, and explicit recorder gaps.
 
 Power-loss/fsync qualification is out of scope. The proposed experiment needs
 separate approval; no such experiment is required by the model or guest

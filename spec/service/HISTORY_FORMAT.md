@@ -66,8 +66,8 @@ those faults. Only the death of the node (which takes the front with it) is A1's
 
 ## 4 Supervised A4 pilot (`fenrir.service.history/2`)
 
-This is the history of an opted-in supervised v1 → v2 worker fixture,
-not a crash campaign. In addition to `schema`, `scenario`, `tenants` and
+This is the history of the opted-in supervised v1 → v2 fixture and its finite
+crash campaign. In addition to `schema`, `scenario`, `tenants` and
 `events`, it has `handler_pin` and `migration_pin`: distinct lowercase
 256-hex strings (digest of descriptor, canonical artifact, image and tender,
 concatenated in that order). An observation or begin event carrying a different
@@ -86,10 +86,22 @@ pin is rejected even if the actual rows match.
 - Submits and deliveries use §2's shapes, plus `["unavailable"]` in the
   `migrated` phase (neither protocol in force). `["concurrent",[A,B]]` covers
   exactly two successful submit/delivery calls, without nested groups or
-  phase transitions. The model checks both orders. Unsupported concurrent,
-  node-crash, or unverified fault claims cannot pass this checker. A recorder
-  gap anywhere or a missing required observation is indeterminate, not a
-  mutant rejection.
+  phase transitions. The model checks both orders. Unsupported concurrent or
+  generic fault claims cannot pass this checker. A recorder gap anywhere
+  (including inside a concurrent group) or a missing required observation is
+  indeterminate, not a mutant rejection.
+- `["crash","node",OLD_OS_PID,NEW_OS_PID,137]` is used only after the external
+  driver correlates the signal receipt with the target, observes its actual wait
+  status, and starts a distinct BEAM on the same SQLite file. It takes the A4
+  node-crash step (clears the outbox, not the store).
+- `["submit-committed-unpublished",T,K,D,DEAD_WORKER,REPLACEMENT_WORKER]`
+  records the witnessed `w3_commit_before_reply` kill. The checker uses the
+  normal successful submit transition, checks its predicates, and retains the
+  *prior* outbox rather than publishing the new receipt. The driver separately
+  requires an indeterminate response, independent observation of the receipt,
+  and matching worker death/replacement in the same front/BEAM. A malformed
+  fault witness projects to a gap, not a semantic rejection. A missing
+  immediate store observation after either fault is also indeterminate.
 
 The worker harness reads phase and rows in an independent SQLite transaction.
 The verifier projects matching image pins to the abstract A4 model image and
@@ -98,8 +110,11 @@ pins alone. The harness also requires an exact verdict for every positive and
 negative control, and successful child exits. The `/1` verifier remains a separate
 branch for A3 and receives no new permissive event forms.
 
-The pilot checks a witnessed SQLite cut-over acknowledgement loss by recording
+The worker fixture checks a witnessed SQLite cut-over acknowledgement loss by recording
 the `indeterminate` transition and required state after store restart; it
 never claims the transaction rolled back based on that outcome. A separately
-witnessed worker kill corroborates supervision and outbox preservation, not a
-node crash or a general fault event in this schema.
+witnessed idle worker kill corroborates supervision and outbox preservation, not
+a node crash or a general fault event in this schema. The bounded campaign
+checks the completeness of the planned histories, operation-specific fault
+witnesses, post-restart state, same-key retries, and negative controls outside the
+model, in `host/service/tools/a4-crash-evidence.mjs`.
