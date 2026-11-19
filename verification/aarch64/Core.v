@@ -1,4 +1,4 @@
-From Coq Require Import ZArith List Bool Lia.
+From Stdlib Require Import ZArith List Bool Lia.
 Import ListNotations.
 Open Scope Z_scope.
 

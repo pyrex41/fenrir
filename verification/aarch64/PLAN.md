@@ -14,11 +14,11 @@ runtime lemmas reusable for later Shen/Scheme and foreign-binary clients.
 
 | Milestone | Deliverable and acceptance | Current state |
 |---|---|---|
-| ARM-01 | Closed source profile, exact bytes, universal lowering proof, native differential controls, explicit trust ledger | Implemented for unary checked I64; handwritten ISA model only |
-| ARM-02 | Independently checked original artifact decoding/projection and correspondence to exact Shen TC0 semantics | Open |
-| ARM-03 | Pin Arm/Sail model and execution profile; prove each emitted instruction/flag/control-transfer summary against it | Open; research blocker for architectural verification |
+| ARM-01 | Closed source profile, exact bytes, universal lowering proof, native differential controls, explicit trust ledger | Implemented for `fenrir-aarch64-checked-unary/1` and `fenrir-aarch64-checked-expr/1`; handwritten ISA model only |
+| ARM-02 | Independently checked original artifact decoding/projection and correspondence to exact Shen TC0 semantics | Open. Tested only: the Shen differential (harness/aarch64-differential.shen) agrees on 3,280 cases; the projection in `tools/aarch64` is unverified; a proof goes through Búri's KLambda semantics of the model (amendment §3) |
+| ARM-03 | Pin Arm/Sail model and execution profile; prove each emitted instruction/flag/control-transfer summary against it | Open; continues Búri's ARM foundation (below), not restarted here |
 | ARM-04 | Prove loaded image, instruction addresses, ABI, register framing and fault conditions; compose instruction summaries | Open |
-| ARM-05 | Extend source semantics and backend to branches, calls, closures, bytes and immutable algebraic values; prove heap/stack relations | Open |
+| ARM-05 | Extend source semantics and backend to branches, calls, closures, bytes and immutable algebraic values; prove heap/stack relations | Partly: binary operations with intermediate traps, comparisons and Bool, `if` with byte-offset branches, `let` and variables in stack slots (expr profile); first-order calls, recursion and tail calls in constant stack (call profile). Closures, bytes, tuples and data open; next steps below |
 | ARM-06 | Allocation and resource exhaustion contract, runtime primitives, startup and termination for complete guest image | Open |
 | ARM-07 | Actual effect handlers, residual-effect capability derivation, device/host boundary and bypass exclusion | Open; requires a new real-I/O profile beyond TC0 |
 | ARM-08 | Handlers, structured tasks, channels, cancellation, cleanup and scheduler refinement | Open |
@@ -27,36 +27,67 @@ runtime lemmas reusable for later Shen/Scheme and foreign-binary clients.
 Do not count theorem quantities, model-only success, hashes, native tests or
 finite exploration as completion of a missing refinement obligation.
 
-## ARM-03 research experiment
+## ARM-03: build on Búri's ARM foundation
 
-Start from [Islaris](https://github.com/rems-project/islaris) and
-[Isla](https://github.com/rems-project/isla), using a pinned Arm model snapshot.
-The initial required instruction family is deliberately tiny: ADDS/SUBS immediate,
-SUBS shifted-register for NEGS, B.cond VC, MOVZ and RET. No arithmetic summary may
-be replaced with a convenient assumption and still count as discharged.
+Búri ([pyrex41/buri](https://github.com/pyrex41/buri)) already has the ARM
+groundwork this milestone needs: a pinned Sail Arm model, an Islaris environment
+and a first byte-level lemma against the Armv9.4 model (amendment §11). ARM-03
+continues that work through a declared adapter instead of reproducing it here:
 
-1. Reproduce an existing Arm proof with the upstream pinned dependency set.
-2. Identify every trusted transformation from architectural model to proof.
-3. Produce an instruction-summary certificate for these exact encodings.
-4. Recheck summaries against the selected authoritative semantics in Rocq, or
-   retain a conspicuous unresolved translator assumption. The original Islaris
-   work found the full Arm model difficult to manipulate efficiently in Coq;
-   this is an actual feasibility question, not solved by selecting that library.
-5. Compose summaries with ARM-01, replacing its handwritten semantics boundary.
-6. Validate architectural-state preconditions are inhabited; retain launch/call
-   witnesses and deliberate violating cases. Avoid a theorem true only because
-   no real execution satisfies its premises.
+1. Take Búri's pinned Sail/Islaris dependency set and its byte-level lemma as
+   the starting point; record the exact revision used.
+2. Extend it to the instruction family the two profiles emit: ADD/ADDS/SUB/SUBS
+   (immediate and shifted register, LSL #0 and ASR #63), MADD, SMULH, SDIV,
+   CSINC, MOVZ, MOVK, LDR/STR immediate on SP (pre-index, post-index, unsigned
+   offset), B, B.cond (EQ, NE, VC), CBZ/CBNZ and RET, for exactly the encodings
+   in `Encode.v`.
+3. Prove each `Machine.exec` case is a summary of the Sail semantics under a
+   stated state relation (`wf` registers ↔ 64-bit vectors, PC offset ↔ address
+   plus image base, doubleword map ↔ byte memory). Flags and control transfer
+   included; no summary may be assumed.
+4. Compose with `compile_correct`, replacing the handwritten-model boundary.
+5. Keep architectural preconditions inhabited: retain launch witnesses and
+   violating cases (unaligned SP, short stack, wrong return address).
 
-Reference: [Islaris PLDI 2022 paper](https://people.mpi-sws.org/~dg/papers/pldi2022.pdf).
-The first comparison benchmark is [Zellic/V12's research preview](https://github.com/Zellic/x86-formal-verification-research),
-whose process assumptions and startup/liveness scope must be compared explicitly.
+The original research notes: [Islaris](https://github.com/rems-project/islaris),
+[Isla](https://github.com/rems-project/isla), the
+[Islaris PLDI 2022 paper](https://people.mpi-sws.org/~dg/papers/pldi2022.pdf)
+(which found the full Arm model hard to manipulate efficiently in Coq: a
+feasibility question that choosing a library does not settle), and
+[Zellic/V12's research preview](https://github.com/Zellic/x86-formal-verification-research)
+as the first comparison benchmark.
+
+## ARM-05: calls (done) and what follows
+
+Done as `fenrir-aarch64-checked-call/1` (README, ABI.md `fenrir-aarch64-call-abi/1`).
+Decisions: the expr machine is kept and the call machine simulates it on
+non-RET steps, so the expression proof is reused; the source semantics is
+fuel-indexed and the theorem is relative to termination; the stack bound is the
+semantics' own `need`, and tail-only tables get a constant bound
+(`tail_calls_constant_stack`). Profile restrictions: one parameter; calls only
+as a `let` initializer or in tail position; no stack-overflow detection.
+
+Next, in order:
+
+1. Several parameters (pass in x0..x7 or on the stack; extends the frame
+   layout and `fenrir-aarch64-call-abi` to version 2).
+2. Calls inside expressions without the A-normal-form restriction (needs the
+   expression compiler itself to know about calls and the caller-saved
+   temporaries on the stack).
+3. Stack-overflow detection (a limit check in the prologue and a new trap, which
+   is a contract change: TC0 has no stack trap) or a proof obligation on the
+   loader that enough stack exists.
+4. Closures and immutable data: a heap model, allocation and its exhaustion
+   contract (ARM-06), and the representation relation for tuples and datatypes.
 
 ## Integration ownership
 
 - **Fenrir/Shen:** executable source semantics, effects, contracts and language
   fixtures. Shen remains a proof producer and reference implementation; independent
   Rocq checking must not assume the Shen host is already correct.
-- **Buri:** reusable representation, source/capture correspondence, compiler
+- **Búri:** the KLambda semantics through which the Shen model gets a formal
+  meaning (the route for ARM-02), the ARM foundation ARM-03 continues, and
+  reusable representation, source/capture correspondence, compiler
   preservation and proof-certificate techniques. Port lemmas through a declared
   adapter rather than treating similarly named semantics as identical.
 - **Vor:** business invariants and evidence-indexed judgments. Prove the bridge
@@ -94,3 +125,8 @@ assumptions. CI must fail for missing prerequisites, malformed certificates,
 mutated bytes and unsupported instructions. It must distinguish proved, tested,
 assumed and unsupported claims. Compile/assembler/QEMU versions are recorded;
 a pinned reproducible build alone never establishes semantic correctness.
+
+All tools are pinned by the flake (`.#aarch64-verification`: Rocq 9.3.0 with
+stdlib V9.2.0, binutils 2.46, qemu-user 11.1.1, Node 22) and one entry point
+runs everything: `sh verification/aarch64/check.sh`. The GitHub workflow runs
+that script under Nix; its remote result has not been observed.
