@@ -154,8 +154,23 @@
       (sh.result (shu.upgrade Label Out Cs) "no model state has this upgrade step with this outcome"))
   ["drained"] Cs -> (sh.result (sh.filter (/. C (shu.pending-free? C)) Cs)
                                "the runner found no pending job, but every model state still has an accepted job pending")
+  ["concurrent" [A B]] Cs ->
+    (let AB (shu.pair A B Cs)
+         BA (shu.pair B A Cs)
+      (if (or (= (hd AB) indeterminate) (= (hd BA) indeterminate))
+          [indeterminate "concurrent path was not fully checked"]
+          (sh.result (sh.dedupe (append (shu.ok-rows AB) (shu.ok-rows BA)) [])
+                     "no order of the concurrent pair is admitted")))
   ["gap" Why] Cs -> [indeterminate (cn "the recorder lost events: " Why)]
   X _ -> [reject (make-string "not a history event: ~S" X)])
+
+(define shu.pair
+  A B Cs -> (let First (shu.event A Cs)
+            (if (= (hd First) ok) (shu.event B (nth 2 First)) First)))
+
+(define shu.ok-rows
+  [ok Cs] -> Cs
+  _ -> [])
 
 (define shu.run
   [] _ Cs Max -> [accepted Max]
@@ -203,8 +218,15 @@
   ["observe" Stores [Phase HP MP]] HP MP ->
     ["observe" Stores [Phase "good"]] where (element? Phase ["prepared" "migrated" "v2"])
   ["upgrade" "begin" | X] _ _ -> ["invalid-observation-or-unsupported-event" ["upgrade" "begin" | X]]
+  ["concurrent" [A B]] _ _ -> ["concurrent" [A B]] where (and (shu.parallel-call? A) (shu.parallel-call? B))
   E _ _ -> E where (not (element? (hd E) ["observe" "concurrent" "fault" "crash"]))
   E _ _ -> ["invalid-observation-or-unsupported-event" E])
+
+(define shu.parallel-call?
+  ["submit" _ _ _ ["accepted" _]] -> true
+  ["submit" _ _ _ ["conflict" _ _]] -> true
+  ["complete" _ _ _ ["delivered"]] -> true
+  _ -> false)
 
 (define shu.gap-at
   [] _ -> none

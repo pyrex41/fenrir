@@ -1,6 +1,6 @@
-# A4 host port: adapter and sequential worker pilot
+# A4 host port: supervised cut-over pilot
 
-The default service node and supervisor still run A3/v1. The adapter reads the durable
+The default service node configuration still runs A3/v1. The adapter reads the durable
 schema and phase after `BEGIN IMMEDIATE` and before the v1 tenant guard, and
 refuses stale v1 requests (including receipt retries) in `migrated` or `v2`.
 Malformed metadata fails closed; the default A3 adapter cannot reopen a store
@@ -44,11 +44,21 @@ It preserves v1 receipts on retries, creates v2 receipts for new keys, and
 finishes a pending job and counts its attempt in one transaction. The
 unversioned snapshot API refuses after installation.
 
-The opt-in worker pilot boots stock Solo5 v1, migration, and v2 guests on a
-temporary store. `fenrir_a4_upgrade` admits the exact source-bound migration and
-v2 contracts, checks the request table and input-bound batch digest, then uses
-the existing OTP operator/session capability. Each v2 launch checks the pin in
-force and loads the pinned descriptor, artifact, image, and tender again; it
+The opt-in supervisor (`a4 => #{operator => Pid, handler => V2Descriptor,
+launch_dir => Dir}`) starts worker banks with matching request domains.
+`fenrir_service_sup:prepare/2` requires the store's operator and the configured
+standby bank's exact pin. The stable front authenticates first, reads durable
+routing advice, and selects a PID in the active bank: v1 in `v1`/`prepared`,
+no bank in `migrated`, and v2 in `v2`. The transaction fence remains authoritative
+if the phase changes after routing. The supervisor retires the old bank after
+cut-over without restarting the front; retrying the same cut-over resumes that
+retirement. On restart in `v2`, only the matching v2 bank starts. A node/front
+restart still loses the volatile outbox as in A3.
+
+The pilot boots stock Solo5 v1, migration, and v2 guests on a temporary store.
+Admission checks the exact source-bound artifacts, request tables and input-bound
+batch digests. Each opted-in worker launch checks the phase (and the durable pin
+for v2), loads the pinned descriptor, artifact, image, and tender again, and
 launches private copies of the image and tender from those checked bytes, not
 from the descriptor's original paths. The launch directory and launcher are
 trusted host configuration and the image builder is a trusted source of images.
@@ -59,8 +69,8 @@ the same admitted owner. It does not send maintenance authority to the guest.
 
 Run `sh host/service/check-a4-workers.sh` on ARM64 Linux with the explicit
 tool prefixes named in the script. The pilot compares each v2 guest's response
-to its one store reply before the front will publish it, and records one `/2`
-history with independent SQLite phase and store observations. The report
+to its one store reply before the front will publish it, and records two `/2`
+histories with independent SQLite phase and store observations. The report
 requires the verifier's exit and exactly the expected verdict for every
 control. No crash campaign is claimed for this pilot.
 
@@ -82,24 +92,30 @@ control. No crash campaign is claimed for this pilot.
   retry was accepted.
 - The real worker pilot migrated four rows with ten host requests, returned an
   old receipt unchanged, issued and retried a new v2 receipt, preserved job
-  state across restart, refused unauthorized migration and submit, and refused
-  a substituted descriptor. The sequential `/2` checker admitted the observed
-  history; its seven controls cover wrong pins, gaps, skipped observations,
-  claimed faults, lost work, altered receipts, and wrong unavailability.
+  state across restart, refused a substituted descriptor and unauthorized
+  mutation, and delivered an existing outbox receipt after retiring v1.
+- The same front survived a witnessed v2 child kill and a separate cut-over
+  commit-acknowledgement loss: the SQLite port returned the matching lost-ack
+  status, the observed store PID exited, and a replacement opened durable v2.
+  A stale v1 worker was fenced while retirement was pending. Two overlapping
+  calls used distinct v2 workers and tenant credentials. The `/2` checker
+  admitted both histories and required exact verdicts for ten controls, including
+  a forged cross-tenant concurrent result, outbox loss, and false rollback.
 
 ## Remaining work
 
 Remaining host work from keen-ptolemy `4c4454c`, not a cherry-pick:
 
-1. **Integrate supervisory cut-over and recovery.** The pilot explicitly
-   restarts the front with v2 worker names; it does not automatically route
-   traffic by durable phase, preserve a live outbox across worker replacement,
-   manage the maintenance operator under the default supervisor, or recover
-   hosting automatically across each upgrade phase. Keep the existing OTP
-   credential-to-scope binding and the trusted delivery path. Do not add the
-   upstream unscoped `request_on/2`.
-2. **Port the A4 campaign, not only its checker.** The `/2` pilot is sequential
-   and does not accept crash, fault, or concurrent-group events. Port the A4 matrix into the
+1. **Operational lifecycle.** The opted-in supervisor depends on an external,
+   live host maintenance PID. It does not provision operator identity or
+   expose maintenance on the node controller. Failed/indeterminate retirement
+   is explicit and operator retries are required (the durable fence and routing
+   remain in force). Verify recovery from a full node crash at every phase,
+   and from a worker killed with an in-flight post-commit reply.
+2. **Port the A4 campaign, not only its checker.** The `/2` pilot admits bounded
+   pairs of successful calls and indeterminate cut-over followed by a required
+   durable observation. It does not admit arbitrary injected fault markers,
+   concurrent phase transitions, or node-crash events. Port the A4 matrix into the
    current campaign driver and report, with a planned denominator, per-row
    exit/verdict and tender/image identity, observed fault effects, and explicit
    recorder gaps carried across restart. A missing row, lost or unobserved

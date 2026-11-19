@@ -6,21 +6,26 @@ import {join} from 'node:path';
 
 const [mode,out]=process.argv.slice(2);
 const source=join(out,'history.json');
+const ackPath=join(out,'cut-over-lost-ack.json');
 const h=JSON.parse(readFileSync(source,'utf8'));
-const copy=()=>structuredClone(h);
+const ack=JSON.parse(readFileSync(ackPath,'utf8'));
 const mutations=[
   ['wrong-pin','rejected',4,x=>x.events[4][2][1]='0'.repeat(256)],
-  ['recorder-gap','indeterminate',16,x=>x.events.push(['gap','observer unavailable'])],
+  ['recorder-gap','indeterminate',h.events.length,x=>x.events.push(['gap','observer unavailable'])],
   ['missing-post-install','indeterminate',5,x=>x.events.splice(6,1)],
-  ['receipt-rewritten','rejected',10,x=>x.events[10][4][1].push(2)],
-  ['wrong-unavailability','rejected',10,x=>x.events[10][4]=['unavailable']],
+  ['receipt-rewritten','rejected',11,x=>x.events[11][4][1].push(2)],
+  ['wrong-unavailability','rejected',11,x=>x.events[11][4]=['unavailable']],
   ['pending-lost','rejected',6,x=>x.events[6][1][0][1]=[]],
-  ['unverified-fault','rejected',16,x=>x.events.push(['fault','claimed-only'])],
+  ['unverified-fault','rejected',h.events.length,x=>x.events.push(['fault','claimed-only'])],
+  ['cross-tenant-pair','rejected',17,x=>x.events[17][1][1][4][1][0]=0],
+  ['outbox-lost-at-cutover','rejected',10,x=>x.events[10][0]='respond-refused'],
+  ['lost-ack-called-rollback','rejected',6,x=>x.events[5][2]=['aborted'],ack],
 ];
-const rows=[[source,'accepted',null],...mutations.map(([n,v,i])=>[join(out,`${n}.json`),v,i])];
+const rows=[[source,'accepted',null],[ackPath,'accepted',null],
+  ...mutations.map(([n,v,i])=>[join(out,`${n}.json`),v,i])];
 if(mode==='fixtures'){
-  for(const [name,, ,alter] of mutations){
-    const x=copy();
+  for(const [name,, ,alter,input=h] of mutations){
+    const x=structuredClone(input);
     alter(x);
     x.scenario=name;
     writeFileSync(join(out,`${name}.json`),JSON.stringify(x),{flag:'wx'});
@@ -43,8 +48,15 @@ if(mode==='fixtures'){
   assert.equal(worker.qualification,'UNKNOWN');
   assert.equal(worker.handler_pin,h.handler_pin);
   assert.equal(worker.migration_pin,h.migration_pin);
+  assert.equal(worker.v1_worker_retired,true);
+  assert.equal(worker.front_outbox_preserved,true);
+  assert.equal(worker.v2_worker_kill_observed,true);
+  assert.equal(worker.overlapping_calls,2);
+  assert.equal(worker.supervisor_restart_v2_only,true);
+  assert.equal(worker.cut_over_lost_ack_observed,true);
   const report={schema:'fenrir.host.a4-worker-check/1',status:'development-pass',qualification:'UNKNOWN',
-    evidence:'one observed sequential upgrade; no crash campaign',worker,verdicts:actual};
+    evidence:'supervised upgrade, concurrent pair, witnessed cut-over acknowledgement loss and worker kill; no node crash campaign',
+    worker,verdicts:actual};
   writeFileSync(join(out,'report.json'),JSON.stringify(report)+'\n',{flag:'wx'});
   console.log(JSON.stringify(report));
 }else{

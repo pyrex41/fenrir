@@ -64,9 +64,9 @@ those faults. Only the death of the node (which takes the front with it) is A1's
 - **indeterminate**: the history records a gap, or the set of consistent model states
   exceeds the checker's bound (4,096). Never an acceptance.
 
-## 4 Sequential A4 pilot (`fenrir.service.history/2`)
+## 4 Supervised A4 pilot (`fenrir.service.history/2`)
 
-This is the history of an explicitly orchestrated v1 → v2 worker fixture,
+This is the history of an opted-in supervised v1 → v2 worker fixture,
 not a crash campaign. In addition to `schema`, `scenario`, `tenants` and
 `events`, it has `handler_pin` and `migration_pin`: distinct lowercase
 256-hex strings (digest of descriptor, canonical artifact, image and tender,
@@ -83,10 +83,13 @@ pin is rejected even if the actual rows match.
   `[PHASE,HANDLER_PIN,MIGRATION_PIN]` with `prepared`, `migrated`, or `v2`.
   Rows retain the v1 store shape before install. Thereafter each job appends
   its attempt count and each v2 receipt appends `2`; v1 receipts stay unchanged.
-- Sequential submits and deliveries use §2's shapes, plus `["unavailable"]`
-  in the `migrated` phase (neither protocol in force). Unsupported concurrent,
-  crash and fault claims cannot pass this checker. A recorder gap anywhere or
-  a missing required observation is indeterminate, not a mutant rejection.
+- Submits and deliveries use §2's shapes, plus `["unavailable"]` in the
+  `migrated` phase (neither protocol in force). `["concurrent",[A,B]]` covers
+  exactly two successful submit/delivery calls, without nested groups or
+  phase transitions. The model checks both orders. Unsupported concurrent,
+  node-crash, or unverified fault claims cannot pass this checker. A recorder
+  gap anywhere or a missing required observation is indeterminate, not a
+  mutant rejection.
 
 The worker harness reads phase and rows in an independent SQLite transaction.
 The verifier projects matching image pins to the abstract A4 model image and
@@ -94,3 +97,9 @@ checks model responses and observations; it does not infer executions from
 pins alone. The harness also requires an exact verdict for every positive and
 negative control, and successful child exits. The `/1` verifier remains a separate
 branch for A3 and receives no new permissive event forms.
+
+The pilot checks a witnessed SQLite cut-over acknowledgement loss by recording
+the `indeterminate` transition and required state after store restart; it
+never claims the transaction rolled back based on that outcome. A separately
+witnessed worker kill corroborates supervision and outbox preservation, not a
+node crash or a general fault event in this schema.
