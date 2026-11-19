@@ -26,11 +26,21 @@ The host-only runner uses a local C compiler and SQLite headers/library (set
 `SQLITE_PREFIX` if they are not in the compiler's default paths), and Erlang/OTP
 28 on `PATH`. Results are `build/host/service/host-only-*/unit.json`.
 
-The full-stack runner builds everything through nix (`nix build .#fenrir-a3-tools`: Erlang/OTP 28.5,
-SQLite 3.53.3, gcc, node 22, pinned by the flake's nixpkgs input), elaborates the handler
+By default the full-stack runner obtains its host prefix with `nix build .#fenrir-a3-tools`
+on x86-64 or ARM64 Linux. The locked nixpkgs provides Erlang/OTP 28.5.0.7, SQLite
+3.53.3 (CLI, headers and libraries), GCC 16.2.0 and Node 22.23.3. Set
+`FENRIR_A3_TOOLS` to use a prebuilt prefix with the same `bin`, `include` and `lib`
+layout instead. The runner elaborates the handler
 (or uses the committed artifact copy when the frontend's emit fails; see below), builds
 the guest image, runs the unit tests, the campaigns and the history checker, and writes
 `build/host/service/<run>/report.json`.
+
+With the flake inputs already cached, check both Linux host outputs and the
+separate TC1 OTP pin without building either toolchain:
+
+```sh
+nix eval --offline --impure --json --file tests/host/pinned-tools.nix
+```
 
 ## Architecture as built
 

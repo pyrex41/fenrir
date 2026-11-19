@@ -219,6 +219,14 @@
       # rebar is used; harness/run-tc1-remote-run.sh compiles the sources with erlc.
       erlang = pkgs.beam_minimal.interpreters.erlang;
 
+      # A3's host prefix from the same locked nixpkgs, using the OTP package
+      # from the original A3 setup. Keep the separate minimal OTP used by TC1.
+      mkA3Tools = hostPkgs: hostPkgs.buildEnv {
+        name = "fenrir-a3-tools";
+        paths = with hostPkgs; [ beamPackages.erlang sqlite.out sqlite.dev sqlite.bin gcc nodejs_22 ];
+        pathsToLink = [ "/bin" "/lib" "/include" ];
+      };
+
       shen-kernel = pkgs.fetchurl {
         url = "https://github.com/Shen-Language/shen-sources/releases/download/shen-41.2/ShenOSKernel-41.2.tar.gz";
         hash = "sha256-0hgtcEU9PpPRO8IPdj79wYzbI7SB9Br7mUP16aB5j2E=";
@@ -306,9 +314,19 @@
         FENRIR_SHEN_JIT = "${jit}";
       };
     in {
-      packages.${system} = { inherit shen-scheme shen-cl shen-jit solo5 solo5-batches hvt-compare yggdrasil link-toolchain erlang aarch64-verification; default = link-toolchain; };
+      packages.${system} = {
+        inherit shen-scheme shen-cl shen-jit solo5 solo5-batches hvt-compare yggdrasil link-toolchain erlang aarch64-verification;
+        fenrir-a3-tools = mkA3Tools pkgs;
+        default = link-toolchain;
+      };
       # Development only: the x86 gate and HVT comparison are not exported here.
-      packages.aarch64-linux = { shen-jit = arm-shen-jit; solo5 = arm-solo5; aarch64-verification = arm-aarch64-verification; };
+      packages.aarch64-linux = {
+        shen-jit = arm-shen-jit;
+        solo5 = arm-solo5;
+        aarch64-verification = arm-aarch64-verification;
+        erlang = arm-pkgs.beam_minimal.interpreters.erlang;
+        fenrir-a3-tools = mkA3Tools arm-pkgs;
+      };
       devShells.aarch64-linux = {
         default = arm-pkgs.mkShell {
           packages = [ arm-pkgs.nodejs_22 arm-shen-jit arm-solo5 ];
