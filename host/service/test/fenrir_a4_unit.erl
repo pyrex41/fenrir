@@ -9,6 +9,7 @@ tests(C) ->
      {a4_session_authority, fun() -> fixture(C, "a4-session", fun authority/2) end},
      {a4_session_owner_death, fun() -> fixture(C, "a4-owner", fun owner_death/2) end},
      {a4_maintenance_operator_death, fun() -> fixture(C, "a4-operator", fun operator_death/2) end},
+     {a4_unauthorized_call_does_not_revoke, fun authorization_transition/0},
      {a4_durable_preparation, fun() -> fixture(C, "a4-restart", fun restart/2) end},
      {a4_exact_snapshot_and_projection, fun() -> fixture(C, "a4-snapshot", fun projection/2) end},
      {a4_maintenance_lost_ack, fun() -> fixture(C, "a4-lost-ack", fun lost_ack/2) end},
@@ -142,8 +143,11 @@ authority(Db, Opts) ->
         {refused, session_active} = open(Prep, Other),
         {refused, unauthorized_maintenance} = ask(Other, {read, Token}),
         {refused, unauthorized_maintenance} = ask(Other, {validate_install, Token, [], []}),
+        {refused, unauthorized_maintenance} = ask(Other, {abort, Id}),
+        {refused, unauthorized_maintenance} = ask(Other, {close, Token}),
         {refused, unauthorized_maintenance} = ask(Owner, {read, make_ref()}),
         {ok, [], []} = ask(Owner, {read, Token}),
+        {refused, session_active} = open(Prep, Other),
         ok = m({abort, Id}),
         {ok, {prepared, NewId, _, Pin} = NewPrep} = prep(),
         true = NewId =/= Id,
@@ -187,9 +191,31 @@ operator_death(_Db, Opts) ->
         exit(Operator, kill),
         receive {'DOWN', Ref, process, Operator, killed} -> ok after 5000 -> error(operator_not_dead) end,
         {refused, unauthorized_maintenance} = m({read, Token}),
+        wait_for_revocation(100),
         {reply, _} = submit(0, 1),
         true
     after exit(Operator, kill) end.
+
+wait_for_revocation(0) -> error(operator_session_not_revoked);
+wait_for_revocation(N) ->
+    case sys:get_state(fenrir_store) of
+        #{operator := none, maintenance := none} -> ok;
+        _ -> receive after 10 -> wait_for_revocation(N - 1) end
+    end.
+
+authorization_transition() ->
+    %% Force the order in which a call reaches the server before the DOWN.
+    Dead = spawn(fun() -> ok end),
+    Ref = monitor(process, Dead),
+    receive {'DOWN', Ref, process, Dead, _} -> ok after 5000 -> error(operator_not_dead) end,
+    Token = make_ref(),
+    Session = #{token => Token, monitor => make_ref()},
+    State = #{operator => Dead, operator_monitor => Ref, maintenance => Session},
+    {reply, {refused, unauthorized_maintenance}, State} =
+        fenrir_store:handle_call({maintenance, {close, Token}}, {self(), make_ref()}, State),
+    {noreply, #{operator := none, maintenance := none}} =
+        fenrir_store:handle_info({'DOWN', Ref, process, Dead, normal}, State),
+    true.
 
 restart(Db, Opts) ->
     First = start(Opts),

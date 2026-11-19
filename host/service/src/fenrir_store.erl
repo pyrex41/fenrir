@@ -267,7 +267,9 @@ watch_operator(Pid) -> monitor(process, Pid).
 maintenance_call(Caller, Request, S = #{operator := Operator}) ->
     case local_alive(Operator) of
         true -> maintenance_live(Caller, Request, S);
-        false -> {{refused, unauthorized_maintenance}, clear_session(S)}
+        %% Authorization never changes session state. A monitored operator's
+        %% DOWN notification owns the cleanup, even if a call arrives first.
+        false -> {{refused, unauthorized_maintenance}, S}
     end.
 
 maintenance_live(Caller, Request, S = #{operator := Caller, port := Port}) ->
