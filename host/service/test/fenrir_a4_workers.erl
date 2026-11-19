@@ -76,10 +76,9 @@ run(Out, Launcher, V1Path, V2Path, Migration) ->
     {delivered, _} = fenrir_front:deliver(0, 0, false),
     true = lists:member({accepted, New}, fenrir_front:outbox()),
     Final = observed(Db, {v2, Id, Pin, MP}),
-    {P0, P1} = overlap(C0, C1),
-    true = P0 =/= P1,
+    Overlap = overlap(C0, C1),
     OverlapFinal = observed(Db, {v2, Id, Pin, MP}),
-    Events = [[<<"submit">>,0,0,1,[<<"accepted">>,Old]],
+    Prefix = [[<<"submit">>,0,0,1,[<<"accepted">>,Old]],
               [<<"submit">>,1,0,1,[<<"accepted">>,[1,0,1,0,0]]],
               [<<"complete">>,1,0,false,[<<"delivered">>]],
               [<<"upgrade">>,<<"begin">>,hex(Pin),hex(MP),[<<"ok">>]], Prepared,
@@ -95,6 +94,7 @@ run(Out, Launcher, V1Path, V2Path, Migration) ->
               [<<"concurrent">>, [[<<"submit">>,0,2,1,[<<"accepted">>,[0,2,1,2,2,2]]],
                                   [<<"submit">>,1,2,0,[<<"accepted">>,[1,2,0,1,1,2]]]]],
               OverlapFinal],
+    {Events, Drain} = drain(Db, {v2, Id, Pin, MP}, Prefix),
     History = #{schema => <<"fenrir.service.history/2">>, scenario => <<"a4-worker-upgrade">>,
                 handler_pin => hex(Pin), migration_pin => hex(MP), tenants => 2, events => Events},
     ok = file:write_file(filename:join(Out, "history.json"), json:encode(History)),
@@ -110,26 +110,52 @@ run(Out, Launcher, V1Path, V2Path, Migration) ->
     Front = whereis(fenrir_front),
     ok = fenrir_front:respond({accepted, New}),
     ok = gen_server:stop(Sup),
-    {ok, Sup2} = fenrir_service_sup:start_link(Config),
+    %% Reopen durable v2 with no v1 descriptor configured. For the duration
+    %% of the restart test even its generated descriptor is unavailable.
+    without_v1(V1Path, fun() ->
+        {ok, Sup2} = fenrir_service_sup:start_link(maps:remove(image, Config)),
+        {ok, {v2, Id, Pin, MP}} = fenrir_store:maintenance(state),
+        undefined = whereis(w1),
+        not_in_outbox = fenrir_front:respond({accepted, New}),
+        {{accepted, New}, #{contract_version := 2}} = fenrir_front:submit(C0, 1, 0, <<0>>),
+        ok = gen_server:stop(Sup2)
+    end),
     {prepared, Id, Pin, MP} = Prep,
-    {ok, {v2, Id, Pin, MP}} = fenrir_store:maintenance(state),
-    undefined = whereis(w1),
-    not_in_outbox = fenrir_front:respond({accepted, New}),
-    {{accepted, New}, #{contract_version := 2}} = fenrir_front:submit(C0, 1, 0, <<0>>),
-    ok = gen_server:stop(Sup2),
-    cut_over_lost_ack(Out, Config, Opts, C0, V2Path, Migration, Pin, MP),
+    AckDrain = cut_over_lost_ack(Out, Config, Opts, C0, V2Path, Migration, Pin, MP),
     {ok, []} = file:list_dir(maps:get(a4_launch_dir, Opts)),
     ok = file:write_file(filename:join(Out, "worker.json"), json:encode(
         #{status => <<"worker-fixture-pass">>, qualification => <<"UNKNOWN">>,
           scope => <<"A4 supervised cutover fixture; no node crash campaign">>,
           v1_worker_retired => true, front_outbox_preserved => true, v2_worker_kill_observed => true,
-          overlapping_calls => 2, supervisor_restart_v2_only => true, cut_over_lost_ack_observed => true,
+          overlap => Overlap, drain => Drain, ack_drain => AckDrain,
+          supervisor_restart_v2_only => true, retired_v1_absent_on_restart => true,
+          cut_over_lost_ack_observed => true,
           migration_requests => MigrationRequests,
           handler_pin => binary:encode_hex(Pin, lowercase), migration_pin => binary:encode_hex(MP, lowercase)})),
     io:format("A4 worker fixture passed (~p migration requests)~n", [MigrationRequests]),
     ok.
 
 hex(B) -> binary:encode_hex(B, lowercase).
+
+without_v1(Path, Fun) ->
+    {ok, Desc} = file:read_file(Path),
+    #{<<"batch_dir">> := Batch} = json:decode(Desc),
+    MissingPath = Path ++ ".retired",
+    MissingBatch = <<Batch/binary, ".retired">>,
+    ok = file:rename(Path, MissingPath),
+    try
+        ok = file:rename(Batch, MissingBatch),
+        try Fun() after ok = file:rename(MissingBatch, Batch) end
+    after ok = file:rename(MissingPath, Path) end.
+
+drain(Db, Target, Prefix) ->
+    Delivered = [begin
+        {delivered, _} = fenrir_front:deliver(T,J,true),
+        [<<"complete">>,T,J,true,[<<"delivered">>]]
+    end || {T,J,_} <- fenrir_store:pending_jobs()],
+    [] = fenrir_store:pending_jobs(),
+    {Prefix ++ Delivered ++ [[<<"drained">>], observed(Db, Target)],
+     #{index => length(Prefix) + length(Delivered), pending => 0}}.
 
 cut_over_lost_ack(Out, Config, Opts, Credential, Handler, Migration, Pin, MP) ->
     Db = filename:join(Out, "cut-over-ack.db"),
@@ -162,26 +188,27 @@ cut_over_lost_ack(Out, Config, Opts, Credential, Handler, Migration, Pin, MP) ->
     undefined = whereis(w1),
     undefined = whereis(w2),
     Front = whereis(fenrir_front),
-    Final = observed(Db, {v2, Id, Pin, MP}),
-    Events = [[<<"submit">>,0,0,1,[<<"accepted">>,Old]],
+    Prefix = [[<<"submit">>,0,0,1,[<<"accepted">>,Old]],
               [<<"upgrade">>,<<"begin">>,hex(Pin),hex(MP),[<<"ok">>]], Prepared,
               [<<"upgrade">>,<<"migrate">>,[<<"ok">>]], Migrated,
               [<<"upgrade">>,<<"cut-over">>,[<<"indeterminate">>]], CutOver,
               [<<"respond">>,[<<"accepted">>,Old]],
-              [<<"submit">>,0,0,1,[<<"accepted">>,Old]], Final],
+              [<<"submit">>,0,0,1,[<<"accepted">>,Old]]],
+    {Events, Drain} = drain(Db, {v2, Id, Pin, MP}, Prefix),
     ok = file:write_file(filename:join(Out, "cut-over-lost-ack.json"), json:encode(
         #{schema => <<"fenrir.service.history/2">>, scenario => <<"cut-over-lost-ack">>,
           handler_pin => hex(Pin), migration_pin => hex(MP), tenants => 2, events => Events})),
-    ok = gen_server:stop(Sup).
+    ok = gen_server:stop(Sup),
+    Drain.
 
 overlap(C0, C1) ->
     Parent = self(),
     Job = fun(C, D) ->
         spawn(fun() ->
             receive go ->
-                Started = erlang:monotonic_time(),
+                Started = erlang:monotonic_time(microsecond),
                 Result = fenrir_front:submit(C, 2, D, <<D>>),
-                Finished = erlang:monotonic_time(),
+                Finished = erlang:monotonic_time(microsecond),
                 Parent ! {self(), Started, Finished, Result}
             end
         end)
@@ -196,8 +223,14 @@ overlap(C0, C1) ->
     {S1, E1, P1} = receive
         {W1, A1, B1, {{accepted,[1,2,0,1,1,2]}, #{worker := Pid1, contract_version := 2}}} -> {A1,B1,Pid1}
     after 10000 -> error(tenant_1_overlap_failed) end,
-    true = erlang:max(S0, S1) < erlang:min(E0, E1),
-    {P0, P1}.
+    true = P0 =/= P1 andalso erlang:max(S0, S1) < erlang:min(E0, E1),
+    Bank = [pid_binary(whereis(a4w1)),pid_binary(whereis(a4w2))],
+    true = lists:sort(Bank) =:= lists:sort([pid_binary(P0),pid_binary(P1)]),
+    #{index => 17, unit => <<"monotonic-microsecond">>, bank => Bank,
+      calls => [#{started => S0, ended => E0, worker => pid_binary(P0)},
+                #{started => S1, ended => E1, worker => pid_binary(P1)}]}.
+
+pid_binary(Pid) -> list_to_binary(pid_to_list(Pid)).
 
 wait_worker(_, _, 0) -> error(worker_not_replaced);
 wait_worker(Name, Previous, N) ->

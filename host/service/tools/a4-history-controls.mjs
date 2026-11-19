@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {overlap,finalDrain,milestoneControls} from './a4-milestones.mjs';
 
 const [mode,out]=process.argv.slice(2);
 const source=join(out,'history.json');
@@ -51,12 +52,15 @@ if(mode==='fixtures'){
   assert.equal(worker.v1_worker_retired,true);
   assert.equal(worker.front_outbox_preserved,true);
   assert.equal(worker.v2_worker_kill_observed,true);
-  assert.equal(worker.overlapping_calls,2);
+  overlap(h,worker.overlap,17,worker.overlap.bank);
+  finalDrain(h,worker.drain);
+  finalDrain(ack,worker.ack_drain);
   assert.equal(worker.supervisor_restart_v2_only,true);
+  assert.equal(worker.retired_v1_absent_on_restart,true);
   assert.equal(worker.cut_over_lost_ack_observed,true);
   const report={schema:'fenrir.host.a4-worker-check/1',status:'development-pass',qualification:'UNKNOWN',
     evidence:'supervised upgrade, concurrent pair, witnessed cut-over acknowledgement loss and worker kill; no node crash campaign',
-    worker,verdicts:actual};
+    worker,verdicts:actual,evidence_controls:milestoneControls(h,worker.overlap,17,worker.overlap.bank,worker.drain)};
   writeFileSync(join(out,'report.json'),JSON.stringify(report)+'\n',{flag:'wx'});
   console.log(JSON.stringify(report));
 }else{

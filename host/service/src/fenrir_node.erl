@@ -93,13 +93,14 @@ command({a4_retry_pair, T, K, D}, {_, Tokens, #{a4 := _}}) ->
     Parent = self(),
     Pids = [spawn_link(fun() ->
         receive go ->
-            Start = erlang:monotonic_time(),
-            R = fixture_submit(Tokens, T, K, D, <<D>>),
-            Parent ! {retry_done, self(), Start, erlang:monotonic_time(), R}
+            Start = erlang:monotonic_time(microsecond),
+            {R, Stats} = fixture_submit(Tokens, T, K, D, <<D>>),
+            End = erlang:monotonic_time(microsecond),
+            Parent ! {retry_done, self(), Start, End, R, pid_string(maps:get(worker, Stats, undefined))}
         end
     end) || _ <- [1, 2]],
     [P ! go || P <- Pids],
-    [receive {retry_done, P, Start, End, R} -> {Start, End, R} end || P <- Pids];
+    [receive {retry_done, P, Start, End, R, Worker} -> {Start, End, R, Worker} end || P <- Pids];
 command(ping, _) -> pong;
 command(diag, _) ->
     Sup = whereis(fenrir_worker_sup),

@@ -21,6 +21,7 @@ main([Out, Erl, Ebin, NodeLaunch, Launcher, V1, V2, Migration]) ->
 scenario(C, Name, Case, HP, MP) ->
     put(recorder, fenrir_drive:new(C, Name)),
     put(fault, #{}),
+    put(drain, #{}),
     Status = try
         boot(),
         submit(0, 0, 1, [0,0,1,0,0]),
@@ -42,7 +43,7 @@ scenario(C, Name, Case, HP, MP) ->
               #{<<"schema">> => <<"fenrir.service.history/2">>,
                 <<"handler_pin">> => hex(HP), <<"migration_pin">> => hex(MP)}),
     #{name => list_to_binary(Name), status => Status, phase => atom_to_binary(Case),
-      history => list_to_binary(File), proof => erase(fault)}.
+      history => list_to_binary(File), proof => erase(fault), drain => erase(drain)}.
 
 keep(S) -> put(recorder, S), ok.
 event(E) -> keep(fenrir_drive:event(get(recorder), E)).
@@ -148,9 +149,7 @@ node_recovery(Case, Target, HP, MP) ->
     deliver(0, 0, false),
     deliver(0, 1, true),
     deliver(1, 0, true),
-    0 = length(cmd(pending)),
-    event([<<"drained">>]),
-    observe(V2).
+    drained(V2).
 
 node_receipt(_, _, 0) -> error(missing_node_kill_receipt);
 node_receipt(Path, Expect, N) ->
@@ -171,10 +170,11 @@ worker_recovery(Target) ->
     {indeterminate, Dead} = cmd({a4_fault_submit,0,1,0}),
     true = lists:member(Dead, [A,B]),
     {w3_commit_before_reply, kill_worker, Dead, killed} = cmd({fired, W}),
-    Replacement = replacement(Beam, Front, Dead, A, B, 100),
-    put(fault, #{index => next_index(), beam => Beam, front => list_to_binary(Front),
+    {Replacement, Peer} = replacement(Beam, Front, Dead, A, B, 100),
+    Proof = #{index => next_index(), beam => Beam, front => list_to_binary(Front),
                  worker => list_to_binary(Dead), replacement => list_to_binary(Replacement),
-                 point => <<"w3_commit_before_reply">>, reason => <<"killed">>}),
+                 point => <<"w3_commit_before_reply">>, reason => <<"killed">>},
+    put(fault, Proof),
     event([<<"submit-committed-unpublished">>,0,1,0,list_to_binary(Dead),list_to_binary(Replacement)]),
     [<<"observe">>, [Tenant0 | _], _] = Obs = observe(Target),
     [_, _, Keys, 2] = Tenant0,
@@ -183,14 +183,23 @@ worker_recovery(Target) ->
     event([<<"respond-refused">>, [<<"accepted">>, Rc]]),
     ok = cmd({respond, {accepted, [0,0,1,0,0]}}),
     event([<<"respond">>, [<<"accepted">>, [0,0,1,0,0]]]),
-    [{S1,E1,{{accepted, Rc}, #{worker := P1}}},{S2,E2,{{accepted, Rc}, #{worker := P2}}}] =
+    [{S1,E1,{accepted, Rc},P1},{S2,E2,{accepted, Rc},P2}] =
         cmd({a4_retry_pair,0,1,0}),
-    true = P1 =/= P2 andalso max(S1,S2) < min(E1,E2),
+    true = P1 =/= P2 andalso max(S1,S2) < min(E1,E2)
+        andalso lists:sort([P1,P2]) =:= lists:sort([Replacement,Peer]),
+    put(fault, Proof#{overlap => #{index => next_index(), unit => <<"monotonic-microsecond">>,
+        calls => [#{started => S1, ended => E1, worker => list_to_binary(P1)},
+                  #{started => S2, ended => E2, worker => list_to_binary(P2)}]},
+        peer => list_to_binary(Peer)}),
     Retry = [<<"submit">>,0,1,0,[<<"accepted">>,Rc]],
     event([<<"concurrent">>,[Retry,Retry]]),
     ok = cmd({respond, Event}),
     event([<<"respond">>, [<<"accepted">>,Rc]]),
-    Obs = observe(Target).
+    Obs = observe(Target),
+    deliver(0,0,true),
+    deliver(0,1,true),
+    deliver(1,0,true),
+    drained(Target).
 
 replacement(_, _, _, _, _, 0) -> error(missing_worker_replacement);
 replacement(Beam, Front, Dead, A, B, N) ->
@@ -198,12 +207,18 @@ replacement(Beam, Front, Dead, A, B, N) ->
     {New, Peer, BeforePeer} = case Dead of A -> {NowA, NowB, B}; B -> {NowB, NowA, A} end,
     BeforePeer = Peer,
     case is_list(New) andalso New =/= Dead of
-        true -> New;
+        true -> {New, Peer};
         false -> timer:sleep(10), replacement(Beam, Front, Dead, A, B, N-1)
     end.
 
 deliver(T,J,Ok) ->
     {delivered, _} = cmd({complete,T,J,Ok}),
     event([<<"complete">>,T,J,Ok,[<<"delivered">>]]).
+
+drained(Target) ->
+    [] = cmd(pending),
+    put(drain, #{index => next_index(), pending => 0}),
+    event([<<"drained">>]),
+    observe(Target).
 
 hex(B) -> binary:encode_hex(B, lowercase).

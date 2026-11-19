@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {overlap,finalDrain,milestoneControls} from './a4-milestones.mjs';
 
 const [mode,out,exit]=process.argv.slice(2);
 const plan=[['node-v1','v1'],['node-prepared','prepared'],['node-migrated','migrated'],
@@ -36,6 +37,7 @@ if(mode==='fixtures'){
 }else if(mode==='verify'){
   let verdicts=[];
   const errors=[];
+  let evidenceControls=[];
   try{
     assert.equal(exit,'0','Shen verifier did not complete successfully');
     const output=readFileSync(join(out,'crash-verdicts.stdout'),'utf8');
@@ -62,6 +64,7 @@ if(mode==='fixtures'){
       const h=read(file(n)), p=r.proof;
       assert.equal(h.handler_pin,pilot.worker.handler_pin);
       assert.equal(h.migration_pin,pilot.worker.migration_pin);
+      finalDrain(h,r.drain);
       assert.equal(obsAfter(h,p.index),true);
       const event=h.events[p.index];
       if(phase==='worker'){
@@ -71,6 +74,8 @@ if(mode==='fixtures'){
         assert.deepEqual(event,['submit-committed-unpublished',0,1,0,p.worker,p.replacement]);
         assert.deepEqual(h.events[p.index+3],['respond',['accepted',[0,0,1,0,0]]]);
         assert.equal(h.events[p.index+4][0],'concurrent');
+        overlap(h,p.overlap,p.index+4,[p.replacement,p.peer]);
+        evidenceControls=milestoneControls(h,p.overlap,p.index+4,[p.replacement,p.peer],r.drain);
       }else{
         assert(Number.isSafeInteger(p.before)&&p.before>0&&Number.isSafeInteger(p.after_pid)&&p.after_pid>0);
         assert.notEqual(p.before,p.after_pid);
@@ -96,7 +101,7 @@ if(mode==='fixtures'){
     });
   }catch(e){errors.push(e.message);}
   const report={schema:'fenrir.host.a4-crash-campaign/1',status:errors.length?'UNKNOWN':'development-pass',
-    qualification:'UNKNOWN',plan:plan.map(([n])=>n),rows,verdicts,errors,
+    qualification:'UNKNOWN',plan:plan.map(([n])=>n),rows,verdicts,errors,evidence_controls:evidenceControls,
     evidence:'durable phase boundary node SIGKILLs and a witnessed pre-reply worker kill; bounded concurrent retries'};
   writeFileSync(join(out,'crash-report.json'),JSON.stringify(report)+'\n',{flag:'wx'});
   console.log(JSON.stringify(report));
