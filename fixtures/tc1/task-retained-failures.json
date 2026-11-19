@@ -1,0 +1,4960 @@
+{
+ "cases": [
+  {
+   "choices": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "defect": "lifo_channel",
+   "discrepancy": "received-other-value",
+   "divergence_epoch": "122",
+   "name": "original",
+   "nodes": "62",
+   "policy": "highest",
+   "program": {
+    "contract_version": "tc1-draft-1",
+    "datatypes": [],
+    "effects": [
+     {
+      "name": "Stop",
+      "operations": [
+       {
+        "argument_type": "I64",
+        "name": "stop",
+        "result_type": "Unit"
+       }
+      ]
+     },
+     {
+      "name": "Tick",
+      "operations": [
+       {
+        "argument_type": "I64",
+        "name": "tick",
+        "result_type": "I64"
+       }
+      ]
+     }
+    ],
+    "entry": "main",
+    "functions": [
+     {
+      "argument_type": "I64",
+      "body": [
+       "let",
+       "4",
+       "3",
+       [
+        "channel",
+        "2",
+        "I64",
+        "2"
+       ],
+       [
+        "let",
+        "46",
+        "45",
+        [
+         "spawn",
+         "44",
+         [
+          "lambda",
+          "43",
+          "42",
+          "Unit",
+          "I64",
+          [
+           "Channel",
+           "Emit",
+           "Task"
+          ],
+          [],
+          [
+           "let",
+           "41",
+           "35",
+           [
+            "handle",
+            "23",
+            "Stop",
+            [
+             [
+              "stop",
+              "5",
+              "6",
+              [
+               "let",
+               "22",
+               "19",
+               [
+                "discontinue",
+                "20",
+                "6"
+               ],
+               [
+                "int",
+                "21",
+                "0"
+               ]
+              ]
+             ]
+            ],
+            [
+             "scope",
+             "18",
+             [
+              "let",
+              "17",
+              "7",
+              [
+               "spawn",
+               "11",
+               [
+                "lambda",
+                "10",
+                "9",
+                "Unit",
+                "I64",
+                [],
+                [],
+                [
+                 "int",
+                 "8",
+                 "0"
+                ]
+               ]
+              ],
+              [
+               "let",
+               "16",
+               "12",
+               [
+                "perform",
+                "14",
+                "Stop",
+                "stop",
+                [
+                 "int",
+                 "13",
+                 "101"
+                ]
+               ],
+               [
+                "int",
+                "15",
+                "0"
+               ]
+              ]
+             ]
+            ]
+           ],
+           [
+            "let",
+            "40",
+            "36",
+            [
+             "send",
+             "26",
+             [
+              "var",
+              "24",
+              "3"
+             ],
+             [
+              "int",
+              "25",
+              "111"
+             ]
+            ],
+            [
+             "let",
+             "39",
+             "37",
+             [
+              "handle",
+              "34",
+              "Tick",
+              [
+               [
+                "tick",
+                "27",
+                [
+                 "prim",
+                 "30",
+                 "add",
+                 [
+                  "var",
+                  "28",
+                  "27"
+                 ],
+                 [
+                  "int",
+                  "29",
+                  "1"
+                 ]
+                ]
+               ]
+              ],
+              [
+               "emit",
+               "33",
+               "h",
+               [
+                "perform",
+                "32",
+                "Tick",
+                "tick",
+                [
+                 "int",
+                 "31",
+                 "121"
+                ]
+               ]
+              ]
+             ],
+             [
+              "int",
+              "38",
+              "0"
+             ]
+            ]
+           ]
+          ]
+         ]
+        ],
+        [
+         "let",
+         "55",
+         "54",
+         [
+          "spawn",
+          "53",
+          [
+           "lambda",
+           "52",
+           "51",
+           "Unit",
+           "I64",
+           [
+            "Channel"
+           ],
+           [],
+           [
+            "let",
+            "50",
+            "48",
+            [
+             "channel",
+             "47",
+             "I64",
+             "1"
+            ],
+            [
+             "int",
+             "49",
+             "0"
+            ]
+           ]
+          ]
+         ],
+         [
+          "let",
+          "73",
+          "72",
+          [
+           "spawn",
+           "71",
+           [
+            "lambda",
+            "70",
+            "69",
+            "Unit",
+            "I64",
+            [
+             "Channel",
+             "Task"
+            ],
+            [],
+            [
+             "let",
+             "68",
+             "62",
+             [
+              "yield",
+              "56"
+             ],
+             [
+              "let",
+              "67",
+              "63",
+              [
+               "cancel",
+               "58",
+               [
+                "var",
+                "57",
+                "54"
+               ]
+              ],
+              [
+               "let",
+               "66",
+               "64",
+               [
+                "send",
+                "61",
+                [
+                 "var",
+                 "59",
+                 "3"
+                ],
+                [
+                 "int",
+                 "60",
+                 "321"
+                ]
+               ],
+               [
+                "int",
+                "65",
+                "0"
+               ]
+              ]
+             ]
+            ]
+           ]
+          ],
+          [
+           "let",
+           "87",
+           "83",
+           [
+            "match",
+            "79",
+            [
+             "receive",
+             "76",
+             [
+              "var",
+              "75",
+              "3"
+             ]
+            ],
+            [
+             "Item",
+             [
+              "74"
+             ],
+             [
+              "var",
+              "77",
+              "74"
+             ]
+            ],
+            [
+             "End",
+             [],
+             [
+              "int",
+              "78",
+              "0"
+             ]
+            ]
+           ],
+           [
+            "let",
+            "86",
+            "84",
+            [
+             "send",
+             "82",
+             [
+              "var",
+              "80",
+              "3"
+             ],
+             [
+              "int",
+              "81",
+              "11"
+             ]
+            ],
+            [
+             "int",
+             "85",
+             "0"
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ],
+      "effects": [
+       "Channel",
+       "Emit",
+       "Task"
+      ],
+      "id": "0",
+      "name": "main",
+      "parameter_id": "1",
+      "result_type": "I64"
+     }
+    ],
+    "input_schema": {
+     "type": "I64"
+    },
+    "module": "tc1-task-generated-40",
+    "schema_version": "tc1-task-demo/1",
+    "slice": "TC1-C1",
+    "source_map": [
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "0",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "2",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "4",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "8",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "10",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "11",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "13",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "14",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "15",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "16",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "17",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "18",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "20",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "21",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "22",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "23",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "24",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "25",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "26",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "28",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "29",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "30",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "31",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "32",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "33",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "34",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "38",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "39",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "40",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "41",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "43",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "44",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "46",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "47",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "49",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "50",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "52",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "53",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "55",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "56",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "57",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "58",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "59",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "60",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "61",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "65",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "66",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "67",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "68",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "70",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "71",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "73",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "75",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "76",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "77",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "78",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "79",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "80",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "81",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "82",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "85",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "86",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "87",
+      "line": "0"
+     }
+    ]
+   },
+   "role": "original",
+   "switches": "8"
+  },
+  {
+   "choices": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "defect": "lifo_channel",
+   "discrepancy": "received-other-value",
+   "divergence_epoch": "46",
+   "name": "reduced-86",
+   "nodes": "23",
+   "policy": "highest",
+   "program": {
+    "contract_version": "tc1-draft-1",
+    "datatypes": [],
+    "effects": [],
+    "entry": "main",
+    "functions": [
+     {
+      "argument_type": "I64",
+      "body": [
+       "let",
+       "4",
+       "3",
+       [
+        "channel",
+        "2",
+        "I64",
+        "2"
+       ],
+       [
+        "let",
+        "46",
+        "45",
+        [
+         "spawn",
+         "44",
+         [
+          "lambda",
+          "43",
+          "42",
+          "Unit",
+          "I64",
+          [
+           "Channel"
+          ],
+          [],
+          [
+           "let",
+           "40",
+           "36",
+           [
+            "send",
+            "26",
+            [
+             "var",
+             "24",
+             "3"
+            ],
+            [
+             "int",
+             "25",
+             "111"
+            ]
+           ],
+           [
+            "int",
+            "38",
+            "0"
+           ]
+          ]
+         ]
+        ],
+        [
+         "let",
+         "73",
+         "72",
+         [
+          "spawn",
+          "71",
+          [
+           "lambda",
+           "70",
+           "69",
+           "Unit",
+           "I64",
+           [
+            "Channel"
+           ],
+           [],
+           [
+            "let",
+            "66",
+            "64",
+            [
+             "send",
+             "61",
+             [
+              "var",
+              "59",
+              "3"
+             ],
+             [
+              "int",
+              "60",
+              "321"
+             ]
+            ],
+            [
+             "int",
+             "65",
+             "0"
+            ]
+           ]
+          ]
+         ],
+         [
+          "match",
+          "79",
+          [
+           "receive",
+           "76",
+           [
+            "var",
+            "75",
+            "3"
+           ]
+          ],
+          [
+           "Item",
+           [
+            "74"
+           ],
+           [
+            "var",
+            "77",
+            "74"
+           ]
+          ],
+          [
+           "End",
+           [],
+           [
+            "int",
+            "78",
+            "0"
+           ]
+          ]
+         ]
+        ]
+       ]
+      ],
+      "effects": [
+       "Channel",
+       "Task"
+      ],
+      "id": "0",
+      "name": "main",
+      "parameter_id": "1",
+      "result_type": "I64"
+     }
+    ],
+    "input_schema": {
+     "type": "I64"
+    },
+    "module": "tc1-task-generated-40",
+    "schema_version": "tc1-task-demo/1",
+    "slice": "TC1-C1",
+    "source_map": [
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "0",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "2",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "4",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "24",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "25",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "26",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "38",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "40",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "43",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "44",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "46",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "59",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "60",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "61",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "65",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "66",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "70",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "71",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "73",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "75",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "76",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "77",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "78",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "79",
+      "line": "0"
+     }
+    ]
+   },
+   "role": "minimized",
+   "switches": "4"
+  },
+  {
+   "choices": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "5",
+    "5",
+    "5",
+    "5",
+    "5",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "defect": "lost_wakeup_await",
+   "discrepancy": "termination-without-awaited",
+   "divergence_epoch": "67",
+   "name": "original",
+   "nodes": "78",
+   "policy": "lowest",
+   "program": {
+    "contract_version": "tc1-draft-1",
+    "datatypes": [],
+    "effects": [
+     {
+      "name": "Stop",
+      "operations": [
+       {
+        "argument_type": "I64",
+        "name": "stop",
+        "result_type": "Unit"
+       }
+      ]
+     },
+     {
+      "name": "Tick",
+      "operations": [
+       {
+        "argument_type": "I64",
+        "name": "tick",
+        "result_type": "I64"
+       }
+      ]
+     }
+    ],
+    "entry": "main",
+    "functions": [
+     {
+      "argument_type": "I64",
+      "body": [
+       "let",
+       "4",
+       "3",
+       [
+        "channel",
+        "2",
+        "I64",
+        "2"
+       ],
+       [
+        "scope",
+        "112",
+        [
+         "let",
+         "24",
+         "23",
+         [
+          "spawn",
+          "22",
+          [
+           "lambda",
+           "21",
+           "20",
+           "Unit",
+           "I64",
+           [
+            "Channel",
+            "Emit"
+           ],
+           [],
+           [
+            "let",
+            "19",
+            "15",
+            [
+             "handle",
+             "12",
+             "Tick",
+             [
+              [
+               "tick",
+               "5",
+               [
+                "prim",
+                "8",
+                "add",
+                [
+                 "var",
+                 "6",
+                 "5"
+                ],
+                [
+                 "int",
+                 "7",
+                 "1"
+                ]
+               ]
+              ]
+             ],
+             [
+              "emit",
+              "11",
+              "h",
+              [
+               "perform",
+               "10",
+               "Tick",
+               "tick",
+               [
+                "int",
+                "9",
+                "101"
+               ]
+              ]
+             ]
+            ],
+            [
+             "let",
+             "18",
+             "16",
+             [
+              "close",
+              "14",
+              [
+               "var",
+               "13",
+               "3"
+              ]
+             ],
+             [
+              "int",
+              "17",
+              "0"
+             ]
+            ]
+           ]
+          ]
+         ],
+         [
+          "let",
+          "34",
+          "33",
+          [
+           "spawn",
+           "32",
+           [
+            "lambda",
+            "31",
+            "30",
+            "Unit",
+            "I64",
+            [
+             "Emit"
+            ],
+            [],
+            [
+             "let",
+             "29",
+             "27",
+             [
+              "emit",
+              "26",
+              "e",
+              [
+               "int",
+               "25",
+               "201"
+              ]
+             ],
+             [
+              "int",
+              "28",
+              "0"
+             ]
+            ]
+           ]
+          ],
+          [
+           "let",
+           "92",
+           "91",
+           [
+            "spawn",
+            "90",
+            [
+             "lambda",
+             "89",
+             "88",
+             "Unit",
+             "I64",
+             [
+              "Task"
+             ],
+             [],
+             [
+              "let",
+              "87",
+              "81",
+              [
+               "handle",
+               "53",
+               "Stop",
+               [
+                [
+                 "stop",
+                 "35",
+                 "36",
+                 [
+                  "let",
+                  "52",
+                  "49",
+                  [
+                   "discontinue",
+                   "50",
+                   "36"
+                  ],
+                  [
+                   "int",
+                   "51",
+                   "0"
+                  ]
+                 ]
+                ]
+               ],
+               [
+                "scope",
+                "48",
+                [
+                 "let",
+                 "47",
+                 "37",
+                 [
+                  "spawn",
+                  "41",
+                  [
+                   "lambda",
+                   "40",
+                   "39",
+                   "Unit",
+                   "I64",
+                   [],
+                   [],
+                   [
+                    "int",
+                    "38",
+                    "0"
+                   ]
+                  ]
+                 ],
+                 [
+                  "let",
+                  "46",
+                  "42",
+                  [
+                   "perform",
+                   "44",
+                   "Stop",
+                   "stop",
+                   [
+                    "int",
+                    "43",
+                    "301"
+                   ]
+                  ],
+                  [
+                   "int",
+                   "45",
+                   "0"
+                  ]
+                 ]
+                ]
+               ]
+              ],
+              [
+               "let",
+               "86",
+               "82",
+               [
+                "handle",
+                "72",
+                "Stop",
+                [
+                 [
+                  "stop",
+                  "54",
+                  "55",
+                  [
+                   "let",
+                   "71",
+                   "68",
+                   [
+                    "discontinue",
+                    "69",
+                    "55"
+                   ],
+                   [
+                    "int",
+                    "70",
+                    "0"
+                   ]
+                  ]
+                 ]
+                ],
+                [
+                 "scope",
+                 "67",
+                 [
+                  "let",
+                  "66",
+                  "56",
+                  [
+                   "spawn",
+                   "60",
+                   [
+                    "lambda",
+                    "59",
+                    "58",
+                    "Unit",
+                    "I64",
+                    [],
+                    [],
+                    [
+                     "int",
+                     "57",
+                     "0"
+                    ]
+                   ]
+                  ],
+                  [
+                   "let",
+                   "65",
+                   "61",
+                   [
+                    "perform",
+                    "63",
+                    "Stop",
+                    "stop",
+                    [
+                     "int",
+                     "62",
+                     "311"
+                    ]
+                   ],
+                   [
+                    "int",
+                    "64",
+                    "0"
+                   ]
+                  ]
+                 ]
+                ]
+               ],
+               [
+                "let",
+                "85",
+                "83",
+                [
+                 "match",
+                 "80",
+                 [
+                  "await",
+                  "76",
+                  [
+                   "var",
+                   "75",
+                   "33"
+                  ]
+                 ],
+                 [
+                  "Ok",
+                  [
+                   "73"
+                  ],
+                  [
+                   "var",
+                   "77",
+                   "73"
+                  ]
+                 ],
+                 [
+                  "Cancelled",
+                  [],
+                  [
+                   "int",
+                   "78",
+                   "0"
+                  ]
+                 ],
+                 [
+                  "Failed",
+                  [
+                   "74"
+                  ],
+                  [
+                   "int",
+                   "79",
+                   "0"
+                  ]
+                 ]
+                ],
+                [
+                 "int",
+                 "84",
+                 "0"
+                ]
+               ]
+              ]
+             ]
+            ]
+           ],
+           [
+            "let",
+            "111",
+            "107",
+            [
+             "match",
+             "98",
+             [
+              "receive",
+              "95",
+              [
+               "var",
+               "94",
+               "3"
+              ]
+             ],
+             [
+              "Item",
+              [
+               "93"
+              ],
+              [
+               "var",
+               "96",
+               "93"
+              ]
+             ],
+             [
+              "End",
+              [],
+              [
+               "int",
+               "97",
+               "0"
+              ]
+             ]
+            ],
+            [
+             "let",
+             "110",
+             "108",
+             [
+              "match",
+              "106",
+              [
+               "await",
+               "102",
+               [
+                "var",
+                "101",
+                "23"
+               ]
+              ],
+              [
+               "Ok",
+               [
+                "99"
+               ],
+               [
+                "var",
+                "103",
+                "99"
+               ]
+              ],
+              [
+               "Cancelled",
+               [],
+               [
+                "int",
+                "104",
+                "0"
+               ]
+              ],
+              [
+               "Failed",
+               [
+                "100"
+               ],
+               [
+                "int",
+                "105",
+                "0"
+               ]
+              ]
+             ],
+             [
+              "int",
+              "109",
+              "0"
+             ]
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ],
+      "effects": [
+       "Channel",
+       "Emit",
+       "Task"
+      ],
+      "id": "0",
+      "name": "main",
+      "parameter_id": "1",
+      "result_type": "I64"
+     }
+    ],
+    "input_schema": {
+     "type": "I64"
+    },
+    "module": "tc1-task-generated-2",
+    "schema_version": "tc1-task-demo/1",
+    "slice": "TC1-C1",
+    "source_map": [
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "0",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "2",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "4",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "6",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "7",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "8",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "9",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "10",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "11",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "12",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "13",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "14",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "17",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "18",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "19",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "21",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "22",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "24",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "25",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "26",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "28",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "29",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "31",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "32",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "34",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "38",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "40",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "41",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "43",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "44",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "45",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "46",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "47",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "48",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "50",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "51",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "52",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "53",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "57",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "59",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "60",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "62",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "63",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "64",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "65",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "66",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "67",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "69",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "70",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "71",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "72",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "75",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "76",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "77",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "78",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "79",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "80",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "84",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "85",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "86",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "87",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "89",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "90",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "92",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "94",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "95",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "96",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "97",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "98",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "101",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "102",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "103",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "104",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "105",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "106",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "109",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "110",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "111",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "112",
+      "line": "0"
+     }
+    ]
+   },
+   "role": "original",
+   "switches": "11"
+  },
+  {
+   "choices": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "defect": "lost_wakeup_await",
+   "discrepancy": "termination-without-awaited",
+   "divergence_epoch": "15",
+   "name": "reduced-63",
+   "nodes": "10",
+   "policy": "lowest",
+   "program": {
+    "contract_version": "tc1-draft-1",
+    "datatypes": [],
+    "effects": [],
+    "entry": "main",
+    "functions": [
+     {
+      "argument_type": "I64",
+      "body": [
+       "let",
+       "24",
+       "23",
+       [
+        "spawn",
+        "22",
+        [
+         "lambda",
+         "21",
+         "20",
+         "Unit",
+         "I64",
+         [],
+         [],
+         [
+          "int",
+          "113",
+          "0"
+         ]
+        ]
+       ],
+       [
+        "match",
+        "106",
+        [
+         "await",
+         "102",
+         [
+          "var",
+          "101",
+          "23"
+         ]
+        ],
+        [
+         "Ok",
+         [
+          "99"
+         ],
+         [
+          "var",
+          "103",
+          "99"
+         ]
+        ],
+        [
+         "Cancelled",
+         [],
+         [
+          "int",
+          "104",
+          "0"
+         ]
+        ],
+        [
+         "Failed",
+         [
+          "100"
+         ],
+         [
+          "int",
+          "105",
+          "0"
+         ]
+        ]
+       ]
+      ],
+      "effects": [
+       "Task"
+      ],
+      "id": "0",
+      "name": "main",
+      "parameter_id": "1",
+      "result_type": "I64"
+     }
+    ],
+    "input_schema": {
+     "type": "I64"
+    },
+    "module": "tc1-task-generated-2",
+    "schema_version": "tc1-task-demo/1",
+    "slice": "TC1-C1",
+    "source_map": [
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "0",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "21",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "22",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "24",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "101",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "102",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "103",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "104",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "105",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "106",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-reduced",
+      "id": "113",
+      "line": "0"
+     }
+    ]
+   },
+   "role": "minimized",
+   "switches": "2"
+  },
+  {
+   "choices": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "2",
+    "2",
+    "2",
+    "2",
+    "3",
+    "3",
+    "3",
+    "3",
+    "0",
+    "0"
+   ],
+   "defect": "no_sibling_cancel",
+   "discrepancy": "failure-without-sibling-cancel",
+   "divergence_epoch": "36",
+   "name": "original",
+   "nodes": "61",
+   "policy": "lowest",
+   "program": {
+    "contract_version": "tc1-draft-1",
+    "datatypes": [],
+    "effects": [
+     {
+      "name": "Tick",
+      "operations": [
+       {
+        "argument_type": "I64",
+        "name": "tick",
+        "result_type": "I64"
+       }
+      ]
+     }
+    ],
+    "entry": "main",
+    "functions": [
+     {
+      "argument_type": "I64",
+      "body": [
+       "let",
+       "4",
+       "3",
+       [
+        "channel",
+        "2",
+        "I64",
+        "2"
+       ],
+       [
+        "let",
+        "24",
+        "23",
+        [
+         "spawn",
+         "22",
+         [
+          "lambda",
+          "21",
+          "20",
+          "Unit",
+          "I64",
+          [
+           "Channel",
+           "Emit"
+          ],
+          [],
+          [
+           "let",
+           "19",
+           "13",
+           [
+            "prim",
+            "7",
+            "div",
+            [
+             "int",
+             "5",
+             "1"
+            ],
+            [
+             "int",
+             "6",
+             "0"
+            ]
+           ],
+           [
+            "let",
+            "18",
+            "14",
+            [
+             "send",
+             "10",
+             [
+              "var",
+              "8",
+              "3"
+             ],
+             [
+              "int",
+              "9",
+              "111"
+             ]
+            ],
+            [
+             "let",
+             "17",
+             "15",
+             [
+              "emit",
+              "12",
+              "e",
+              [
+               "int",
+               "11",
+               "121"
+              ]
+             ],
+             [
+              "int",
+              "16",
+              "0"
+             ]
+            ]
+           ]
+          ]
+         ]
+        ],
+        [
+         "let",
+         "53",
+         "52",
+         [
+          "spawn",
+          "51",
+          [
+           "lambda",
+           "50",
+           "49",
+           "Unit",
+           "I64",
+           [
+            "Channel",
+            "Emit"
+           ],
+           [],
+           [
+            "let",
+            "48",
+            "42",
+            [
+             "channel",
+             "25",
+             "I64",
+             "1"
+            ],
+            [
+             "let",
+             "47",
+             "43",
+             [
+              "handle",
+              "33",
+              "Tick",
+              [
+               [
+                "tick",
+                "26",
+                [
+                 "prim",
+                 "29",
+                 "add",
+                 [
+                  "var",
+                  "27",
+                  "26"
+                 ],
+                 [
+                  "int",
+                  "28",
+                  "1"
+                 ]
+                ]
+               ]
+              ],
+              [
+               "emit",
+               "32",
+               "h",
+               [
+                "perform",
+                "31",
+                "Tick",
+                "tick",
+                [
+                 "int",
+                 "30",
+                 "211"
+                ]
+               ]
+              ]
+             ],
+             [
+              "let",
+              "46",
+              "44",
+              [
+               "handle",
+               "41",
+               "Tick",
+               [
+                [
+                 "tick",
+                 "34",
+                 [
+                  "prim",
+                  "37",
+                  "add",
+                  [
+                   "var",
+                   "35",
+                   "34"
+                  ],
+                  [
+                   "int",
+                   "36",
+                   "1"
+                  ]
+                 ]
+                ]
+               ],
+               [
+                "emit",
+                "40",
+                "h",
+                [
+                 "perform",
+                 "39",
+                 "Tick",
+                 "tick",
+                 [
+                  "int",
+                  "38",
+                  "221"
+                 ]
+                ]
+               ]
+              ],
+              [
+               "int",
+               "45",
+               "0"
+              ]
+             ]
+            ]
+           ]
+          ]
+         ],
+         [
+          "let",
+          "82",
+          "81",
+          [
+           "spawn",
+           "80",
+           [
+            "lambda",
+            "79",
+            "78",
+            "Unit",
+            "I64",
+            [
+             "Channel",
+             "Task"
+            ],
+            [],
+            [
+             "let",
+             "77",
+             "71",
+             [
+              "match",
+              "61",
+              [
+               "await",
+               "57",
+               [
+                "var",
+                "56",
+                "23"
+               ]
+              ],
+              [
+               "Ok",
+               [
+                "54"
+               ],
+               [
+                "var",
+                "58",
+                "54"
+               ]
+              ],
+              [
+               "Cancelled",
+               [],
+               [
+                "int",
+                "59",
+                "0"
+               ]
+              ],
+              [
+               "Failed",
+               [
+                "55"
+               ],
+               [
+                "int",
+                "60",
+                "0"
+               ]
+              ]
+             ],
+             [
+              "let",
+              "76",
+              "72",
+              [
+               "match",
+               "67",
+               [
+                "receive",
+                "64",
+                [
+                 "var",
+                 "63",
+                 "3"
+                ]
+               ],
+               [
+                "Item",
+                [
+                 "62"
+                ],
+                [
+                 "var",
+                 "65",
+                 "62"
+                ]
+               ],
+               [
+                "End",
+                [],
+                [
+                 "int",
+                 "66",
+                 "0"
+                ]
+               ]
+              ],
+              [
+               "let",
+               "75",
+               "73",
+               [
+                "prim",
+                "70",
+                "div",
+                [
+                 "int",
+                 "68",
+                 "1"
+                ],
+                [
+                 "int",
+                 "69",
+                 "0"
+                ]
+               ],
+               [
+                "int",
+                "74",
+                "0"
+               ]
+              ]
+             ]
+            ]
+           ]
+          ],
+          [
+           "int",
+           "83",
+           "0"
+          ]
+         ]
+        ]
+       ]
+      ],
+      "effects": [
+       "Channel",
+       "Emit",
+       "Task"
+      ],
+      "id": "0",
+      "name": "main",
+      "parameter_id": "1",
+      "result_type": "I64"
+     }
+    ],
+    "input_schema": {
+     "type": "I64"
+    },
+    "module": "tc1-task-generated-0",
+    "schema_version": "tc1-task-demo/1",
+    "slice": "TC1-C1",
+    "source_map": [
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "0",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "2",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "4",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "5",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "6",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "7",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "8",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "9",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "10",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "11",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "12",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "16",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "17",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "18",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "19",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "21",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "22",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "24",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "25",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "27",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "28",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "29",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "30",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "31",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "32",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "33",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "35",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "36",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "37",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "38",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "39",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "40",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "41",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "45",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "46",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "47",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "48",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "50",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "51",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "53",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "56",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "57",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "58",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "59",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "60",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "61",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "63",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "64",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "65",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "66",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "67",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "68",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "69",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "70",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "74",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "75",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "76",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "77",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "79",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "80",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "82",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "83",
+      "line": "0"
+     }
+    ]
+   },
+   "role": "original",
+   "switches": "4"
+  },
+  {
+   "choices": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "2",
+    "2",
+    "2",
+    "2",
+    "0",
+    "0"
+   ],
+   "defect": "no_sibling_cancel",
+   "discrepancy": "failure-without-sibling-cancel",
+   "divergence_epoch": "24",
+   "name": "reduced-27",
+   "nodes": "11",
+   "policy": "lowest",
+   "program": {
+    "contract_version": "tc1-draft-1",
+    "datatypes": [],
+    "effects": [],
+    "entry": "main",
+    "functions": [
+     {
+      "argument_type": "I64",
+      "body": [
+       "let",
+       "24",
+       "23",
+       [
+        "spawn",
+        "22",
+        [
+         "lambda",
+         "21",
+         "20",
+         "Unit",
+         "I64",
+         [],
+         [],
+         [
+          "prim",
+          "7",
+          "div",
+          [
+           "int",
+           "5",
+           "1"
+          ],
+          [
+           "int",
+           "6",
+           "0"
+          ]
+         ]
+        ]
+       ],
+       [
+        "let",
+        "82",
+        "81",
+        [
+         "spawn",
+         "80",
+         [
+          "lambda",
+          "79",
+          "78",
+          "Unit",
+          "I64",
+          [],
+          [],
+          [
+           "int",
+           "122",
+           "0"
+          ]
+         ]
+        ],
+        [
+         "int",
+         "83",
+         "0"
+        ]
+       ]
+      ],
+      "effects": [
+       "Task"
+      ],
+      "id": "0",
+      "name": "main",
+      "parameter_id": "1",
+      "result_type": "I64"
+     }
+    ],
+    "input_schema": {
+     "type": "I64"
+    },
+    "module": "tc1-task-generated-0",
+    "schema_version": "tc1-task-demo/1",
+    "slice": "TC1-C1",
+    "source_map": [
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "0",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "5",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "6",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "7",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "21",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "22",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "24",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "79",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "80",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "82",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "83",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-reduced",
+      "id": "122",
+      "line": "0"
+     }
+    ]
+   },
+   "role": "minimized",
+   "switches": "3"
+  },
+  {
+   "choices": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "3",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4",
+    "4"
+   ],
+   "defect": "capacity_off_by_one",
+   "discrepancy": "send-admitted-over-capacity",
+   "divergence_epoch": "109",
+   "name": "original",
+   "nodes": "67",
+   "policy": "lowest",
+   "program": {
+    "contract_version": "tc1-draft-1",
+    "datatypes": [],
+    "effects": [
+     {
+      "name": "Tick",
+      "operations": [
+       {
+        "argument_type": "I64",
+        "name": "tick",
+        "result_type": "I64"
+       }
+      ]
+     }
+    ],
+    "entry": "main",
+    "functions": [
+     {
+      "argument_type": "I64",
+      "body": [
+       "let",
+       "4",
+       "3",
+       [
+        "channel",
+        "2",
+        "I64",
+        "1"
+       ],
+       [
+        "let",
+        "7",
+        "6",
+        [
+         "channel",
+         "5",
+         "I64",
+         "1"
+        ],
+        [
+         "let",
+         "26",
+         "25",
+         [
+          "spawn",
+          "24",
+          [
+           "lambda",
+           "23",
+           "22",
+           "Unit",
+           "I64",
+           [
+            "Channel"
+           ],
+           [],
+           [
+            "let",
+            "21",
+            "15",
+            [
+             "send",
+             "10",
+             [
+              "var",
+              "8",
+              "6"
+             ],
+             [
+              "int",
+              "9",
+              "101"
+             ]
+            ],
+            [
+             "let",
+             "20",
+             "16",
+             [
+              "send",
+              "13",
+              [
+               "var",
+               "11",
+               "3"
+              ],
+              [
+               "int",
+               "12",
+               "111"
+              ]
+             ],
+             [
+              "let",
+              "19",
+              "17",
+              [
+               "channel",
+               "14",
+               "I64",
+               "1"
+              ],
+              [
+               "int",
+               "18",
+               "0"
+              ]
+             ]
+            ]
+           ]
+          ]
+         ],
+         [
+          "let",
+          "66",
+          "65",
+          [
+           "spawn",
+           "64",
+           [
+            "lambda",
+            "63",
+            "62",
+            "Unit",
+            "I64",
+            [
+             "Channel",
+             "Task"
+            ],
+            [],
+            [
+             "let",
+             "61",
+             "55",
+             [
+              "scope",
+              "49",
+              [
+               "let",
+               "48",
+               "35",
+               [
+                "spawn",
+                "36",
+                [
+                 "lambda",
+                 "34",
+                 "33",
+                 "Unit",
+                 "I64",
+                 [
+                  "Channel"
+                 ],
+                 [],
+                 [
+                  "let",
+                  "32",
+                  "30",
+                  [
+                   "send",
+                   "29",
+                   [
+                    "var",
+                    "27",
+                    "6"
+                   ],
+                   [
+                    "int",
+                    "28",
+                    "2101"
+                   ]
+                  ],
+                  [
+                   "int",
+                   "31",
+                   "0"
+                  ]
+                 ]
+                ]
+               ],
+               [
+                "let",
+                "47",
+                "45",
+                [
+                 "match",
+                 "44",
+                 [
+                  "await",
+                  "40",
+                  [
+                   "var",
+                   "39",
+                   "35"
+                  ]
+                 ],
+                 [
+                  "Ok",
+                  [
+                   "37"
+                  ],
+                  [
+                   "var",
+                   "41",
+                   "37"
+                  ]
+                 ],
+                 [
+                  "Cancelled",
+                  [],
+                  [
+                   "int",
+                   "42",
+                   "0"
+                  ]
+                 ],
+                 [
+                  "Failed",
+                  [
+                   "38"
+                  ],
+                  [
+                   "int",
+                   "43",
+                   "0"
+                  ]
+                 ]
+                ],
+                [
+                 "int",
+                 "46",
+                 "0"
+                ]
+               ]
+              ]
+             ],
+             [
+              "let",
+              "60",
+              "56",
+              [
+               "send",
+               "52",
+               [
+                "var",
+                "50",
+                "6"
+               ],
+               [
+                "int",
+                "51",
+                "211"
+               ]
+              ],
+              [
+               "let",
+               "59",
+               "57",
+               [
+                "cancel",
+                "54",
+                [
+                 "var",
+                 "53",
+                 "25"
+                ]
+               ],
+               [
+                "int",
+                "58",
+                "0"
+               ]
+              ]
+             ]
+            ]
+           ]
+          ],
+          [
+           "let",
+           "82",
+           "81",
+           [
+            "spawn",
+            "80",
+            [
+             "lambda",
+             "79",
+             "78",
+             "Unit",
+             "I64",
+             [
+              "Emit"
+             ],
+             [],
+             [
+              "let",
+              "77",
+              "75",
+              [
+               "handle",
+               "74",
+               "Tick",
+               [
+                [
+                 "tick",
+                 "67",
+                 [
+                  "prim",
+                  "70",
+                  "add",
+                  [
+                   "var",
+                   "68",
+                   "67"
+                  ],
+                  [
+                   "int",
+                   "69",
+                   "1"
+                  ]
+                 ]
+                ]
+               ],
+               [
+                "emit",
+                "73",
+                "h",
+                [
+                 "perform",
+                 "72",
+                 "Tick",
+                 "tick",
+                 [
+                  "int",
+                  "71",
+                  "301"
+                 ]
+                ]
+               ]
+              ],
+              [
+               "int",
+               "76",
+               "0"
+              ]
+             ]
+            ]
+           ],
+           [
+            "let",
+            "93",
+            "91",
+            [
+             "match",
+             "90",
+             [
+              "await",
+              "86",
+              [
+               "var",
+               "85",
+               "25"
+              ]
+             ],
+             [
+              "Ok",
+              [
+               "83"
+              ],
+              [
+               "var",
+               "87",
+               "83"
+              ]
+             ],
+             [
+              "Cancelled",
+              [],
+              [
+               "int",
+               "88",
+               "0"
+              ]
+             ],
+             [
+              "Failed",
+              [
+               "84"
+              ],
+              [
+               "int",
+               "89",
+               "0"
+              ]
+             ]
+            ],
+            [
+             "int",
+             "92",
+             "0"
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ],
+      "effects": [
+       "Channel",
+       "Emit",
+       "Task"
+      ],
+      "id": "0",
+      "name": "main",
+      "parameter_id": "1",
+      "result_type": "I64"
+     }
+    ],
+    "input_schema": {
+     "type": "I64"
+    },
+    "module": "tc1-task-generated-5",
+    "schema_version": "tc1-task-demo/1",
+    "slice": "TC1-C1",
+    "source_map": [
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "0",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "2",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "4",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "5",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "7",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "8",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "9",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "10",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "11",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "12",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "13",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "14",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "18",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "19",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "20",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "21",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "23",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "24",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "26",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "27",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "28",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "29",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "31",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "32",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "34",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "36",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "39",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "40",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "41",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "42",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "43",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "44",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "46",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "47",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "48",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "49",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "50",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "51",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "52",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "53",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "54",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "58",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "59",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "60",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "61",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "63",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "64",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "66",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "68",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "69",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "70",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "71",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "72",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "73",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "74",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "76",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "77",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "79",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "80",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "82",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "85",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "86",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "87",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "88",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "89",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "90",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "92",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "93",
+      "line": "0"
+     }
+    ]
+   },
+   "role": "original",
+   "switches": "5"
+  },
+  {
+   "choices": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2"
+   ],
+   "defect": "capacity_off_by_one",
+   "discrepancy": "send-admitted-over-capacity",
+   "divergence_epoch": "39",
+   "name": "reduced-54",
+   "nodes": "19",
+   "policy": "lowest",
+   "program": {
+    "contract_version": "tc1-draft-1",
+    "datatypes": [],
+    "effects": [],
+    "entry": "main",
+    "functions": [
+     {
+      "argument_type": "I64",
+      "body": [
+       "let",
+       "7",
+       "6",
+       [
+        "channel",
+        "5",
+        "I64",
+        "1"
+       ],
+       [
+        "let",
+        "26",
+        "25",
+        [
+         "spawn",
+         "24",
+         [
+          "lambda",
+          "23",
+          "22",
+          "Unit",
+          "I64",
+          [
+           "Channel"
+          ],
+          [],
+          [
+           "let",
+           "21",
+           "15",
+           [
+            "send",
+            "10",
+            [
+             "var",
+             "8",
+             "6"
+            ],
+            [
+             "int",
+             "9",
+             "101"
+            ]
+           ],
+           [
+            "int",
+            "2103",
+            "0"
+           ]
+          ]
+         ]
+        ],
+        [
+         "let",
+         "66",
+         "65",
+         [
+          "spawn",
+          "64",
+          [
+           "lambda",
+           "63",
+           "62",
+           "Unit",
+           "I64",
+           [
+            "Channel"
+           ],
+           [],
+           [
+            "let",
+            "60",
+            "56",
+            [
+             "send",
+             "52",
+             [
+              "var",
+              "50",
+              "6"
+             ],
+             [
+              "int",
+              "51",
+              "211"
+             ]
+            ],
+            [
+             "int",
+             "58",
+             "0"
+            ]
+           ]
+          ]
+         ],
+         [
+          "int",
+          "2102",
+          "0"
+         ]
+        ]
+       ]
+      ],
+      "effects": [
+       "Channel",
+       "Task"
+      ],
+      "id": "0",
+      "name": "main",
+      "parameter_id": "1",
+      "result_type": "I64"
+     }
+    ],
+    "input_schema": {
+     "type": "I64"
+    },
+    "module": "tc1-task-generated-5",
+    "schema_version": "tc1-task-demo/1",
+    "slice": "TC1-C1",
+    "source_map": [
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "0",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "5",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "7",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "8",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "9",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "10",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "21",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "23",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "24",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "26",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "50",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "51",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "52",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "58",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "60",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "63",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "64",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-generated",
+      "id": "66",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-reduced",
+      "id": "2102",
+      "line": "0"
+     },
+     {
+      "column": "0",
+      "file": "tc1-task-reduced",
+      "id": "2103",
+      "line": "0"
+     }
+    ]
+   },
+   "role": "minimized",
+   "switches": "2"
+  }
+ ],
+ "count": "200",
+ "family": "tc1-task-generated/1",
+ "producer": "harness/tc1-task-loop.shen",
+ "qualification": "UNKNOWN",
+ "schema": "tc1-task-retained-failures/1",
+ "seed": "1"
+}
