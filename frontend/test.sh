@@ -12,6 +12,7 @@
 #               of the same name rewritten in surface syntax: the model run of
 #               the elaborated artifact has the fixture's outcome and emissions,
 #               and the artifact is the fixture's program up to a renaming of IDs
+#   schedules   C1 fixtures use their stated schedule; a non-runnable choice fails
 #   stable      elaborating twice gives the same bytes
 #   remote      every program under examples/remote/ and tests/frontend/remote/
 #               declares a remote effect: it checks, elaborates twice to the same
@@ -98,13 +99,33 @@ for file in tests/frontend/roundtrip/*.fen; do
     continue
   fi
   sh "$fenrir" emit "$file" "$work/elaborated.json" > /dev/null 2>&1
+  if grep -Fq '"schema_version":"tc1-task-demo/1"' "$work/fixture.json" &&
+     ! grep -Fq '"schema_version":"tc1-task-demo/1","slice":"TC1-C1"' "$work/elaborated.json"; then
+    fail "$file" "expected C1 artifact identity"; continue
+  fi
   if ! difference=$(node tests/frontend/fixture.mjs same "$work/fixture.json" "$work/elaborated.json" 2>&1); then
     fail "$file" "not the fixture's program up to IDs:" "$difference"
   fi
 done
 
+schedules=0
+for file in tests/frontend/schedules/*.fen; do
+  schedules=$((schedules + 1))
+  spec=$(sed -n 's/^\\\\ schedule //p' "$file")
+  sed -n 's/^\\\\ > //p' "$file" > "$work/expected"
+  want=0
+  if grep -q ': error:' "$work/expected"; then want=1; fi
+  status=0
+  sh "$fenrir" run "$file" "$spec" > "$work/out" 2>&1 || status=$?
+  observed "$work/out" | grep -v '^schedule: ' > "$work/observed"
+  if [ "$status" -ne "$want" ] || [ -z "$spec" ] || [ ! -s "$work/expected" ] ||
+     ! cmp -s "$work/expected" "$work/observed"; then
+    fail "$file" "status $status (expected $want)" "expected: $(cat "$work/expected")" "got: $(cat "$work/out")"
+  fi
+done
+
 stable=0
-for file in examples/*.fen; do
+for file in examples/*.fen tests/frontend/programs/task-*.fen; do
   stable=$((stable + 1))
   name=$(basename "$file" .fen)
   sh "$fenrir" emit "$file" "$work/$name.json" > /dev/null 2>&1
@@ -233,6 +254,6 @@ else
   solo5="skipped (FENRIR_SOLO5 is not set and build/vendor/solo5 is not built)"
 fi
 
-printf 'frontend tests: %s accepted programs, %s rejected programs, %s round trips, %s stable artifacts, %s remote programs, %s programs with includes, %s durable programs; Solo5: %s; failures: %s\n' \
-  "$accepted" "$rejected" "$roundtrips" "$stable" "$remote" "$included" "$durable" "$solo5" "$failures"
+printf 'frontend tests: %s accepted programs, %s rejected programs, %s round trips, %s schedule runs, %s stable artifacts, %s remote programs, %s programs with includes, %s durable programs; Solo5: %s; failures: %s\n' \
+  "$accepted" "$rejected" "$roundtrips" "$schedules" "$stable" "$remote" "$included" "$durable" "$solo5" "$failures"
 [ "$failures" -eq 0 ]

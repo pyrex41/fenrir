@@ -1,0 +1,4 @@
+\\ expect 2:11 Outcome is a built-in type and cannot be declared
+(datatype Outcome A B)
+(define main {I64 --> I64}
+  input -> (do yield 0))

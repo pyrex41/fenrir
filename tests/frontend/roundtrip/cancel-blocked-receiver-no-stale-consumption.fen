@@ -1,0 +1,10 @@
+\\ Round trip: the TC1-C1 hand fixture cancel-blocked-receiver-no-stale-consumption, in surface syntax.
+\\ frontend/test.sh compares this program's run (production FIFO schedule) with the run of the fixture's artifact.
+
+(define main {I64 --> I64}
+  input -> (let c (channel I64 1)
+                t (spawn (lambda (_ : Unit) (match (receive c) ((Item x) -> x) (End -> 0))))
+             (do (cancel t)
+                 (match (await t) ((Ok x) -> 0) (Cancelled -> 0) ((Failed code) -> 0))
+                 (send c 5)
+                 (match (receive c) ((Item x) -> x) (End -> 0)))))

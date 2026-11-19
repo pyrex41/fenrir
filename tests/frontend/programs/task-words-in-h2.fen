@@ -1,0 +1,11 @@
+\\ > outcome: Ok 42
+\\ These pre-C1 names are still datatypes, a function, and a local parameter.
+(datatype SendResult (Wrapped I64))
+(datatype Outcome (Kept I64))
+(define apply-outcome {(Tuple (Outcome --> I64) Outcome) --> I64}
+  f v -> (f v))
+(define send {I64 --> SendResult}
+  yield -> (Wrapped (apply-outcome (lambda (r : Outcome) (match r ((Kept n) -> (+ n 2))))
+                                   (Kept yield))))
+(define main {I64 --> I64}
+  input -> (match (send 40) ((Wrapped x) -> x)))

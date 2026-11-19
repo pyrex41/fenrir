@@ -1,0 +1,7 @@
+\\ Round trip: the TC1-C1 hand fixture deadlock-receive-and-await, in surface syntax.
+\\ frontend/test.sh compares this program's run (production FIFO schedule) with the run of the fixture's artifact.
+
+(define main {I64 --> I64}
+  input -> (let c (channel I64 1)
+                t (spawn (lambda (_ : Unit) (match (receive c) ((Item x) -> x) (End -> 0))))
+             (match (await t) ((Ok r) -> r) (Cancelled -> 0) ((Failed code) -> 0))))

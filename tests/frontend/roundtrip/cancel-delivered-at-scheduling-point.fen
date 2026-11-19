@@ -1,0 +1,7 @@
+\\ Round trip: the TC1-C1 hand fixture cancel-delivered-at-scheduling-point, in surface syntax.
+\\ frontend/test.sh compares this program's run (production FIFO schedule) with the run of the fixture's artifact.
+
+(define main {I64 --> I64}
+  input -> (let t (spawn (lambda (_ : Unit) (do (emit "a" 0) (emit "b" 0) yield (emit "c" 0) 0)))
+             (do (cancel t)
+                 (match (await t) ((Ok x) -> 0) (Cancelled -> 1) ((Failed code) -> 2)))))

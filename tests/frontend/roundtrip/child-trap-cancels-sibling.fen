@@ -1,0 +1,8 @@
+\\ Round trip: the TC1-C1 hand fixture child-trap-cancels-sibling, in surface syntax.
+\\ frontend/test.sh compares this program's run (production FIFO schedule) with the run of the fixture's artifact.
+
+(define main {I64 --> I64}
+  input -> (let c (channel I64 1)
+                a (spawn (lambda (_ : Unit) (do yield (/ 1 0))))
+                b (spawn (lambda (_ : Unit) (do (emit "b0" 0) (match (receive c) ((Item x) -> x) (End -> 0)) (emit "b1" 0) 0)))
+             (do (emit "root" 0) 0)))

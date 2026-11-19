@@ -13,6 +13,7 @@ import {encode} from '../../tools/tc0/canonical.mjs';
 import {cases as callHand} from '../../fixtures/tc0/pure-call-hand-cases.mjs';
 import {cases as dataHand} from '../../fixtures/tc0/pure-data-hand-cases.mjs';
 import {cases as handlerCases,resumptionCases} from '../../fixtures/tc1/handler-hand-cases.mjs';
+import {cases as taskCases} from '../../fixtures/tc1/task-hand-cases.mjs';
 
 const differ=(where,a,b)=>{console.log(`${where}: ${JSON.stringify(a)} against ${JSON.stringify(b)}`);process.exit(1);};
 // Canonical encoding, so that the order of object keys does not matter.
@@ -34,6 +35,7 @@ function same(a,b) {
     else if(tag==='let'){id(where,p[0],q[0]);each(p.slice(1),q.slice(1));}
     else if(tag==='lambda'){id(where,p[0],q[0]);literal(where+' signature',p.slice(1,5),q.slice(1,5));expression(where,p[5],q[5]);}
     else if(tag==='resume'){id(where,p[0],q[0]);expression(where,p[1],q[1]);}
+    else if(tag==='channel')literal(where+' element type and capacity',p,q);
     else if(tag==='project'){expression(where,p[0],q[0]);literal(where+' index',p[1],q[1]);}
     else if(tag==='match') {
       expression(where,p[0],q[0]);
@@ -60,7 +62,7 @@ function same(a,b) {
 
 const [command,first,second]=process.argv.slice(2);
 if(command==='write'&&second) {
-  const found=[...callHand,...dataHand,...handlerCases,...resumptionCases].find(c=>c.name===first);
+  const found=[...callHand,...dataHand,...handlerCases,...resumptionCases,...taskCases].find(c=>c.name===first);
   if(!found){console.error(`no hand fixture is named ${first}`);process.exit(2);}
   writeFileSync(second,JSON.stringify(found.program));
 } else if(command==='same'&&second) {
