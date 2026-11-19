@@ -14,7 +14,8 @@ if (script.endsWith('/frontend/main.shen') && mode === 'emit') {
   fs.writeFileSync(out + '/result', 'mock emit\\n');
   fs.writeFileSync(artifact, '{}');
 } else if (mode === 'replay') {
-  if (script.endsWith('/service-fenrir.shen') && !fs.existsSync(artifacts + '/accepted-job.json')) {
+  if ((script.endsWith('/service-fenrir.shen') || script.endsWith('/service-upgrade-fenrir.shen')) &&
+      !fs.existsSync(artifacts + '/accepted-job.json')) {
     process.exit(2);
   }
   const fixture = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -23,6 +24,7 @@ if (script.endsWith('/frontend/main.shen') && mode === 'emit') {
     file, machine: fixture.machine, check: fixture.check, length: fixture.length,
     schedule_enabled: true, first_failure_at: fixture.length,
   };
+  if (fixture.schema === 'fenrir.service.upgrade-counterexample/1') report.schedule_within_budget = true;
   console.log('loaded Shen replay evaluator');
   switch (process.env.MOCK_REPLAY) {
     case 'exit-mismatch': process.exitCode = 1; break;
@@ -30,6 +32,7 @@ if (script.endsWith('/frontend/main.shen') && mode === 'emit') {
     case 'wrong-file': report.file += '.other'; break;
     case 'wrong-step': report.first_failure_at++; break;
     case 'wrong-schema': report.schema += '.other'; break;
+    case 'out-of-budget': report.schedule_within_budget = false; break;
     case 'nested-status':
       console.log(JSON.stringify({ diagnostic: { status: 'reproduced' } }));
       return;
@@ -43,8 +46,10 @@ if (script.endsWith('/frontend/main.shen') && mode === 'emit') {
 }
 `;
 
-for (const [name, suffix] of [['explore', ''], ['fenrir', '-a2']]) {
+for (const [name, suffix] of [['explore', ''], ['fenrir', '-a2'],
+  ['upgrade', '-a4'], ['upgrade-fenrir', '-a4-fenrir']]) {
   test(`${name} retained replay requires an agreeing exit and structured report`, async t => {
+    const upgrade = name.startsWith('upgrade');
     const cwd = mkdtempSync(join(tmpdir(), 'fenrir-retained-replay-'));
     t.after(() => rmSync(cwd, { recursive: true, force: true }));
     const script = `harness/run-service-${name}.sh`;
@@ -54,6 +59,11 @@ for (const [name, suffix] of [['explore', ''], ['fenrir', '-a2']]) {
     };
     for (const path of [script, 'harness/jit.sh', 'harness/solo5.sh', 'frontend/fenrir.sh',
       'examples/service/accepted-job.fen', 'examples/service/mutants/no-key-check.fen']) copy(path);
+    if (name === 'upgrade-fenrir') {
+      for (const path of ['accepted-job-v2.fen', 'migrate-v1-v2.fen', 'mutants-a4/migrate-drops-keys.fen']) {
+        copy(`examples/service/${path}`);
+      }
+    }
     copy('harness/service-retained-replay.sh');
     const jit = join(cwd, 'mock-jit');
     mkdirSync(join(jit, 'bin'), { recursive: true });
@@ -62,10 +72,11 @@ for (const [name, suffix] of [['explore', ''], ['fenrir', '-a2']]) {
     mkdirSync(join(cwd, fixtureDir), { recursive: true });
     writeFileSync(join(cwd, fixtureDir, 'fixture.json'), JSON.stringify({
       machine: 'retry-mutant', check: 'retry.replay', length: 2,
+      ...(upgrade && { schema: 'fenrir.service.upgrade-counterexample/1' }),
     }));
 
     for (const scenario of ['success', 'exit-mismatch', 'status-mismatch', 'wrong-file', 'wrong-step',
-      'wrong-schema', 'nested-status', 'malformed']) {
+      'wrong-schema', 'nested-status', 'malformed', ...(upgrade ? ['out-of-budget'] : [])]) {
       await t.test(scenario, () => {
         const result = spawnSync('sh', [script, 'replay-retained'], {
           cwd, encoding: 'utf8', timeout: 10_000,

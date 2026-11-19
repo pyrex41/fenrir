@@ -1,0 +1,77 @@
+\\ Stage A4 of the application example (04_DIRECTION_AMENDMENT.md section 8): version 2
+\\ of the accepted-job handler (spec/service/UPGRADE.md section 2). Version 1 is
+\\ examples/service/accepted-job.fen, unchanged; this file differs from it only where
+\\ the v2 storage contract (UPGRADE.md section 2.2) differs:
+\\
+\\ - a job is staged with its attempt count, (StageJob2 0);
+\\ - a delivery finishes the job AND counts the attempt, in the same commit, still only
+\\   while the job is pending;
+\\ - the commit is Tx2, which carries the contract version in band: the store refuses a
+\\   Tx2 unless version 2 is in force (UPGRADE.md section 4.3);
+\\ - a receipt is (Receipt t k d r j), recorded under v1 and returned unchanged, or
+\\   (Receipt2 t k d r j), made by the v2 store for a request accepted under v2. The
+\\   handler never builds a receipt: it returns the one the store recorded.
+\\
+\\ There is no module system: the library is the first part of this file.
+
+\\ ---------- the v2 storage contract's vocabulary (UPGRADE.md section 2.2) ----------
+
+(datatype Cap (Tenant I64))
+(datatype Receipt (Receipt I64 I64 I64 I64 I64) (Receipt2 I64 I64 I64 I64 I64))
+(datatype Guard Always (Once I64) (Pending I64))
+(datatype Write (PutReport I64 Bytes) (StageJob2 I64) (RecordKey I64 I64) (Finish I64 Bool) (CountAttempt I64))
+(datatype Writes Done (Then Write Writes))
+(datatype Tx (Tx2 Cap Guard Writes))
+(datatype Reply (Committed Receipt) (Recorded I64 Receipt) Applied Skipped Unauthorized)
+
+(effect Store durable
+  (commit Tx --> Reply))
+
+\\ ---------- library: atomic, once, jobs-stage ----------
+
+\\ The body of a transaction computes its write set and can perform nothing, so the
+\\ whole transaction reaches the host as one commit.
+(define atomic {(Tuple Cap Guard (Unit --> Writes)) --> Reply}
+  cap guard build -> (perform Store commit (Tx2 cap guard (build unit))))
+
+(define once {I64 --> Guard}
+  key -> (Once key))
+
+\\ Stage the durable job of the report this commit writes, with no attempt yet.
+(define jobs-stage {Writes --> Writes}
+  writes -> (Then (StageJob2 0) writes))
+
+(define tenant-of {Cap --> I64}
+  cap -> (match cap ((Tenant t) -> t)))
+
+\\ ---------- the handler ----------
+
+(datatype Command (Submit Cap I64 I64 Bytes) (Complete Cap I64 Bool))
+(datatype Response (Accepted Receipt) (Conflict I64 I64) Delivered Refused)
+
+(define decide {(Tuple Cap I64 I64 Reply) --> Response}
+  cap key digest reply ->
+    (match reply
+      ((Committed receipt) -> (Accepted receipt))
+      ((Recorded recorded receipt) -> (if (= recorded digest) (Accepted receipt) (Conflict (tenant-of cap) key)))
+      (Applied -> Refused)
+      (Skipped -> Refused)
+      (Unauthorized -> Refused)))
+
+(define submit {(Tuple Cap I64 I64 Bytes) --> Response}
+  cap key digest payload ->
+    (decide cap key digest
+      (atomic cap (once key)
+        (lambda (u : Unit)
+          (jobs-stage (Then (PutReport digest payload) (Then (RecordKey key digest) Done)))))))
+
+\\ The worker's delivery of a job's result: done (ok) or failed, and the attempt
+\\ counted, once.
+(define complete {(Tuple Cap I64 Bool) --> Response}
+  cap job ok -> (do (atomic cap (Pending job) (lambda (u : Unit) (Then (Finish job ok) (Then (CountAttempt job) Done))))
+                    Delivered))
+
+(define main {Command --> Response}
+  command -> (match command
+               ((Submit cap key digest payload) -> (submit cap key digest payload))
+               ((Complete cap job ok) -> (complete cap job ok))))

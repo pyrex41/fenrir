@@ -16,6 +16,8 @@ service_replay_retained() {
         const report = JSON.parse(readFileSync(0, "utf8"));
         if (report.schema === "fenrir.service.replay/1" && report.status === "reproduced" &&
             report.schedule_enabled === true && report.file === file &&
+            (fixture.schema !== "fenrir.service.upgrade-counterexample/1" ||
+             report.schedule_within_budget === true) &&
             typeof fixture.machine === "string" && report.machine === fixture.machine &&
             typeof fixture.check === "string" && report.check === fixture.check &&
             Number.isSafeInteger(fixture.length) && report.length === fixture.length &&

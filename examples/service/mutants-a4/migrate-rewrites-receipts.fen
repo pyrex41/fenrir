@@ -1,0 +1,65 @@
+\\ A4 migration mutant migrate-rewrites-receipts: every recorded receipt is rewritten to the v2
+\\ representation (one change from examples/service/migrate-v1-v2.fen).
+\\ Stage A4 of the application example: the v1 -> v2 migration of the accepted-job
+\\ store, as a Fenrir program (spec/service/UPGRADE.md section 5).
+\\
+\\ The migration function is pure (migrate-row): a v1 job row gains its attempt count,
+\\ derived from its status (0 while pending; 1 once done or failed, because exactly one
+\\ delivery was applied); a key row is carried over with its receipt exactly as
+\\ recorded, so a client retrying a request accepted under v1 is answered with the same
+\\ receipt after the upgrade.
+\\
+\\ It is performed through one durable effect, Migration, discharged by the host, one
+\\ row per request (a host reply is at most 512 bytes in control protocol v2):
+\\   read i      row i of the snapshot the host took when row 0 was read (NoMore past
+\\               the end); reading row 0 starts a new snapshot and drops anything staged
+\\   stage row   the v2 row computed from a v1 row, kept by the host (volatile)
+\\   install n   after reading all n rows: the host installs the staged rows, in one
+\\               transaction with the schema change and the upgrade state, only if the
+\\               store still holds exactly the snapshot (compare-and-swap; a D1 program
+\\               cannot hold a transaction open across host requests, DURABLE.md
+\\               section 8) and the upgrade is prepared
+\\ Changed means a v1 request committed after the snapshot: read again, at most three
+\\ times.
+
+(datatype Status Pending Done Failed)
+(datatype Receipt (Receipt I64 I64 I64 I64 I64) (Receipt2 I64 I64 I64 I64 I64))
+\\ (Job1 tenant id report status), (Key1 tenant key digest receipt)
+(datatype Row1 (Job1 I64 I64 I64 Status) (Key1 I64 I64 I64 Receipt))
+(datatype Next1 NoMore (Next Row1))
+\\ (Job2 tenant id report status attempts), (Key2 tenant key digest receipt)
+(datatype Row2 (Job2 I64 I64 I64 Status I64) (Key2 I64 I64 I64 Receipt))
+(datatype Ack Ack)
+(datatype Migrated Installed Changed Refused)
+
+(effect Migration durable
+  (read I64 --> Next1)
+  (stage Row2 --> Ack)
+  (install I64 --> Migrated))
+
+\\ ---------- the migration function ----------
+
+(define attempts-of {Status --> I64}
+  status -> (match status (Pending -> 0) (Done -> 1) (Failed -> 1)))
+
+(define migrate-row {Row1 --> Row2}
+  row -> (match row
+           ((Job1 t j report status) -> (Job2 t j report status (attempts-of status)))
+           ((Key1 t k d receipt) -> (Key2 t k d (match receipt ((Receipt a b c r j) -> (Receipt2 a b c r j)) ((Receipt2 a b c r j) -> (Receipt2 a b c r j)))))))
+
+\\ ---------- performing it ----------
+
+\\ Read rows i, i+1, ... and stage each one's migration; the number of rows read.
+(define copy {I64 --> I64}
+  i -> (match (perform Migration read i)
+         (NoMore -> i)
+         ((Next row) -> (do (perform Migration stage (migrate-row row)) (copy (+ i 1))))))
+
+(define attempt {I64 --> Migrated}
+  tries -> (match (perform Migration install (copy 0))
+             (Installed -> Installed)
+             (Changed -> (if (> tries 1) (attempt (- tries 1)) Changed))
+             (Refused -> Refused)))
+
+(define main {Unit --> Migrated}
+  u -> (attempt 3))

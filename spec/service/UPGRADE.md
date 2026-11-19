@@ -228,10 +228,11 @@ rows exceeds it (`GuestError Oversize`). One row per request keeps every reply u
 limit; the guest-to-host direction (61,440 bytes) was never the constraint. This is a
 transport limit, not a limit of the durable contract.
 
-The host installs the rows the program computed, checking only their types (DURABLE.md
-§5), the row count and the compare. It does not re-derive them: what is checked against
-the model is that the program computes `mig-store` (§9), not that the host would catch a
-wrong program.
+The refinement harness checks that the program computes `mig-store` (§9). Its
+emulated host checks types, row count and the compare; this is not evidence that
+an OTP host would catch a wrong program. The proposed host boundary must validate
+the staged rows and preservation obligations independently (see
+[A4 host port](../../host/service/A4_PORT.md)).
 
 ## 6 Properties
 
@@ -353,11 +354,20 @@ Kept outside the model (harness/service-upgrade-mutants.shen), each one change:
 
 ## 9 Fenrir handlers and the refinement check
 
+From the repository root with Shen/JIT available, run
+`sh harness/run-service-upgrade.sh` for the A4 model and its mutant campaign.
+`sh harness/run-service-upgrade-fenrir.sh` runs the Fenrir refinement, its mutant
+campaign, the sandboxed JS comparison, and the Solo5 sample (requires a Linux
+spt host). Each accepts `replay-retained` for its own counterexample set.
+The Solo5 sample check uses one cold-boot replay per tape; its `quick` mode
+does not repeat the standalone hostile-host or independent rerecording checks.
+None of these commands qualify the OTP host or test power loss.
+
 As A2: a Fenrir machine is the A4 model with every run (`submit`, `complete`,
 `dispatch` then `land`) executed by running the handler program of the run's version on
 the Shen TC1-D1 model, its `Store.commit` answered by the store under the storage
 contract of that version (HANDLER.md §3 for `Tx`, §2.2 for `Tx2`) with the fencing of
-§4.3, and `migrate` executed by running the migration program with its two requests
+§4.3, and `migrate` executed by running the migration program with its requests
 answered on the current stores (*provisional*: both answered within the `migrate` step).
 The claim, checked by bounded exploration, is that this machine has exactly the A4
 model's graph: same states, edges and responses. Separately, for every reachable
@@ -368,10 +378,9 @@ compare-and-swap of §5). The distinct (program, request, replies) runs are then
 the JavaScript TC1-D1 implementation and, on a declared sample, in the Solo5 guest,
 step for step against the model.
 
-## 10 The real stack (host/service)
+## 10 Proposed real-stack mapping (host/service)
 
-The mapping, stated as named assumptions in
-[host/service/CONTRACT.md](../../host/service/CONTRACT.md) §7:
+This section is a design, not evidence that the current A3 host implements A4.
 
 - The SQLite file has a `meta` table with the schema version (`schema`:
   `fenrir.host.service-store/1` or `/2`) and the upgrade state (`upgrade`, with the image
@@ -387,7 +396,15 @@ The mapping, stated as named assumptions in
   migration guest), `cut_over`, `abort_upgrade`, `upgrade_state`.
 - History schema `fenrir.service.history/2` adds the upgrade events, `unavailable`,
   dispatched runs and v2 receipts; schema `/1` histories stay valid and are checked as
-  before ([HISTORY_FORMAT.md](HISTORY_FORMAT.md) §4).
+  before ([HISTORY_FORMAT.md](HISTORY_FORMAT.md)).
+
+The model's tenant label represents a tenant already authenticated by the host. It
+does not stand for an authority carried in the guest's request. The A4 host must
+preserve A3's token-to-scope binding, the separate trusted delivery path and the
+host's check of the response tenant before publication. A version or image selected
+by the guest cannot confer authority. The operator-only migration capability is
+separate from tenant credentials and from the handler's store capability; a handler
+must never acquire cross-tenant snapshot, staging or install access.
 
 ## 11 For the owner to confirm
 
@@ -407,7 +424,7 @@ The mapping, stated as named assumptions in
 7. No rollback between `migrate` and `cut-over` (possible, not done), none after
    `cut-over` (§4.5).
 8. Progress assumption F3: a migrated upgrade is eventually cut over (§6).
-9. The migration's two requests answered within the `migrate` step in the refinement
+9. The migration's requests answered within the `migrate` step in the refinement
    check; interleaving covered by the separate compare-and-swap check (§9).
 10. The install's compare covers job and key rows; reports and `Next` are compared
     through them (§5). A v1 commit always changes a job or key row, except a delivery
