@@ -2,7 +2,7 @@
 %% bytes checked here, never executed later from its descriptor's original paths.
 %% The local operator and the host-owned launch directory are in the TCB.
 -module(fenrir_a4_image).
--export([admit/2, admit_pair/3, load/3, with_launch/3]).
+-export([admit/2, admit_handler/3, load/3, with_launch/3]).
 
 admit(Path, Role) ->
     case bundle(Path, Role) of
@@ -10,13 +10,11 @@ admit(Path, Role) ->
         Error -> Error
     end.
 
-admit_pair(V1, V2, Tenants) ->
-    case {bundle(V1, handler_v1), bundle(V2, handler_v2)} of
-        {{ok, P1, {#{<<"domain">> := Domain = #{<<"tenants">> := Tenants}}, _, _}},
-         {ok, P2, {#{<<"domain">> := Domain}, _, _}}} -> {ok, P1, P2};
-        {{ok, _, _}, {ok, _, _}} -> {error, upgrade_request_domain_mismatch};
-        {{error, _} = Error, _} -> Error;
-        {_, Error} -> Error
+admit_handler(Path, Role, Tenants) when Role =:= handler_v1; Role =:= handler_v2 ->
+    case bundle(Path, Role) of
+        {ok, Pin, {#{<<"domain">> := Domain = #{<<"tenants">> := Tenants}}, _, _}} -> {ok, Pin, Domain};
+        {ok, _, _} -> {error, upgrade_request_domain_mismatch};
+        Error -> Error
     end.
 
 load(Path, Role, Expected) ->

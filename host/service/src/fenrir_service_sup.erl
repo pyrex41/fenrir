@@ -29,9 +29,9 @@ start_checked(Config = #{a4 := #{operator := Operator, handler := Handler, launc
             andalso is_integer(Count) andalso Count >= 1 andalso Count =< 64
             andalso Mutant =:= normal andalso filelib:is_dir(Dir) of
         true ->
-            case fenrir_a4_image:admit_pair(maps:get(image, Config), Handler, maps:get(tenants, Config)) of
-                {ok, V1, V2} ->
-                    supervisor:start_link({local, ?MODULE}, ?MODULE, {top, Config#{a4_pins => {V1, V2}}});
+            case fenrir_a4_image:admit_handler(Handler, handler_v2, maps:get(tenants, Config)) of
+                {ok, Pin, Domain} ->
+                    supervisor:start_link({local, ?MODULE}, ?MODULE, {top, Config#{a4_v2 => {Pin, Domain}}});
                 {error, _} = Error -> Error
             end;
         false -> {error, invalid_a4_supervisor_config}
@@ -65,15 +65,22 @@ init({top, Config}) ->
 init({workers, Workers, Config}) -> worker_sup_init({Workers, Config}).
 
 worker_sup_init({#{v1 := V1, v2 := V2},
-                 Config = #{a4 := #{handler := Handler, launch_dir := Dir}, a4_pins := {P1, P2}}}) ->
+                 Config = #{a4 := #{handler := Handler, launch_dir := Dir}, a4_v2 := {P2, Domain}}}) ->
     Base = #{launcher => maps:get(launcher, Config), a4_launch_dir => Dir,
              console_dir => maps:get(console_dir, Config, "/tmp")},
     V2Specs = bank(v2, V2, Base#{image => Handler, a4_pin => P2}),
     case fenrir_store:routing_phase() of
         {ok, {v2, P2}} -> {ok, {worker_strategy(), V2Specs}};
         {ok, Phase} when Phase =:= v1; Phase =:= {prepared, P2}; Phase =:= {migrated, P2} ->
-            {ok, {worker_strategy(),
-                  bank(v1, V1, Base#{image => maps:get(image, Config), a4_v1_pin => P1}) ++ V2Specs}};
+            %% Read v1 only after SQLite tells us that recovery may still
+            %% require it. Durable v2 must never depend on retired bytes.
+            Path = maps:get(image, Config, undefined),
+            case fenrir_a4_image:admit_handler(Path, handler_v1, maps:get(tenants, Config)) of
+                {ok, P1, Domain} ->
+                    {ok, {worker_strategy(), bank(v1, V1, Base#{image => Path, a4_v1_pin => P1}) ++ V2Specs}};
+                {ok, _, _} -> error(upgrade_request_domain_mismatch);
+                {error, Why} -> error({v1_image_required, Why})
+            end;
         {ok, _} -> error(durable_image_pin_mismatch);
         _ -> error(durable_phase_unavailable)
     end;
