@@ -118,7 +118,31 @@ with_store(C, Name, Mutant, Fun) ->
     fenrir_drive:fresh_db(Db),
     case ets:info(fenrir_mailbox) of undefined -> ets:new(fenrir_mailbox, [named_table, public]); _ -> ok end,
     {ok, Pid} = fenrir_store:start_link(#{db => Db, tenants => 2, mutant => Mutant}),
-    try Fun(Db) after gen_server:stop(Pid) end.
+    %% Wait for this exact fixture to finish terminating, including SQLite port
+    %% close. Never kill a process found by name or treat a failed stop as success.
+    try Fun(Db) after ok = gen_server:stop(Pid, normal, 10000) end.
+
+store_fixture_teardown(C) ->
+    Name = "fixture-teardown",
+    %% Test the exception path too. Capture the fixture's exact server and port
+    %% from inside the callback and check both immediately, without a sleep.
+    {Pid, Port} =
+        try with_store(C, Name, normal, fun(_) ->
+            Store = whereis(fenrir_store),
+            #{port := OpenPort} = sys:get_state(Store),
+            true = is_port(OpenPort),
+            throw({fixture_exception, Store, OpenPort})
+        end)
+        catch throw:{fixture_exception, Store, OpenPort} -> {Store, OpenPort}
+        end,
+    false = is_process_alive(Pid),
+    undefined = whereis(fenrir_store),
+    undefined = erlang:port_info(Port),
+    with_store(C, Name, normal, fun(_) ->
+        true = whereis(fenrir_store) =/= Pid,
+        [[[], [], [], 0], [[], [], [], 0]] = fenrir_store:snapshot(),
+        true
+    end).
 
 %% No guest here: exercise real front dispatch with a worker mailbox probe.
 authority(C) ->
@@ -256,7 +280,8 @@ store(C) ->
          {always_finish_unconditional_applied, [{0, tx(0, always(), [w(<<"Finish">>, [i(9), {bool, true}])])}], reply(<<"Applied">>)},
          {stage_job_of_does_not_allocate, [{0, tx(0, always(), [w(<<"StageJobOf">>, [i(3)])])}, {0, sub(0, 0, 0)}], committed(receipt(0, 0, 0, 0, 0))},
          {malformed_tx_aborted, [{0, d(<<"Tx">>, <<"Tx">>, [])}], {aborted, malformed_tx}}],
-    [t({store_contract, N}, fun() ->
+    [t(store_fixture_teardown, fun() -> store_fixture_teardown(C) end)]
+    ++ [t({store_contract, N}, fun() ->
             with_store(C, atom_to_list(N), normal,
                        fun(_) -> Rs = [commit(T, X) || {T, X} <- Txs], {lists:last(Rs) =:= Want, Rs} end)
         end) || {N, Txs, Want} <- Cases]
