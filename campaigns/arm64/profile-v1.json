@@ -1,0 +1,34 @@
+{
+  "schema": "fenrir.arm64-qualification-proposal/1",
+  "id": "fenrir-g1-tc1-aarch64-linux-spt/1",
+  "status": "proposed",
+  "baseline": "da1ec7459a7b8edb92dd887d49fb90d8f6e5088d",
+  "platform": "linux",
+  "nodeArch": "arm64",
+  "kernelMachine": "aarch64",
+  "nixSystem": "aarch64-linux",
+  "solo5Commit": "38e0c348be231a2a3c59510a5caabf562792679f",
+  "solo5Abi": "spt",
+  "manifests": {
+    "g1": {
+      "path": "spec/tc0/tc0-a-requirements.json",
+      "sha256": "d605d2cb759973fe1ec5397b39ddd02b6973b9c1d5967bed7b902a5fdde2d933",
+      "requiredRows": 15,
+      "optionalRows": 2,
+      "claims": 6
+    },
+    "tc1": {
+      "path": "spec/tc1/tc1-requirements.json",
+      "sha256": "004d663f3fcbcbbdd60a92a45479d14cc7f7577b88cdb4f93c1460f6d044d83f",
+      "requiredRows": 22,
+      "optionalRows": 1,
+      "claims": 9
+    }
+  },
+  "g1RepairWaiver": {
+    "record": "campaigns/tc0/s3/repair-isolation-acceptance.json",
+    "patchSha256": "5991317d47198014a1109b530ecd2354eb0a64b6f1142c30c69ea81c11cdcc50",
+    "admission": "owner-must-reconfirm-for-this-profile"
+  },
+  "tc1RepairWaiver": "not-carried-forward-without-explicit-owner-extension"
+}
