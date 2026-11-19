@@ -9,6 +9,11 @@ artifact and its pin are the repository-relative re-emit from `aad371b`
 an A2 result produced in this checkout. No A4 artifacts, upgrade runtime, or service
 gate rows were imported.
 
+The toolchain lane has since added an ARM64 Linux Solo5 flake output. The
+toolchain paragraph below describes the original import baseline; the Nix
+output itself and the combined service campaign have not yet been validated.
+ARM64 Linux is now the primary development target.
+
 ## What can run here
 
 - `sh host/service/check-host-only.sh`: compile the host and tests, pin-check the
