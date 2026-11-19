@@ -15,7 +15,8 @@ run(ConfigFile, Mode) ->
     Out = maps:get(out, C),
     ok = filelib:ensure_dir(filename:join(Out, "unit/x")),
     fenrir_faults:init(),
-    Common = [vectors(maps:get(root, C)), values(), store(C), settings(C), artifact_manifest(C)],
+    Root = maps:get(root, C),
+    Common = [vectors(Root), values(), store(C), settings(C), artifact_manifest(C), fenrir_report_test:tests(Root)],
     Extra = case Mode of
                 full -> [image_manifest(C), identity(C)];
                 host_only -> [[t(store_lost_commit_ack, fun() -> lost_commit_ack(C) end)]]

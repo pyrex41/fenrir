@@ -12,7 +12,7 @@
 -export([new/2, start/1, stop/1, kill/1, call/2, call/3, cmd/2, backoff/1,
          submit/4, submit_told/4, complete/4, respond/2, crash/2, observe/1, drain/2, fault/3,
          event/2, events/1, told/1, write_history/3, audit/2, retry_submit/5, concurrent/2,
-         fresh_db/1]).
+         fresh_db/1, sqlite_exit/2]).
 
 %% Ctx: #{erl, ebin, node_launch, out, config => NodeConfigMap, name}
 new(Ctx, Name) ->
@@ -37,8 +37,8 @@ start(S = #{node := none, config := Config, dir := Dir, ctx := Ctx}) ->
             "-run", "fenrir_node", "main", ConfigFile],
     T0 = erlang:monotonic_time(microsecond),
     Port = open_port({spawn_executable, maps:get(node_launch, Ctx)},
-                     [{args, Args}, {packet, 4}, binary, exit_status,
-                      {env, [{"FENRIR_SQLITE_PORT", maps:get(sqlite_port, Ctx)}]}]),
+                      [{args, Args}, {packet, 4}, binary, exit_status,
+                       {env, sqlite_env(Ctx, Dir)}]),
     receive
         {Port, {data, B}} ->
             case binary_to_term(B) of
@@ -48,7 +48,19 @@ start(S = #{node := none, config := Config, dir := Dir, ctx := Ctx}) ->
                 {start_failed, Why} -> wait_exit(Port), {start_failed, Why}
             end;
         {Port, {exit_status, St}} -> {start_failed, {exit, St}}
-    after 60000 -> {start_failed, timeout}
+    after 60000 -> catch port_close(Port), {start_failed, timeout}
+    end.
+
+sqlite_env(#{observe_sqlite_exit := true, sqlite_observer := Observer, sqlite_port := Program}, Dir) ->
+    [{"FENRIR_SQLITE_PORT", Observer}, {"FENRIR_REAL_SQLITE_PORT", Program},
+     {"FENRIR_SQLITE_EXIT_DIR", Dir}];
+sqlite_env(#{sqlite_port := Program}, _) -> [{"FENRIR_SQLITE_PORT", Program}].
+
+sqlite_exit(#{dir := Dir}, Pid) ->
+    case file:read_file(filename:join(Dir, "sqlite-exit-" ++ integer_to_list(Pid))) of
+        {ok, <<>>} -> none;
+        {ok, B} -> binary_to_integer(B);
+        {error, enoent} -> missing
     end.
 
 wait_exit(Port) -> receive {Port, {exit_status, _}} -> ok after 10000 -> catch port_close(Port), ok end.
@@ -84,7 +96,7 @@ collect(S, Port, OnNote, Acc) ->
                 A -> {ok, A, Acc}
             end;
         {Port, {exit_status, St}} -> {died, St, Acc#{node := none}}
-    after 120000 -> {died, driver_timeout, kill(Acc)}
+    after 120000 -> {died, driver_timeout, kill(event(Acc, [<<"gap">>, <<"driver timed out">>]))}
     end.
 
 %% ---------- the recorder ----------

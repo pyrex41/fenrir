@@ -7,9 +7,74 @@
 %%   erl -noshell -pa EBIN -run fenrir_campaign main CONFIG
 %% CONFIG: one Erlang map (consulted), see host/service/check.sh.
 -module(fenrir_campaign).
--export([main/1]).
+-export([main/1, declared_scope/1, scope_config/1, fixture_paths/1, sweep_name/2, sweep_result/6]).
 
 -define(D, fenrir_drive).
+-define(SQLITE_LIMIT, 40).
+
+families() -> [hand_traces, a2_runs, random_schedules, retries, duplicates,
+               crash_points, sqlite_kills, lost_ack, busy, two_workers].
+
+mutants() -> [volatile_mailbox, respond_before_commit, two_transactions, busy_as_success,
+              no_dedup, no_transaction, sync_off, equivalent_control].
+
+%% The report checks the canonical mode, never a plan narrowed by diagnostic overrides.
+scope_config(quick) -> scope_config(1, 12, 3, 1, 10);
+scope_config(full) -> scope_config(5, 60, 6, 2, 20).
+
+scope_config(Repeats, Random, MutantRandom, SQLiteRepeats, Batches) ->
+    #{tenants => 3, repeats => Repeats, random_schedules => Random, schedule_length => 10,
+      mutant_random_schedules => MutantRandom, sqlite_kill_repeats => SQLiteRepeats,
+      concurrent_batches => Batches, mutants => mutants()}.
+
+declared_scope(C) ->
+    P = scope_config(maps:get(mode, C)),
+    Rs = lists:seq(1, repeats(P)),
+    Fixtures = fixture_paths(maps:get(root, C)),
+    Hand = fixture(Fixtures, hand_traces, <<"traces">>),
+    A2 = fixture(Fixtures, a2_runs, <<"runs">>),
+    Static = [{normal, hand_traces, binary_to_list(maps:get(<<"name">>, T))} || T <- Hand]
+        ++ [{normal, a2_runs, run_name(I)} || I <- lists:seq(0, length(A2) - 1)]
+        ++ [{normal, random_schedules, seed_name(I)} || I <- lists:seq(1, maps:get(random_schedules, P))]
+        ++ [{normal, F, repeat_name(R)} || F <- [retries, duplicates, two_workers], R <- Rs]
+        ++ [{normal, crash_points, crash_name(Point, Action, Op, R)} || {Point, Action, Op} <- crash_matrix(), R <- Rs]
+        ++ [{normal, F, op_name(Op, R)} || F <- [busy, lost_ack], Op <- [submit, complete], R <- Rs]
+        ++ [{M, F, N} || M <- mutants(), {F, N} <- mutant_cases(P)],
+    Sweeps = [{normal, K, Op, R} || {K, Op, R} <- normal_sweeps(P)]
+        ++ [{M, before_statement, submit, 1} || M <- mutants()],
+    #{cases => [{M, F, full_name(M, F, N)} || {M, F, N} <- Static],
+      sweeps => Sweeps, limit => ?SQLITE_LIMIT, families => families(),
+      fixture_counts => [{hand_traces, 11, length(Hand)}, {a2_runs, 68, length(A2)}]}.
+
+fixture_paths(Root) ->
+    #{hand_traces => filename:join(Root, "spec/service/hand-traces.json"),
+      a2_runs => filename:join(Root, "tests/host/a2-runs.json")}.
+
+fixture(C, Key, Field) ->
+    {ok, B} = file:read_file(maps:get(Key, C)),
+    maps:get(Field, json:decode(B)).
+
+normal_sweeps(C) ->
+    [{K, Op, R} || K <- [before_statement, write, sync], Op <- [submit, complete],
+                   R <- lists:seq(1, maps:get(sqlite_kill_repeats, C, 1))].
+
+mutant_cases(C) ->
+    [{retries, repeat_name(1)}, {duplicates, repeat_name(1)}, {busy, op_name(submit, 1)},
+     {crash_points, crash_name(f1_after_response, kill_node, submit, 1)},
+     {crash_points, crash_name(w4_reply_before_response, kill_node, submit, 1)},
+     {lost_ack, op_name(submit, 1)}]
+    ++ [{random_schedules, seed_name(I)} || I <- mutant_seeds(C)].
+
+mutant_seeds(C) -> lists:seq(1, maps:get(mutant_random_schedules, C, 3)).
+full_name(M, F, N) -> fmt("~s/~s/~s", [M, F, N]).
+run_name(I) -> fmt("run-~2..0B", [I]).
+seed_name(I) -> fmt("seed-~3..0B", [I]).
+repeat_name(R) -> fmt("repeat-~B", [R]).
+op_name(Op, R) -> fmt("~s-~B", [Op, R]).
+crash_name(P, A, Op, R) -> fmt("~s-~s-~s-~B", [P, A, Op, R]).
+sweep_name({M, K, Op, R}, N) -> full_name(M, sqlite_kills, probe_name(K, Op, R, N)).
+probe_name(K, Op, R, N) -> fmt("~s-~B-~s-~B", [K, N, Op, R]).
+fmt(F, Args) -> lists:flatten(io_lib:format(F, Args)).
 
 main([ConfigFile]) ->
     {ok, [C]} = file:consult(ConfigFile),
@@ -19,8 +84,7 @@ main([ConfigFile]) ->
     Want = fun(F) -> Families =:= all orelse lists:member(F, Families) end,
     Ctx = ctx(C, normal, 1),
     R = lists:append(
-          [run_family(F, Ctx, C) || F <- [hand_traces, a2_runs, random_schedules, retries, duplicates,
-                                           crash_points, sqlite_kills, lost_ack, busy, two_workers], Want(F)]
+          [run_family(F, Ctx, C) || F <- families(), Want(F)]
           ++ [mutant_suite(M, C) || Want(mutants), M <- maps:get(mutants, C)]),
     ok = file:write_file(filename:join(Out, "scenarios.bin"), term_to_binary(R)),
     Hist = [maps:get(history, X) || X <- R, maps:is_key(history, X)],
@@ -31,6 +95,7 @@ main([ConfigFile]) ->
 ctx(C, Mutant, Workers) ->
     #{erl => maps:get(erl, C), ebin => maps:get(ebin, C), node_launch => maps:get(node_launch, C),
       sqlite_port => maps:get(sqlite_port, C), out => maps:get(out, C),
+      sqlite_observer => filename:join([maps:get(root, C), "host", "service", "test", "sqlite-exit-observer.sh"]),
       config => #{tenants => maps:get(tenants, C, 3), image => maps:get(image, C), launcher => maps:get(launcher, C),
                   workers => Workers, mutant => Mutant}}.
 
@@ -43,17 +108,22 @@ scenario(Ctx, Family, Name, Fun) -> scenario(Ctx, Family, Name, #{}, Fun).
 scenario(Ctx0, Family, Name, Over, Fun) ->
     Ctx = Ctx0#{config := maps:merge(maps:get(config, Ctx0), Over)},
     Mutant = maps:get(mutant, maps:get(config, Ctx)),
-    Full = lists:flatten(io_lib:format("~s/~s/~s", [Mutant, Family, Name])),
+    Full = full_name(Mutant, Family, Name),
+    try run_scenario(Ctx, Full, Family, Mutant, Fun) of
+        Result -> Result#{family => Family, name => Full, mutant => Mutant}
+    catch Cl:Er:St ->
+        #{family => Family, name => Full, mutant => Mutant, status => execution_error,
+          detail => {Cl, Er, lists:sublist(St, 4)}}
+    end.
+
+run_scenario(Ctx, Full, Family, Mutant, Fun) ->
     S0 = ?D:new(Ctx, Full),
     T0 = erlang:monotonic_time(microsecond),
     case ?D:start(S0) of
         {start_failed, Why} ->
-            #{family => Family, name => Full, mutant => Mutant, status => start_failed, detail => Why};
+            #{status => start_failed, detail => Why};
         S1 ->
-            {S2, Checks} = try Fun(S1) of
-                               {SX, CX} -> {SX, CX}
-                           catch Cl:Er:St -> {?D:kill(S1), [{exception, false, {Cl, Er, lists:sublist(St, 4)}}]}
-                           end,
+            {S2, Checks} = try Fun(S1) catch Cl:Er:St -> ?D:kill(S1), erlang:raise(Cl, Er, St) end,
             S3 = case maps:get(node, S2) of none -> S2; _ -> ?D:observe(S2) end,
             S4 = ?D:stop(S3),
             Audit = ?D:audit(maps:get(db, S4), ?D:told(S4)),
@@ -61,7 +131,9 @@ scenario(Ctx0, Family, Name, Over, Fun) ->
             File = ?D:write_history(S4, Tenants, #{<<"family">> => atom_to_binary(Family),
                                                    <<"mutant">> => atom_to_binary(Mutant)}),
             CrashAudits = [V || {_, V} <- maps:get(audits, S4, [])],
-            #{family => Family, name => Full, mutant => Mutant, history => File,
+            Events = ?D:events(S4),
+            #{status => executed, history => File, events => length(Events),
+              gaps => [E || [<<"gap">> | _] = E <- Events],
               audit_final => Audit, audit_after_crashes => CrashAudits,
               audit_clean => Audit =:= [] andalso lists:all(fun(V) -> V =:= [] end, CrashAudits),
               checks => Checks, checks_ok => lists:all(fun({_, Ok, _}) -> Ok end, Checks),
@@ -93,8 +165,7 @@ run_family(crash_points, Ctx, C) ->
      || {Point, Action, Op} <- crash_matrix(), R <- lists:seq(1, repeats(C)),
         string:find(lists:flatten(io_lib:format("~s-~s-~s", [Point, Action, Op])), Only) =/= nomatch];
 run_family(sqlite_kills, Ctx, C) ->
-    lists:append([sqlite_kills(Ctx, Kind, Op, R) || Kind <- [before_statement, write, sync], Op <- [submit, complete],
-                                                    R <- lists:seq(1, maps:get(sqlite_kill_repeats, C, 1))]);
+    lists:append([sqlite_kills(Ctx, Kind, Op, R) || {Kind, Op, R} <- normal_sweeps(C)]);
 run_family(lost_ack, Ctx, C) -> [lost_ack(Ctx, Op, R) || Op <- [submit, complete], R <- lists:seq(1, repeats(C))];
 run_family(busy, Ctx, C) -> [busy(Ctx, Op, R) || Op <- [submit, complete], R <- lists:seq(1, repeats(C))];
 run_family(two_workers, Ctx, C) -> [two_workers(Ctx, R, maps:get(concurrent_batches, C, 10)) || R <- lists:seq(1, repeats(C))].
@@ -107,7 +178,7 @@ mutant_suite(Mutant, C) ->
      crash_point(Ctx, w4_reply_before_response, kill_node, submit, 1),
      lost_ack(Ctx, submit, 1)]
     ++ sqlite_kills(Ctx, before_statement, submit, 1)
-    ++ [random_schedule(Ctx, Seed, 10) || Seed <- lists:seq(1, maps:get(mutant_random_schedules, C, 3))].
+    ++ [random_schedule(Ctx, Seed, 10) || Seed <- mutant_seeds(C)].
 
 %% ---------- hand traces (spec/service/hand-traces.json) ----------
 
@@ -163,7 +234,7 @@ resp(Other) -> iolist_to_binary(io_lib:format("~p", [Other])).
 a2_run(Ctx, I, Run) ->
     [Kind, T, X, Y] = maps:get(<<"request">>, Run),
     [Reply] = maps:get(<<"replies">>, Run),
-    Name = lists:flatten(io_lib:format("run-~2..0B", [I])),
+    Name = run_name(I),
     scenario(Ctx, a2_runs, Name,
       fun(S0) ->
               S1 = a2_prefix(S0, Kind, T, X, Y, Reply),
@@ -196,7 +267,7 @@ pad(S, T, 1) -> element(2, ?D:submit_told(S, T, 2, 0)).
 %% ---------- random schedules over the A1 alphabet ----------
 
 random_schedule(Ctx, Seed, Len) ->
-    Name = lists:flatten(io_lib:format("seed-~3..0B", [Seed])),
+    Name = seed_name(Seed),
     scenario(Ctx, random_schedules, Name,
       fun(S0) ->
               rand:seed(exsss, {Seed, 1009, 7}),
@@ -221,7 +292,7 @@ random_step(S) ->
 %% ---------- retries and duplicates ----------
 
 retries(Ctx, R) ->
-    scenario(Ctx, retries, "repeat-" ++ integer_to_list(R),
+    scenario(Ctx, retries, repeat_name(R),
       fun(S0) ->
               Pairs = [{T, K} || T <- [0, 1, 2], K <- [0, 1, 2]],
               {S, Checks} = lists:foldl(
@@ -240,7 +311,7 @@ retries(Ctx, R) ->
       end).
 
 duplicates(Ctx, R) ->
-    scenario(Ctx, duplicates, "repeat-" ++ integer_to_list(R),
+    scenario(Ctx, duplicates, repeat_name(R),
       fun(S0) ->
               S1 = lists:foldl(fun(K, A) -> element(2, ?D:submit_told(A, R rem 3, K, 0)) end, S0, [0, 1, 2]),
               S2 = ?D:drain(S1, #{duplicate => true}),
@@ -283,7 +354,7 @@ predicted(s3_before_commit, kill_port, _) -> [indeterminate];
 predicted(_, _, _) -> [indeterminate].
 
 crash_point(Ctx, Point, Action, Op, R) ->
-    Name = lists:flatten(io_lib:format("~s-~s-~s-~B", [Point, Action, Op, R])),
+    Name = crash_name(Point, Action, Op, R),
     scenario(Ctx, crash_points, Name,
       fun(S0) ->
               {T, S1} = prefix(S0, R),
@@ -357,32 +428,81 @@ kept(_, _) -> false.
 %% fsync, counted from the faulted request), n = 1, 2, ... until the request finishes
 %% without the fault firing. Each n is its own scenario.
 sqlite_kills(Ctx, Kind, Op, R) -> sqlite_kills(Ctx, Kind, Op, R, 1, []).
-sqlite_kills(Ctx, Kind, Op, R, N, Acc) when N =< 40 ->
-    Name = lists:flatten(io_lib:format("~s-~B-~s-~B", [Kind, N, Op, R])),
-    Res = scenario(Ctx, sqlite_kills, Name,
+sqlite_kills(Ctx, Kind, Op, R, N, Acc) ->
+    Name = probe_name(Kind, Op, R, N),
+    Res = scenario(Ctx#{observe_sqlite_exit => true}, sqlite_kills, Name,
             fun(S0) ->
                     {T, S1} = prefix(S0, R),
-                    Before = snapshot_of(S1),
+                    Before = await_prefix(S1, T, 1 + R rem 2, 100),
                     Pid0 = pids(S1),
                     {ok, S2} = ?D:cmd(S1, {arm_port, Kind, N}),
                     {Out, Target, S3} = target(S2, Op, T, R),
-                    Pid1 = pids(S3), S4 = S3,
+                    Pid1 = pids(S3),
+                    %% Disarm the port explicitly: the generic disarm command ignores port errors.
+                    {Disarm, S4} = ?D:cmd(S3, {arm_port, disarm, 1}),
                     Died = maps:get(sqlite_port, Pid0) =/= maps:get(sqlite_port, Pid1),
-                    S5 = case Died of true -> ?D:fault(S4, <<"sqlite_port">>, atom_to_binary(Kind)); false -> S4 end,
-                    {_, S6} = ?D:cmd(S5, disarm),
+                    SameNode = maps:get(crashes, S4) =:= maps:get(crashes, S2),
+                    Exit = ?D:sqlite_exit(S3, maps:get(sqlite_port, Pid0)),
+                    Applied = target_applied(Op, Target, S2, S3),
+                    Probe = sweep_result(Op, Out, {Died, SameNode}, Exit, Disarm, Applied),
+                    S6 = case Probe of fired -> ?D:fault(S4, <<"sqlite_port">>, atom_to_binary(Kind)); _ -> S4 end,
                     {S7, Retry} = recover(S6, Target),
                     After = snapshot_of(S7),
-                    put(fired, Died),
-                    {S7, [check(port_killed_or_beyond, true, {Died, Out}),
+                    {S7, [check(sqlite_probe, Probe =/= unverified, {Probe, Out, Died, SameNode, Exit, Disarm, Applied}),
                           check(retry_definite, Retry =/= gave_up, Retry),
                           check(no_pending_job_after_drain, no_pending(After), After),
                           check(accepted_work_kept, kept(Before, After), {Before, After})]}
             end),
-    case erase(fired) of
-        true -> sqlite_kills(Ctx, Kind, Op, R, N + 1, [Res#{fired => true} | Acc]);
-        _ -> lists:reverse([Res#{fired => false, beyond_last_point => true} | Acc])
-    end;
-sqlite_kills(_, _, _, _, _, Acc) -> lists:reverse(Acc).
+    Probe = case lists:keyfind(sqlite_probe, 1, maps:get(checks, Res, [])) of
+                {_, _, {P, _, _, _, _, _, _}} -> P;
+                false -> unverified
+            end,
+    End = case {Probe, N} of
+              {fired, ?SQLITE_LIMIT} -> limit_reached;
+              {fired, _} -> continue;
+              {beyond, 1} -> no_fault_fired;
+              {beyond, _} -> completed;
+              {unverified, _} -> unverified
+          end,
+    M = maps:get(mutant, Res),
+    Row = Res#{sweep => {M, Kind, Op, R}, probe_index => N, sweep_end => End,
+               fired => Probe =:= fired, beyond_last_point => End =:= completed},
+    case End of
+        continue -> sqlite_kills(Ctx, Kind, Op, R, N + 1, [Row | Acc]);
+        _ -> lists:reverse([Row | Acc])
+    end.
+
+target_applied(Op, Target, Before, After) ->
+    case {maps:get(coverage, After), maps:get(coverage, Before)} of
+        {[{Target, [Reply]} | Old], Old} ->
+            case {Op, json:decode(Reply)} of
+                {submit, [_, _, <<"Committed">>, _]} -> true;
+                {complete, [_, _, <<"Applied">>]} -> true;
+                _ -> false
+            end;
+        _ -> false
+    end.
+
+%% For a firing, the observer must have reaped the armed child with SIGKILL,
+%% not merely observed a new port PID (which can happen after a crash or timeout).
+sweep_result(_, _, {true, true}, 137, ok, _) -> fired;
+sweep_result(submit, {accepted, _}, {false, true}, none, ok, true) -> beyond;
+sweep_result(complete, delivered, {false, true}, none, ok, true) -> beyond;
+sweep_result(_, _, _, _, _, _) -> unverified.
+
+%% The early-reply mutant can still be flushing the setup requests. Do not
+%% arm while they are pending; count statements only in the targeted request.
+await_prefix(S, _, _, 0) -> error({sqlite_prefix_not_committed, maps:get(name, S)});
+await_prefix(S, T, Count, N) ->
+    Snap = snapshot_of(S),
+    case Snap of
+        L when is_list(L) ->
+            case lists:nth(T + 1, L) of
+                [Reports, _, Keys, Count] when length(Reports) =:= Count, length(Keys) =:= Count -> L;
+                _ -> timer:sleep(20), await_prefix(S, T, Count, N - 1)
+            end;
+        Other -> error({sqlite_prefix_snapshot_unavailable, Other})
+    end.
 
 %% The node's process ids, once its store is up again (it restarts after a port death).
 pids(S) -> pids(S, 50).
@@ -396,7 +516,7 @@ pids(S, N) ->
 %% ---------- lost acknowledgment ----------
 
 lost_ack(Ctx, Op, R) ->
-    scenario(Ctx, lost_ack, lists:flatten(io_lib:format("~s-~B", [Op, R])),
+    scenario(Ctx, lost_ack, op_name(Op, R),
       fun(S0) ->
               {T, S1} = prefix(S0, R),
               Before = snapshot_of(S1),
@@ -426,7 +546,7 @@ lost_ack(Ctx, Op, R) ->
 %% ---------- busy: a second connection holds the write lock ----------
 
 busy(Ctx, Op, R) ->
-    scenario(Ctx, busy, lists:flatten(io_lib:format("~s-~B", [Op, R])),
+    scenario(Ctx, busy, op_name(Op, R),
       fun(S0) ->
               {T, S1} = prefix(S0, R),
               Before = snapshot_of(S1),
@@ -450,7 +570,7 @@ busy(Ctx, Op, R) ->
 %% ---------- two workers on one store ----------
 
 two_workers(Ctx, R, Batches) ->
-    scenario(Ctx, two_workers, "repeat-" ++ integer_to_list(R), #{workers => 2},
+    scenario(Ctx, two_workers, repeat_name(R), #{workers => 2},
       fun(S0) ->
               rand:seed(exsss, {R, 4242, 1}),
               {S, Us} = lists:foldl(
