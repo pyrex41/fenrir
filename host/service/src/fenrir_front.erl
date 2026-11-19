@@ -40,7 +40,7 @@ outbox() -> gen_server:call(?MODULE, outbox).
 
 request(Worker, Scope, Req) ->
     Outcome = try fenrir_worker:run(Worker, Scope, Req) of
-                  {ok, V, St} -> {response(V, Scope), St};
+                  {ok, V, St} -> {response(V, Scope, Req), St};
                   {refused, Why} -> {{refused, Why}, #{}};
                   {failed, Why, St} -> {aborted, St#{why => Why}};
                   {O, Why, St} -> {O, St#{why => Why}}
@@ -59,13 +59,14 @@ request(Worker, Scope, Req) ->
 
 response({data, <<"Response">>, <<"Accepted">>,
           [{data, <<"Receipt">>, <<"Receipt">>, [{int, T}, {int, K}, {int, D}, {int, R}, {int, J}]}]},
-         {tenant, T}) -> {accepted, [T, K, D, R, J]};
-response({data, <<"Response">>, <<"Conflict">>, [{int, T}, {int, K}]}, {tenant, T}) -> {conflict, T, K};
-response({data, <<"Response">>, <<"Delivered">>, []}, _) -> delivered;
-response({data, <<"Response">>, <<"Refused">>, []} = V, _) -> {response, V};
+         {tenant, T}, {submit, K, D, _}) -> {accepted, [T, K, D, R, J]};
+response({data, <<"Response">>, <<"Conflict">>, [{int, T}, {int, K}]},
+         {tenant, T}, {submit, K, _, _}) -> {conflict, T, K};
+response({data, <<"Response">>, <<"Delivered">>, []}, _, {complete, _, _}) -> delivered;
+response({data, <<"Response">>, <<"Refused">>, []} = V, _, {submit, _, _, _}) -> {response, V};
 %% Do not expose an unexpected guest value or publish it to the outbox. A
 %% commit may already have happened, so do not tell the caller it rolled back.
-response(_, _) -> indeterminate.
+response(_, _, _) -> indeterminate.
 
 init({Workers, Bindings}) -> {ok, #{workers => Workers, next => 0, outbox => [], bindings => Bindings}}.
 

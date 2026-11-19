@@ -118,7 +118,7 @@ with_store(C, Name, Mutant, Fun) ->
     fenrir_drive:fresh_db(Db),
     case ets:info(fenrir_mailbox) of undefined -> ets:new(fenrir_mailbox, [named_table, public]); _ -> ok end,
     {ok, Pid} = fenrir_store:start_link(#{db => Db, tenants => 2, mutant => Mutant}),
-    try Fun(Db) after unlink(Pid), exit(Pid, shutdown), timer:sleep(50) end.
+    try Fun(Db) after gen_server:stop(Pid) end.
 
 %% No guest here: exercise real front dispatch with a worker mailbox probe.
 authority(C) ->
@@ -133,7 +133,12 @@ authority(C) ->
      t(credential_scopes_front_dispatch, fun() ->
          {Tokens, Bindings} = fenrir_authority:campaign_credentials(2),
          Parent = self(),
-         Worker = spawn(fun() -> authority_worker_probe(Parent) end),
+         Worker = spawn(fun() ->
+             authority_worker_probe(Parent, fun({submit, K, D, _}) ->
+                 T = case K of 0 -> 1; 1 -> 0 end,
+                 accepted_value(T, K, D)
+             end)
+         end),
          true = register(authority_probe, Worker),
          {ok, Front} = fenrir_front:start_link([authority_probe], Bindings),
          try
@@ -159,6 +164,7 @@ authority(C) ->
              exit(Worker, kill)
          end
      end),
+     t(response_must_match_request, fun response_integrity/0),
      t(guest_scope_mismatch_cannot_read_or_write, fun() ->
          with_store(C, "scope", normal, fun(_) ->
              Rc = receipt(1, 0, 1, 0, 0),
@@ -176,14 +182,60 @@ authority(C) ->
          end)
      end)].
 
-authority_worker_probe(Parent) ->
+response_integrity() ->
+    {Tokens, Bindings} = fenrir_authority:campaign_credentials(2),
+    Parent = self(),
+    Worker = spawn(fun() -> authority_worker_probe(Parent, fun response_fixture/1) end),
+    true = register(response_probe, Worker),
+    {ok, Front} = fenrir_front:start_link([response_probe], Bindings),
+    try
+        Token = maps:get(1, Tokens),
+        Submit = fun(K, D) -> fenrir_front:submit(Token, K, D, <<D>>) end,
+        Deliver = fun(J) -> fenrir_front:deliver(1, J, true) end,
+        Bad = [{wrong_submit_kind, fun() -> Submit(0, 0) end},
+               {wrong_receipt_key, fun() -> Submit(1, 0) end},
+               {wrong_receipt_digest, fun() -> Submit(2, 0) end},
+               {wrong_conflict_key, fun() -> Submit(3, 0) end},
+               {accepted_for_delivery, fun() -> Deliver(0) end},
+               {conflict_for_delivery, fun() -> Deliver(1) end},
+               {refused_for_delivery, fun() -> Deliver(2) end}],
+        lists:foreach(fun({Test, Call}) ->
+            {Test, {indeterminate, _}, []} = {Test, Call(), fenrir_front:outbox()}
+        end, Bad),
+        {delivered, _} = Deliver(3),
+        {{accepted, [1, 4, 1, 0, 0]}, _} = Submit(4, 1),
+        {{conflict, 1, 5}, _} = Submit(5, 1),
+        [{accepted, [1, 4, 1, 0, 0]}, {conflict, 1, 5}] = fenrir_front:outbox(),
+        true
+    after
+        gen_server:stop(Front),
+        exit(Worker, kill),
+        flush_worker_probes(Worker)
+    end.
+
+flush_worker_probes(Worker) ->
+    receive {Worker, _, _} -> flush_worker_probes(Worker) after 0 -> ok end.
+
+response_fixture({submit, 0, _, _}) -> d(<<"Response">>, <<"Delivered">>, []);
+response_fixture({submit, 1, D, _}) -> accepted_value(1, 0, D);
+response_fixture({submit, 2, D, _}) -> accepted_value(1, 2, D + 1);
+response_fixture({submit, 3, _, _}) -> conflict_value(1, 2);
+response_fixture({submit, 4, D, _}) -> accepted_value(1, 4, D);
+response_fixture({submit, 5, _, _}) -> conflict_value(1, 5);
+response_fixture({complete, 0, _}) -> accepted_value(1, 0, 0);
+response_fixture({complete, 1, _}) -> conflict_value(1, 1);
+response_fixture({complete, 2, _}) -> d(<<"Response">>, <<"Refused">>, []);
+response_fixture({complete, 3, _}) -> d(<<"Response">>, <<"Delivered">>, []).
+
+accepted_value(T, K, D) -> d(<<"Response">>, <<"Accepted">>, [receipt(T, K, D, 0, 0)]).
+conflict_value(T, K) -> d(<<"Response">>, <<"Conflict">>, [i(T), i(K)]).
+
+authority_worker_probe(Parent, Respond) ->
     receive
-        {'$gen_call', From, {run, Scope, Req = {submit, K, D, _}}} ->
+        {'$gen_call', From, {run, Scope, Req}} ->
             Parent ! {self(), Scope, Req},
-            T = case K of 0 -> 1; 1 -> 0 end,
-            Resp = d(<<"Response">>, <<"Accepted">>, [receipt(T, K, D, 0, 0)]),
-            gen_server:reply(From, {ok, Resp, #{}}),
-            authority_worker_probe(Parent)
+            gen_server:reply(From, {ok, Respond(Req), #{}}),
+            authority_worker_probe(Parent, Respond)
     end.
 
 store(C) ->
@@ -380,16 +432,7 @@ guest_authority(C) ->
          %% Inject bad dispatch metadata: select the real tenant-1 entry for
          %% an authenticated tenant-0 submit. Same image and protocol; the
          %% real guest emits a well-formed Store.commit for another tenant.
-         {ok, Bin} = file:read_file(maps:get(image, C)),
-         I = json:decode(Bin),
-         Entries = maps:get(<<"entries">>, I),
-         [E1] = [E || E = #{<<"request">> := [<<"submit">>, 1, 0, 0]} <- Entries],
-         Bad = [case E of #{<<"request">> := Req = [<<"submit">>, 0, 0, 0]} ->
-                              E1#{<<"request">> := Req};
-                          _ -> E
-                end || E <- Entries],
-         Desc = filename:join([maps:get(out, C), "unit", "wrong-tenant-image.json"]),
-         ok = file:write_file(Desc, json:encode(I#{<<"entries">> := Bad})),
+         Desc = misrouted_submit_image(C, "wrong-tenant", [<<"submit">>, 1, 0, 0]),
          with_guest_service(C, "wrong-tenant", Desc, fun(Tokens) ->
              {aborted, #{why := unauthorized_scope, replies := [], commit := none}} =
                  fenrir_front:submit(maps:get(0, Tokens), 0, 0, <<0>>),
@@ -397,7 +440,30 @@ guest_authority(C) ->
              [] = fenrir_front:outbox(),
              true
          end)
+     end),
+     t(real_guest_wrong_key_is_not_published, fun() ->
+         Desc = misrouted_submit_image(C, "wrong-key", [<<"submit">>, 0, 1, 0]),
+         with_guest_service(C, "wrong-key", Desc, fun(Tokens) ->
+             {indeterminate, #{commit := committed}} = fenrir_front:submit(maps:get(0, Tokens), 0, 0, <<0>>),
+             %% The reply is suppressed, not rolled back. Within-tenant writes
+             %% are still made by the handler, here deliberately misrouted.
+             [[[[0, 0]], [[0, 0, <<"pending">>]], [[1, 0, [0, 1, 0, 0, 0]]], 1], [[], [], [], 0]]
+                 = fenrir_store:snapshot(),
+             [] = fenrir_front:outbox(),
+             true
+         end)
      end)].
+
+misrouted_submit_image(C, Name, Target) ->
+    {ok, Bin} = file:read_file(maps:get(image, C)),
+    I = json:decode(Bin),
+    Entries = maps:get(<<"entries">>, I),
+    From = [<<"submit">>, 0, 0, 0],
+    [Replacement] = [E || E = #{<<"request">> := Req} <- Entries, Req =:= Target],
+    Bad = [case E of #{<<"request">> := From} -> Replacement#{<<"request">> := From}; _ -> E end || E <- Entries],
+    Desc = filename:join([maps:get(out, C), "unit", Name ++ "-image.json"]),
+    ok = file:write_file(Desc, json:encode(I#{<<"entries">> := Bad})),
+    Desc.
 
 with_guest_service(C, Name, Image, Fun) ->
     Dir = filename:join(maps:get(out, C), "unit"),

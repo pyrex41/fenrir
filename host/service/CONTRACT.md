@@ -43,9 +43,13 @@ not a record that they all ran in this integration.
   not an unforgeable wire token. The separate per-invocation scope stays in the
   host worker. Each `Store.commit` checks the guest's claim against that scope
   before reading a guard, releasing a receipt, or writing. Mismatches do not get
-  a guest reply. The front also refuses to publish a receipt or conflict for
-  another tenant. This enforces a tenant frame, not per-operation privileges
-  within a tenant or confidentiality against a hostile platform.
+  a guest reply. The front checks the response kind against the request and
+  binds submit receipts to tenant, key and digest (conflicts to tenant and key).
+  A mismatch is indeterminate and does not enter the outbox; it cannot undo a
+  commit. Neither can a busy or denied later host call erase evidence of an
+  earlier commit in the same session. This enforces a tenant frame and response
+  correlation, not per-operation privileges within a tenant or confidentiality
+  against a hostile platform.
 - **Trusted components.** Same-VM Erlang code, supervisor/configuration, store,
   durable-job runner, image metadata and launch environment are trusted.
   `deliver/3` takes scope from a trusted job row (or a fixture on the test

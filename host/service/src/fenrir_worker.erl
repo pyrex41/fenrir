@@ -139,7 +139,7 @@ init_payload(Program, I) ->
 %% A failed session's outcome, from what the store did in it.
 outcome(Kind, Why, St) ->
     O = case {Kind, maps:get(commit, St)} of
-            {busy, _} -> busy;
+            {busy, none} -> busy;
             {aborted, none} -> aborted;
             {aborted, _} -> indeterminate;
             {indeterminate, _} -> indeterminate;
@@ -182,28 +182,32 @@ host_request(Record, St, I) ->
     receive {Port, {exit_status, N}} -> throw({fail, failed, {tender_exit, N}, St})
     after 0 -> ok
     end,
-    St1 = St#{commit := sent},
-    case fenrir_store:commit(maps:get(scope, St), Value) of
-        {reply, {data, <<"Reply">>, <<"Unauthorized">>, []}} ->
-            throw({fail, aborted, unauthorized_scope, St});
-        {reply, Reply} ->
-            St2 = St1#{commit := committed, replies := maps:get(replies, St1) ++ [fenrir_value:encode(Reply)]},
-            fenrir_faults:hit(w3_commit_before_reply, maps:get(ctx, St2)),
-            {J, St3} = request(St2, $A, fenrir_proto:reply_payload(Seq, Reply), $S),
-            {Records, St4} = records(J, St3, 1),
-            Echo = [V || #{<<"events">> := Es} <- Records, #{<<"kind">> := <<"HostReply">>, <<"value">> := V} <- Es],
-            Echo =:= [json:decode(fenrir_value:encode(Reply))] orelse throw({fail, failed, {'BadSteps', reply_echo}, St4}),
-            fenrir_faults:hit(w4_reply_before_response, maps:get(ctx, St4)),
-            St5 = St4#{requests := Seq + 1},
-            case maps:get(<<"execution">>, J) of
-                <<"Running">> -> drive(St5, I);
-                <<"Completed">> -> completed(Records, St5);
-                X -> throw({fail, failed, {execution, X}, St5})
-            end;
-        busy -> throw({fail, busy, store_busy, St1#{commit := none}});
-        {aborted, Why} -> throw({fail, aborted, Why, St});
-        {indeterminate, Why} -> throw({fail, indeterminate, Why, St1})
+    {Reply, St1} = commit_reply(fenrir_store:commit(maps:get(scope, St), Value), St),
+    fenrir_faults:hit(w3_commit_before_reply, maps:get(ctx, St1)),
+    {J, St2} = request(St1, $A, fenrir_proto:reply_payload(Seq, Reply), $S),
+    {Records, St3} = records(J, St2, 1),
+    Echo = [V || #{<<"events">> := Es} <- Records, #{<<"kind">> := <<"HostReply">>, <<"value">> := V} <- Es],
+    Echo =:= [json:decode(fenrir_value:encode(Reply))] orelse throw({fail, failed, {'BadSteps', reply_echo}, St3}),
+    fenrir_faults:hit(w4_reply_before_response, maps:get(ctx, St3)),
+    St4 = St3#{requests := Seq + 1},
+    case maps:get(<<"execution">>, J) of
+        <<"Running">> -> drive(St4, I);
+        <<"Completed">> -> completed(Records, St4);
+        X -> throw({fail, failed, {execution, X}, St4})
     end.
+
+%% Busy or denied describes this operation only. It cannot undo evidence of a
+%% prior reply in the same session, even though the pinned handler needs one call.
+commit_reply({reply, {data, <<"Reply">>, <<"Unauthorized">>, []}}, St) ->
+    throw({fail, aborted, unauthorized_scope, St});
+commit_reply({reply, Reply}, St) ->
+    {Reply, St#{commit := committed, replies := maps:get(replies, St) ++ [fenrir_value:encode(Reply)]}};
+commit_reply(busy, St) -> throw({fail, busy, store_busy, St});
+commit_reply({aborted, Why}, St) -> throw({fail, aborted, Why, St});
+commit_reply({indeterminate, Why}, St = #{commit := none}) ->
+    throw({fail, indeterminate, Why, St#{commit := sent}});
+commit_reply({indeterminate, Why}, St) ->
+    throw({fail, indeterminate, Why, St}).
 
 completed(Records, St) ->
     Out = [O || #{<<"events">> := Es} <- Records, #{<<"kind">> := <<"TaskTermination">>, <<"outcome">> := O} <- Es],
@@ -286,6 +290,38 @@ records(J, St, N) ->
     end.
 
 -ifdef(TEST).
+
+commit_outcome_test_() ->
+    Before = #{commit => none, replies => [], requests => 0},
+    Applied = {data, <<"Reply">>, <<"Applied">>, []},
+    {Applied, After} = commit_reply({reply, Applied}, Before),
+    ReplyBytes = [fenrir_value:encode(Applied)],
+    Unauthorized = {reply, {data, <<"Reply">>, <<"Unauthorized">>, []}},
+    ScopeMismatch = {aborted, unauthorized_scope},
+    [
+     {"first busy remains retryable", ?_assertEqual({busy, store_busy, Before}, store_failure(busy, Before))},
+     {"commit then busy is indeterminate",
+      ?_assertEqual({indeterminate, store_busy, #{commit => committed, requests => 1, replies => ReplyBytes}},
+                    store_failure(busy, After#{requests := 1}))},
+     {"first scope rejection is aborted", ?_assertEqual({aborted, unauthorized_scope, Before},
+                                                       store_failure(ScopeMismatch, Before))},
+     {"commit then scope rejection is indeterminate",
+      ?_assertEqual({indeterminate, unauthorized_scope, #{commit => committed, requests => 1, replies => ReplyBytes}},
+                    store_failure(ScopeMismatch, After#{requests := 1}))},
+     {"Unauthorized reply also preserves prior commit",
+      ?_assertEqual({indeterminate, unauthorized_scope, #{commit => committed, requests => 1, replies => ReplyBytes}},
+                    store_failure(Unauthorized, After#{requests := 1}))},
+     {"lost first commit reply marks sent",
+      ?_assertEqual({indeterminate, lost, Before#{commit := sent}}, store_failure({indeterminate, lost}, Before))},
+     {"lost later commit reply preserves prior commit",
+      ?_assertEqual({indeterminate, lost, #{commit => committed, requests => 1, replies => ReplyBytes}},
+                    store_failure({indeterminate, lost}, After#{requests := 1}))}
+    ].
+
+store_failure(Reply, St) ->
+    try commit_reply(Reply, St)
+    catch throw:{fail, Kind, Why, State} -> outcome(Kind, Why, State)
+    end.
 
 %% Model port messages directly to control the read boundaries independently of
 %% the OS. The Bye bytes are the spec's bye-seq-86 vector.
