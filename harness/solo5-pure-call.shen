@@ -96,6 +96,11 @@
   [] N -> N
   [[_ Steps] | Rest] N -> (fh.step-count Rest (+ N (length Steps))))
 
+(define fh.completed-count
+  [] N -> N
+  [["Completed" _] | Rest] N -> (fh.completed-count Rest (+ N 1))
+  [_ | Rest] N -> (fh.completed-count Rest N))
+
 \\ Indices of programs whose guest trace differs from the model trace.
 (define fh.differing
   [] [] _ Acc -> (reverse Acc)
@@ -139,6 +144,8 @@
                          ["batch_sha256" Sha]
                          ["programs" (str Count)]
                          ["fuel" (str Fuel)]
+                         ["model_completed" (str (fh.completed-count Model 0))]
+                         ["guest_completed" (str (fh.completed-count Normal 0))]
                          ["model_steps" (str (fh.step-count Model 0))]
                          ["guest_steps" (str (fh.step-count Normal 0))]
                          ["programs_differing" (str (length Failures))]

@@ -490,6 +490,14 @@ does not export the x86-64 HVT comparison or the legacy Shen ports. This is
 development support only; it does not change the x86-64 qualification profile
 or establish any ARM64 qualification.
 
+The separate [ARM64 Linux Solo5 development workflow](.github/workflows/arm64-solo5-development.yml)
+builds the locked toolchain on GitHub's ARM64 Linux runner. It compares the
+stock SPT guest's traces with the Shen model for the TC1 handler and TC0-A
+hand cases, and requires both guest fault variants to diverge. The artifact
+includes the source and toolchain pins, host details, guest image and report.
+Its separate A3 job builds the pinned host prefix and runs OTP/SQLite host-only
+tests, not the A3 guest or history campaign. Neither job runs HVT.
+
 For Go host tests, pinned toolchain instructions and optional explicit Shen/Node
 integration vectors, use the [native host README](tools/solo5/native-arithmetic/README.md).
 Live commands additionally require the exact images and reviewed isolation/cleanup
