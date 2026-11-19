@@ -1,0 +1,321 @@
+{
+ "version": "tc1-handler-catalog/1",
+ "status": "development-proposal-not-qualified",
+ "contract": "spec/tc1/EFFECTS.md (tc1-draft-1), sections 2, 4, 6 and 7",
+ "profile": "tc1-handler-step/1",
+ "schema_versions": [
+  "tc1-handler-demo/1",
+  "tc1-handler-demo/2"
+ ],
+ "model": "models/tc1/handler-machine.shen",
+ "candidate": "runtime/tc1/handler-machine.mjs",
+ "derived_from": {
+  "effects_section_6": "The thirteen rows of the table of reference steps. A row naming two cases is two transitions here (perform and resume dispatch; resume in and not in tail position). AbandonFrame, which the table gives once, is one transition per kind of frame the step record can tell apart.",
+  "tc0_a_catalog": {
+   "path": "spec/tc0/pure-call-demo.json",
+   "version": "pure-call-demo-catalog/2",
+   "sha256": "40ff95ef185eb51141c314fa7ad26910fd9ae8618b102be21912e4fe33006fc0",
+   "use": "Its frames, controls, dispatch, collect, root and site rules apply unchanged to TC1 programs. Steps at TC0-A forms and frames (let, if, match, prim, tuple, project, construct, emit, call, apply, the root machine) that are not AbandonFrame steps are TC0-A transitions: they are not keys of this catalog and are measured by the TC0-A coverage row."
+  }
+ },
+ "controls_added": [
+  {
+   "kind": "Abandon",
+   "fields": [],
+   "meaning": "A segment is being discarded after discontinue; one frame per step, no user code runs"
+  }
+ ],
+ "frames_added": [
+  {
+   "kind": "Handler",
+   "fields": [
+    "node",
+    "effect",
+    "clauses",
+    "env"
+   ],
+   "return": "Value: pop; the value passes through unchanged (HandleReturn). Unwind or Abandon: discard one frame"
+  },
+  {
+   "kind": "Clause",
+   "fields": [
+    "node (the perform)",
+    "segment",
+    "env"
+   ],
+   "return": "Value: replaced by its segment; the value is the result of the perform (ClauseReturn). Unwind or Abandon: replaced by its segment, which is discarded next"
+  },
+  {
+   "kind": "ClauseExit",
+   "fields": [
+    "node (the perform)",
+    "env"
+   ],
+   "return": "Value: pop; the clause value is the value of the handle (ClauseExitReturn)"
+  },
+  {
+   "kind": "ResumeReturn",
+   "fields": [
+    "node (the resume)",
+    "env"
+   ],
+   "return": "Value: pop; the handled body value is the value of the resume (ResumeReturn)"
+  },
+  {
+   "kind": "DiscontinueReturn",
+   "fields": [
+    "node (the discontinue)",
+    "env"
+   ],
+   "return": "Abandon reaching it: pop and produce unit (DiscontinueReturn)"
+  }
+ ],
+ "depth": "Depth is the number of active frames after the step; a segment held by a clause frame counts as that one frame, one held in a resumption as none. A transition's depth field is the change from the previous step's depth (0 before the first step): \"+1\", \"0\", \"-1\", or a bound such as \"<=0\", \">=0\", \">=+1\", \">=+2\" where it depends on the segment size s >= 1.",
+ "classification": [
+  "A step is keyed by its site rule, the form of the program node at its site, and its after control. Forms are read from the decoded program: handle, perform, resume, discontinue, let, if, match, a strict form (prim, tuple, project, construct, emit) and call or apply.",
+  "Ready at a perform node: the clause form is that of the clause whose body root the next step dispatches.",
+  "Ready at a resume node: in tail position when the resume is reached through tail positions only from its clause body root: a clause, handle or function body, a let body, an if branch or a match arm in such a position.",
+  "AbandonFrame or UnwindFrame at a perform node: a clause frame when the depth does not fall (it gives back at least the handler frame), otherwise a collect or clause-exit frame.",
+  "A step at a handler form, or an AbandonFrame step, whose key is not listed here is outside the catalog; so is a step whose depth change contradicts its transition."
+ ],
+ "transitions": [
+  {
+   "id": "H-DISPATCH-HANDLE",
+   "key": "Dispatch handle -> Eval",
+   "site": "handle node / Dispatch",
+   "frames": "handler frame pushed; the body is entered in tail position",
+   "depth": "+1",
+   "source": "EFFECTS.md section 6, row \"Dispatch handle\""
+  },
+  {
+   "id": "H-DISPATCH-PERFORM",
+   "key": "Dispatch perform -> Eval",
+   "site": "perform node / Dispatch",
+   "frames": "collect frame pushed for the one argument",
+   "depth": "+1",
+   "source": "EFFECTS.md section 6, row \"Dispatch perform, resume\""
+  },
+  {
+   "id": "H-DISPATCH-RESUME",
+   "key": "Dispatch resume -> Eval",
+   "site": "resume node / Dispatch",
+   "frames": "collect frame pushed for the one argument",
+   "depth": "+1",
+   "source": "EFFECTS.md section 6, row \"Dispatch perform, resume\""
+  },
+  {
+   "id": "H-DISPATCH-DISCONTINUE",
+   "key": "Dispatch discontinue -> Ready",
+   "site": "discontinue node / Dispatch",
+   "frames": "none: discontinue has no operand and is Ready at once",
+   "depth": "0",
+   "source": "Not tabulated in section 6; EFFECTS.md section 2 (discontinue(k) has no argument) with the TC0-A catalog dispatch rule for a strict form without operands (\"a nullary construct enters Ready directly\")"
+  },
+  {
+   "id": "H-COLLECT-PERFORM",
+   "key": "CollectReturn perform -> Ready",
+   "site": "perform node / CollectReturn",
+   "frames": "collect frame popped; the argument is stored",
+   "depth": "-1",
+   "source": "Not tabulated in section 6; the TC0-A catalog Collect frame return rule applied to the one argument of perform (EFFECTS.md section 2: strict in its one argument, like a call)"
+  },
+  {
+   "id": "H-COLLECT-RESUME",
+   "key": "CollectReturn resume -> Ready",
+   "site": "resume node / CollectReturn",
+   "frames": "collect frame popped; the argument is stored",
+   "depth": "-1",
+   "source": "Not tabulated in section 6; the TC0-A catalog Collect frame return rule applied to the one argument of resume"
+  },
+  {
+   "id": "H-READY-PERFORM-TAIL-CLAUSE",
+   "key": "Ready perform, clause op(x) -> Eval",
+   "site": "perform node / Ready",
+   "frames": "the suspended segment (perform site out to and including the selected handler, s >= 1 frames) replaced by one clause frame; the clause body is entered",
+   "depth": "<=0",
+   "source": "EFFECTS.md section 6, row \"Ready perform, clause op(x)\""
+  },
+  {
+   "id": "H-READY-PERFORM-EXPLICIT-CLAUSE",
+   "key": "Ready perform, clause op(x,k) -> Eval",
+   "site": "perform node / Ready",
+   "frames": "the segment (s >= 1 frames) removed into k; one clause-exit frame pushed; the clause body is entered",
+   "depth": "<=0",
+   "source": "EFFECTS.md section 6, row \"Ready perform, clause op(x,k)\""
+  },
+  {
+   "id": "H-READY-RESUME",
+   "key": "Ready resume, not in tail position -> Value",
+   "site": "resume node / Ready",
+   "frames": "resume-return frame pushed, then the segment (s >= 1 frames); the value is delivered at the perform site",
+   "depth": ">=+2",
+   "source": "EFFECTS.md section 6, row \"Ready resume\", not in tail position"
+  },
+  {
+   "id": "H-READY-RESUME-TAIL",
+   "key": "Ready resume, in tail position -> Value",
+   "site": "resume node / Ready",
+   "frames": "the segment (s >= 1 frames) pushed, no frame of its own; the value is delivered at the perform site",
+   "depth": ">=+1",
+   "source": "EFFECTS.md section 6, row \"Ready resume\", in tail position (section 7: a resume in tail position pushes no frame)"
+  },
+  {
+   "id": "H-READY-DISCONTINUE",
+   "key": "Ready discontinue -> Abandon",
+   "site": "discontinue node / Ready",
+   "frames": "discontinue-return frame pushed, then the segment (s >= 1 frames)",
+   "depth": ">=+2",
+   "source": "EFFECTS.md section 6, row \"Ready discontinue\""
+  },
+  {
+   "id": "H-HANDLE-RETURN",
+   "key": "HandleReturn -> Value",
+   "site": "handle node / HandleReturn",
+   "frames": "handler frame popped; the body value is the value of the handle",
+   "depth": "-1",
+   "source": "EFFECTS.md section 6, row \"HandleReturn\""
+  },
+  {
+   "id": "H-CLAUSE-RETURN",
+   "key": "ClauseReturn -> Value",
+   "site": "perform node / ClauseReturn",
+   "frames": "clause frame replaced by the segment it holds (s >= 1 frames); the clause value is the result of the perform",
+   "depth": ">=0",
+   "source": "EFFECTS.md section 6, row \"ClauseReturn\""
+  },
+  {
+   "id": "H-CLAUSE-EXIT-RETURN",
+   "key": "ClauseExitReturn -> Value",
+   "site": "perform node / ClauseExitReturn",
+   "frames": "clause-exit frame popped; the clause value is the value of the handle",
+   "depth": "-1",
+   "source": "EFFECTS.md section 6, row \"ClauseExitReturn\""
+  },
+  {
+   "id": "H-RESUME-RETURN",
+   "key": "ResumeReturn -> Value",
+   "site": "resume node / ResumeReturn",
+   "frames": "resume-return frame popped; the handled body value is the value of the resume",
+   "depth": "-1",
+   "source": "EFFECTS.md section 6, row \"ResumeReturn\""
+  },
+  {
+   "id": "H-DISCONTINUE-RETURN",
+   "key": "DiscontinueReturn -> Value",
+   "site": "discontinue node / DiscontinueReturn",
+   "frames": "discontinue-return frame popped; the value is unit",
+   "depth": "-1",
+   "source": "EFFECTS.md section 6, row \"DiscontinueReturn\""
+  },
+  {
+   "id": "H-ABANDON-LET",
+   "key": "AbandonFrame at a let frame -> Abandon",
+   "site": "let node / AbandonFrame",
+   "frames": "one let frame discarded",
+   "depth": "-1",
+   "source": "EFFECTS.md section 6, row \"AbandonFrame\", at a TC0-A let frame"
+  },
+  {
+   "id": "H-ABANDON-IF",
+   "key": "AbandonFrame at an if frame -> Abandon",
+   "site": "if node / AbandonFrame",
+   "frames": "one if frame discarded",
+   "depth": "-1",
+   "source": "EFFECTS.md section 6, row \"AbandonFrame\", at a TC0-A if frame"
+  },
+  {
+   "id": "H-ABANDON-MATCH",
+   "key": "AbandonFrame at a match frame -> Abandon",
+   "site": "match node / AbandonFrame",
+   "frames": "one match frame discarded",
+   "depth": "-1",
+   "source": "EFFECTS.md section 6, row \"AbandonFrame\", at a TC0-A match frame"
+  },
+  {
+   "id": "H-ABANDON-COLLECT",
+   "key": "AbandonFrame at an operand collection of a strict form -> Abandon",
+   "site": "prim, tuple, project, construct or emit node / AbandonFrame",
+   "frames": "one collect frame discarded",
+   "depth": "-1",
+   "source": "EFFECTS.md section 6, row \"AbandonFrame\", at a TC0-A collect frame"
+  },
+  {
+   "id": "H-ABANDON-CALL",
+   "key": "AbandonFrame at a call or apply node, collection or return frame -> Abandon",
+   "site": "call or apply node / AbandonFrame",
+   "frames": "one collect or return frame discarded (the step record does not say which)",
+   "depth": "-1",
+   "source": "EFFECTS.md section 6, row \"AbandonFrame\", at a TC0-A collect or return frame"
+  },
+  {
+   "id": "H-ABANDON-HANDLER",
+   "key": "AbandonFrame at a handler frame -> Abandon",
+   "site": "handle node / AbandonFrame",
+   "frames": "one handler frame discarded",
+   "depth": "-1",
+   "source": "EFFECTS.md section 6, row \"AbandonFrame\", at a handler frame"
+  },
+  {
+   "id": "H-ABANDON-CLAUSE",
+   "key": "AbandonFrame at a clause frame -> Abandon",
+   "site": "perform node / AbandonFrame",
+   "frames": "a clause frame replaced by the segment it holds (s >= 1), which is abandoned next",
+   "depth": ">=0",
+   "source": "EFFECTS.md section 6, row \"AbandonFrame\", at a clause frame; by analogy with \"UnwindFrame at a clause frame\" (section 6 does not say that abandoning a clause frame exposes its segment)"
+  },
+  {
+   "id": "H-ABANDON-PERFORM",
+   "key": "AbandonFrame at a perform node, collection or clause-exit frame -> Abandon",
+   "site": "perform node / AbandonFrame",
+   "frames": "one collect or clause-exit frame discarded (the step record does not say which)",
+   "depth": "-1",
+   "source": "EFFECTS.md section 6, row \"AbandonFrame\", at a collect or clause-exit frame"
+  },
+  {
+   "id": "H-ABANDON-RESUME",
+   "key": "AbandonFrame at a resume node, collection or resume-return frame -> Abandon",
+   "site": "resume node / AbandonFrame",
+   "frames": "one collect or resume-return frame discarded (the step record does not say which)",
+   "depth": "-1",
+   "source": "EFFECTS.md section 6, row \"AbandonFrame\", at a collect or resume-return frame"
+  },
+  {
+   "id": "H-UNWIND-HANDLER",
+   "key": "UnwindFrame at a handler frame -> Unwind",
+   "site": "handle node / UnwindFrame",
+   "frames": "one handler frame discarded",
+   "depth": "-1",
+   "source": "Not tabulated in section 6; section 4 (a trap in the body unwinds through the handler) with the TC0-A catalog root rule \"Unwind discards one frame per step\""
+  },
+  {
+   "id": "H-UNWIND-CLAUSE",
+   "key": "UnwindFrame at a clause frame -> Unwind",
+   "site": "perform node / UnwindFrame",
+   "frames": "clause frame replaced by the segment it holds (s >= 1), which unwinds next",
+   "depth": ">=0",
+   "source": "EFFECTS.md section 6, row \"UnwindFrame at a clause frame\""
+  },
+  {
+   "id": "H-UNWIND-PERFORM",
+   "key": "UnwindFrame at a perform node, collection or clause-exit frame -> Unwind",
+   "site": "perform node / UnwindFrame",
+   "frames": "one collect or clause-exit frame discarded (the step record does not say which)",
+   "depth": "-1",
+   "source": "Not tabulated in section 6; the TC0-A root rule \"Unwind discards one frame per step\" at a collect frame of perform, or at a clause-exit frame when an explicit clause traps (section 4, clause trap aborts)"
+  },
+  {
+   "id": "H-UNWIND-RESUME",
+   "key": "UnwindFrame at a resume node, collection or resume-return frame -> Unwind",
+   "site": "resume node / UnwindFrame",
+   "frames": "one collect or resume-return frame discarded (the step record does not say which)",
+   "depth": "-1",
+   "source": "Not tabulated in section 6; the TC0-A root rule \"Unwind discards one frame per step\" at a collect frame of resume, or at a resume-return frame when the resumed body traps"
+  }
+ ],
+ "transitions_sha256": "e617ad94f9d74d73a277c9f869204a1f832fa69c88c99640d7118de5dcd37d21",
+ "not_covered": [
+  "Multi-shot resumption (section 7)",
+  "Runtime and durable effects (section 8)",
+  "Which of two frames at one node a step discards, where the step record does not say (marked in the transitions concerned)"
+ ]
+}
