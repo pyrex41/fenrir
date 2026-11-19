@@ -8,6 +8,8 @@ import {
   localPath, repoRelative, resolvePath, sha, sourceReader, under,
 } from './identity.mjs';
 import { execute } from './process.mjs';
+import { preflight, PROFILE } from './arm64-preflight.mjs';
+import { ARM_GATES, ARM_SPEC, captureBinding, readArmFrame, retainArmReports } from './arm-capture.mjs';
 
 const CONFIG = '.pi/fenrir-workflow.json';
 const RUNS = 'build/evidence-runs';
@@ -131,6 +133,8 @@ export async function runEvidence({
   if (!/^[a-z][a-z0-9-]{0,63}$/.test(checkId) || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(head))
     throw new Error('A configured check ID and full expected HEAD are required');
   const root = await realpath(cwd);
+  const arm = ARM_GATES.get(checkId);
+  if (arm && shenJit !== undefined) throw new Error('ARM development capture selects only preflight-pinned installs');
   const PATH = await resolvePath(root, path);
   const lockDir = await checkedPath(root, LOCK_ROOT, { directory: true, create: true });
   const lock = resolve(lockDir, 'controller.lock');
@@ -173,15 +177,49 @@ export async function runEvidence({
     const source = sourceReader(root, git.path, baseEnv);
     const before = await source(head);
     receipt.sourceHash = before.hash;
-    const { value: config, hash } = await committedJson(root, before, CONFIG);
-    receipt.configHash = hash;
-    const check = readCheck(config, checkId);
-    receipt.command = check.command;
-    receipt.kind = check.kind;
+    let check, config, binding, manifests, pins;
     const gate = gates.get(checkId);
-    receipt.authorityHash = authorityHash(before, [CONFIG, ...(config.protectedPaths ?? []), ...check.authorityPaths,
-      ...(gate ? [gate[1], gate[3], gate[4]] : []),
-    ]);
+    if (arm) {
+      receipt.scope = 'arm-development-capture-only';
+      receipt.kind = 'development';
+      const armPreflight = await preflight({ cwd: root, head, gate: arm, path: PATH });
+      receipt.preflight = armPreflight;
+      if (armPreflight.source?.sha256 !== before.hash || !armPreflight.sourceStable)
+        throw new Error('ARM development preflight source or scope was not verified');
+      if (armPreflight.status !== 'READY-FOR-DEVELOPMENT') {
+        receipt.verdict = armPreflight.status === 'BLOCKED' ? 'BLOCKED' : 'UNKNOWN';
+        throw new Error('ARM development preflight did not pass');
+      }
+      pins = Object.fromEntries(armPreflight.checks.filter(row => row.id.startsWith('output-'))
+        .map(row => [row.id.slice('output-'.length), row.detail]));
+      receipt.nodeExecutable = await executableIdentity('node', PATH);
+      if (receipt.nodeExecutable.path !== await realpath(process.execPath) || under(root, receipt.nodeExecutable.path))
+        throw new Error('Gate PATH node differs from the native preflight executable');
+      shenJit = pins['shen-jit'].path;
+      manifests = {};
+      for (const id of arm === 'tc1' ? ['g1', 'tc1'] : ['g1']) {
+        const { value, hash } = await committedJson(root, before, ARM_SPEC[id][0]);
+        if (hash !== armPreflight.source.manifests[id]) throw new Error('ARM development manifest drift');
+        manifests[id] = value;
+      }
+      const manifestHash = armPreflight.source.manifests[arm];
+      receipt.manifestHash = manifestHash;
+      binding = captureBinding(arm, receipt, armPreflight.source.profileSha256, manifestHash, armPreflight.source.manifests.g1);
+      receipt.capture = binding;
+      // Independent limits and fixed gate names. No Pi check or approval is read.
+      check = { timeoutSeconds: 3600 };
+      receipt.authorityHash = authorityHash(before, [PROFILE, 'harness', 'tools/evidence', 'flake.nix', 'flake.lock', ...Object.keys(manifests).map(id => ARM_SPEC[id][0])]);
+    } else {
+      const { value, hash } = await committedJson(root, before, CONFIG);
+      config = value;
+      receipt.configHash = hash;
+      check = readCheck(config, checkId);
+      receipt.command = check.command;
+      receipt.kind = check.kind;
+      receipt.authorityHash = authorityHash(before, [CONFIG, ...(config.protectedPaths ?? []), ...check.authorityPaths,
+        ...(gate ? [gate[1], gate[3], gate[4]] : []),
+      ]);
+    }
     const limit = timeoutSeconds ?? check.timeoutSeconds;
     if (!Number.isInteger(limit) || limit < 1 || limit > check.timeoutSeconds) throw new Error('Timeout may only lower the configured positive bound');
     receipt.timeoutSeconds = limit;
@@ -201,12 +239,19 @@ export async function runEvidence({
       try { jit = await jitIdentity(shenJit); }
       catch (error) { if (['ENOENT', 'EACCES', 'ENOTDIR'].includes(error.code)) receipt.verdict = 'BLOCKED'; throw error; }
       receipt.shenJit = jit;
+    } else if (arm) {
+      jit = await jitIdentity(shenJit);
+      receipt.shenJit = jit;
     } else if (shenJit) throw new Error('--shen-jit applies only to structured evaluators');
     let executable;
-    try { executable = await executableIdentity(check.command[0], PATH); }
+    try { executable = arm ? { path: jit.binary, sha256: jit.sha256 } : await executableIdentity(check.command[0], PATH); }
     catch (error) { if (error.message.startsWith('Executable unavailable:')) receipt.verdict = 'BLOCKED'; throw error; }
     if (under(root, executable.path)) throw new Error('Launcher resolves into the checkout');
     receipt.executable = executable;
+    const args = arm ? ['script', resolve(root, ARM_SPEC[arm][2]), jit.lib, root, directory, jit.binary,
+      'arm-development/1', arm, binding.nonce, binding.source_sha256, binding.profile_sha256,
+      binding.manifest_sha256, binding.g1_manifest_sha256] : check.command.slice(1);
+    if (arm) receipt.command = [executable.path, ...args];
     if (signal?.aborted) throw new Error('Cancelled before launch');
     const stdoutPath = resolve(directory, 'stdout.log');
     const stderrPath = resolve(directory, 'stderr.log');
@@ -215,13 +260,16 @@ export async function runEvidence({
     retainLock = true; // On an unexpected runner exception, require human cleanup.
     receipt.cleanup = 'unresolved';
     const result = await execute({
-      executable: executable.path, args: check.command.slice(1), cwd: root, stdoutPath, stderrPath,
+      executable: executable.path, args, cwd: root, stdoutPath, stderrPath,
       onSpawn: pid => writeFileSync(resolve(directory, 'launch.json'), JSON.stringify({ pid, processGroup: pid, id }),
         { flag: 'wx', mode: 0o600 }),
       timeoutMs: limit * 1000, signal, env: {
-        ...baseEnv, ...(jit && { FENRIR_SHEN_JIT: jit.root }), ...(solo5 && { FENRIR_SOLO5: solo5 }),
-        FENRIR_CHECK_ID: checkId, FENRIR_CHECK_NONCE: receipt.nonce, FENRIR_SOURCE_SHA256: before.hash,
-        FENRIR_CONFIG_SHA256: hash, FENRIR_ARTIFACT_DIR: directory,
+        ...baseEnv, ...(jit && { FENRIR_SHEN_JIT: jit.root }),
+        ...(arm ? { FENRIR_SOLO5: pins.solo5.path, ...(pins.erlang && { FENRIR_ERLANG: pins.erlang.path }) } : {
+          ...(solo5 && { FENRIR_SOLO5: solo5 }),
+          FENRIR_CHECK_ID: checkId, FENRIR_CHECK_NONCE: receipt.nonce, FENRIR_SOURCE_SHA256: before.hash,
+          FENRIR_CONFIG_SHA256: receipt.configHash, FENRIR_ARTIFACT_DIR: directory,
+        }),
       },
     });
     const { report: stdout, ...execution } = result;
@@ -242,13 +290,19 @@ export async function runEvidence({
       return { path, sha256, bytes: size };
     }));
     if (!same(git, await executableIdentity('git', PATH)) ||
-        !same(executable, await executableIdentity(check.command[0], PATH)) ||
+        (!arm && !same(executable, await executableIdentity(check.command[0], PATH))) ||
+        (arm && !same(receipt.nodeExecutable, await executableIdentity('node', PATH))) ||
         (jit && !same(jit, await jitIdentity(shenJit)))) throw new Error('Executable or Shen/JIT identity drift');
     if ((await source(head)).hash !== before.hash) throw new Error('Source identity drift');
     receipt.sourceStable = true;
     if (result.issue || result.cleanupIssue || signal?.aborted || result.exitSignal)
       throw new Error(result.issue || result.cleanupIssue || (signal?.aborted ? 'Cancelled' : `Evaluator terminated: ${result.exitSignal}`));
-    if (gate) {
+    if (arm) {
+      const armFrame = readArmFrame(stdout, binding, result.exitCode);
+      await retainArmReports(root, directory, receipt, armFrame, binding, manifests);
+      receipt.verdict = armFrame.verdict;
+      receipt.summary = 'Validated ARM development reports only; qualification UNKNOWN';
+    } else if (gate) {
       if (frameError) throw frameError;
       if (statuses.get(report.verdict) !== result.exitCode) throw new Error('Evaluator verdict contradicts process exit');
       if (report.verdict === 'PASS' && !report.evidence.length) throw new Error('Evaluator PASS requires fresh retained evidence');

@@ -96,13 +96,12 @@ exit 2. It neither runs a guest nor proves seccomp, the sandbox controls,
 toolchain usage by a later evaluator, runner provenance or cleanup. A clean
 preflight, even with all prerequisites, always says `qualification: UNKNOWN`.
 
-For explicit ARM development measurement, use the stock gate launchers
-*without* a nonce, with reviewed pinned `FENRIR_SHEN_JIT`, `FENRIR_SOLO5`
-and (for TC1) `FENRIR_ERLANG` installs. Use a clean dedicated checkout
-and retain the fresh `build/harness` reports. The present standalone
-legacy runner (`tools/evidence/run.mjs`) expects a registered frame and
-does not serve as an ARM gate capture adapter; it fails closed on an
-unregistered frame/report. None of these commands is ARM qualification.
+For bounded ARM development measurements, use the standalone runner's
+[`arm-development-g1` or `arm-development-tc1`](../../tools/evidence/README.md#arm64-development-capture-no-qualification)
+mode. The separate development frame and receipt require same-run identity
+and report digests but cannot grant eligibility. The legacy check IDs still
+expect a registered frame and are not ARM adapters. Bare stock gate launchers
+also remain available for direct development measurement.
 
 ## Evaluator and evidence work still required before approval can take effect
 
@@ -122,13 +121,12 @@ unregistered frame/report. None of these commands is ARM qualification.
    carry usage identities in their reports. A missing output/probe facility is
    BLOCKED; wrong identity or partial/corrupt evidence is UNKNOWN; a confirmed
    violation or semantic divergence is FAIL.
-3. **Strengthen nested same-run G1 binding.** Today `fh.tc0-a-gate` checks a
-   nested report's schema, verdict/exit and HEAD on success and carries its
-   waivers. For this profile require profile, source and manifest digest,
-   run nonce/subrun and pinned toolchain identity on every status, retain the
-   nested report digest, and gate TC1 on the independently validated G1 row
-   set and its approved waiver disposition. Bare legacy development PASS
-   must not serve as this prerequisite.
+3. **Complete nested G1 admission.** ARM development capture now binds the
+   nested role, run nonce, source, profile and manifest digests on every
+   reported status; it retains the exact nested report digest and validates
+   the row inventory. The future evaluator still needs pinned toolchain
+   identity on every status and approved waiver disposition. Bare legacy
+   development PASS must not serve as that prerequisite.
 4. **Use a Pi-independent receipt envelope.** Bind exact full Git HEAD,
    tracked bytes/modes, evaluator/protected paths (including the profile,
    flake/lock and waiver), manifest digests, command/args, runner and tool

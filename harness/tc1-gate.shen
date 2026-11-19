@@ -51,10 +51,35 @@
 \\ Its verdict and exit must agree; a report for another HEAD says nothing about this one.
 (define fh.tc0-a-gate
   Memo ->
-    (let Report (fh.harness "gate.shen" [(fh.subdir "tc0-a-gate") (value fh.*jit*)] 7200)
+    (let Dir (fh.subdir "tc0-a-gate")
+         Capture (value fh.*capture*)
+         Args (if (empty? Capture) [] (fh.capture-args "nested-g1" Capture (fh.field "g1_manifest_sha256" Capture)))
+         Path (cn Dir "/gate.json")
+         Report (fh.harness "gate.shen" (append [Dir (value fh.*jit*)] Args) 7200)
          Verdict (fh.member "verdict" Report)
          Detail [["required_rows_passing" (fh.member "required_rows_passing" Report)] ["authority" (fh.member "authority" Report)]
-                 ["qualification" (fh.member "qualification" Report)] ["claims" (json.stringify (fh.member "claims" Report) [])]]
+                  ["qualification" (fh.member "qualification" Report)] ["claims" (json.stringify (fh.member "claims" Report) [])]]
+      (if (and (not (empty? Capture))
+               (not (fh.same-run-g1? Report Path (fh.capture-binding Args) (fh.member-in "head" Memo))))
+          (fh.row "UNKNOWN" ["Nested G1 report or same-run binding was not verified"] [] Memo)
+          (fh.tc0-a-result Report Verdict
+            (if (empty? Capture) Detail (append Detail [["report_sha256" (fh.sha256 Path)]])) Memo))))
+
+(define fh.same-run-g1?
+  Report Path Binding Head ->
+    (and (not (empty? Report)) (string? Head) (not (= Head ""))
+         (= (fh.member "capture" Report) Binding)
+         (= (fh.member "head" Report) Head)
+         (= (fh.member "schema" Report) "tc0-a-gate-run/3")
+         (= (fh.member "manifest" Report) "spec/tc0/tc0-a-requirements.json")
+         (= (fh.member "evaluator" Report) "harness/gate.shen")
+         (= (fh.member "authority" Report) "UNREGISTERED")
+         (= (fh.member "qualification" Report) "UNKNOWN")
+         (= (fh.member "claims" Report) [])
+         (= Report (json.parse (read-file-as-string Path) [[byte-limit 4194304]]))))
+
+(define fh.tc0-a-result
+  Report Verdict Detail Memo ->
       (if (or (= Report []) (not (= (fh.member "schema" Report) "tc0-a-gate-run/3")))
           (fh.row "UNKNOWN" ["The TC0-A gate did not report"] [] Memo)
           (if (= Verdict "PASS")
@@ -63,7 +88,7 @@
                   (fh.row "UNKNOWN" ["The TC0-A gate report is for another HEAD, or this run's source was never identified"] Detail Memo))
               (fh.row (if (element? Verdict ["FAIL" "BLOCKED"]) Verdict "UNKNOWN")
                       [(cn "TC0-A gate verdict " (if (string? Verdict) Verdict "missing")) | (fh.not-passing (fh.member "rows" Report))]
-                      Detail Memo)))))
+                       Detail Memo))))
 
 (define fh.tc1-handlers
   Memo ->

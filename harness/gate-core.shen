@@ -25,6 +25,38 @@
 (set fh.*jit* (hd (tl (tl (tl (tl (value *argv*)))))))
 (set fh.*controller* (tl (tl (tl (tl (tl (value *argv*)))))))
 (load (cn (value fh.*root*) "harness/common.shen"))
+(set fh.*capture* [])
+
+(define fh.capture-binding
+  ["arm-development/1" Role Nonce Source Profile Manifest G1] ->
+    [object ["role" Role] ["nonce" Nonce] ["source_sha256" Source]
+            ["profile_sha256" Profile] ["manifest_sha256" Manifest] ["g1_manifest_sha256" G1]]
+  ["arm-development/1" | _] -> (error "Invalid ARM development capture arguments")
+  _ -> [])
+
+(define fh.capture-args
+  Role Binding Manifest ->
+    ["arm-development/1" Role (fh.field "nonce" Binding) (fh.field "source_sha256" Binding)
+      (fh.field "profile_sha256" Binding) Manifest (fh.field "g1_manifest_sha256" Binding)])
+
+(define fh.capture-valid?
+  [] _ _ _ -> true
+  B Manifest Evaluator Host ->
+    (and (= (hd Host) 0) (= (hd (tl Host)) "Linux aarch64c#10;")
+         (= (fh.field "profile_sha256" B) (fh.sha256 (cn (value fh.*root*) "campaigns/arm64/profile-v1.json")))
+         (= (fh.field "manifest_sha256" B) (fh.sha256 (cn (value fh.*root*) Manifest)))
+         (= (fh.field "g1_manifest_sha256" B) (fh.sha256 (cn (value fh.*root*) "spec/tc0/tc0-a-requirements.json")))
+         (if (= Evaluator "harness/tc1-gate.shen")
+             (= (fh.field "role" B) "tc1")
+             (element? (fh.field "role" B) ["g1" "nested-g1"]))))
+
+(define fh.capture-frame
+  [] _ _ -> skip
+  B Verdict Path ->
+    (if (= (fh.field "role" B) "nested-g1") skip
+        (output "FENRIR_ARM_CAPTURE ~A~%"
+          (json.stringify [object ["schema" "fenrir.arm-development-frame/1"]
+              ["binding" B] ["verdict" Verdict] ["report_sha256" (fh.sha256 Path)]] []))))
 
 \\ ---------- rows and the checks every gate needs ----------
 \\ A check returns [Status Reasons Detail Memo]. Detail is a list of [Key String].
@@ -175,7 +207,12 @@
 \\ file, Label the gate's name in the controller's summary.
 (define fh.gate-main
   ManifestPath ManifestSchema ReportSchema Evaluator Label ->
-    (let Manifest (json.parse (read-file-as-string (cn (value fh.*root*) ManifestPath)) [[byte-limit 4194304]])
+    (let Binding (fh.capture-binding (value fh.*controller*))
+          Capture (not (empty? Binding))
+          Host (if Capture (fh.exec "uname" ["-sm"] 30) [])
+          Admission (if (fh.capture-valid? Binding ManifestPath Evaluator Host)
+                        (set fh.*capture* Binding) (error "ARM development platform, profile or manifest mismatch"))
+          Manifest (json.parse (read-file-as-string (cn (value fh.*root*) ManifestPath)) [[byte-limit 4194304]])
           Ledger (json.parse (read-file-as-string (cn (value fh.*root*) (fh.field "ledger" Manifest))) [[byte-limit 4194304]])
           Valid (if (and (= (fh.field "schema" Manifest) ManifestSchema)
                          (empty? (fh.unknown-references (fh.field "rows" Manifest) (fh.ledger-ids Ledger))))
@@ -192,14 +229,15 @@
                    (append Rows0 [[object ["id" "source-drift"] ["required" true] ["status" "UNKNOWN"]
                                           ["reasons" ["Source changed during evaluation, or was never identified"]] ["detail" [object]]]])
                    Rows0)
-          Verdict (fh.verdict Rows)
+          Verdict (if (fh.capture-valid? Binding ManifestPath Evaluator Host) (fh.verdict Rows)
+                      (error "ARM development profile or manifest drift"))
           Claims (fh.claims (tl (fh.field "claims" Manifest)) (fh.field "claim_prerequisites" Manifest) Rows)
            Host (trap-error (fh.exec "uname" ["-sm"] 30) (/. E [-1 "" "platform probe failed"]))
            Supported (fh.legacy-runner? Host)
-           Registered (and Supported (fh.registered? Manifest))
-           Controller (value fh.*controller*)
+           Registered (and (not Capture) Supported (fh.registered? Manifest))
+           Controller (if Capture [] (value fh.*controller*))
           Passing (make-string "~A/~A" (fh.count-status "PASS" true Rows 0) (- (length Rows) (fh.count-optional Rows 0)))
-          Report [object ["schema" ReportSchema]
+          Report [object | (append [["schema" ReportSchema]
                          ["authority" (if Registered "owner-accepted, registered" "UNREGISTERED")]
                           ["qualification" (if Registered Verdict "UNKNOWN")]
                           ["runner" [object ["uname_sm" (hd (tl Host))] ["uname_exit" (str (hd Host))]
@@ -214,13 +252,15 @@
                          ["shen" (make-string "~A ~A ~A" (value *implementation*) (value *port*) (version))]
                          ["aggregation" (fh.field "aggregation" Manifest)]
                          ["required_rows_passing" Passing]
-                         ["rows" Rows]]
+                          ["rows" Rows]] (if Capture [["capture" Binding]] []))]
           Text (json.stringify Report [[byte-limit 4194304]])
-          Written (write-to-file (cn (value fh.*out*) "gate.json") (cn Text "c#10;"))
-       (do (output "~A~%" Text)
+          Path (cn (value fh.*out*) "gate.json")
+          Written (write-to-file Path (cn Text "c#10;"))
+       (do (if (or (not Capture) (= (fh.field "role" Binding) "nested-g1")) (output "~A~%" Text) skip)
             (fh.controller-record Controller
               (if Supported Label (cn Label " (legacy qualification requires Linux x86_64)"))
               Registered Verdict Claims Passing (fh.waivers Memo))
+            (fh.capture-frame Binding Verdict Path)
             \\ A bare run has a development verdict, including when TC1 calls G1.
             \\ A framed run must exit consistently with its credited verdict.
             (shen-jit.exit (fh.exit-status (if (and (cons? Controller) (not Registered)) "UNKNOWN" Verdict))))))

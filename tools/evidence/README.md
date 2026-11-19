@@ -60,6 +60,41 @@ same-user process can escape a process group, modify files transiently, or
 tamper with local receipts and logs. Preserve receipts externally if needed,
 and verify their digests before relying on retained files.
 
+## ARM64 development capture (no qualification)
+
+On a reviewed native ARM64 Linux runner with the existing sandbox prerequisites,
+prepare the pinned outputs and run from a clean checkout:
+
+```sh
+nix build --no-link .#shen-jit .#solo5 .#erlang
+commit=$(git rev-parse HEAD)
+nix develop --command node tools/evidence/run.mjs arm-development-tc1 --head "$commit"
+```
+
+Use `arm-development-g1` to run only G1 (no Erlang needed). No Pi configuration,
+approval, or session is used to select these commands. The internal preflight
+selects the installed ARM flake outputs; don't pass `--shen-jit`. If the outer or
+candidate PATH cannot create a network namespace, or a pinned output is
+missing, the preflight blocks rather than weakening confinement. Use only a
+trusted reviewed runner and toolchain. The timeout is at most 3,600 seconds
+after launch; use `--timeout-seconds` to lower it.
+
+`build/evidence-runs/<runId>/` holds the receipt, bounded outer logs, and fresh
+gate reports. The separate ARM frame binds a run nonce, source SHA-256, profile
+SHA-256 and the relevant manifest digests, and hashes the exact top report.
+TC1 additionally runs G1 as a nested Shen process with that same binding and a
+distinct role. TC1's prerequisite row binds the nested report's digest and
+verdict, and the capture validates and retains both reports. Missing,
+inconsistent, or oversized report evidence yields UNKNOWN. The existing
+process-group watchdog is not host-level confinement; subordinate gate work
+files are neither quota-bounded nor fully retained as evidence. Review and
+clean up the job externally as needed.
+
+PASS is a **development verdict**, never qualification. Neither frame nor
+receipt credits claims; old repair waivers, when observed, are diagnostic
+only. See the [review proposal](../../campaigns/arm64/QUALIFICATION_PROPOSAL.md)
+for unmet admission requirements.
+
 Fast tests (temporary commits and mock evaluators, no language qualification):
 
 ```sh
