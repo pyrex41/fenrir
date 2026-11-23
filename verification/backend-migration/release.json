@@ -1,0 +1,117 @@
+{
+  "package": "/nix/store/8yss5qdzad3lcaha4d9y8m5h6ywnsnrj-fenrir-0.1-dev",
+  "source_archive_sha256": "a566416c32e7cc366aacd27718727505a8644722f67c81c58708075f97dca642",
+  "baseline": "94f3b1b4c7b1092645c139df07a92392406bb535",
+  "backend_files_sha256": {
+    "backends/arm64/arguments.shen": "d330e46eac5131bc5f7c3814ca07552a263d94fec1fd4c4b015fcc55cd9344be",
+    "backends/arm64/byte-scan.shen": "8fc075964aa4cf8884721bd58dd379fc8fb5e3ff9754ad49339ce3edbd4490d4",
+    "backends/arm64/constants.shen": "5503b83dcb07f81053cdb2459fcb27c05828d4170c3b1018e75df06358404817",
+    "backends/arm64/emit.shen": "73c22f1ecafd1bd879709f7529036d5eb672d382e479c3560c790c1284c133b3",
+    "backends/arm64/handler-context.shen": "f5f0a6d93d7b944ab5a1977993c6ce53f780ba0bad32259bfdbfefe61600a39f",
+    "backends/arm64/handlers.shen": "088772fcab2ca15a60a21088cf75691e2b2ba3ef83fbedaca8bea706a3c3764b",
+    "backends/arm64/managed.shen": "c0a07eb546e0dd08e9a0c10e6daa1db50b14cfdafc78161b995c29707422cb7f",
+    "backends/arm64/printer.shen": "b9930fefc67d4e9c011df969f889ac7c54a2d908489fd6ec1a3dc73aab99dc10",
+    "backends/arm64/scalar.shen": "682164ab2f596a1a5046f640eebc408bb1a4d9f865ba3f47e1c785731ac1ddfe",
+    "backends/arm64/tasks.shen": "2d11d75421c5becae6bfb03d998c92c043bf4d04004684a113f739ace63fa7eb",
+    "bin/fenrir": "67244c0439ec02f31b8aaa775c518da7e6a679f03853b1bf93f22edbd772a8c3",
+    "harness/emit-arm64.sh": "8b116eb0a70c3acb939f408c6c161bc1527a0c68c896bd27c24c2c43baeaf2ed",
+    "tools/aarch64/application-image.mjs": "ba43b5998ef977c416cf23e7e780f43251b3a14ebb89022574bb3261a1920c9b",
+    "tools/aarch64/native-image.sh": "39c041e8cd2d3d9deefd6457b95711a69b49e13f3262566927171a8c9721a043",
+    "tools/aarch64/shen-profile.mjs": "9193845559813a33179e737c93851eac51aff7ee4d517e711c82c9c6ef0b1fb2"
+  },
+  "installed_groups_exit": {
+    "apps": 0,
+    "dispatch": 0,
+    "javascript": 0,
+    "cli": 0,
+    "native": 0,
+    "roundtrips": 0
+  },
+  "masked_emitters": [
+    "native-image.mjs",
+    "managed-image.mjs"
+  ],
+  "default_app_outputs_sha256": {
+    "src/benchmarks/http/router.fen": "c41aa05ce313bc499e01b051224bb556165166477a434457b74bc716f83b76c8",
+    "http-edited-mac": "780071aea53a24d1c57d122fb38b4e68a08a8d6ac571f7d14163cdb2374d7822",
+    "http-edited-spt/http.spt": "8cacc22237701f7d046cf2aca1ec30d40318ec8e6be3d2e9ac07e9d526c66e88",
+    "http-edited-spt/ingress": "4474b4c968c86a25691c46a2a333cfb286ed4f918b4b249bd4063a6673d962b5",
+    "http-edited-mac.build.json": "8f79be6bb2983e8e643c096cb53eafb07c6653ec157dfdcb4b87d32733f6563a",
+    "http-mac.build.json": "8836eb37ebb3ab5012f8b94a738b6838053f6cfd43d4a883602d7fb3aca2eb2b",
+    "service-counterexamples.log": "744ae0e6ec60cb38d7c2466057b7586eb58c3d14552a4f89623050099681a20d",
+    "stream-mac": "d076d8bf2e2ed27fe656f49250165e2ea3092a408ebbe65963f2bedc53687959",
+    "stream-spt": "4d8e09365cfcd657e0f8e8826eda64fc4ac550f69d9e49aacb3aee6ef90084d4",
+    "http-mac": "65062aa18e7b39c0014314b101db86aff0d1ba90a9c4424b4276647bd1064154",
+    "http-spt/ingress": "4474b4c968c86a25691c46a2a333cfb286ed4f918b4b249bd4063a6673d962b5",
+    "http-spt/http.spt": "3cbd8e35c9bd6700d9f03eaf17024238c367940c661d480d746702809bbd7239",
+    "persistent-counts-macos-arm64.log": "d98fdc8ff85ccfde6a211fa785b07039cd67b134f5d7dfedf2a38927d5c49259",
+    "persistent-counts-solo5-arm64-spt.log": "d98fdc8ff85ccfde6a211fa785b07039cd67b134f5d7dfedf2a38927d5c49259",
+    "persistent-decoder-macos-arm64.log": "d98fdc8ff85ccfde6a211fa785b07039cd67b134f5d7dfedf2a38927d5c49259",
+    "persistent-decoder-solo5-arm64-spt.log": "d98fdc8ff85ccfde6a211fa785b07039cd67b134f5d7dfedf2a38927d5c49259",
+    "chunk-snapshots-macos-arm64.log": "d98fdc8ff85ccfde6a211fa785b07039cd67b134f5d7dfedf2a38927d5c49259",
+    "chunk-snapshots-solo5-arm64-spt.log": "d98fdc8ff85ccfde6a211fa785b07039cd67b134f5d7dfedf2a38927d5c49259",
+    "shared-counts-child-macos-arm64.log": "d98fdc8ff85ccfde6a211fa785b07039cd67b134f5d7dfedf2a38927d5c49259",
+    "shared-counts-child-solo5-arm64-spt.log": "d98fdc8ff85ccfde6a211fa785b07039cd67b134f5d7dfedf2a38927d5c49259",
+    "search-macos-arm64.log": "f22995d66531175a51f47259f92cd78a8a36154e173b36bf90863ebbbeea245a",
+    "search-solo5-arm64-spt.log": "f22995d66531175a51f47259f92cd78a8a36154e173b36bf90863ebbbeea245a",
+    "check-macos-arm64.log": "d33344ade50380bbf4000948a0d4c5bf1993a59b7b176dc5feb01035eea85f09",
+    "check-solo5-arm64-spt.log": "d33344ade50380bbf4000948a0d4c5bf1993a59b7b176dc5feb01035eea85f09",
+    "prefix-macos-arm64.log": "0ad03c674023729f432ce6df4b8a07e19ec45c8941620f9ff5c62e28c6aca5af",
+    "prefix-solo5-arm64-spt.log": "227e2586a91e30b62ec52a4a2f7b24827161c5d58d12a537a6f7f21914de5542"
+  },
+  "recovery": {
+    "mac": {
+      "history_sha256": "cdf36b1c1ca55319f6815ec1cc98cbbc474c102f7a7cdbc57f076433e2820f2d",
+      "verdict": "accepted",
+      "events": 18
+    },
+    "spt": {
+      "history_sha256": "3b4e9dee24e37dab52ffc63d6a2bec69ba7e57ee4a1a9f4d1b161a17e20829d4",
+      "verdict": "accepted",
+      "events": 18
+    }
+  },
+  "annotated": {
+    "macos-arm64": "49 passed, 0 failed",
+    "solo5-arm64-spt": "49 passed, 0 failed"
+  },
+  "source_model_comparisons": 92,
+  "roundtrip_receipts_sha256": "4a33c19dadb8446cb4f7a61721f9c2167278494175632a7367b6cf3376225bce",
+  "exact_scalar_tables": 84,
+  "rocq": {
+    "schema": "fenrir.aarch64.check/1",
+    "status": "development-pass",
+    "qualification": "UNKNOWN",
+    "tools": "/nix/store/1scvwczicvm8263pyfsp6hsrdjk6c53c-fenrir-aarch64-verification-tools",
+    "unary": {
+      "profile": "fenrir-aarch64-checked-unary/1",
+      "report": "/src/build/aarch64/1795476778119-16150/report.json",
+      "proof_instances": 12,
+      "native_comparisons": 564,
+      "rejected_mutants": 3
+    },
+    "expr": {
+      "profile": "fenrir-aarch64-checked-expr/1",
+      "report": "/src/build/aarch64/check-1795476777-1/expr/report.json",
+      "programs": 70,
+      "native_comparisons": 2520,
+      "rejected_mutants": 10
+    },
+    "call": {
+      "profile": "fenrir-aarch64-checked-call/1",
+      "report": "/src/build/aarch64/check-1795476777-1/call/report.json",
+      "programs": 14,
+      "tail_constant_stack_instances": 5,
+      "native_comparisons": 436,
+      "rejected_mutants": 8
+    },
+    "differential": {
+      "report": "/src/build/aarch64/check-1795476777-1/differential/report.json",
+      "cases": "3760",
+      "status": "development-pass",
+      "negative_control": "Control.v: failures = [0; 480; 512; 3280] proved (exactly the falsified cases)"
+    }
+  },
+  "archived_receipts": 10,
+  "frontend_linux_arm64": "frontend tests: 24 accepted programs, 137 rejected programs, 46 round trips, 3 schedule runs, 20 stable artifacts, 6 remote programs, 17 programs with includes, 8 durable programs; Solo5: 17 programs agree with the model in the guest; failures: 0"
+}

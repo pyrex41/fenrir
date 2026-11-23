@@ -61,7 +61,7 @@ sh /src/tools/aarch64/link-spt.sh representation.c representation.spt'''
         (d / "benchmark.fen").write_text(src)
         cmd("sh", str(root / "frontend/fenrir.sh"), "emit", "benchmark.fen", "artifact", cwd=d,
             env=dict(os.environ, FENRIR_NATIVE_BUILD="1"))
-        cmd("node", str(root / "tools/aarch64/native-image.mjs"), "solo5-arm64-spt", "artifact", "program.s", cwd=d)
+        cmd("sh", str(root / "tools/aarch64/native-image.sh"), "solo5-arm64-spt", "artifact", "program.s", cwd=d)
         (d / "corpus.h").write_text(c_table(corpus, rows, lane))
         cmd(*docker, build, "sh", lane)
         (d / "fenrir.spt").symlink_to("program.spt")

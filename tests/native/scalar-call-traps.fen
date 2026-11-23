@@ -1,0 +1,9 @@
+\\ > outcome: Ok -1
+(define dec {I64 --> I64} x -> (- x 1))
+(define twice {I64 --> I64} x -> (* x 2))
+(define main {I64 --> I64}
+  x -> (if (= x 1) (/ -9223372036854775808 -1)
+         (if (= x 2) (/ 42 0)
+           (if (= x 3) (dec -9223372036854775808)
+             (if (= x 4) (twice 9223372036854775807)
+               (+ (twice x) (dec x)))))))

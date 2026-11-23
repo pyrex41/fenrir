@@ -51,7 +51,14 @@ def main(cli):
         (work / "task.fen").write_text("(define main {I64 --> I64} x -> (do yield (+ x 1)))\n")
         for schedule in ([], ["fifo"]):
             assert "outcome: Ok 1" in run("model", "--profile", profile["id"], "task.fen", *schedule).stdout
+        # These 639 scalar expressions have logarithmic live depth. A managed
+        # frame that reserves one slot per AST node rejects this valid program.
+        terms = ["1"] * 320
+        while len(terms) > 1:
+            terms = [f"(+ {a} {b})" for a, b in zip(terms[::2], terms[1::2])] + (terms[-1:] if len(terms) % 2 else [])
+        (work / "wide.fen").write_text(f'(define main {{I64 --> I64}} x -> (do (emit "start" x) {terms[0]}))\n')
         for target in profile["targets"]:
+            assert run("run", "--target", target, "wide.fen", "0").stdout.splitlines() == ['emit "start": 0', "320"]
             for name in ("main.fen", "local-store.fen", "unused-remote.fen", "managed-signature.fen"):
                 run("check", "--target", target, name)
 

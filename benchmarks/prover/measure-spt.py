@@ -95,7 +95,7 @@ def main(out):
         (folder / "benchmark.fen").write_text(source)
         command("sh", root / "frontend/fenrir.sh", "emit", "benchmark.fen", "artifact",
                 cwd=folder, env=dict(os.environ, FENRIR_NATIVE_BUILD="1"))
-        command("node", root / "tools/aarch64/native-image.mjs", "solo5-arm64-spt",
+        command("sh", root / "tools/aarch64/native-image.sh", "solo5-arm64-spt",
                 "artifact", "program.s", cwd=folder)
         (folder / "corpus.h").write_text(c_table(corpus, rows, lane))
         (folder / "reference.c").write_bytes((here / "reference.c").read_bytes())

@@ -112,7 +112,7 @@ with open(sys.argv[1]) as manifest:
             sys.exit(f"build output would overwrite source file {source}")
 PYTHON
 fi
-node "$root/tools/aarch64/native-image.mjs" "$target" "$work/artifact" "$work/program.s" --standalone "$work/profile.h"
+sh "$root/tools/aarch64/native-image.sh" "$target" "$work/artifact" "$work/program.s" "$work/profile.h"
 if [ "$1" = model ]; then
     FENRIR_NATIVE_BUILD=1 sh "$root/frontend/fenrir.sh" run-artifact "$work/artifact" "$schedule" "$profile"
     exit "$?"

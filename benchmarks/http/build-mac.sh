@@ -23,7 +23,7 @@ inputs = run_path(str(root / "benchmarks/solo5-build-inputs.py"))["shared_inputs
 for name in ("benchmarks/http/service.fen", "benchmarks/http/router.fen",
              "benchmarks/http/build-mac.sh", "benchmarks/http/build-service.mjs",
              "benchmarks/http/server.c", "runtime/native/task-state.h",
-             "tools/aarch64/result-printer.mjs", "tools/tc0/canonical.mjs", "harness/jit.sh"):
+             "tools/tc0/canonical.mjs", "harness/jit.sh"):
     inputs[name] = hashlib.sha256((root / name).read_bytes()).hexdigest()
 print(json.dumps(inputs, sort_keys=True))
 MANIFEST

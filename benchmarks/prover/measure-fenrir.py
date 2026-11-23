@@ -211,15 +211,11 @@ def main():
         verifier_sha256=sha(here / "verify.py"),
         runner_sha256=sha(here / "check-references.sh"),
         evidence_sha256={p.name: sha(p) for p in sorted(evidence.iterdir())})
-    report["fenrir_build_inputs"] = {
-        name: sha(root / name) for name in (
-            "bin/fenrir", "frontend/elaborate.shen", "frontend/main.shen",
-            "tools/aarch64/managed-image.mjs", "tools/aarch64/byte-scan.mjs", "tools/aarch64/native-image.mjs",
-            "tools/aarch64/result-printer.mjs", "tools/aarch64/darwin-main.c",
-            "spec/native/standalone-v1.json", "tools/tc1/native-profile.mjs",
-            "tools/aarch64/native-profile.mjs", "tools/aarch64/native-profile-stamp.mjs",
-            "runtime/native/managed.c", "runtime/native/heap.c", "runtime/native/heap.h")
-    }
+    emitter = [] if "backends/arm64/managed.shen" in build_inputs else ["tools/aarch64/native-image.mjs"]
+    report["fenrir_build_inputs"] = {**build_inputs, **{
+        name: sha(root / name) for name in ["bin/fenrir", "tools/aarch64/darwin-main.c",
+                                             "tools/aarch64/native-profile-stamp.mjs", *emitter]
+    }}
     commands = {}
     work = {"search": 0, "check": 0}
     for lane in work:

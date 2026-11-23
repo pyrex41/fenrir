@@ -1,0 +1,247 @@
+{
+  "solo5_image": "sha256:2973c75c0af0a7a3d9d960cd66031bbb994089a46b3741b9ce6ca08427902409",
+  "wire_sha256": "0a85b6d641616b45525c12ff037dc826d72f9b2911c9627048bb6c38eb5cbb07",
+  "stream_sha256": "b130de978596d0ca5f6ed95f6dbd625ee82258d30df3038e08ce8dce1d881b66",
+  "lanes": {
+    "http/macos-arm64": {
+      "builds": {
+        "javascript": {
+          "build_ns": 480236875,
+          "sha256": "953fb5a7b069399ae1cf6c2e6350fbc0feb1330c8f82ed4bf97ecd9a3572fe26"
+        },
+        "shen": {
+          "build_ns": 552705000,
+          "sha256": "e2ecbc12366cc24712b5aa0fa6353f3684ac8e9f5a5cc04124d504610f6737d9"
+        }
+      },
+      "clock": "in-process monotonic around checked kernel",
+      "samples_ns": [
+        {
+          "shen": 936750,
+          "javascript": 438125
+        },
+        {
+          "javascript": 432834,
+          "shen": 924875
+        },
+        {
+          "shen": 931958,
+          "javascript": 431959
+        },
+        {
+          "javascript": 450500,
+          "shen": 929417
+        },
+        {
+          "shen": 922375,
+          "javascript": 425583
+        }
+      ],
+      "warmup": {
+        "javascript": 451125,
+        "shen": 954334
+      },
+      "median_paired_ratio": 2.138088445078459
+    },
+    "framed-log/macos-arm64": {
+      "builds": {
+        "javascript": {
+          "build_ns": 1301249042,
+          "sha256": "967eb16a89061afbb7dc39957d3ac5f1092a6c3ddead0d637a8fa9b84b97c42b"
+        },
+        "shen": {
+          "build_ns": 2348697583,
+          "sha256": "2e41668ae848041c2e2d79d651fb7a2b602f13b374741c9989e38e7a16d90fb9"
+        }
+      },
+      "clock": "host process start through exit",
+      "samples_ns": [
+        {
+          "shen": 27608542,
+          "javascript": 18818958
+        },
+        {
+          "javascript": 26387333,
+          "shen": 33852583
+        },
+        {
+          "shen": 19100833,
+          "javascript": 13104833
+        },
+        {
+          "javascript": 27377417,
+          "shen": 30373500
+        },
+        {
+          "shen": 22664792,
+          "javascript": 17142083
+        }
+      ],
+      "warmup": {
+        "javascript": 142245167,
+        "shen": 100226125
+      },
+      "median_paired_ratio": 1.3221725737764776
+    },
+    "durable/macos-arm64": {
+      "builds": {
+        "javascript": {
+          "build_ns": 1143228416,
+          "sha256": "3f353c314fcf3b1a1ec8ab1dce62124719189166775c2a48be5ea611263539cc"
+        },
+        "shen": {
+          "build_ns": 997252583,
+          "sha256": "54867ebcc6d88dda83a72e08c52b027dcbfdbd247641c20b8e55dc678c50a517"
+        }
+      },
+      "clock": "host process start through exit",
+      "samples_ns": [
+        {
+          "shen": 39400125,
+          "javascript": 46488000
+        },
+        {
+          "javascript": 47898625,
+          "shen": 47144625
+        },
+        {
+          "shen": 41692250,
+          "javascript": 38655709
+        },
+        {
+          "javascript": 45882416,
+          "shen": 51536250
+        },
+        {
+          "shen": 45686084,
+          "javascript": 43857208
+        }
+      ],
+      "warmup": {
+        "javascript": 136798625,
+        "shen": 375883167
+      },
+      "median_paired_ratio": 1.041700693760533
+    },
+    "http/solo5-arm64-spt": {
+      "builds": {
+        "javascript": {
+          "build_ns": 460625083,
+          "sha256": "b0163bf29f4a07262cf016b33657d36285da8ac995a2158ff04e2677b83decc6"
+        },
+        "shen": {
+          "build_ns": 635627041,
+          "sha256": "54443de378c7a7a2c8edeae4fe4a2a7e8dff5b83438b3263c3052bd883b2e354"
+        }
+      },
+      "clock": "in-process monotonic around checked kernel",
+      "samples_ns": [
+        {
+          "shen": 991131,
+          "javascript": 420210
+        },
+        {
+          "javascript": 452461,
+          "shen": 1054338
+        },
+        {
+          "shen": 981921,
+          "javascript": 452336
+        },
+        {
+          "javascript": 461502,
+          "shen": 948046
+        },
+        {
+          "shen": 958422,
+          "javascript": 439544
+        }
+      ],
+      "warmup": {
+        "javascript": 459335,
+        "shen": 1790967
+      },
+      "median_paired_ratio": 2.1804916003858543
+    },
+    "framed-log/solo5-arm64-spt": {
+      "builds": {
+        "javascript": {
+          "build_ns": 1105852708,
+          "sha256": "04cfee77cf620995da2bf824ac3819caf083db4896cfac77ddd34baee4dfc931"
+        },
+        "shen": {
+          "build_ns": 1206876875,
+          "sha256": "4d8e09365cfcd657e0f8e8826eda64fc4ac550f69d9e49aacb3aee6ef90084d4"
+        }
+      },
+      "clock": "in-process monotonic around checked kernel",
+      "samples_ns": [
+        {
+          "shen": 13319943,
+          "javascript": 2739972
+        },
+        {
+          "javascript": 3673810,
+          "shen": 10212802
+        },
+        {
+          "shen": 10078885,
+          "javascript": 3772895
+        },
+        {
+          "javascript": 2250594,
+          "shen": 10965431
+        },
+        {
+          "shen": 11133890,
+          "javascript": 3612061
+        }
+      ],
+      "warmup": {
+        "javascript": 2362637,
+        "shen": 11480892
+      },
+      "median_paired_ratio": 3.0824202581296385
+    },
+    "durable/solo5-arm64-spt": {
+      "builds": {
+        "javascript": {
+          "build_ns": 1930253084,
+          "sha256": "35778fdbb48ef022c5643c2b903b1b9f578b866b26c7cf1b9e04db98442b2fe2"
+        },
+        "shen": {
+          "build_ns": 1267068416,
+          "sha256": "eb757bc3730bbab68f883ff136bb302801b5bb8eaf9397e3a5ae1e7d4db1006b"
+        }
+      },
+      "clock": "host process start through exit including Solo5 container launch",
+      "samples_ns": [
+        {
+          "shen": 755912833,
+          "javascript": 678865250
+        },
+        {
+          "javascript": 715464000,
+          "shen": 630512166
+        },
+        {
+          "shen": 584644250,
+          "javascript": 585075000
+        },
+        {
+          "javascript": 557064833,
+          "shen": 753851292
+        },
+        {
+          "shen": 865928542,
+          "javascript": 696839833
+        }
+      ],
+      "warmup": {
+        "javascript": 718213500,
+        "shen": 866570542
+      },
+      "median_paired_ratio": 1.1134946633370908
+    }
+  }
+}

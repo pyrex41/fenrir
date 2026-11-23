@@ -111,9 +111,7 @@ sources = [here / name for name in ("router.fen", "service.fen", "router-loop.h"
            "router-time.nim", "check-router.py", "check-nim-router.py", "measure-router-mac.py",
            "measure-router-spt.py")]
 sources += [native / name for name in ("heap.h", "heap.c", "managed.c")]
-sources += [root / "tools/aarch64" / name for name in ("managed-image.mjs", "byte-scan.mjs", "result-printer.mjs", "native-profile.mjs")]
-sources.append(root / "spec/native/standalone-v1.json")
-sources.append(root / "tools/tc1/native-profile.mjs")
+sources += [root / name for name in build_inputs]
 report = dict(target="darwin-arm64", host=command("uname", "-a"), hardware=command("sysctl", "-n", "hw.model"), os=command("sw_vers"),
               rounds=rounds, heads=len(cases), bytes_per_round=sum(len(h) for h, _ in cases),
               median_ns=median_ns, median_rss_bytes=median_rss, fastest_measured_reference=comparison,

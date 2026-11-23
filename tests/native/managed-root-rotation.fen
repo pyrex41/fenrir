@@ -1,0 +1,8 @@
+\\ > outcome: Ok 23
+(datatype Cell (Box I64))
+(define rotate {(Tuple I64 Cell Cell) --> I64}
+  n a b -> (if (= n 0)
+    (match a ((Box x) -> (match b ((Box y) -> (+ (* x 10) y)))))
+    (match a ((Box x) -> (rotate (- n 1) b (Box x))))))
+(define main {I64 --> I64}
+  n -> (rotate (+ n 3000) (Box 2) (Box 3)))

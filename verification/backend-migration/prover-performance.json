@@ -1,0 +1,197 @@
+{
+  "host": "macOS-27.2.1-arm64-arm-64bit",
+  "image": "sha256:2973c75c0af0a7a3d9d960cd66031bbb994089a46b3741b9ce6ca08427902409",
+  "rounds": 2000,
+  "build_ns": {
+    "search/macos-arm64": {
+      "javascript": 145353875,
+      "shen": 166214042
+    },
+    "search/solo5-arm64-spt": {
+      "javascript": 61284917,
+      "shen": 201899250
+    },
+    "check/macos-arm64": {
+      "javascript": 166517250,
+      "shen": 126180708
+    },
+    "check/solo5-arm64-spt": {
+      "javascript": 354684291,
+      "shen": 396435541
+    }
+  },
+  "lanes": {
+    "search/macos-arm64": {
+      "warmup": {
+        "javascript": 129458750,
+        "shen": 109367500
+      },
+      "samples_ns": [
+        {
+          "shen": 11959417,
+          "javascript": 11446542
+        },
+        {
+          "javascript": 6757625,
+          "shen": 17859250
+        },
+        {
+          "shen": 15309459,
+          "javascript": 10895875
+        },
+        {
+          "javascript": 9049250,
+          "shen": 12326834
+        },
+        {
+          "shen": 10859375,
+          "javascript": 7781541
+        }
+      ],
+      "binaries": {
+        "javascript": "4e860f987a79fdab6b16237a0fefb687fa7ebb291424442ec49b2a562fb52807",
+        "shen": "7dd92404ed64c36b2b00f68622314c409c59e551e25c71583ab827c8972e9ee8"
+      },
+      "assemblies": {
+        "javascript": "7a20c8e71cd8c34a02095201b0e947430cbb1fa3a6b3af1c82dd8cea5ad96180",
+        "shen": "e578027eccefda0593414fc98e90dd3643bee354adb8c714c37d0d032b22213b"
+      },
+      "artifact": "6f7c853972dab1e89d64743fe545a8f3de5bc5d31004c2e46f66706582bfce52",
+      "median_paired_ratio": 1.3955301398527618
+    },
+    "search/solo5-arm64-spt": {
+      "warmup": {
+        "javascript": 1801634,
+        "shen": 4517482
+      },
+      "samples_ns": [
+        {
+          "shen": 4681607,
+          "javascript": 1873967
+        },
+        {
+          "javascript": 1651925,
+          "shen": 5421027
+        },
+        {
+          "shen": 4872942,
+          "javascript": 1588883
+        },
+        {
+          "javascript": 3003140,
+          "shen": 5021943
+        },
+        {
+          "shen": 4591816,
+          "javascript": 1631258
+        }
+      ],
+      "binaries": {
+        "javascript": "2fbe0afa50c80b6886c454d3cccbe062bd266e2cfbf8e5f03273daad0a756298",
+        "shen": "85ffd093ae6bc97b1ae00cb0615fe858654d6b49ff861c22c4e9657285622e19"
+      },
+      "assemblies": {
+        "javascript": "8d3db2ca8cc529ba24fb4e503813495c6105dac03c79c5bb43f7646206a22626",
+        "shen": "531063a1d88a8c11de11a9379af502313e68d1183676f4a9d8905206bcc7d9f6"
+      },
+      "artifact": "6f7c853972dab1e89d64743fe545a8f3de5bc5d31004c2e46f66706582bfce52",
+      "median_paired_ratio": 2.8148925553162036
+    },
+    "check/macos-arm64": {
+      "warmup": {
+        "javascript": 99871834,
+        "shen": 127986083
+      },
+      "samples_ns": [
+        {
+          "shen": 23417667,
+          "javascript": 25633541
+        },
+        {
+          "javascript": 22957375,
+          "shen": 13114167
+        },
+        {
+          "shen": 11180834,
+          "javascript": 5930541
+        },
+        {
+          "javascript": 6470667,
+          "shen": 17068500
+        },
+        {
+          "shen": 6832417,
+          "javascript": 6741625
+        }
+      ],
+      "binaries": {
+        "javascript": "eca93acbe22077fee02789708cb086b6bfae20b5a9e319a06e6a52843b8587f1",
+        "shen": "5da0fee72d273a9e946c5b03b2491fb7cb2e433e5c21d7117c9ab35ebac61774"
+      },
+      "assemblies": {
+        "javascript": "a1e1ac003ecbcf09753d68419674f76bf27e86a9134d0bca2893eb7cc99ab4b8",
+        "shen": "4d543b74193746f511220a3b42cf27ba294599878b078dfe4fa11b94f7a2f7a2"
+      },
+      "artifact": "ccb766bacf3b0358fb4171ba25d7c23b91b896791abf8dd36d041f33880175af",
+      "median_paired_ratio": 1.0134673761889752
+    },
+    "check/solo5-arm64-spt": {
+      "warmup": {
+        "javascript": 800671,
+        "shen": 2903056
+      },
+      "samples_ns": [
+        {
+          "shen": 2821306,
+          "javascript": 922380
+        },
+        {
+          "javascript": 847213,
+          "shen": 6186573
+        },
+        {
+          "shen": 3031016,
+          "javascript": 842379
+        },
+        {
+          "javascript": 839629,
+          "shen": 3093266
+        },
+        {
+          "shen": 2838973,
+          "javascript": 835629
+        }
+      ],
+      "binaries": {
+        "javascript": "9a32ab064ae6ef58ba239713478241670cdd6d53cb379cf806dcf63b8df6a46b",
+        "shen": "2232e8f16244eb707502f7223d6147fafbc9113bdc540bccb4c39f1ac9f4e9b9"
+      },
+      "assemblies": {
+        "javascript": "d10350af56657420c59250b2da5d6fe0456b7fe33022cb2e06c1ec6c65fe3432",
+        "shen": "63cd502d2a9856ab3455750590600dead20363406427d97699a3c379259efa15"
+      },
+      "artifact": "ccb766bacf3b0358fb4171ba25d7c23b91b896791abf8dd36d041f33880175af",
+      "median_paired_ratio": 3.5981618725063185
+    }
+  },
+  "clocks": {
+    "macos-arm64": "host process start through checked exit",
+    "solo5-arm64-spt": "guest monotonic around fenrir_entry"
+  },
+  "emitter_sources": {
+    "javascript": "9d0180d539830cf0066b440e91e54fc8cf62a4eb7568bd9020e8410560cca6b7",
+    "shen": {
+      "arguments.shen": "d330e46eac5131bc5f7c3814ca07552a263d94fec1fd4c4b015fcc55cd9344be",
+      "byte-scan.shen": "8fc075964aa4cf8884721bd58dd379fc8fb5e3ff9754ad49339ce3edbd4490d4",
+      "constants.shen": "5503b83dcb07f81053cdb2459fcb27c05828d4170c3b1018e75df06358404817",
+      "emit.shen": "73c22f1ecafd1bd879709f7529036d5eb672d382e479c3560c790c1284c133b3",
+      "handler-context.shen": "f5f0a6d93d7b944ab5a1977993c6ce53f780ba0bad32259bfdbfefe61600a39f",
+      "handlers.shen": "088772fcab2ca15a60a21088cf75691e2b2ba3ef83fbedaca8bea706a3c3764b",
+      "managed.shen": "c0a07eb546e0dd08e9a0c10e6daa1db50b14cfdafc78161b995c29707422cb7f",
+      "printer.shen": "b9930fefc67d4e9c011df969f889ac7c54a2d908489fd6ec1a3dc73aab99dc10",
+      "scalar.shen": "682164ab2f596a1a5046f640eebc408bb1a4d9f865ba3f47e1c785731ac1ddfe",
+      "tasks.shen": "2d11d75421c5becae6bfb03d998c92c043bf4d04004684a113f739ace63fa7eb"
+    }
+  },
+  "corpus_sha256": "2f83ba048b706245c5f66770020a39ba83dfcda387f843a6116ccd95f20a2d2c"
+}

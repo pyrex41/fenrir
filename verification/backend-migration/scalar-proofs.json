@@ -1,0 +1,704 @@
+{
+  "schema": "fenrir.aarch64.check/1",
+  "status": "development-pass",
+  "qualification": "UNKNOWN",
+  "tools": "/nix/store/1scvwczicvm8263pyfsp6hsrdjk6c53c-fenrir-aarch64-verification-tools",
+  "unary": {
+    "profile": "fenrir-aarch64-checked-unary/1",
+    "proof_instances": 12,
+    "native_comparisons": 564,
+    "rejected_mutants": 3
+  },
+  "expr": {
+    "profile": "fenrir-aarch64-checked-expr/1",
+    "programs": 70,
+    "native_comparisons": 2520,
+    "rejected_mutants": 10
+  },
+  "call": {
+    "profile": "fenrir-aarch64-checked-call/1",
+    "programs": 14,
+    "tail_constant_stack_instances": 5,
+    "native_comparisons": 436,
+    "rejected_mutants": 8
+  },
+  "differential": {
+    "cases": "3760",
+    "status": "development-pass",
+    "negative_control": "Control.v: failures = [0; 480; 512; 3280] proved (exactly the falsified cases)"
+  },
+  "shen_tables": [
+    {
+      "kind": "expr",
+      "name": "add-sub-intermediate",
+      "bytes": 112,
+      "sha256": "c74abdb71c37b7d329c6b5e6f1f99fbfd89069a2e4bd7173116d65be0925ee30",
+      "rocq_module": "ExprCase0",
+      "artifact_sha256": "a33746a0e9fbd6dced8dce4f9d6f034b928c25d54459d045daa8abc760e82227"
+    },
+    {
+      "kind": "expr",
+      "name": "sub-add-intermediate",
+      "bytes": 112,
+      "sha256": "9e768b1465043b1a8c680c108a95e11b2f405cabc9ac63c3d4e6a850b63b4521",
+      "rocq_module": "ExprCase1",
+      "artifact_sha256": "a422606caf72e94ae741ec28e7587b0fc1104891908386071ee69bc4126f2abd"
+    },
+    {
+      "kind": "expr",
+      "name": "mul-square",
+      "bytes": 64,
+      "sha256": "37e1b2f9c3015226bf4769e62de8481e6b2bd9f8f319ff6a86835f9751999c06",
+      "rocq_module": "ExprCase2",
+      "artifact_sha256": "42a48f7665831b6edec80d0132fcdd6219297f5132dbf40c9ad1793f78180e48"
+    },
+    {
+      "kind": "expr",
+      "name": "mul-by-three-then-div",
+      "bytes": 148,
+      "sha256": "3c22572279eedbe06b79e74224fbd0b7a8f5961daa3ac1a96279d8497d34e6c0",
+      "rocq_module": "ExprCase3",
+      "artifact_sha256": "5fe8a9fb0acfe8a6e0a5b30d68bca781e08bacacef8d683ddcd33cdd87ad4061"
+    },
+    {
+      "kind": "expr",
+      "name": "div-by-x",
+      "bytes": 96,
+      "sha256": "f6b3b861513e2dd8bce3c6c11dee3f51f8672f925a9806aeabb14fe5de5e1396",
+      "rocq_module": "ExprCase4",
+      "artifact_sha256": "651c70eefe92a3f6f223a029e70aff5d1bdefe57bf055af367ac24853899d378"
+    },
+    {
+      "kind": "expr",
+      "name": "div-by-minus-one",
+      "bytes": 96,
+      "sha256": "ac1085554b9f1cbe6f573ad105e2667f8bc0a1d1aac038bfa2e3c9662f99aed6",
+      "rocq_module": "ExprCase5",
+      "artifact_sha256": "2dbdc47d8e77ae18b1e9a1e91920d6a37d4dcbaa4b1d68cbdd059cd7bfe1c497"
+    },
+    {
+      "kind": "expr",
+      "name": "min-div-x",
+      "bytes": 96,
+      "sha256": "31bb95a0afaf7f89b24b62cd52cf138d8c6ddb63a35c7b31dde82dd90ed0d928",
+      "rocq_module": "ExprCase6",
+      "artifact_sha256": "d3d45b336008eebb40aa51a2607ae6aa3ce4a4ebf19deb35ff600114ab2e8650"
+    },
+    {
+      "kind": "expr",
+      "name": "neg",
+      "bytes": 44,
+      "sha256": "4925e09e29fde7a9780768048a09e05beb367beb707d857d5181fa532e6ffdcb",
+      "rocq_module": "ExprCase7",
+      "artifact_sha256": "d52377849cf5943fcb71e3bff724ff95d6e1bf53c935dc51214f48d24544242b"
+    },
+    {
+      "kind": "expr",
+      "name": "abs",
+      "bytes": 92,
+      "sha256": "9521b34e986f476430b032f273c688c0119d467680fc182d361691877184ad34",
+      "rocq_module": "ExprCase8",
+      "artifact_sha256": "ea87b63b825bf7a5effa8f90e0a5c7d8ed66ac6bf49a8b5bb1f39137fec85222"
+    },
+    {
+      "kind": "expr",
+      "name": "let-chain",
+      "bytes": 164,
+      "sha256": "9781c462fa697a6de02e40580d0ae397e84be59031df1e203691444090ee15e8",
+      "rocq_module": "ExprCase9",
+      "artifact_sha256": "8f7ffdb114e5d6b7e433415c76cc2883588be572b297860de04d2735463ec477"
+    },
+    {
+      "kind": "expr",
+      "name": "let-shadow",
+      "bytes": 144,
+      "sha256": "b4b260a0e482045ac1bba3916fe282a94e896021721219d4361c2f0939b38c95",
+      "rocq_module": "ExprCase10",
+      "artifact_sha256": "a3681c553a0d7a30ddbcabfc1d94fa63dbce511c6d76c85ec5e9d8a7fd4a5557"
+    },
+    {
+      "kind": "expr",
+      "name": "nested-operands",
+      "bytes": 312,
+      "sha256": "b4aeceebef38e4636e9dcb95fb72473f5bbd98f861884368060594769d5f2f49",
+      "rocq_module": "ExprCase11",
+      "artifact_sha256": "60bb6087d40fb44eb7e539805b4d95d785331cd1dabf63e8450d890d5a24a24f"
+    },
+    {
+      "kind": "expr",
+      "name": "guarded-div",
+      "bytes": 156,
+      "sha256": "eadaa15ff1af10683f4aa7af07a2de9a84fe4c7038aecd352260f7d6efc089f5",
+      "rocq_module": "ExprCase12",
+      "artifact_sha256": "23b5148a37c6c6fca11cea81c68021236d9b3612e40941b8d0511a0d76cfd421"
+    },
+    {
+      "kind": "expr",
+      "name": "branch-local-trap",
+      "bytes": 160,
+      "sha256": "d30967cde44478e07b3d97daf1ceeec52ae4ce58d78af2f8935f40a0ee5f7c43",
+      "rocq_module": "ExprCase13",
+      "artifact_sha256": "b83673b90469a2f939ce684c069f550ec6af0b9fef5bc58dd2ac385e166665ae"
+    },
+    {
+      "kind": "expr",
+      "name": "big-literals",
+      "bytes": 112,
+      "sha256": "60b96ebd8a437628c93126ce6e2c58af23f2a60d9c722d91362d5e757a74ff64",
+      "rocq_module": "ExprCase14",
+      "artifact_sha256": "52ae626a0967e85d4aa87d28dcc715e6f44acf7aa75e91e3e5887b6ded1339b4"
+    },
+    {
+      "kind": "expr",
+      "name": "max-plus-x",
+      "bytes": 68,
+      "sha256": "95629058efe2e726ed1901b428c9ecd964eabc1e7aeaeee273ac8f2bd728a929",
+      "rocq_module": "ExprCase15",
+      "artifact_sha256": "376ca75403f41e8670635eb0d700f8f3942e007cb17d474b01bcf0be9237343c"
+    },
+    {
+      "kind": "expr",
+      "name": "div-chain",
+      "bytes": 188,
+      "sha256": "dd9bc3a4add535cb60ce8496200e1e31ad8201ae6c1bf157c4155a394753b770",
+      "rocq_module": "ExprCase16",
+      "artifact_sha256": "6a224976c0c299cedb3398e6c4fbc002fc0d41eb093529ba0e8eea4af99fb976"
+    },
+    {
+      "kind": "expr",
+      "name": "mixed-let-if",
+      "bytes": 300,
+      "sha256": "e68ded864c4af3fdd342091056e88d1e8e1b019a61bdb7ad6bf8d48a154c454f",
+      "rocq_module": "ExprCase17",
+      "artifact_sha256": "e1ac2464143b55c82394a1df72cd5df57ca9e458e2c9e08b628f0c0be11be414"
+    },
+    {
+      "kind": "expr",
+      "name": "cmp-le",
+      "bytes": 56,
+      "sha256": "6393e8a727d428addb412a18d01423cf563dff2f953fd75cecfc9beee7891f84",
+      "rocq_module": "ExprCase18",
+      "artifact_sha256": "b606a5176c06eefa0680d0ad97c273beab88025c62022e1913e0615836ab9a1c"
+    },
+    {
+      "kind": "expr",
+      "name": "cmp-ge-self",
+      "bytes": 44,
+      "sha256": "80ea2eacef434455b765d9b0329eaa35ae152c31a390dc07eaa3191083915460",
+      "rocq_module": "ExprCase19",
+      "artifact_sha256": "2df9f028912da211a1941a0bdb7cda9b74ff8dcf3a60854aed12ad1f18455ee1"
+    },
+    {
+      "kind": "expr",
+      "name": "cmp-gt",
+      "bytes": 56,
+      "sha256": "8becd1c46d1df56811d784a887aa2d97726bf11cc238f0dda9ab7de05da3c75d",
+      "rocq_module": "ExprCase20",
+      "artifact_sha256": "1ff29284493c467d98c2493bb243a2c140f6bc875438dbbef0d6fc9d4a0a1406"
+    },
+    {
+      "kind": "expr",
+      "name": "eq-literal",
+      "bytes": 56,
+      "sha256": "3e8d1e8690fbf4f5b406f6248cdec751a6ee3b3dc0e5b26f3790068df49ca590",
+      "rocq_module": "ExprCase21",
+      "artifact_sha256": "d71d36c5da89b3d9698ca0613b75b5562b452e04a8184ddc7f5ea8274988d0dc"
+    },
+    {
+      "kind": "expr",
+      "name": "not-eq-zero",
+      "bytes": 64,
+      "sha256": "08a9b43d4abb2fef408df45a746a3aae310a246bedda2acc823c06ce10f9f47e",
+      "rocq_module": "ExprCase22",
+      "artifact_sha256": "f9ce8586311299063936088900088aefb4326a634c177965ef1bf1b361335ba3"
+    },
+    {
+      "kind": "expr",
+      "name": "eq-bools",
+      "bytes": 108,
+      "sha256": "11fbc04baa625c1b112f20c8231f0b2272fc728bd901beb4d5de553193dd2bdb",
+      "rocq_module": "ExprCase23",
+      "artifact_sha256": "f902e31171bbd4bd45f5b2e41128565f097dadab6adac7dd3166308196411b70"
+    },
+    {
+      "kind": "expr",
+      "name": "bool-if",
+      "bytes": 72,
+      "sha256": "4e47776a14dafb431dfbc6f486efedcb77aae3ab6a594b34e2f84c7d594de478",
+      "rocq_module": "ExprCase24",
+      "artifact_sha256": "420276517d8e8feeb57b033bc815fe1a8d2f9d02e77ebd2e316b34dfc17e36e2"
+    },
+    {
+      "kind": "expr",
+      "name": "cmp-traps-first",
+      "bytes": 100,
+      "sha256": "73ad52958bfc680a0620f6d146e9a666dfd56f44da3c48fe8f21526ddf08a438",
+      "rocq_module": "ExprCase25",
+      "artifact_sha256": "c637298f9c70626f217801662b30642b019ba44660eafe378acf939ae90914ee"
+    },
+    {
+      "kind": "expr",
+      "name": "let-bool",
+      "bytes": 148,
+      "sha256": "690d6e516cfd7ed369b3efaac57e8bf7a4a25a2c757e5f9dc1067ff5903c03a0",
+      "rocq_module": "ExprCase26",
+      "artifact_sha256": "f2af3c439296733761416ad94cdf0dcf06df4c84927e215de9b6b9bcf370f364"
+    },
+    {
+      "kind": "expr",
+      "name": "deep-left",
+      "bytes": 244,
+      "sha256": "f664787ad6a65503d091cfa9809fddfb76627612ce13e02cffb745d5af99a567",
+      "rocq_module": "ExprCase27",
+      "artifact_sha256": "4c461b3dda2420c26b1d47659a920b2ea4a5921aa20eea8a97cc236707dbd0c7"
+    },
+    {
+      "kind": "expr",
+      "name": "deep-right",
+      "bytes": 244,
+      "sha256": "cc791dda5a08b01ed0ce853adc9a583b6390133fededad091a083058200983a1",
+      "rocq_module": "ExprCase28",
+      "artifact_sha256": "f4e5f261285c487f8a4829589b880b105d4943017307ccbe21f1cafe44d03734"
+    },
+    {
+      "kind": "expr",
+      "name": "eval-order",
+      "bytes": 168,
+      "sha256": "61f892e0b358e777b328316aa5175e76fdfcd75149f6b05e0c36a6d10ad5c1b1",
+      "rocq_module": "ExprCase29",
+      "artifact_sha256": "7ad647a1e09e107eeb42e07d10206f2cacd455cf4b10617b470812ca15de3d06"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-0",
+      "bytes": 284,
+      "sha256": "407e3956d052312973657c0ad613ef26f18fa818afda06f0e2d2d9d0b2f875f9",
+      "rocq_module": "ExprCase30",
+      "artifact_sha256": "5c946f3c4e4789237940e6a3cb11a69dfc1bc88fe3e9b07783318b2bd84c6901"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-1",
+      "bytes": 24,
+      "sha256": "8e1b9121a0bd83e074baeee4f9617381aaee023ae9fb053acd248b6896b434a1",
+      "rocq_module": "ExprCase31",
+      "artifact_sha256": "bf1ee534a902308f789cee64b74d57c38253e8b0c63e75e3be6a97c6e86c9dfd"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-2",
+      "bytes": 620,
+      "sha256": "58f7ab54d27b2b78c5d7b669ae8d452d0d5c95cda7a25f02b4de35ee437d3e58",
+      "rocq_module": "ExprCase32",
+      "artifact_sha256": "bc04538afd3725ac3bcfffcfaaca2959b1d21b2456d3efdc8fd7fcdfac8e0126"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-3",
+      "bytes": 220,
+      "sha256": "bfecc99e0f1eb45c0d6ef198c051b80b119a648701995cd2968bf62ceaa81763",
+      "rocq_module": "ExprCase33",
+      "artifact_sha256": "9ae8b0aad0146e7b08f74cea5c8000147bb1b3697fb8a94a24cde4a13171ee12"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-4",
+      "bytes": 108,
+      "sha256": "369077d264720e664465d5516a9069c0dba7ea4e277efdd40fb9377da0c56067",
+      "rocq_module": "ExprCase34",
+      "artifact_sha256": "382c3d63181a90c0a4c069c54da22a6072b0323ecd60dc27a5a9c00faa67a81b"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-5",
+      "bytes": 24,
+      "sha256": "8e1b9121a0bd83e074baeee4f9617381aaee023ae9fb053acd248b6896b434a1",
+      "rocq_module": "ExprCase35",
+      "artifact_sha256": "bf1ee534a902308f789cee64b74d57c38253e8b0c63e75e3be6a97c6e86c9dfd"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-6",
+      "bytes": 324,
+      "sha256": "01f78c23124b511eb59228f0ed446fc861a9a2de50e024d0ccae7bb75fb0f695",
+      "rocq_module": "ExprCase36",
+      "artifact_sha256": "4cf1ff0c6a841e90a8732483cafa35be42fc306f6190e4e9f2cca52c080a7bb3"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-7",
+      "bytes": 68,
+      "sha256": "1bf2e921673c2e53fdd42ac7ccc885be3568fd4784f5c6d9cde5242a453442ae",
+      "rocq_module": "ExprCase37",
+      "artifact_sha256": "a1c253651251db0be1d492fc5948c31b76de4744e10d56294983a7a562fa5bba"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-8",
+      "bytes": 304,
+      "sha256": "d436c65c0af0bc1bd7bc7b83b7d62c41e638076d9649596bfc71097890cf1155",
+      "rocq_module": "ExprCase38",
+      "artifact_sha256": "893352bfa1413169992c0f8d1f515c0ced346e9591e7b405cd4ab4942b4e2552"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-9",
+      "bytes": 452,
+      "sha256": "704c17ad332f581c1cb1b0526a612fcec1395f681b1b7945c4f3c6a3bf687fc3",
+      "rocq_module": "ExprCase39",
+      "artifact_sha256": "fa8dfabc51d48bcd505d3545b492f7f94fdf5b546baca58ae63872a93c246fe3"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-10",
+      "bytes": 36,
+      "sha256": "b7282a33d71857775dfd54ee55ee1a62137113a71c286507497f97e974e149cf",
+      "rocq_module": "ExprCase40",
+      "artifact_sha256": "117ea874ca7b99e7e34a39b1a2b82b5c5962bb6ec3a6799e81565dbe5a22beea"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-11",
+      "bytes": 460,
+      "sha256": "1918ffe6dec3867337fb779af207197fdd2c56714b1b1076ccd45f63c8d1722f",
+      "rocq_module": "ExprCase41",
+      "artifact_sha256": "1ec755cfe51fd5ec0f3c00124aa7bc510e67085ef971af959a8dcc5313acfacb"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-12",
+      "bytes": 360,
+      "sha256": "ad96dabd91e18da8d8f1202fa097a1eb68446ad0a9a6c8340da7394015492bbf",
+      "rocq_module": "ExprCase42",
+      "artifact_sha256": "e4e6c9b7a6e4028ea988d07808cf9159a004cb9cb3cc95ba0b395ecf741b9ae3"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-13",
+      "bytes": 368,
+      "sha256": "21fbccd6494e6c3536ffd4a2c4be1bcd7a404e1e92bec9cb2de48143b253d729",
+      "rocq_module": "ExprCase43",
+      "artifact_sha256": "5e66979ee57df46ad79979997176f28f3bd6c767a3222af955c4d852efc5d849"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-14",
+      "bytes": 24,
+      "sha256": "e6568655f251759dee1abae87525fd1e345dffb728534caa92dfbd6cb2e0c071",
+      "rocq_module": "ExprCase44",
+      "artifact_sha256": "03228787ce5ee451399717df347671bfb4c147f774b5d12e143297851dfbfba6"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-15",
+      "bytes": 212,
+      "sha256": "a909db34f8026dba6b36d6f96ec94212edb0a8e4042210bfaff8e0be154d7e63",
+      "rocq_module": "ExprCase45",
+      "artifact_sha256": "0f4b2aea79b8821fddb49bcfa1664cc2abea7f28529b6775b02fa0ebcf62da5e"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-16",
+      "bytes": 360,
+      "sha256": "f3d67b1d86df3fed79bbe0c41afcb5464d5120fb172b92e091ccd9c193bdb497",
+      "rocq_module": "ExprCase46",
+      "artifact_sha256": "4b196da32e9b7e93f176b0ac740576cb47e4ff174e767bec0fe510df5e633437"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-17",
+      "bytes": 36,
+      "sha256": "1ec006699eb2ed945030d4644f627a8d713d080b56355c225b20cdad1ef248bb",
+      "rocq_module": "ExprCase47",
+      "artifact_sha256": "7f5f50a056564d852cc1174405c8049197a522b1954fb140209eb0e51ccc8072"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-18",
+      "bytes": 280,
+      "sha256": "36015eb4655a79645ff153dae78dc9cd5d26306884ccd2953c4d58144acabc42",
+      "rocq_module": "ExprCase48",
+      "artifact_sha256": "8f2e954a946861655b66ae430c792e2d7161549a033101c6e8104a9ebb4c0d7f"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-19",
+      "bytes": 228,
+      "sha256": "aa25eae90e095bf1f2f3dc90aa30820c9b8a55e1ef5c908ad256fb596cdbf543",
+      "rocq_module": "ExprCase49",
+      "artifact_sha256": "8c3e0db65310690b0e135e0ecfd3ffcab2f5bc169a63ddd2bd0eef8d5c3bf7c7"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-20",
+      "bytes": 36,
+      "sha256": "6fa6d9097593fc56d794c97542d334ddb65f75be612548600f3db9e934cb1c2d",
+      "rocq_module": "ExprCase50",
+      "artifact_sha256": "2443ce7764c186cd4ba0ad48289794ea355934cafc29b9a128164be326000c02"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-21",
+      "bytes": 36,
+      "sha256": "4032e7539b3aa5d0d20eae4adf3bb30cf4729f65cc8a6ed3a5c949c4dd925bf0",
+      "rocq_module": "ExprCase51",
+      "artifact_sha256": "f4979780ecdf7f91ae0f62d6487108ea184446aecc6961f668f650dcda587e4d"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-22",
+      "bytes": 36,
+      "sha256": "6fa6d9097593fc56d794c97542d334ddb65f75be612548600f3db9e934cb1c2d",
+      "rocq_module": "ExprCase52",
+      "artifact_sha256": "2443ce7764c186cd4ba0ad48289794ea355934cafc29b9a128164be326000c02"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-23",
+      "bytes": 212,
+      "sha256": "295c6e21740b9fb010c8e4ec7868cfc2256459b1de68dff97c6a3dafcd30702e",
+      "rocq_module": "ExprCase53",
+      "artifact_sha256": "2d294b8d287b249e2a114cff021eebe466a2e2b41eb3579f977e609fddc3b98b"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-24",
+      "bytes": 24,
+      "sha256": "e6568655f251759dee1abae87525fd1e345dffb728534caa92dfbd6cb2e0c071",
+      "rocq_module": "ExprCase54",
+      "artifact_sha256": "03228787ce5ee451399717df347671bfb4c147f774b5d12e143297851dfbfba6"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-25",
+      "bytes": 396,
+      "sha256": "0cfb6f7eca5b1779634e88c33627e27608bc9be9559fb368683027b5fc0b80d0",
+      "rocq_module": "ExprCase55",
+      "artifact_sha256": "1151f2f0c7ce014ea0bb7dd7ae54a6d20bef4fc8a3492d4c0c53377bca5584c3"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-26",
+      "bytes": 36,
+      "sha256": "bfe24bd07fec4d9f46bf9b146db472056558e97c25b204b242d7f105a0284a70",
+      "rocq_module": "ExprCase56",
+      "artifact_sha256": "7351fdab3fba7f68b521b787790bc1b1ff662014450caa939891d77464755c95"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-27",
+      "bytes": 120,
+      "sha256": "2115774ae485b255ade2b4b4644dac8064263ac968a284480b8c85b76ffb9dc9",
+      "rocq_module": "ExprCase57",
+      "artifact_sha256": "ef9f78cd832ab439de6816e7afe3df78e8607c853172b8a17eae12ff3fabef12"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-28",
+      "bytes": 544,
+      "sha256": "5a0b644b4b6cccdbfde87e781d676425e97e3e61738b20ccb85783ae41a0d505",
+      "rocq_module": "ExprCase58",
+      "artifact_sha256": "39472719337428234e619a755cb131758e5462ae03b6ffd5cb15897cda1136e5"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-29",
+      "bytes": 280,
+      "sha256": "8127242724492fd9402bd4dedca2bce0877be82de6e77f3e01fed75b682ebd7f",
+      "rocq_module": "ExprCase59",
+      "artifact_sha256": "bb87556e1eba8ed680292e4da305dff9af11e6254539c30e0ba33728ff88acaf"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-30",
+      "bytes": 316,
+      "sha256": "6cb2cdf16b2fa9d80472d13fbcaeac42c7b3db631c3337c8deaec79c5b1f760d",
+      "rocq_module": "ExprCase60",
+      "artifact_sha256": "a9f810e374dc173cdbb270530edb31aa267216810fb7652cd996c32e1775add4"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-31",
+      "bytes": 432,
+      "sha256": "6e46790b5b2cd54f504204fbc48d5b0818a419bc78440dc904cc81f783834b93",
+      "rocq_module": "ExprCase61",
+      "artifact_sha256": "b73c7344c5862e285bd8282c39d126a952567c648182197f22b4abccaf4b2939"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-32",
+      "bytes": 36,
+      "sha256": "756bcfa01850c7bbf51636f6890515300f18dbdd5bbf7aff6b3f1c6d25ff07ed",
+      "rocq_module": "ExprCase62",
+      "artifact_sha256": "4d781ab0d41d03eec8598c08953c329b8c8c9190472c3122b1b0640514432c11"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-33",
+      "bytes": 88,
+      "sha256": "9408c10dd585f9316a3ba1361d0286445d9c2206a14bd055de6c4204be03ec7f",
+      "rocq_module": "ExprCase63",
+      "artifact_sha256": "2bad0fd17b56ec05352a71f8b0fb9a532fe1c2b5e866824c016c7812746ba9fa"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-34",
+      "bytes": 24,
+      "sha256": "e6568655f251759dee1abae87525fd1e345dffb728534caa92dfbd6cb2e0c071",
+      "rocq_module": "ExprCase64",
+      "artifact_sha256": "03228787ce5ee451399717df347671bfb4c147f774b5d12e143297851dfbfba6"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-35",
+      "bytes": 416,
+      "sha256": "27a66da92f268ca3127b4fe9bc0557400e9d9d272174a7fbcab3346cd92effd7",
+      "rocq_module": "ExprCase65",
+      "artifact_sha256": "c5ebeecb2910daf1ef76f4fb273e47a9bd26cff4e85f9d56f0fe6764c01eecb4"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-36",
+      "bytes": 344,
+      "sha256": "2f329ab12a30b7f27a412dba24112d79186e60ae8f4494df4e85a568054be2b2",
+      "rocq_module": "ExprCase66",
+      "artifact_sha256": "9382d97982a6d185fc78559c173e01d5b69f256618740f074dd40c69b5335848"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-37",
+      "bytes": 592,
+      "sha256": "7aeb11d9be21cd838479433f912806ee5de719b7e9f063b696e2db6319578828",
+      "rocq_module": "ExprCase67",
+      "artifact_sha256": "0f5ddd8c2aaea6221d07f4b32b0674fcc24242e3a3f6a0761386d3072a128137"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-38",
+      "bytes": 364,
+      "sha256": "ed57c665b053092fea1911b81f33c7512ebb580ff69ddf64ed62b700b2ab67c9",
+      "rocq_module": "ExprCase68",
+      "artifact_sha256": "cee7a329553e47fbe84af1720fcf92d8cef08e8d7ff20abc90b2a51030eeb802"
+    },
+    {
+      "kind": "expr",
+      "name": "gen-39",
+      "bytes": 340,
+      "sha256": "062171aadf6c03f3e3397ab4804e5e7988a6cad2717b6f7c6cc242033436e8d4",
+      "rocq_module": "ExprCase69",
+      "artifact_sha256": "253105b2c8f36bb133c506edf6993fafb35415216290299bab31f9da691633cc"
+    },
+    {
+      "kind": "call",
+      "name": "sum-recursive",
+      "bytes": 348,
+      "sha256": "ca6d7b55b598e9a30585da2057b7c645097314933e492d4595d4e17611605c5b",
+      "rocq_module": "CallCase0",
+      "artifact_sha256": "83bf0b4ae45709dd42b7d67fdb92b125ede4640613b039eef8613436ce5fa3b3"
+    },
+    {
+      "kind": "call",
+      "name": "count-down-tail",
+      "bytes": 268,
+      "sha256": "681bbc05824aa3d49e9df001168cf5aa440fcbfeb564b27f86d30d796046e687",
+      "rocq_module": "CallCase1",
+      "artifact_sha256": "b7c7c97f8b34677e6dab81204d87323197fe8c7d2e0aebce5e3959885d008231"
+    },
+    {
+      "kind": "call",
+      "name": "even-odd-mutual-tail",
+      "bytes": 392,
+      "sha256": "9a940710b96345279939053b28e4e7f68b94167f9e196b4840aca2cd137e7be3",
+      "rocq_module": "CallCase2",
+      "artifact_sha256": "68e3659954283ed39fd2d1a9a4371936c642f62475b5d2555b541a9f4cb5be13"
+    },
+    {
+      "kind": "call",
+      "name": "callee-overflow",
+      "bytes": 172,
+      "sha256": "5eb11f1072fc4c95a6062bbe63e90baf77d94b31d14b9af88d512835f513408e",
+      "rocq_module": "CallCase3",
+      "artifact_sha256": "125a83e9c39d1effe94aa71327da9cef124449d22c6b5a9ea3a15f1471d7c806"
+    },
+    {
+      "kind": "call",
+      "name": "callee-divzero",
+      "bytes": 192,
+      "sha256": "8e4087811ae0b98fac99878240c88fa18dfe1ff52023a43d29b00a73ebf57458",
+      "rocq_module": "CallCase4",
+      "artifact_sha256": "a25d255a5a72f21b5973f1a4db9694a5398a421b843b6f297a012dbe2a946443"
+    },
+    {
+      "kind": "call",
+      "name": "chain",
+      "bytes": 308,
+      "sha256": "4a9bf92e09161cfd4e7ef82f2e519c5ba7edcaa51da85079855f78c55efdd023",
+      "rocq_module": "CallCase5",
+      "artifact_sha256": "838e47f778f652ed7968e09da918ed819fa58b17c3b6fcb5a8b78efc02878691"
+    },
+    {
+      "kind": "call",
+      "name": "bool-parameter",
+      "bytes": 200,
+      "sha256": "5cdde9fd6487c324638bc3e33d69ff9ae2afcadcb4451a770ebc33918661c27d",
+      "rocq_module": "CallCase6",
+      "artifact_sha256": "fadfe33b12e48211b43674495aa34eb402d880a7a16c214c89f843011d1a228e"
+    },
+    {
+      "kind": "call",
+      "name": "call-in-branch",
+      "bytes": 224,
+      "sha256": "3341b1b193733e29a3235f5b1e71cf43c52394a4c4a66fddd2b16720e3591435",
+      "rocq_module": "CallCase7",
+      "artifact_sha256": "af3f4e99f82f8c28d5375e23efeadd5ca779d1d8fe8fedad61c63a31eb17b1ec"
+    },
+    {
+      "kind": "call",
+      "name": "collatz-tail",
+      "bytes": 540,
+      "sha256": "e56910f2f28472965557b647ab4bf5717cd964865b6639db662031eefa55ac9e",
+      "rocq_module": "CallCase8",
+      "artifact_sha256": "6e36afb9cc32267d50fc905a6a3b554f0e14c094406b51b9600a63c3718a2904"
+    },
+    {
+      "kind": "call",
+      "name": "let-before-call",
+      "bytes": 184,
+      "sha256": "ee00a7288b97dd59e31aee90af3b0221e134cbc78d54f229170289875f5d9dfa",
+      "rocq_module": "CallCase9",
+      "artifact_sha256": "65783ee26c7d5615a050eda3408a66362a8275303ff335dd41ed9d9efa2e0f19"
+    },
+    {
+      "kind": "call",
+      "name": "entry-not-first-in-callee-order",
+      "bytes": 176,
+      "sha256": "b038565be997b93d0a5153859bee749e8ccda3a262ed36849d34cdb27b7944b5",
+      "rocq_module": "CallCase10",
+      "artifact_sha256": "d0e0d80febd58cc7af115c2c7b347d8ae46dc85d3f28fccf7f50eb1420c71af2"
+    },
+    {
+      "kind": "call",
+      "name": "fib-recursive",
+      "bytes": 412,
+      "sha256": "ff769d9c151900c1767c2ee892f42f1f41a589d4f0699337e28b92f51c8fe5a6",
+      "rocq_module": "CallCase11",
+      "artifact_sha256": "560fe8cc64d22845c81ca21d8b233554dcdcc2917d46b4ee7a8b7e0052d323db"
+    },
+    {
+      "kind": "call",
+      "name": "deep-recursion",
+      "bytes": 348,
+      "sha256": "d132a818217493920331404d938e380c64dc25a55a2f18ebe9c192f99e14d65c",
+      "rocq_module": "CallCase12",
+      "artifact_sha256": "9b049962ac59ca7dc7b7606b65b56fbe479d44c620eb414260712cf1f9f41ee5"
+    },
+    {
+      "kind": "call",
+      "name": "long-tail-loop",
+      "bytes": 268,
+      "sha256": "365ee36d9f6dfd997031d6d43b893b154a3c4e9768c81ad8f272d702054c559b",
+      "rocq_module": "CallCase13",
+      "artifact_sha256": "766dc0f729591a9bfe5610647d751f492548ed036032f05afcc51d1a280cc3f5"
+    }
+  ]
+}

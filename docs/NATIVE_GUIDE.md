@@ -145,6 +145,20 @@ add source-reporting branches on arithmetic trap paths. The existing Rocq
 exact-image results apply to the function tables produced by the verification
 compiler. The instrumented CLI images have execution-test coverage.
 
+The installed CLI and the four preview application builders use the Shen ARM64
+backend by default. Set `FENRIR_NATIVE_BACKEND=javascript` when building to
+select the comparison compiler. Node runs the independent artifact validator
+and prepares standalone profile metadata. Some application builders also use
+Node for host bindings and build orchestration. Both compilers link against
+the same native C runtime.
+
+The installed Shen emitter reproduced the exact bytes of 70 expression and 14
+call function tables covered by the Rocq checks. The release suite separately
+compared source-model observations with native execution and exercised the
+four application builds with the JavaScript emitters removed. The release
+record identifies the tested package and the commands to repeat these checks.
+[Proof scope](design/SHEN_NATIVE_BACKEND.md#verification) · [Installed checks and measurements](../verification/backend-migration/README.md)
+
 ### Choose an execution profile
 
 The public CLI builds standalone programs with the `fenrir-native-standalone/1`

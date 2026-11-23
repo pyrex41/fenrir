@@ -9,10 +9,16 @@ out=$(cd "$2" && pwd -P)
 cp -R "$package/libexec/fenrir" "$out/src"
 chmod -R u+w "$out/src"
 cd "$out/src"
+# Exercise the entire editable release through its installed toolchain while
+# making accidental imports of either comparison emitter fail immediately.
+if [ "${FENRIR_TEST_WITHOUT_JS_EMITTER:-0}" = 1 ]; then
+    mkdir "$out/comparison-emitters"
+    mv tools/aarch64/managed-image.mjs tools/aarch64/native-image.mjs "$out/comparison-emitters/"
+fi
 "$tc" sh harness/run-service-explore.sh replay-retained > "$out/service-counterexamples.log"
 for target in macos-arm64 solo5-arm64-spt; do
     for fixture in persistent-counts persistent-decoder shared-counts-child chunk-snapshots; do
-        "$package/bin/fenrir" run --target "$target" "benchmarks/framed-log/$fixture.fen" 41 > "$out/$fixture-$target.log"
+        "$tc" sh "$out/src/bin/fenrir" run --target "$target" "benchmarks/framed-log/$fixture.fen" 41 > "$out/$fixture-$target.log"
         printf '%s\n' '(tuple true true true)' | cmp - "$out/$fixture-$target.log"
     done
     "$tc" python3 benchmarks/prover/run-fenrir.py "$target" > "$out/search-$target.log"
@@ -107,6 +113,6 @@ artifacts = ["src/benchmarks/http/router.fen", "http-edited-mac", "http-edited-s
              "search-macos-arm64.log", "search-solo5-arm64-spt.log",
              "check-macos-arm64.log", "check-solo5-arm64-spt.log",
              "prefix-macos-arm64.log", "prefix-solo5-arm64-spt.log"]
-report = dict(package=str(package), files={name: sha(out / name) for name in artifacts}, recovery=receipts)
+report = dict(package=str(package), comparison_emitters_absent=not (out / "src/tools/aarch64/native-image.mjs").exists(), files={name: sha(out / name) for name in artifacts}, recovery=receipts)
 (out / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
 PY

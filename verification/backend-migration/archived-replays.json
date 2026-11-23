@@ -1,0 +1,82 @@
+[
+  {
+    "name": "macos-arm64-concurrent.json",
+    "target": "macos-arm64",
+    "schema": "fenrir-native-schedule/1",
+    "image_sha256": "e1f717e12dde1ddf2aff545bfa37e4e19e3ae4e67197604cff21126c49d2d74f",
+    "receipt_sha256": "d9e718b422f8a4980e7ba8788e64f2c079663b1bc903bf57bee0b9c11e8e07f9",
+    "outcome": "exact native observations"
+  },
+  {
+    "name": "macos-arm64-normal.json",
+    "target": "macos-arm64",
+    "schema": "fenrir-native-observations/2",
+    "image_sha256": "42cbca569a89eee8f86419bb4fcca1abfc29ee1e6a54878b69d30bd575431361",
+    "receipt_sha256": "d63fd9ae41fe7881712e3e85c9a42ade5ed2c88d6a98eee85282efe7c6c70187",
+    "outcome": "exact native observations"
+  },
+  {
+    "name": "macos-arm64-outer-trap.json",
+    "target": "macos-arm64",
+    "schema": "fenrir-native-observations/2",
+    "image_sha256": "42cbca569a89eee8f86419bb4fcca1abfc29ee1e6a54878b69d30bd575431361",
+    "receipt_sha256": "8a6265f0c8b5061dbb025c5a61854b3fb95b6374998fb17ebdd466ddff73d799",
+    "outcome": "exact native observations"
+  },
+  {
+    "name": "macos-arm64-task-trap.json",
+    "target": "macos-arm64",
+    "schema": "fenrir-native-observations/2",
+    "image_sha256": "45e8e5ad83ba961d8ebdc6b8f2929e56e474703644cb10f0b7262901034b8747",
+    "receipt_sha256": "b68159af9b79fde022754f405f2abb765837ebe28d4c0adc487fe56b7faf1365",
+    "outcome": "exact native observations"
+  },
+  {
+    "name": "macos-arm64-trap.json",
+    "target": "macos-arm64",
+    "schema": "fenrir-native-observations/2",
+    "image_sha256": "42cbca569a89eee8f86419bb4fcca1abfc29ee1e6a54878b69d30bd575431361",
+    "receipt_sha256": "ed89ea82902069ec564498d0bdc562c05937f21f7164c8add80e7197e4211727",
+    "outcome": "exact native observations"
+  },
+  {
+    "name": "solo5-arm64-spt-concurrent.json",
+    "target": "solo5-arm64-spt",
+    "schema": "fenrir-native-schedule/1",
+    "image_sha256": "042931e23c58df2a21cc895b1b6f73e38451f7f2fe9945d0816ebc622a2efa94",
+    "receipt_sha256": "edc20d3eebac3811845dd488ed57031d2be0808a2fe457ea302b9d1f10a0be3d",
+    "outcome": "exact native observations"
+  },
+  {
+    "name": "solo5-arm64-spt-normal.json",
+    "target": "solo5-arm64-spt",
+    "schema": "fenrir-native-observations/2",
+    "image_sha256": "6b0465e9990bb17effb0b1db099f875833e390e4f1c3798a73a4c11ac2c554fb",
+    "receipt_sha256": "43c3fb776882adf12a77218bb5dbad4c58986de053e2629a8a8e364b48270bb6",
+    "outcome": "exact native observations"
+  },
+  {
+    "name": "solo5-arm64-spt-outer-trap.json",
+    "target": "solo5-arm64-spt",
+    "schema": "fenrir-native-observations/2",
+    "image_sha256": "6b0465e9990bb17effb0b1db099f875833e390e4f1c3798a73a4c11ac2c554fb",
+    "receipt_sha256": "56dfffca10d0ed253c1775d55c52b8db0508066966f1325b48a07602d6ce482a",
+    "outcome": "exact native observations"
+  },
+  {
+    "name": "solo5-arm64-spt-task-trap.json",
+    "target": "solo5-arm64-spt",
+    "schema": "fenrir-native-observations/2",
+    "image_sha256": "7710ba3dafa1368f29015ef09aa954aae74356d7cc7d34078ec845c86a1869f2",
+    "receipt_sha256": "f321626b8dc95d700af613ac4465912958be53c71d3afb249fe37e384a6e5a75",
+    "outcome": "exact native observations"
+  },
+  {
+    "name": "solo5-arm64-spt-trap.json",
+    "target": "solo5-arm64-spt",
+    "schema": "fenrir-native-observations/2",
+    "image_sha256": "6b0465e9990bb17effb0b1db099f875833e390e4f1c3798a73a4c11ac2c554fb",
+    "receipt_sha256": "22ef635589224824dd780eb1f8afee7b24a94f20709330dac5cb760db3518edb",
+    "outcome": "exact native observations"
+  }
+]

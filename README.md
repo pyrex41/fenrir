@@ -11,7 +11,7 @@ The idea is to develop applications and their semantics together. Write down wha
 ## How Fenrir is built and checked
 
 1. **Read the source.** The frontend is written in Shen. It reads a `.fen` file, resolves names, checks types and effects, and emits a JSON representation of the program. Source locations travel with it so a trap can point back to the expression that caused it. [Frontend](frontend)
-2. **Run the rules or build an executable.** The Shen model evaluates that representation one step at a time. The native compiler, written in JavaScript, lowers it to ARM64 assembly and links it with the runtime as a Mac executable or a Solo5 guest image. The standalone profile specifies the entry point and resource limits. [Models](models/tc1) · [Compiler](tools/aarch64) · [Runtime](runtime/native) · [Execution profile](spec/native/standalone-v1.json)
+2. **Run the rules or build an executable.** Two independent Shen implementations read the validated program. The model executes its rules one step at a time. The compiler selects ARM64 instructions and emits assembly. The target toolchain assembles and links that code with the C runtime to produce a Mac executable or a Solo5 guest image. The standalone profile specifies the entry point and resource limits. [Models](models/tc1) · [Compiler](backends/arm64) · [Runtime](runtime/native) · [Execution profile](spec/native/standalone-v1.json)
 3. **Compare executions.** Gleipnir explores bounded sets of programs and schedules, checks observations against the model, and retains counterexamples for replay. The harness also runs deliberately broken implementations to check whether its tests can detect the difference. [Gleipnir harness](harness/README.md)
 
 ### Can a cancelled child still produce an event?
@@ -59,7 +59,7 @@ The developer preview has immutable algebraic data types, exhaustive pattern mat
 
 The core is monomorphic and shares declarations through textual includes. The standalone runtime supports 16 live child tasks. `fenrir profile` prints its limits, and `fenrir check --target TARGET SOURCE` checks whether a program can compile for that target. Durable services and remote peers use their own host runners.
 
-Independent installation testing and Solo5 performance remain open alpha work. The compiler proofs cover specific subsets against an instruction model. Whole-image correctness remains open. [Alpha plan and measurements](docs/WORK_FILE.md) · [Proof scope](verification/aarch64/README.md)
+The installed Shen compiler built and ran all four applications on both targets with the older JavaScript emitters removed. All 46 programs in the source-model comparison suite agreed on both targets. Speed is still an open problem. On Solo5, the same certificate checker took 3.60× as long when compiled by Shen as when compiled by the previous backend. Independent clean-machine installation and whole-image correctness also remain open. [Backend measurements and checks](verification/backend-migration/README.md) · [Alpha plan and measurements](docs/WORK_FILE.md) · [Proof scope](verification/aarch64/README.md)
 
 ## Build a native ARM64 program
 
@@ -90,7 +90,7 @@ The Solo5 target uses an ARM64 Linux Docker engine and the Solo5 toolchain image
 ## Where the ideas come from
 
 - **Koka** is the main language influence. Its effect types make a function’s interactions with its environment visible in its type. Fenrir’s current frontend infers a finite set of effects for each function. [Koka language book](https://koka-lang.github.io/koka/doc/book.html)
-- **Shen** supplies the language for writing the frontend and the executable rules. Its pattern matching lets a rule describe a machine state and the step it can take next. [Shen](https://shenlanguage.org/) · [Task machine](models/tc1/task-machine.shen)
+- **Shen** supplies the language for writing the frontend, executable rules, and ARM64 backend. Its pattern matching lets a rule describe a machine state and the step it can take next. [Shen](https://shenlanguage.org/) · [Task machine](models/tc1/task-machine.shen)
 - **Elixir and Erlang/OTP** informed task ownership, supervision, and recovery. OTP also supplies the supervisor in the durable-service example. [Elixir task supervision](https://hexdocs.pm/elixir/Task.Supervisor.html)
 - **MirageOS and Solo5** informed the deployment goal of shipping an application and its runtime in one image with a small interface to the host. Solo5 is already a native target. [MirageOS](https://mirage.io/) · [Solo5](https://github.com/Solo5/solo5)
 

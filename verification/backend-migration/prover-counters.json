@@ -1,0 +1,34 @@
+{
+  "search/javascript": {
+    "result": 20000,
+    "allocations": 250000,
+    "collections": 246,
+    "collection_ns": 107288,
+    "root_frame_entries": 122000,
+    "total_linked_slots": 914000
+  },
+  "search/shen": {
+    "result": 20000,
+    "allocations": 250000,
+    "collections": 245,
+    "collection_ns": 101385,
+    "root_frame_entries": 200000,
+    "total_linked_slots": 3010000
+  },
+  "check/javascript": {
+    "result": 12000,
+    "allocations": 126000,
+    "collections": 123,
+    "collection_ns": 47959,
+    "root_frame_entries": 76000,
+    "total_linked_slots": 348000
+  },
+  "check/shen": {
+    "result": 12000,
+    "allocations": 126000,
+    "collections": 123,
+    "collection_ns": 63167,
+    "root_frame_entries": 102000,
+    "total_linked_slots": 1198000
+  }
+}

@@ -255,7 +255,7 @@ def summarize(prover, http, stream):
     source_identity = "unrecorded"
     if any(m is not None for m in manifests):
         schema = run_path(str(Path(__file__).with_name("solo5-build-inputs.py")))
-        supported = [set(schema[name]) for name in ("SHARED_PATHS", "PRE_PROFILE_PATHS", "ORIGINAL_PATHS")]
+        supported = [set(schema[name]) for name in ("SHEN_PATHS", "JS_APPLICATION_PATHS", "SHARED_PATHS", "PRE_PROFILE_PATHS", "ORIGINAL_PATHS")]
         if (not manifests[0] or set(manifests[0]) not in supported
                 or any(not isinstance(h, str) or not re.fullmatch("[0-9a-f]{64}", h)
                        for h in manifests[0].values())
@@ -269,6 +269,8 @@ def summarize(prover, http, stream):
         inputs = [prover["fenrir_build_inputs"], http["source_sha256"], stream["compilers"]["fenrir"]["sources"]]
         common = {"runtime/native/heap.c", "runtime/native/heap.h", "runtime/native/managed.c",
                   "tools/aarch64/managed-image.mjs", "tools/aarch64/byte-scan.mjs"}
+        if manifests[0] and "backends/arm64/managed.shen" in manifests[0]:
+            common = set(schema["SHEN_PATHS"])
         if manifests[0] and "spec/native/standalone-v1.json" in manifests[0]:
             common.update(schema["PROFILE_PATHS"])
             stamp = inputs[0].get("tools/aarch64/native-profile-stamp.mjs")

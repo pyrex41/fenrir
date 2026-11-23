@@ -1,14 +1,20 @@
 # Fenrir alpha and performance plan for Apple Silicon and Solo5 ARM64
 
-## Alpha checkpoint, 2026-11-23
+## Shen backend checkpoint, 2026-11-23
+
+The installed Shen compiler passed the four-application checks on macOS ARM64 and Solo5 ARM64 SPT with both JavaScript emitters removed. Rebuilding the archived sources outside the checkout on the development Mac reproduced the tested Nix package. A second-engineer installation on a clean machine remains open. [Package identity and installed checks](../verification/backend-migration/release.json)
+
+The migration measurements compare the two Fenrir compilers on identical workloads. On Solo5, Shen-generated code took 2.81× the previous backend’s time for proof search and 3.60× for certificate checking. Both allocated the same number of cells. Shen linked more than three times as many GC root slots in both kernels. Narrowing the set of roots registered across calls is a concrete next experiment. Qualification against the external-language performance targets still requires a scorecard for this compiler. [Paired measurements and counters](../verification/backend-migration/README.md)
+
+## Archived JavaScript backend checkpoint, 2026-11-23
 
 The installed candidate `b0mdbbw2c016wrqrlgggn4088fy1j2zl-fenrir-0.1-dev` runs the prover, framed-log processor, HTTP server and durable jobs service on macOS ARM64 and Solo5. The CLI build, edit, trap and replay exercises passed outside the checkout on the development Mac. An independent second-engineer clean-machine installation remains open. [Candidate source](../verification/performance/2026-11-22-arm64/prover-validated-corpus-source.tar.gz) · [Four applications](../verification/performance/2026-11-22-arm64/prover-validated-four-apps.tar.gz) · [Installed CLI](../verification/performance/2026-11-22-arm64/prover-validated-installed-cli.tar.gz)
 
-For the independent installation, the candidate archive SHA-256 is `25f30d6063d891d9e8abf541c67e10cc1b44f63c657631823602778a02ecc93f`. Use the supplied archive with the second-engineer instructions in the [Apple Silicon installation guide](../README.md#build-a-native-arm64-program). The expected Nix store path is `/nix/store/b0mdbbw2c016wrqrlgggn4088fy1j2zl-fenrir-0.1-dev`.
+To reproduce this earlier installation, the candidate archive SHA-256 is `25f30d6063d891d9e8abf541c67e10cc1b44f63c657631823602778a02ecc93f`. Use the supplied archive with the second-engineer instructions in the [Apple Silicon installation guide](../README.md#build-a-native-arm64-program). The expected Nix store path is `/nix/store/b0mdbbw2c016wrqrlgggn4088fy1j2zl-fenrir-0.1-dev`.
 
 | Qualification | Evidence and remaining work |
 |---|---|
-| Mac kernels | The current candidate passed all four elapsed and peak-memory gates with a 0.997× elapsed geometric mean (paired bootstrap 95% interval 0.836–1.151). [Current Mac scorecard and raw reports](../verification/performance/2026-11-22-arm64/validated-package-mac-kernels.tar.gz) |
+| Mac kernels | This archived candidate passed all four elapsed and peak-memory gates with a 0.997× elapsed geometric mean (paired bootstrap 95% interval 0.836–1.151). [Current Mac scorecard and raw reports](../verification/performance/2026-11-22-arm64/validated-package-mac-kernels.tar.gz) |
 | Solo5 kernels | The installed candidate took 2.949× C elapsed time against a 1.5× target. Search, checking and framed-log exceeded the individual 2× threshold. Routing and all four tender memory comparisons passed. [Solo5 scorecard](../verification/performance/2026-11-22-arm64/validated-package-solo5-kernels.tar.gz) |
 | Services | Sustainable throughput and capacity-linked p99 qualification remain open. Both workers sustained the first Mac 53,334 requests/s pair, with a large tail-latency difference. Two independently checked Solo5 durable pairs completed at 200 commits/s. [Mac HTTP pair](../verification/performance/2026-11-22-arm64/mac-http-53334-first-rust-pair.tar.gz) · [Durable pairs](../verification/performance/2026-11-22-arm64/durable-200-two-pairs.tar.gz) |
 

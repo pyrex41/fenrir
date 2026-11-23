@@ -24,7 +24,8 @@ temporary=
 trap 'rm -rf "$stage"; if [ -n "$temporary" ]; then rm -f "$temporary"; fi' EXIT
 cd "$root"
 cp -R README.md flake.nix flake.lock bin frontend harness models typing tools runtime package.json benchmarks examples fixtures "$stage/"
-mkdir -p "$stage/docs/history"
+mkdir -p "$stage/docs/history" "$stage/docs/design"
+cp docs/design/SHEN_NATIVE_BACKEND.md "$stage/docs/design/"
 cp docs/NATIVE_GUIDE.md docs/PREVIEW.md docs/WORK_FILE.md "$stage/docs/"
 cp docs/history/DEVELOPMENT_HISTORY.md "$stage/docs/history/"
 mkdir -p "$stage/verification" "$stage/host" "$stage/backends" "$stage/tests/solo5" "$stage/tests/host" "$stage/tests/frontend"
@@ -34,7 +35,7 @@ cp -R tests/native "$stage/tests/"
 cp -R tests/frontend/roundtrip "$stage/tests/frontend/"
 cp -R tests/host/histories "$stage/tests/host/"
 cp tests/solo5/durable-hand-cases.mjs "$stage/tests/solo5/"
-cp -R backends/solo5 "$stage/backends/"
+cp -R backends/solo5 backends/arm64 "$stage/backends/"
 cp -R host/service "$stage/host/"
 # Python bytecode can contain checkout-specific paths and interpreter timestamps.
 # Drop generated caches from the private staging copy before hashing the flake.
