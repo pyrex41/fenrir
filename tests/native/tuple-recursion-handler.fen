@@ -1,0 +1,12 @@
+\\ > emit "handled": 1
+\\ > outcome: Ok 12
+(effect Read (read I64 --> I64))
+(define walk {(Tuple I64 Bytes) --> I64}
+  n bytes ->
+    (if (= n 0)
+      (perform Read read (bytes-index bytes 0))
+      (handle Read
+        ((read x) -> (do (emit "handled" n) (+ x n)))
+        (walk (- n 1) bytes))))
+(define main {I64 --> I64}
+  input -> (handle Read ((read x) -> 99) (walk (+ input 2) #x0b)))

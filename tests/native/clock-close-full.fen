@@ -1,0 +1,14 @@
+\\ > outcome: Ok 7
+(define main {I64 --> I64}
+  input -> (let c (channel I64 1)
+                first (send c 7)
+                sender (spawn (lambda (_ : Unit)
+                         (match (send c 9) (Sent -> 1) (Closed -> 0))))
+             (do (sleep 1) (close c)
+                 (match (await sender)
+                   ((Ok status) -> (match (receive c)
+                     ((Item n) -> (match (receive c)
+                       (End -> (+ n status)) ((Item extra) -> -1)))
+                     (End -> -2)))
+                   (Cancelled -> -3)
+                   ((Failed code) -> -4)))))

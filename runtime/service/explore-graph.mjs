@@ -61,7 +61,7 @@ export function exploreGraph({tenants,keys,digests,budgets,cap,onEdge=()=>{}}){
     seconds:Number(process.hrtime.bigint()-start)/1e9};
 }
 
-if(import.meta.url===`file://${process.argv[1]}`){
+if(import.meta.main){
   const a=process.argv.slice(2);
   if(a.length!==10)throw new Error('Usage: explore-graph.mjs T K D S C R X CAP EDGES.jsonl SUMMARY.json');
   const n=a.slice(0,8).map(x=>{const v=Number(x);if(!Number.isInteger(v)||v<0)throw new Error('not a count: '+x);return v;});

@@ -130,9 +130,9 @@
 (define sh.outbox-lacks?
   E [[sys _ Outbox _] _] -> (not (element? E Outbox)))
 
-(define sh.permutations
-  [] -> [[]]
-  Xs -> (mapcan (/. X (map (/. P [X | P]) (sh.permutations (remove X Xs)))) Xs))
+(define sh.remove-one
+  X [X | Xs] -> Xs
+  X [Y | Ys] -> [Y | (sh.remove-one X Ys)])
 
 \\ One history event: [ok Cands'] | [reject Reason] | [indeterminate Reason].
 (define sh.event
@@ -149,33 +149,56 @@
                                       "the observed stores differ from the stores of every model state")
   ["drained"] Cs -> (sh.result (sh.filter (/. C (sh.pending-free? C)) Cs)
                                "the runner found no pending job, but every model state still has an accepted job pending")
-  ["concurrent" Evs] Cs -> (sh.result (sh.group (sh.permutations Evs) Cs []) "no order of the concurrent group is admitted")
+  ["concurrent" Evs] Cs -> (sh.concurrent Evs Cs)
   ["gap" Why] Cs -> [indeterminate (cn "the recorder lost events: " Why)]
   X _ -> [reject (make-string "not a history event: ~S" X)])
 
 (define sh.result
-  [violated V] _ -> [reject (make-string "a model property predicate failed on a model state: ~S" V)]
+  [violated V] _ -> [invalid-model (make-string "a model property predicate failed on a model state: ~S" V)]
   [] Reason -> [reject Reason]
   Cs _ -> (if (> (length Cs) (value sh.*bound*)) [indeterminate "candidate bound exceeded"] [ok Cs]))
 
-(define sh.group
-  [] _ Acc -> (sh.dedupe Acc [])
-  [P | Ps] Cs Acc -> (let R (sh.sequence P Cs)
-                       (sh.group Ps Cs (if (= (hd R) ok) (append (nth 2 R) Acc) Acc))))
+\\ Extend only prefixes that admit a state. Each branch removes one occurrence.
+\\ Acc retains distinct terminal candidates across the explored orders.
+(define sh.concurrent
+  Evs Cs -> (let R (sh.orders Evs Cs [])
+              (if (= (hd R) ok)
+                  (sh.result (nth 2 R) "no order of the concurrent group is admitted") R)))
 
-(define sh.sequence
-  [] Cs -> [ok Cs]
-  [E | Es] Cs -> (let R (sh.event E Cs) (if (= (hd R) ok) (sh.sequence Es (nth 2 R)) R)))
+(define sh.orders
+  [] Cs Acc -> [ok (sh.dedupe (append Cs Acc) [])]
+  Evs Cs Acc -> (sh.choices (sh.dedupe Evs []) Evs Cs Acc))
+
+(define sh.choices
+  [] _ _ Acc -> [ok Acc]
+  [E | Rest] Evs Cs Acc ->
+    (let Prefix (sh.event E Cs)
+         R (cond ((= (hd Prefix) reject) [ok Acc])
+                 ((= (hd Prefix) ok) (sh.orders (sh.remove-one E Evs) (nth 2 Prefix) Acc))
+                 (true Prefix))
+      (if (= (hd R) ok) (sh.choices Rest Evs Cs (nth 2 R)) R)))
 
 \\ ---------- one history ----------
 
 (define sh.run
-  [] _ Cs Max -> [accepted Max]
+  [] I Cs Max -> [accepted Max I Cs]
   [E | Es] I Cs Max ->
     (let R (sh.event E Cs)
       (cond ((= (hd R) ok) (sh.run Es (+ I 1) (nth 2 R) (sh.max Max (length (nth 2 R)))))
             ((= (hd R) indeterminate) [indeterminate I E (nth 2 R) Cs])
             (true [rejected I E (nth 2 R) Cs]))))
+
+(define sh.run-chunks
+  _ Count Count Total [accepted Max Total _] -> [accepted Max]
+  _ Count Count _ _ -> (error "chunked history has the wrong event count")
+  File N Count Total [accepted Max I Cs] ->
+    (let Path (cn File (cn ".events." (str N)))
+         Chunk (sh.norm (json.parse (read-file-as-string Path) [[byte-limit 67108864]]))
+         Events (fh.field "events" Chunk)
+         _ (if (and (= I (fh.field "first" Chunk)) (cons? Events)
+                    (<= (+ I (length Events)) Total)) ok (error "invalid history chunk extent"))
+         R (sh.run Events I Cs Max)
+      (if (= (hd R) accepted) (sh.run-chunks File (+ N 1) Count Total R) R)))
 
 (define sh.max
   A B -> (if (> A B) A B))
@@ -195,24 +218,29 @@
       (sh.check-schema (fh.field "schema" H) File H)))
 
 (define sh.check-schema
-  "fenrir.service.history/1" File H -> (sh.check-file-1 File H)
+  "fenrir.service.history/1" File H -> (sh.check-file-1 File H false)
+  "fenrir.service.history/1-chunked" File H -> (sh.check-file-1 File H true)
   "fenrir.service.history/2" File H -> (shu.check File H [["history" File]
             ["scenario" (fh.field "scenario" H)] ["schema" "fenrir.service.history/2"]])
   _ _ _ -> (error "unknown service history schema"))
 
 (define sh.check-file-1
-  File H ->
+  File H Chunked ->
     (let Tenants (fh.field "tenants" H)
-         Events (fh.field "events" H)
+         Events (if Chunked [] (fh.field "events" H))
+         Total (if Chunked (fh.field "event_count" H) (length Events))
+         Chunks (if Chunked (fh.field "chunks" H) 0)
+         _ (if (and (integer? Chunks) (integer? Total) (>= Chunks 0) (>= Total Chunks)) ok
+               (error "invalid chunked history counts"))
          Expect (trap-error (fh.field "expect" H) (/. E "none"))
          Start [[(svc.initial Tenants) (svcp.monitor-initial)]]
-         R (sh.run Events 0 Start 1)
+         R (if Chunked (sh.run-chunks File 0 Chunks Total [accepted 1 0 Start]) (sh.run Events 0 Start 1))
          Verdict (str (hd R))
          Base [["history" File]
                ["scenario" (trap-error (fh.field "scenario" H) (/. E ""))]
                ["verdict" Verdict]
                ["expect" Expect]
-               ["events" (length Events)]
+               ["events" Total]
                ["model_steps" (value sh.*model-steps*)]
                ["predicate_evaluations" (value sh.*predicate-checks*)]]
       (if (= (hd R) accepted)

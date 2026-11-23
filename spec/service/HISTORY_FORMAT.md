@@ -34,8 +34,14 @@ job]`, an event is `["accepted", receipt]` or `["conflict", tenant, key]`, a sto
 | `["fault", WHAT, POINT]` | the driver verified the named injection at that point; for a verified node injection this accompanies a separate `crash` event | none (informational; the faulted request's own outcome says what it did) |
 | `["observe", STORES]` | the stores as the service's API reported them (one read transaction) | none; the model's stores must equal STORES |
 | `["drained"]` | the job runner found no pending job | none; the model must have no pending job |
-| `["concurrent", [EVENT...]]` | submits/deliveries issued at once over several workers | the members in some order |
+| `["concurrent", [EVENT...]]` | submits/deliveries issued at once over several workers | every occurrence in some order, including repeated identical members |
 | `["gap", WHY]` | the recorder lost events | none: the verdict is indeterminate |
+
+For a concurrent group the checker tries each distinct event as the next
+member and consumes one occurrence. It extends an ordering only while some
+model state admits its prefix. Completed orderings contribute their surviving
+states to the union. Step and predicate counters count the checks actually
+performed, so a shared prefix can contribute once across several orders.
 
 OUT, the outcome the service reported for a request:
 
@@ -125,3 +131,21 @@ This evidence gate also requires strictly overlapping call intervals from one
 monotonic clock, the two distinct front-selected workers, and a final `drained`
 milestone corroborated by the zero-pending query and final v2 observation.
 An admissible trace that omits such a milestone is not campaign evidence.
+
+### Chunked storage for version 1 histories
+
+A manifest with schema `fenrir.service.history/1-chunked` carries the v1
+tenant, scenario and expectation fields, an integer `event_count` and an
+integer `chunks`. For a manifest at `history.json`, chunk zero lives at
+`history.json.events.0`. Subsequent suffixes are consecutive decimal integers.
+Each chunk is a JSON object with a zero-based global event offset `first` and
+a nonempty `events` array using the v1 event grammar. An empty history uses
+zero chunks. Each file has the existing 64 MiB JSON parser limit, including
+any final observation within its chunk.
+
+Pass the manifest to `harness/run-service-history.sh`. The checker carries
+the candidate states and property monitors across chunk boundaries. It checks
+offsets and the total event count before accepting, and reports the first
+inadmissible event using its global index. A missing chunk or inconsistent
+offset makes an otherwise admissible history unreadable. The model state and
+an individual observation must still fit in memory.

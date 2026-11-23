@@ -1,0 +1,10 @@
+ARG SOLO5_IMAGE=fenrir-track1-solo5:38e0c348be23-arm64
+FROM ${SOLO5_IMAGE} AS solo5
+RUN git -C /opt/solo5 rev-parse HEAD > /opt/solo5-install/SOLO5_COMMIT
+FROM erlang:28-alpine@sha256:a61e716415b2ec95369e3ba18ea59a4379a82ae7744f6045a4145297f5ca1521
+RUN apk add --no-cache build-base nodejs sqlite-dev libseccomp
+COPY --from=solo5 /opt/solo5-install /opt/solo5-install
+ENV FENRIR_SOLO5=/opt/solo5-install
+
+ARG REFERENCE_TOOLS=none
+RUN case "$REFERENCE_TOOLS" in rust|nim) apk add --no-cache "$REFERENCE_TOOLS";; esac

@@ -1,0 +1,4 @@
+\\ > outcome: Trap Overflow
+\\ native trap-site: 4:44
+(define main {I64 --> I64}
+  input -> (do (sleep 9223372036854775807) (sleep 1) now))

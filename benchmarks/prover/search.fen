@@ -1,0 +1,67 @@
+(datatype Answer (Proof Bytes I64) (Model I64 I64) Exhausted)
+
+(define prepend-steps {(Tuple I64 Bytes) --> Bytes}
+  count suffix -> (if (>= count 8)
+    (prepend-steps (- count 8) (bytes-concat "ssssssss" suffix))
+    (if (= count 0) suffix
+      (bytes-concat
+        (if (< count 4)
+          (if (< count 2) "s" (if (= count 2) "ss" "sss"))
+          (if (< count 6) (if (= count 4) "ssss" "sssss")
+            (if (= count 6) "ssssss" "sssssss")))
+        suffix))))
+
+(define closing-rules {I64 --> Bytes}
+  count -> (if (>= count 8)
+    (prepend-steps (- count 8) "ssssssssx")
+    (if (< count 4)
+      (if (< count 2) (if (< count 1) "x" "sx") (if (< count 3) "ssx" "sssx"))
+      (if (< count 6) (if (< count 5) "ssssx" "sssssx") (if (< count 7) "ssssssx" "sssssssx")))))
+
+(define branch-rules {I64 --> Bytes}
+  count -> (if (>= count 8)
+    (prepend-steps (- count 8) "ssssssssb")
+    (if (< count 4)
+      (if (< count 2) (if (< count 1) "b" "sb") (if (< count 3) "ssb" "sssb"))
+      (if (< count 6) (if (< count 5) "ssssb" "sssssb") (if (< count 7) "ssssssb" "sssssssb")))))
+
+(define search-steps {(Tuple Queue Queue I64 I64 I64 I64) --> Answer}
+  q rear pos negative fuel steps -> (if (= fuel 0) Exhausted
+    (let left (- fuel 1)
+      (match q
+        (Empty -> (match rear (Empty -> (Model pos left)) ((More s g tail) -> (search-steps rear Empty pos negative fuel steps))))
+        ((More sign f rest) ->
+          (match f
+            ((Atom bit) ->
+              (if (present (if sign negative pos) bit)
+                  (Proof (closing-rules steps) left)
+                  (search-steps rest rear (if sign (insert pos bit) pos)
+                                     (if sign negative (insert negative bit)) left (+ steps 1))))
+            ((Neg a) -> (match rest
+                          (Empty -> (search-steps rear (More (not sign) a Empty) pos negative left (+ steps 1)))
+                          ((More hs hf ht) -> (search-steps rest (enqueue rear (not sign) a) pos negative left (+ steps 1)))))
+            ((Binary op a b) ->
+              (let sign-a (if (= op 2) (not sign) sign)
+                (if (= (= op 0) sign)
+                    (match rest
+                      (Empty -> (search-steps rear (More sign-a a (More sign b Empty))
+                                  pos negative left (+ steps 1)))
+                      ((More hs hf ht) -> (search-steps rest (append-queue rear (More sign-a a (More sign b Empty)))
+                                  pos negative left (+ steps 1))))
+                    (let branch (match rest
+                                  (Empty -> (search-steps rear (More sign-a a Empty) pos negative left 0))
+                                  ((More hs hf ht) -> (search-steps rest (enqueue rear sign-a a) pos negative left 0)))
+                      (match branch
+                        ((Proof w remaining) ->
+                          (let other (match rest
+                                       (Empty -> (search-steps rear (More sign b Empty) pos negative remaining 0))
+                                       ((More hs hf ht) -> (search-steps rest (enqueue rear sign b) pos negative remaining 0)))
+                            (match other
+                              ((Proof v unused) -> (Proof (bytes-concat (branch-rules steps) (bytes-concat w v)) unused))
+                              ((Model bits unused) -> other)
+                              (Exhausted -> other))))
+                        ((Model bits remaining) -> branch)
+                        (Exhausted -> branch))))))))))))
+
+(define search {(Tuple Queue I64 I64 I64) --> Answer}
+  q pos negative fuel -> (search-steps q Empty pos negative fuel 0))

@@ -1,0 +1,2 @@
+(define main {I64 --> I64}
+  n -> (project (tuple (/ 1 n) n (+ n 1)) 1))

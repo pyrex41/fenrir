@@ -1,0 +1,58 @@
+[
+  {
+    "archive": "mac-http-70000.tar.gz",
+    "sample": "0-fenrir-70000.json",
+    "sha256": "e5b617370c695bff358de0039d345b949e55407687f7fdf8ed16257955384aeb",
+    "observed_growth": false,
+    "verdict": "sustained-at-offered-rate"
+  },
+  {
+    "archive": "mac-http-70000.tar.gz",
+    "sample": "0-nim-70000.json",
+    "sha256": "7dc08c8b51790fa336ae1cd8a003db6c00d92953a734d6bfee9211844360c251",
+    "observed_growth": false,
+    "verdict": "sustained-at-offered-rate"
+  },
+  {
+    "archive": "mac-http-70000.tar.gz",
+    "sample": "0-rust-70000.json",
+    "sha256": "852492f146d447f9a6255fdc979b475ad14818f71b56e18a6ef029db0c605d8d",
+    "observed_growth": false,
+    "verdict": "sustained-at-offered-rate"
+  },
+  {
+    "archive": "mac-http-80000.tar.gz",
+    "sample": "0-fenrir-80000.json",
+    "sha256": "e4f57e56ee751f6d162db772c15874f74949d151599bf7132095127d301b8fec",
+    "observed_growth": false,
+    "verdict": "sustained-at-offered-rate"
+  },
+  {
+    "archive": "mac-http-80000.tar.gz",
+    "sample": "0-rust-80000.json",
+    "sha256": "ae93c3fe637a66e24df2ee6f0487f3e38ba7efac26f68ee8c06e9dc64e071805",
+    "observed_growth": true,
+    "verdict": "failed-response-criteria"
+  },
+  {
+    "archive": "mac-http-80000.tar.gz",
+    "sample": "0-nim-80000.json",
+    "sha256": "aba9a8fa5bd761eafffe08432acff36afa174806f68d541fdafdee57c4932447",
+    "observed_growth": false,
+    "verdict": "backlog-clearance-unconfirmed"
+  },
+  {
+    "archive": "mac-http-bandit-ten-minute.tar.gz",
+    "sample": "ten-minute/0-elixir-1000.json",
+    "sha256": "17c1010288d0bee7856183865557efdfdc78e51cfdccbe19a7590c4d421299ca",
+    "observed_growth": false,
+    "verdict": "sustained-at-offered-rate"
+  },
+  {
+    "archive": "mac-http-bandit-ten-minute.tar.gz",
+    "sample": "ten-minute/1-elixir-10000.json",
+    "sha256": "6142b58a3442e76e38eb17e3e54f3796ed9b2a31b414cb67481903edff86c6ed",
+    "observed_growth": false,
+    "verdict": "sustained-at-offered-rate"
+  }
+]

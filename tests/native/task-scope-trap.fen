@@ -1,0 +1,4 @@
+\\ > emit "inner": 0 (task 0)
+\\ > outcome: Trap DivZero
+(define main {I64 --> I64}
+  input -> (scope (do (scope (do (emit "inner" input) (/ 1 input))) (emit "outer" 2) 2)))

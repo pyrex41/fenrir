@@ -1,0 +1,25 @@
+{
+  "package": "/nix/store/ncjcqbbky4kl2520nar4ndsl9jnjillj-fenrir-0.1-dev",
+  "scripts": {
+    "assess-paced.py": "0814daf58522dabd33b9ae5667e0d2fa6064ed0c3e5d34bbc03b0afe81c2953d",
+    "compare-recovery.py": "ea1f6f39dfd047f80ddd5a1177092cf03a5f2623141a54ac94fc2c214f290e1c",
+    "repeat-recovery.py": "e2e2c6baa6b52afdf0f9fbaf41b3dc0a13f12199ea93865b8a47d2636a82f2c9"
+  },
+  "cases": {
+    "original": 0,
+    "scenario": 1,
+    "history": 1,
+    "events": 1,
+    "verdict": 1
+  },
+  "input_verdict": {
+    "history": "build/host/service/supervised-rG1uzNLM/history.json",
+    "scenario": "paced-commits",
+    "verdict": "accepted",
+    "expect": "accepted",
+    "events": 60001,
+    "model_steps": 60000,
+    "predicate_evaluations": 60000,
+    "max_candidates": 1
+  }
+}

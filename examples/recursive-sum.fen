@@ -1,0 +1,6 @@
+\\ > outcome: Ok 0
+(define sum {I64 --> I64}
+  n -> (if (<= n 0) 0 (+ (sum (- n 1)) n)))
+
+(define main {I64 --> I64}
+  input -> (if (> input 500) (+ input 1) (sum input)))

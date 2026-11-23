@@ -1,0 +1,42 @@
+{
+  "emitter_sha256": "b0827cb62513d65b1c9c85f199596e433d4b0df37d5bd7c80b65537ac0bc5429",
+  "unchanged_assembly": {
+    "check-macos-arm64": "a15c15aaa4c44390e503b8d4ee5de88c7a9a43f0948308c3d4b82d50e2e1d0ef",
+    "check-solo5-arm64-spt": "abfb1ae254f4fcf7dcec972287ca18a0881de9f55f9450c3f6959feb6bb2baf3",
+    "http-macos-arm64": "255380ee8c308d624ef76d20c2420e9fbaac6310572e359672a4a6402558ecc6",
+    "http-solo5-arm64-spt": "e677610675e86940a6031a716068da2dcbbcc32e985fbb12c4a410d8000dd965",
+    "search-macos-arm64": "85cd8b89ef33e70d5fae6c5836271100504ea63424df314ba73bf56ece9d8ea4",
+    "search-solo5-arm64-spt": "43e2caf7946c61f49f88753af9eb2a951b994e3606686eba119a1725e89fa5da",
+    "stream-macos-arm64": "e3c5a88d1eb51ab941dedf328f126e43d53ba9d25c197d402547b41553b5a25a",
+    "stream-solo5-arm64-spt": "a51bbd2077958b15e88f5e941618e51f978fcf7234eab018d617bad698952b24"
+  },
+  "native": {
+    "macos-arm64": [
+      "PASS tests/native/tuple-recursion-handler.fen",
+      "PASS tests/native/tail-call-operand-trap.fen",
+      "PASS tests/native/allocating-tail-swap.fen",
+      "PASS tests/native/loop-rebinding.fen",
+      "macos-arm64: 4 passed, 0 failed"
+    ],
+    "solo5-arm64-spt": [
+      "PASS tests/native/tuple-recursion-handler.fen",
+      "PASS tests/native/tail-call-operand-trap.fen",
+      "PASS tests/native/allocating-tail-swap.fen",
+      "PASS tests/native/loop-rebinding.fen",
+      "solo5-arm64-spt: 4 passed, 0 failed"
+    ]
+  },
+  "shen": {
+    "tail-call-operand-trap-shen": [
+      "emit \"first\": 0",
+      "outcome: Trap DivZero",
+      "trap at: tests/native/tail-call-operand-trap.fen:7:15",
+      "steps: 58"
+    ],
+    "tuple-recursion-handler-shen": [
+      "emit \"handled\": 1",
+      "outcome: Ok 12",
+      "steps: 133"
+    ]
+  }
+}

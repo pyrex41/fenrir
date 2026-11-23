@@ -1,0 +1,4 @@
+(define countdown {(Tuple I64 I64) --> I64}
+  n acc -> (if (<= n 0) acc (countdown (- n 1) (+ acc 2))))
+(define main {I64 --> I64}
+  n -> (countdown n 7))

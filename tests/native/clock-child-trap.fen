@@ -1,0 +1,5 @@
+\\ > outcome: Trap ChildFailed
+(define main {I64 --> I64}
+  input -> (let child (spawn (lambda (_ : Unit) (do (sleep -1) now)))
+                result (await child)
+             input))

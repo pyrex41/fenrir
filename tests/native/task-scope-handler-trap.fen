@@ -1,0 +1,7 @@
+\\ > emit "clause": 0 (task 0)
+\\ > outcome: Trap DivZero
+(effect Ask (ask I64 --> I64))
+(define main {I64 --> I64}
+  n -> (scope (handle Ask
+                ((ask x) -> (do (emit "clause" x) (/ 1 x)))
+                (+ 10 (perform Ask ask n)))))

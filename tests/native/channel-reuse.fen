@@ -1,0 +1,12 @@
+\\ > outcome: Ok #x6b65657021
+(define discard {I64 --> I64}
+  n -> (if (= n 0) 0
+         (let c (channel Bytes 2)
+           (do (send c (bytes-concat "discard" "!")) (discard (- n 1))))))
+
+(define main {I64 --> Bytes}
+  input -> (let saved (channel Bytes 1)
+             (do (send saved (bytes-concat (if (= input 0) "keep" "other") "!"))
+                 (discard 160)
+                 (close saved)
+                 (match (receive saved) ((Item b) -> b) (End -> "lost")))))

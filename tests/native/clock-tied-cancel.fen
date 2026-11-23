@@ -1,0 +1,4 @@
+\\ > outcome: Ok 5
+(define main {I64 --> I64}
+  input -> (let child (spawn (lambda (_ : Unit) (do (sleep 5) now)))
+             (do (sleep 5) (cancel child) now)))

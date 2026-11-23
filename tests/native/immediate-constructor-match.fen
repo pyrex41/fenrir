@@ -1,0 +1,6 @@
+(datatype Bundle (Pack Bytes I64 I64) Other)
+(define main {I64 --> I64}
+  n -> (match (Pack (bytes-concat (if (= n 0) #x2a #x29) #x00)
+                    (/ 1 n) (+ n 1))
+         ((Pack bytes a b) -> (bytes-index bytes 0))
+         (Other -> -1)))

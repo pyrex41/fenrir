@@ -1,0 +1,30 @@
+[
+  {
+    "block": 1,
+    "first": "fenrir-native-spt",
+    "fenrir_p99_us": 5330,
+    "c_p99_us": 15987,
+    "ratio": 0.3333958841558767
+  },
+  {
+    "block": 2,
+    "first": "c-native-spt",
+    "fenrir_p99_us": 13102,
+    "c_p99_us": 7756,
+    "ratio": 1.689272821041774
+  },
+  {
+    "block": 3,
+    "first": "fenrir-native-spt",
+    "fenrir_p99_us": 5109,
+    "c_p99_us": 5162,
+    "ratio": 0.9897326617590081
+  },
+  {
+    "block": 4,
+    "first": "c-native-spt",
+    "fenrir_p99_us": 7542,
+    "c_p99_us": 4756,
+    "ratio": 1.5857863751051304
+  }
+]

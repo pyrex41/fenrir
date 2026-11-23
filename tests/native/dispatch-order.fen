@@ -1,0 +1,4 @@
+(define main {I64 --> I64}
+  input -> (let a (spawn (lambda (_ : Unit) (do (emit "first" input) 1)))
+                b (spawn (lambda (_ : Unit) (do (emit "second" input) 2)))
+             0))

@@ -1,0 +1,4 @@
+\\ > outcome: Trap InvalidDuration
+\\ native trap-site: 4:16
+(define main {I64 --> I64}
+  input -> (do (sleep (- input 1)) now))

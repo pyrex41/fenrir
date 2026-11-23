@@ -1,0 +1,14 @@
+\\ > emit "body": 7
+\\ > outcome: Ok 42
+(datatype Reply (Value I64) Failed)
+(effect Ask (ask I64 --> I64))
+
+(define main {I64 --> I64}
+  n -> (let reply
+         (handle Ask
+           ((ask x k) -> (match (resume k x)
+             ((Value v) -> (Value (* v 6)))
+             (Failed -> (Value (/ 1 0)))))
+           (let a (perform Ask ask 7)
+             (do (emit "body" a) (if (= n 0) (Value a) Failed))))
+         (match reply ((Value v) -> v) (Failed -> 0))))

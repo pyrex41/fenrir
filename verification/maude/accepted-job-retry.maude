@@ -1,0 +1,48 @@
+mod ACCEPTED-JOB is
+  protecting NAT .
+  sorts Mode Status Event History State .
+  ops correct reapply : -> Mode [ctor] .
+  ops absent pending done failed : -> Status [ctor] .
+  ops submit crash : -> Event [ctor] .
+  op delivery : Nat Bool -> Event [ctor] .
+  op ack : Nat -> Event [ctor] .
+  op nil : -> History [ctor] .
+  op _::_ : Event History -> History [ctor prec 55 gather (e E)] .
+  *** Remaining budgets, allocated jobs, job slots, receipt membership, reverse path.
+  op st : Mode Nat Nat Nat Nat Nat Status Status Bool Bool History -> State [ctor] .
+  op initial : Mode -> State .
+  op finish : Status Bool -> Status .
+  vars M : Mode .
+  vars S C R X N : Nat .
+  vars A B : Status .
+  vars U V : Bool .
+  var H : History .
+  eq initial(M) = st(M,2,2,2,1,0,absent,absent,false,false,nil) .
+  eq finish(pending,true) = done .
+  eq finish(pending,false) = failed .
+  eq finish(A,U) = A [owise] .
+  rl [commit] : st(M,s S,C,R,X,0,A,B,U,V,H) =>
+    st(M,S,C,R,X,1,pending,B,true,V,submit :: H) .
+  rl [retry] : st(correct,s S,C,R,X,1,A,B,U,V,H) =>
+    st(correct,S,C,R,X,1,A,B,true,V,submit :: H) .
+  rl [forget-key] : st(reapply,s S,C,R,X,1,A,B,U,V,H) =>
+    st(reapply,S,C,R,X,2,A,pending,U,true,submit :: H) .
+  rl [crash] : st(M,S,C,R,s X,N,A,B,U,V,H) =>
+    st(M,S,C,R,X,N,A,B,false,false,crash :: H) .
+  rl [ack-zero] : st(M,S,C,s R,X,N,A,B,true,V,H) =>
+    st(M,S,C,R,X,N,A,B,true,V,ack(0) :: H) .
+  rl [ack-one] : st(M,S,C,s R,X,N,A,B,U,true,H) =>
+    st(M,S,C,R,X,N,A,B,U,true,ack(1) :: H) .
+  rl [deliver-0-true] : st(M,S,s C,R,X,N,A,B,U,V,H) =>
+    st(M,S,C,R,X,N,finish(A,true),B,U,V,delivery(0,true) :: H) .
+  rl [deliver-0-false] : st(M,S,s C,R,X,N,A,B,U,V,H) =>
+    st(M,S,C,R,X,N,finish(A,false),B,U,V,delivery(0,false) :: H) .
+  crl [deliver-1-true] : st(M,S,s C,R,X,N,A,B,U,V,H) =>
+    st(M,S,C,R,X,N,A,finish(B,true),U,V,delivery(1,true) :: H) if N >= 1 .
+  crl [deliver-1-false] : st(M,S,s C,R,X,N,A,B,U,V,H) =>
+    st(M,S,C,R,X,N,A,finish(B,false),U,V,delivery(1,false) :: H) if N >= 1 .
+  crl [deliver-2-true] : st(M,S,s C,R,X,N,A,B,U,V,H) =>
+    st(M,S,C,R,X,N,A,B,U,V,delivery(2,true) :: H) if N >= 2 .
+  crl [deliver-2-false] : st(M,S,s C,R,X,N,A,B,U,V,H) =>
+    st(M,S,C,R,X,N,A,B,U,V,delivery(2,false) :: H) if N >= 2 .
+endm

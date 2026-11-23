@@ -1,0 +1,42 @@
+{
+  "fenrir": {
+    "valid": 48000000,
+    "threshold_ns": 16777216,
+    "fetch_at_least_threshold": 155,
+    "waiting_for_previous_at_least_threshold": 2719822,
+    "dispatch_at_least_threshold": 0,
+    "seconds_with_more_than_16_outstanding": 154,
+    "peak_backlog": 5845,
+    "peak_second": 410,
+    "server_cpu_us_per_completed": 17.185625,
+    "median_ns": 95417,
+    "slowest_valid": {
+      "Index": 13270285,
+      "Lane": 13,
+      "ElapsedNs": 134280084,
+      "PreviousRequestNs": 133898625,
+      "DispatchNs": 209,
+      "FetchNs": 381250
+    }
+  },
+  "rust": {
+    "valid": 48000000,
+    "threshold_ns": 16777216,
+    "fetch_at_least_threshold": 26,
+    "waiting_for_previous_at_least_threshold": 440051,
+    "dispatch_at_least_threshold": 1,
+    "seconds_with_more_than_16_outstanding": 119,
+    "peak_backlog": 1601,
+    "peak_second": 338,
+    "server_cpu_us_per_completed": 18.375208333333333,
+    "median_ns": 86042,
+    "slowest_valid": {
+      "Index": 17385511,
+      "Lane": 7,
+      "ElapsedNs": 110577958,
+      "PreviousRequestNs": 109729375,
+      "DispatchNs": 125,
+      "FetchNs": 848458
+    }
+  }
+}

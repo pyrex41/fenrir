@@ -139,7 +139,7 @@
 
 \\ Words with a meaning of their own, which no function or variable may take.
 (define fe.reserved?
-  Name -> (element? Name ["define" "datatype" "effect" "remote-effect" "read-only" "include" "serve" "let" "if" "do" "tuple" "project" "match" "lambda" "type"
+  Name -> (element? Name ["define" "datatype" "effect" "remote-effect" "read-only" "include" "library" "serve" "let" "if" "do" "tuple" "project" "match" "lambda" "type"
                           "emit" "perform" "handle" "resume" "discontinue" "unit" "true" "false"
                           "not" "neg" "bytes-length" "bytes-index" "bytes-concat" "_"]))
 
@@ -219,6 +219,7 @@
 
 (define fe.effect-name
   [sym _ _ "Emit"] -> "Emit"
+  [sym _ _ "Time"] -> (do (fe.uses-time) "Time")
   [sym _ _ "Task"] -> (do (fe.uses-tasks) "Task")
   [sym _ _ "Channel"] -> (do (fe.uses-tasks) "Channel")
   [sym L C Name] -> (if (= (fe.lookup Name (value fe.*effects*)) none)
@@ -229,6 +230,10 @@
 \\ TC1-C1: a program that uses a task form or a task type is an artifact of schema
 \\ tc1-task-demo/1 (CONCURRENCY.md); fe.*tasks* records that it does.
 (set fe.*tasks* false)
+(set fe.*time* false)
+(define fe.uses-time
+  -> (do (fe.uses-tasks) (set fe.*time* true)))
+
 (define fe.uses-tasks
   -> (set fe.*tasks* true))
 
@@ -413,7 +418,7 @@
 \\ Task words are contextual, so old functions and local bindings keep their
 \\ meaning. Operation names are resolved separately by perform/handle.
 (define fe.task-form?
-  K -> (element? K ["scope" "spawn" "await" "cancel" "channel" "send" "receive" "close"]))
+  K -> (element? K ["sleep" "scope" "spawn" "await" "cancel" "channel" "send" "receive" "close"]))
 
 (define fe.unbound?
   K Env -> (and (= (fe.binding K Env) none) (= (fe.lookup K (value fe.*functions*)) none)))
@@ -425,6 +430,8 @@
   [sym L C "unit"] _ Want -> (fe.done L C ["unit" (fe.node L C)] "Unit" [] [] Want)
   [sym L C "true"] _ Want -> (fe.done L C ["bool" (fe.node L C) true] "Bool" [] [] Want)
   [sym L C "false"] _ Want -> (fe.done L C ["bool" (fe.node L C) false] "Bool" [] [] Want)
+  [sym L C "now"] Env Want -> (do (fe.uses-time) (fe.done L C ["now" (fe.node L C)] "I64" [["Time" L C "this clock read"]] [] Want))
+    where (fe.unbound? "now" Env)
   [sym L C "yield"] Env Want -> (do (fe.uses-tasks) (fe.done L C ["yield" (fe.node L C)] "Unit" [["Task" L C "this yield"]] [] Want))
     where (fe.unbound? "yield" Env)
   [sym L C Name] Env Want -> (fe.name L C Name (fe.binding Name Env) Want)
@@ -611,6 +618,13 @@
   Name L C Form -> [Name L C (make-string "this ~A" Form)])
 
 (define fe.task-form
+  "sleep" L C [Duration] Env Want ->
+    (let Time (fe.uses-time)
+         Node (fe.node L C)
+         Row (fe.expr Duration Env [want "I64" "the sleep duration in nanoseconds" ""])
+      (fe.done L C ["sleep" Node (fe.row-node Row)] "Unit"
+               (fe.union (fe.row-effects Row) [(fe.runtime-effect "Time" L C "sleep")]) (fe.row-uses Row) Want))
+  "sleep" L C _ _ _ -> (fe.fail L C "sleep takes one I64 duration in nanoseconds")
   "scope" L C [Body] Env Want ->
     (let Node (fe.node L C)
          Row (fe.expr Body Env Want)
@@ -952,7 +966,7 @@
 
 (define fe.handle
   _ _ [sym EL EC Effect] _ _ _ -> (fe.fail EL EC (make-string "~A is a runtime effect: the runtime discharges it, and no handler can" Effect))
-    where (element? Effect ["Task" "Channel"])
+    where (element? Effect ["Task" "Channel" "Time"])
   L C [sym EL EC Effect] Items Env Want ->
     (let Ops (fe.lookup Effect (value fe.*effects*))
          Known (if (= Ops none) (fe.fail EL EC (make-string "unknown effect ~A" Effect)) true)
@@ -1030,12 +1044,23 @@
 
 \\ Stack: the files being read, innermost first; the program's own file is the last.
 (define fe.included
-  Path L C Stack ->
+  Mode Path L C Stack ->
     (if (element? Path Stack)
         (fe.fail L C (make-string "include cycle: ~A is already being read (~A)" Path (fe.listed (reverse Stack))))
-        (let Octets (trap-error (read-file-as-bytelist Path)
+        (let Registered (set fe.*input-files* [Path | (value fe.*input-files*)])
+             Octets (trap-error (read-file-as-bytelist Path)
                                 (/. E (fe.fail L C (make-string "the included file ~A cannot be read" Path))))
-          (fe.expand (map (/. F (fe.declaration-only Path F)) (fe.read-included Path Octets)) Path [Path | Stack]))))
+          (fe.expand (map (/. F (fe.import-form Mode Path F)) (fe.read-included Path Octets)) Path [Path | Stack]))))
+
+(define fe.import-form
+  "include" Path F -> (fe.declaration-only Path F)
+  "library" _ [list L C [[sym _ _ "define"] [sym _ _ "main"] | Rest]] -> (fe.fail L C "main belongs to the entry file")
+  "library" _ F -> F where (element? (fe.form-head F) ["define" "datatype" "effect" "remote-effect" "include" "library"])
+  "library" _ F -> (fe.reject F "a library may contain functions, declarations and local file references"))
+
+(define fe.form-head
+  [list _ _ [[sym _ _ K] | _]] -> K
+  _ -> "")
 
 (define fe.declaration-only
   Path [list L C [[sym SL SC K] | Rest]] -> [list L C [[sym SL SC K] | Rest]] where (element? K ["datatype" "effect" "remote-effect" "include"])
@@ -1044,8 +1069,9 @@
 \\ The forms of File with every include replaced by the declarations it names.
 (define fe.expand
   [] _ _ -> []
-  [[list L C [[sym _ _ "include"] [str SL SC Octets]]] | Forms] File Stack ->
-    (append (fe.included (fe.include-path SL SC Octets File) L C Stack) (fe.expand Forms File Stack))
+  [[list L C [[sym _ _ Mode] [str SL SC Octets]]] | Forms] File Stack ->
+    (append (fe.included Mode (fe.include-path SL SC Octets File) L C Stack) (fe.expand Forms File Stack)) where (element? Mode ["include" "library"])
+  [[list L C [[sym _ _ "library"] | _]] | _] _ _ -> (fe.fail L C "library requires one relative file name")
   [[list L C [[sym _ _ "include"] | _]] | _] _ _ -> (fe.fail L C "include is written (include c#34;file.fenc#34;), the file named relative to the directory of this one")
   [F | Forms] File Stack -> [F | (fe.expand Forms File Stack)])
 
@@ -1400,13 +1426,15 @@
 (define fe.check-handled
   [] _ -> true
   [["Emit" | _] | Rest] Durable -> (fe.check-handled Rest Durable)
-  [[K | _] | Rest] Durable -> (fe.check-handled Rest Durable) where (element? K ["Task" "Channel"])
+  [[K | _] | Rest] Durable -> (fe.check-handled Rest Durable) where (element? K ["Task" "Channel" "Time"])
   [[Name | _] | Rest] Durable -> (fe.check-handled Rest Durable)
     where (or (element? Name Durable) (not (= (fe.lookup Name (value fe.*remote*)) none)))
   [[Name L C Cause] | _] _ ->
     (fe.fail L C (make-string "effect ~A is not handled: it comes from ~A, and no (handle ~A ...) encloses that on the way from the entry function main" Name Cause Name)))
 
 (define fe.source-map
+  File [[Id [at-file Origin L] C] | Rest] Acc ->
+    (fe.source-map File Rest [[object ["column" (str C)] ["file" Origin] ["id" Id] ["line" (str L)]] | Acc])
   File [] Acc -> Acc
   File [[Id L C] | Rest] Acc ->
     (fe.source-map File Rest [[object ["column" (str C)] ["file" File] ["id" Id] ["line" (str L)]] | Acc]))
@@ -1438,7 +1466,8 @@
 \\ name; Octets are the source. Returns the artifact.
 (define fe.elaborate
   File Module Octets ->
-    (let Forms (fe.expand (fe.read Octets) File [File])
+    (let Inputs (set fe.*input-files* [File])
+         Forms (fe.expand (fe.read Octets) File [File])
          Serving (set fe.*serving* (cons? (fe.of-kind "serve" Forms)))
          DatatypeForms (fe.of-kind "datatype" Forms)
          EffectForms (fe.effect-forms Forms)
@@ -1448,6 +1477,7 @@
          \\ Names first, so that declarations may refer to each other in any order.
          Reset (set fe.*datatypes* [["TrapCode" (map (/. K [K []]) ["Overflow" "DivZero" "Bounds" "InvalidDuration" "TaskLimit" "ChildFailed"])]])
          NoTasks (set fe.*tasks* false)
+         NoTime (set fe.*time* false)
          Names (set fe.*datatype-names* (fe.declared "datatype" (/. D (fe.datatype-name D)) DatatypeForms []))
          EffectNames (set fe.*effects* (map (/. N [N []]) (fe.declared "effect" (/. D (fe.user-effect-name D)) EffectForms [])))
          RemoteNames (set fe.*remote* (map (/. F [(fe.declared-name F) []]) RemoteForms))
@@ -1499,6 +1529,6 @@
               ["functions" (map (/. R (hd R)) Results)]
                ["input_schema" [object ["type" (nth 2 (fe.binding "main" Functions))]]]
               ["module" Module]
-               ["schema_version" (cond (Far "tc1-handler-demo/3") (D1 "tc1-durable-demo/1") (Tasks "tc1-task-demo/1") (true "tc1-handler-demo/2"))]
-               ["slice" (cond (Far "TC1-R1") (D1 "TC1-D1") (Tasks "TC1-C1") (true "TC1-H2"))]
+               ["schema_version" (cond (Far "tc1-handler-demo/3") (D1 "tc1-durable-demo/1") ((value fe.*time*) "tc1-time-demo/1") (Tasks "tc1-task-demo/1") (true "tc1-handler-demo/2"))]
+               ["slice" (cond (Far "TC1-R1") (D1 "TC1-D1") ((value fe.*time*) "TC1-T1") (Tasks "TC1-C1") (true "TC1-H2"))]
               ["source_map" (fe.source-map File (value fe.*locations*) [])]])))

@@ -1,0 +1,4 @@
+\\ ok
+\\ > outcome: Ok 12
+(library "sub/twice.decl.fen")
+(define main {I64 --> I64} input -> (twice 5))

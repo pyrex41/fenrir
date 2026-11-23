@@ -27,7 +27,7 @@ campaign. ARM64 Linux is now the primary development target.
 - `sh harness/run-service-history.sh tests/host/histories/full-cycle.json` can be
   attempted independently of the guest with an already-built PR10 Shen/JIT
   (`FENRIR_SHEN_JIT` points to its install prefix). The runner's exit status is
-  not a conformance verdict: inspect `verdicts.jsonl`. Run all 18 fixtures and
+  not a conformance verdict: inspect `verdicts.jsonl`. Run all 20 fixtures and
   compare every `verdict` to its input `expect` before claiming the checker works.
 - `sh host/service/check.sh quick` requires Linux with the reconciled guest,
   frontend and history tools. A preflight exit when any prerequisite is missing

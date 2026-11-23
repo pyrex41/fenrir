@@ -20,7 +20,7 @@
 -module(fenrir_front).
 -behaviour(gen_server).
 -export([start_link/2, submit/4, deliver/3, respond/1, outbox/0]).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 start_link(Workers, Bindings) -> gen_server:start_link({local, ?MODULE}, ?MODULE, {Workers, Bindings}, []).
 
@@ -80,7 +80,7 @@ response({data, <<"Response">>, <<"Refused">>, []} = V, _, {submit, _, _, _}) ->
 %% commit may already have happened, so do not tell the caller it rolled back.
 response(_, _, _) -> indeterminate.
 
-init({Workers, Bindings}) -> {ok, #{workers => Workers, next => 0, outbox => [], bindings => Bindings}}.
+init({Workers, Bindings}) -> {ok, #{workers => Workers, next => 0, outbox => #{}, bindings => Bindings}}.
 
 handle_call({pick_submit, Credential}, _From, S = #{bindings := Bindings}) ->
     case fenrir_authority:authenticate(Credential, Bindings) of
@@ -93,10 +93,10 @@ handle_call(pick_delivery, _From, S) ->
     {Worker, S1} = pick(S),
     {reply, Worker, S1};
 handle_call({add, E}, _From, S = #{outbox := O}) ->
-    {reply, ok, S#{outbox := lists:usort([E | O])}};
+    {reply, ok, S#{outbox := O#{E => true}}};
 handle_call({respond, E}, _From, S = #{outbox := O}) ->
-    {reply, case lists:member(E, O) of true -> ok; false -> not_in_outbox end, S};
-handle_call(outbox, _From, S = #{outbox := O}) -> {reply, O, S}.
+    {reply, case maps:is_key(E, O) of true -> ok; false -> not_in_outbox end, S};
+handle_call(outbox, _From, S = #{outbox := O}) -> {reply, lists:sort(maps:keys(O)), S}.
 
 pick(S = #{workers := #{v1 := V1, v2 := V2}, next := N}) ->
     Ws = case fenrir_store:routing_phase() of
@@ -118,3 +118,7 @@ pick(S = #{workers := Ws, next := N}) ->
 handle_cast(_, S) -> {noreply, S}.
 handle_info(_, S) -> {noreply, S}.
 terminate(_, _) -> ok.
+
+code_change(_, S = #{outbox := Events}, _) when is_list(Events) ->
+    {ok, S#{outbox := maps:from_keys(Events, true)}};
+code_change(_, S, _) -> {ok, S}.

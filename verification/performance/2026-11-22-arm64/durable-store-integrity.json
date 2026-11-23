@@ -1,0 +1,22 @@
+{
+  "mac-fenrir": {
+    "path": "build/durable-mac-ten-minute-d3uo1E9x/runs/0/fenrir-native-mac/0",
+    "commits": 60000
+  },
+  "mac-rust": {
+    "path": "build/durable-mac-ten-minute-d3uo1E9x/runs/0/rust/0",
+    "commits": 60000
+  },
+  "solo5-fenrir": {
+    "path": "build/host/service/supervised-TnCLe1EN",
+    "commits": 200
+  },
+  "solo5-c": {
+    "path": "build/host/service/supervised-kQyUpCli",
+    "commits": 200
+  },
+  "PRAGMA user_version=0": "unexpected durable store format version",
+  "UPDATE meta SET v='v2' WHERE k='upgrade'": "unexpected durable store version metadata",
+  "UPDATE jobs SET tenant=2 WHERE tenant=1": "SQLite foreign key check failed",
+  "validator_sha256": "0110937fe359d8be926c4707fa26c631ebb73a7c030383610ca214061afecb48"
+}

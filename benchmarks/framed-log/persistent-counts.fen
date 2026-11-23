@@ -1,0 +1,13 @@
+(library "processor.fen")
+
+(define main {I64 --> (Tuple Bool Bool Bool)}
+  input -> (let base (add-record (add-record Vacant 0 3 input) 2 4 7)
+                left (add-record base 0 5 11)
+                right (add-record base 2 6 13)
+                unchanged (= (flatten base NoKeys)
+                             (Key 0 1 3 input (Key 2 1 4 7 NoKeys)))
+                left-ok (= (flatten left NoKeys)
+                           (Key 0 2 8 (+ input 11) (Key 2 1 4 7 NoKeys)))
+                right-ok (= (flatten right NoKeys)
+                            (Key 0 1 3 input (Key 2 2 10 20 NoKeys)))
+             (tuple unchanged left-ok right-ok)))

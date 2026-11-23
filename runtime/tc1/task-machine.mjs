@@ -21,8 +21,7 @@
 import {HandlerMachine} from './handler-machine.mjs';
 
 export class ScheduleError extends Error {}
-const RUNTIME=new Set(['spawn','await','cancel','yield','channel','send','receive','close']);
-const TRAP_NAME={DivZero:'DivZero',Overflow:'Overflow',Bounds:'Bounds',ChildFailed:'ChildFailed'};
+const RUNTIME=new Set(['spawn','await','cancel','sleep','yield','channel','send','receive','close']);
 const numeric=(a,b)=>BigInt(a)<BigInt(b)?-1:BigInt(a)>BigInt(b)?1:0;
 
 // The bindings an expression uses that `bound` does not bind.
@@ -60,6 +59,7 @@ class Thread extends HandlerMachine {
       const ids=[...freeIn(x[5],new Set([x[0]]),new Set())].sort(numeric);
       return this.produce({code_id:node,captures:ids.map(id=>{if(!this.env.has(id))throw new Error('Missing capture');return [id,this.env.get(id)];}),capture_support:[]});
     }
+    if(tag==='now')return this.produce(['int',String(this.machine.now)]);
     if(!RUNTIME.has(tag))return super.dispatch(expr,tail);
     // Operands left to right; yield and channel have none, so they are Ready at once.
     const pending=tag==='channel'||tag==='yield'?[]:x,metadata=tag==='channel'?x[1]:null;
@@ -71,7 +71,9 @@ class Thread extends HandlerMachine {
 
 export class TaskMachine {
   constructor(artifact,input,options={}) {
-    if(artifact?.schema_version!=='tc1-task-demo/1'||artifact.slice!=='TC1-C1')throw new TypeError('TC1-C1 artifact required');
+    this.timed=artifact?.schema_version==='tc1-time-demo/1'&&artifact.slice==='TC1-T1';
+    this.now=0n;
+    if(!this.timed&&(artifact?.schema_version!=='tc1-task-demo/1'||artifact.slice!=='TC1-C1'))throw new TypeError('TC1-C1 artifact required');
     this.options={...options};this.artifact=artifact;this.input=input;
     this.tasks=new Map();this.scopes=new Map();this.channels=new Map();this.awaits=[];
     this.counters={task:1n,scope:1n,channel:0n};this.epoch=0n;this.events=[];this.becameRunnable=[];
@@ -148,6 +150,14 @@ export class TaskMachine {
       const record=th.step();site=record.site;
       for(const e of record.events)if(e.kind==='Emit')events.push({kind:'Emit',task:id,label:e.label,value:e.value});
     }
+    if(this.timed&&!this.runnable().length){
+      const sleepers=[...this.tasks.values()].filter(t=>t.status==='Blocked'&&t.thread.control.waiting?.timer!==undefined);
+      if(sleepers.length){
+        this.now=sleepers.reduce((d,t)=>d<t.thread.control.waiting.timer?d:t.thread.control.waiting.timer,sleepers[0].thread.control.waiting.timer);
+        events.push({kind:'AdvanceTime',time:String(this.now)});
+        for(const t of sleepers)if(t.thread.control.waiting.timer===this.now)this.commit(t.id,['unit']);
+      }
+    }
     this.events.push(...events);
     return {epoch:String(this.epoch++),task:id,site,after:th.control.kind,depth:String(th.frames.length),events,point,runnable:this.runnable()};
   }
@@ -170,6 +180,8 @@ export class TaskMachine {
         if(!this.options.staleWaiter){const i=list.findIndex(r=>r.task===targetId);list.splice(i,1);}
         events.push({kind:w.receive!==undefined?'ReceiveRemoved':'SendRemoved',task:targetId,channel:ch.id});
         this.stabilize(ch,events);
+      } else if(w.timer!==undefined){
+        events.push({kind:"TimerRemoved",task:targetId,deadline:String(w.timer)});
       } else {
         this.awaits.splice(this.awaits.findIndex(a=>a.waiter===targetId),1);
         events.push({kind:'AwaitRemoved',task:targetId,target:w.await});
@@ -207,7 +219,16 @@ export class TaskMachine {
       return this.block(task,c.node,{await:target.id});
     }
     if(op==='cancel'){this.request(id,v[0].task,events);return th.produce(['unit']);}
-    if(op==='yield'){events.push({kind:'Yield',task:id});return th.produce(['unit']);}
+    if(op==='sleep'){
+      const duration=BigInt(v[0][1]),deadline=this.now+duration;
+      if(duration<0n)return th.trap('InvalidDuration');
+      if(deadline>9223372036854775807n)return th.trap('Overflow');
+      if(duration>0n){
+        events.push({kind:'Sleep',task:id,deadline:String(deadline)});
+        return this.block(task,c.node,{timer:deadline});
+      }
+    }
+    if(op==='yield'||op==='sleep'){events.push({kind:'Yield',task:id});return th.produce(['unit']);}
     if(op==='channel') {
       const ch=this.fresh('channel');this.channels.set(ch,{id:ch,capacity:BigInt(c.metadata),queue:[],closed:false,senders:[],receivers:[]});
       events.push({kind:'Channel',task:id,channel:ch,capacity:c.metadata});return th.produce({channel:ch});
@@ -307,7 +328,7 @@ export class TaskMachine {
 }
 
 // A task outcome as the Outcome value await returns.
-export function outcomeValue(o){return o[0]==='Ok'?['data','Outcome','Ok',o[1]]:o[0]==='Cancelled'?['data','Outcome','Cancelled']:['data','Outcome','Failed',['data','TrapCode',TRAP_NAME[o[1]]]];}
+export function outcomeValue(o){return o[0]==='Ok'?['data','Outcome','Ok',o[1]]:o[0]==='Cancelled'?['data','Outcome','Cancelled']:['data','Outcome','Failed',['data','TrapCode',o[1]]];}
 
 // Run under an explicit schedule: one task ID per step. Stops at the end of the schedule,
 // at a terminal root, at a deadlock or at a choice that is not Runnable (ScheduleDiverged,

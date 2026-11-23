@@ -1,0 +1,10 @@
+\\ > emit "return": 2
+\\ > emit "return": 1
+\\ > outcome: Ok 33
+(effect Wrap (wrap I64 --> I64))
+(define main {I64 --> I64}
+  n -> (handle Wrap
+         ((wrap x k) ->
+           (let result (resume k x)
+             (do (emit "return" x) (+ result (* 10 x)))))
+         (+ (perform Wrap wrap 1) (perform Wrap wrap 2))))

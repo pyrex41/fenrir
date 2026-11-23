@@ -79,6 +79,7 @@
 (define tm.trap-ctor
   overflow -> "Overflow"
   div-zero -> "DivZero"
+  invalid-duration -> "InvalidDuration"
   bounds -> "Bounds"
   child-failed -> "ChildFailed")
 
@@ -106,6 +107,7 @@
 
 \\ Remove the registration of blocked task X, whose control is C: [M Events].
 (define tm.remove-registration
+  M X [wait N [timer D]] -> [M [[timer-removed X D]]]
   M X [wait N [receive Ch]] -> (tm.remove-from M X (tm.chan Ch M) receive)
   M X [wait N [send Ch]] -> (tm.remove-from M X (tm.chan Ch M) send)
   [tm Ts Ss Cs As N] X [wait Node [await Y]] -> [[tm Ts Ss Cs (remove [X Y] As) N] [[await-removed X Y]]]
@@ -180,16 +182,50 @@
 \\ ---------- one step ----------
 
 (define tm.step
-  Prog M Id -> (tm.step-task Prog M (tm.task Id M)))
+  Prog M Id -> (tm.after-step (tm.step-task Prog M (tm.task Id M))))
+
+(define tm.with-clock
+  [tm Ts Ss Cs As [A B C | _]] D -> [tm Ts Ss Cs As [A B C D]])
+
+(define tm.after-step
+  [step [tm Ts Ss Cs As [A B C D]] Site Es Point] ->
+    (let M [tm Ts Ss Cs As [A B C D]]
+      (if (empty? (tm.runnable-in Ts))
+          (tm.advance (tm.earliest Ts none) M Site Es Point)
+          [step M Site Es Point]))
+  R -> R)
+
+(define tm.earliest
+  [] Best -> Best
+  [[task I blocked [wait N [timer D]] | _] | Ts] Best ->
+    (tm.earliest Ts (if (or (= Best none) (< (tc0.i64.compare D Best) 0)) D Best))
+  [_ | Ts] Best -> (tm.earliest Ts Best))
+
+(define tm.advance
+  none M Site Es Point -> [step M Site Es Point]
+  D [tm Ts Ss Cs As [A B C Old]] Site Es Point ->
+    [step [tm (tm.wake-timers Ts D) Ss Cs As [A B C D]] Site (append Es [[advance-time D]]) Point])
+
+(define tm.wake-timers
+  [] D -> []
+  [[task I blocked [wait N [timer D]] E F K O] | Ts] D ->
+    [[task I runnable [pending N [unit]] E F K O] | (tm.wake-timers Ts D)]
+  [T | Ts] D -> [T | (tm.wake-timers Ts D)])
+
+(define tm.sleep
+  M I N [trap R] -> (tm.result (tm.continue M I [unwind R] runnable) [node N ready] [] true)
+  M I N [ok D] -> (tm.result (tm.continue M I [wait N [timer D]] blocked) [node N ready] [[sleep I D]] true))
 
 (define tm.step-task
   Prog M [task I runnable C E F K O] -> (tm.local Prog M [task I runnable C E F K O] C F)
   _ _ _ -> [schedule-error])
 
 (define tm.runtime-op?
-  Op -> (element? Op [spawn await cancel yield channel send receive close]))
+  Op -> (element? Op [spawn await cancel sleep yield channel send receive close]))
 
 (define tm.local
+  _ [tm Ts Ss Cs As [A B C D]] [task I | _] [evaluate [now N] _] _ ->
+    (tm.result (tm.continue [tm Ts Ss Cs As [A B C D]] I [value [int D]] runnable) [node N dispatch] [] false)
   Prog M Task [start Clo] _ -> (if (tm.due? Task) (tm.deliver M Task [machine task-start task-start]) (tm.start Prog M Task Clo))
   Prog M Task [evaluate [scope N Body] _] _ ->
     (if (tm.due? Task) (tm.deliver M Task [node N dispatch]) (tm.enter-scope M Task N Body))
@@ -284,9 +320,9 @@
       (tm.result (tm.put-task [task I S [evaluate (hd (tl Lambda)) true] [[(hd Lambda) [unit]] | Captures] F K O] M) [machine task-start task-start] [] true)))
 
 (define tm.enter-scope
-  [tm Ts Ss Cs As [NT NS NC]] [task I S C E F K O] N Body ->
+  [tm Ts Ss Cs As [NT NS NC | Clock]] [task I S C E F K O] N Body ->
     (let Sid (str NS)
-         M [tm Ts (append Ss [[scope Sid I open none [] false [] false]]) Cs As [NT (+ NS 1) NC]]
+         M [tm Ts (append Ss [[scope Sid I open none [] false [] false]]) Cs As [NT (+ NS 1) NC | Clock]]
       (tm.result (tm.put-task [task I S [evaluate Body true] E [[scope-frame N Sid] | F] K O] M) [node N dispatch] [[scope-enter I Sid]] true)))
 
 \\ ---------- Ready of a runtime operation (section 5) ----------
@@ -312,10 +348,14 @@
   M [task I | _] N cancel _ [[task-handle X]] ->
     (let Result (tm.request M I X)
       (tm.result (tm.continue (hd Result) I [value [unit]] runnable) [node N ready] (hd (tl Result)) true))
+  M [task I | _] N sleep _ [[int "0"]] -> (tm.op M (tm.task I M) N yield none [])
+  [tm Ts Ss Cs As [A B C D]] [task I | _] N sleep _ [[int V]] ->
+    (tm.sleep [tm Ts Ss Cs As [A B C D]] I N
+      (if (< (tc0.i64.compare V "0") 0) [trap invalid-duration] (tc0.arithmetic add [D V])))
   M [task I | _] N yield _ [] -> (tm.result (tm.continue M I [value [unit]] runnable) [node N ready] [[yield I]] true)
-  [tm Ts Ss Cs As [NT NS NC]] [task I | _] N channel Cap [] ->
+  [tm Ts Ss Cs As [NT NS NC | Clock]] [task I | _] N channel Cap [] ->
     (let Ch (str NC)
-         M [tm Ts Ss (append Cs [[chan Ch (tc0.i64.small Cap) [] false [] []]]) As [NT NS (+ NC 1)]]
+         M [tm Ts Ss (append Cs [[chan Ch (tc0.i64.small Cap) [] false [] []]]) As [NT NS (+ NC 1) | Clock]]
       (tm.result (tm.continue M I [value [channel-handle Ch]] runnable) [node N ready] [[channel I Ch Cap]] true))
   M [task I | _] N send _ [[channel-handle Ch] V] -> (tm.send M I N (tm.chan Ch M) V)
   M [task I | _] N receive _ [[channel-handle Ch]] -> (tm.receive M I N (tm.chan Ch M))
@@ -340,12 +380,12 @@
   [_ | Fs] -> (tm.handlers Fs))
 
 (define tm.spawn
-  [tm Ts Ss Cs As [NT NS NC]] I N Clo Frames Owning ->
+  [tm Ts Ss Cs As [NT NS NC | Clock]] I N Clo Frames Owning ->
     (let Child (str NT)
          Implicit (str NS)
          Ss2 (append (tm.replace (tm.add-child (tm.find Owning Ss) Child) Ss) [[scope Implicit Child open none [] false [] false]])
          Ts2 (append Ts [[task Child runnable [start Clo] [] (append (tm.handlers Frames) [[scope-frame implicit Implicit]]) none Owning]])
-         M [tm Ts2 Ss2 Cs As [(+ NT 1) (+ NS 1) NC]]
+         M [tm Ts2 Ss2 Cs As [(+ NT 1) (+ NS 1) NC | Clock]]
       (tm.result (tm.continue M I [value [task-handle Child]] runnable) [node N ready] [[spawn I Child Owning Implicit]] true)))
 
 (define tm.add-child
@@ -505,6 +545,7 @@
   [ready | _] -> "Ready"
   [unwind | _] -> "Unwind"
   [abandon | _] -> "Abandon"
+  [pending | _] -> "Pending"
   [wait | _] -> "Wait"
   [join] -> "Join"
   [terminal] -> "Terminal")

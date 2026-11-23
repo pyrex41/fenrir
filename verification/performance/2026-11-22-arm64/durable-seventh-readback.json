@@ -1,0 +1,68 @@
+{
+  "c": {
+    "store": {
+      "commits": 60000,
+      "tenant_counts": [
+        30000,
+        30000
+      ],
+      "checked_tables": [
+        "tenants",
+        "reports",
+        "jobs",
+        "request_keys"
+      ]
+    },
+    "history": {
+      "tenants": 2,
+      "worker_implementation": "c-native-spt",
+      "schema": "fenrir.service.history/1",
+      "scenario": "paced-commits",
+      "expect": "accepted",
+      "event_count": 60001,
+      "events_sha256": "e5e9d00ba301b4b1c1f83af8261f0380ba6bbfa5dd03195fabce170041a85396"
+    },
+    "verdict": "sustained-at-offered-rate",
+    "p99_us": 953430,
+    "cutoff_outstanding": 0,
+    "timing_sha256": "f4504e8c364638cb492c38a894544b4e3e1e09314c88acff90776a31ca0f8929",
+    "p99_phase_us": {
+      "waiting_previous": 943430,
+      "ready_to_dispatch": 10157,
+      "service": 19549
+    }
+  },
+  "fenrir": {
+    "store": {
+      "commits": 60000,
+      "tenant_counts": [
+        30000,
+        30000
+      ],
+      "checked_tables": [
+        "tenants",
+        "reports",
+        "jobs",
+        "request_keys"
+      ]
+    },
+    "history": {
+      "tenants": 2,
+      "worker_implementation": "fenrir-native-spt",
+      "schema": "fenrir.service.history/1",
+      "scenario": "paced-commits",
+      "expect": "accepted",
+      "event_count": 60001,
+      "events_sha256": "e5e9d00ba301b4b1c1f83af8261f0380ba6bbfa5dd03195fabce170041a85396"
+    },
+    "verdict": "sustained-at-offered-rate",
+    "p99_us": 6759,
+    "cutoff_outstanding": 1,
+    "timing_sha256": "9a668dab3dfe7efad2847d48c0030663fd89388fa6d0218af2279f8ea82f6aa0",
+    "p99_phase_us": {
+      "waiting_previous": 0,
+      "ready_to_dispatch": 2132,
+      "service": 4871
+    }
+  }
+}

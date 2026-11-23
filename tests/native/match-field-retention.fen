@@ -1,0 +1,16 @@
+\\ > outcome: Ok 42
+(datatype Inner (Cell Bytes))
+(datatype Outer (Box Inner))
+
+(define churn {(Tuple I64 Bytes) --> Bytes}
+  n last -> (if (= n 0) last
+    (churn (- n 1) (bytes-concat (if (= n 1) #x01 #x00) #x00))))
+
+(define read-field {Outer --> I64}
+  obj -> (match obj
+    ((Box inner) -> (match inner
+      ((Cell bytes) -> (let scratch (churn 5000 #x00)
+        (+ (bytes-index scratch 0) (bytes-index bytes 0))))))))
+
+(define main {I64 --> I64}
+  i -> (read-field (Box (Cell (bytes-concat (if (= i 0) #x29 #x00) #x00)))))

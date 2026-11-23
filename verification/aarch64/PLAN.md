@@ -130,3 +130,39 @@ All tools are pinned by the flake (`.#aarch64-verification`: Rocq 9.3.0 with
 stdlib V9.2.0, binutils 2.46, qemu-user 11.1.1, Node 22) and one entry point
 runs everything: `sh verification/aarch64/check.sh`. The GitHub workflow runs
 that script under Nix; its remote result has not been observed.
+
+### Native task-runtime checks for ARM-08
+
+On Apple Silicon, run `python3 tests/native/check-scheduler.py NEW_OUTPUT_DIRECTORY`
+with the Solo5 ARM64 SPT toolchain image installed. The runner builds and
+executes each C fixture on Darwin and in an SPT guest. It retains compiler and
+launcher commands, exit statuses, source and binary hashes, and the container
+image ID. Fixtures cover the context switch, collection with suspended
+stacks, handler isolation and inheritance, FIFO yield, completion waits,
+and cancellation of a waiter. The cancel-owned-scopes fixture cancels a parent
+blocked in a nested join and checks that both children terminate before the
+parent. Compiled lexical scopes reserve their own scheduler frame, join on
+success, and abort on a body trap. Run the four tests/native/task-scope*.fen
+fixtures through bin/fenrir test on each target for source-level checks.
+The root task also joins its implicit scope. The implicit-join-roots runtime
+fixture forces collection while the parent holds its return value and checks
+child failure and body-trap precedence. The root-task-result.fen source
+fixture exercises the generated result-type flag with an allocated byte string.
+Compiled spawn, await and cancel now use the FIFO scheduler. The native CLI
+reserves 16 concurrent child stacks of 256 KiB and space for 32 inherited
+handler frames per child. Completed handles keep the outcome in the managed
+heap and release the stack for reuse. Exceeding the slot or handler bound
+at spawn reports TaskLimit. Differential runs cover repeated await,
+cancellation, captured values, copied handlers, child failure, and reusing
+a completed child's stack while an older handle remains reachable.
+Compiled channel creation, send, receive, and close share the FIFO scheduler.
+The native profile supports capacities 1 through 8 and 64 simultaneously
+reachable channels. Managed buffers retain queued objects. The runtime
+collects discarded handles before reporting exhaustion of its channel pool.
+When every remaining task is blocked, the CLI prints the wait graph in task
+ID order and exits with status 1. The native record and replay commands
+reproduce this observable outcome on both targets.
+Run `python3 tests/native/check-dispatch-replay.py NEW_DIRECTORY` to
+compare FIFO and a forced reverse order on both targets. The fixture checks
+both observable event orders, replays both receipts, and rejects unavailable,
+short, and trailing choices. Scheduler refinement remains open.

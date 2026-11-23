@@ -1,0 +1,15 @@
+(define again {I64 --> I64}
+  n -> (if (= n 0) 0
+        (let child (spawn (lambda (_ : Unit) n))
+          (match (await child)
+            ((Ok x) -> (again (- x 1)))
+            (Cancelled -> 1)
+            ((Failed code) -> 2)))))
+
+(define main {I64 --> Bytes}
+  input -> (let old (spawn (lambda (_ : Unit) (bytes-concat (if (= input 0) "a" "x") "b")))
+             (do (await old) (again 32) (cancel old)
+               (match (await old)
+                 ((Ok bytes) -> bytes)
+                 (Cancelled -> "cancelled")
+                 ((Failed code) -> "failed")))))

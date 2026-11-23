@@ -1,0 +1,13 @@
+(library "parent-cell.fen")
+
+(define main {I64 --> (Tuple Bool Bool)}
+  input -> (let shape (/ input 4)
+                bits (- input (* shape 4))
+                first (< 1 bits)
+                second (= (- bits (* 2 (/ bits 2))) 1)
+                child (Pair first)
+                left (Branch child 0)
+                right (if (= shape 0) left
+                        (if (= shape 1) (Branch child 1) (Branch (Pair second) 1)))
+                changed (updated left)
+             (tuple (observed changed) (observed right))))

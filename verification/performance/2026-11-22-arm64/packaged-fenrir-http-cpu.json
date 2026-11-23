@@ -1,0 +1,96 @@
+{
+  "raw_sha256": "c1ca2f8c8fcebb8d2b006cc3853d35c2679c81429afa3ee49ed6b8a452d7b0c0",
+  "scope": "Darwin server process",
+  "minutes": [
+    {
+      "minute": 1,
+      "start_sample_ns": 3431916,
+      "end_sample_ns": 60072683458,
+      "server_cpu_seconds": 100.39,
+      "mean_server_cores": 1.6712377368279345,
+      "completed": 4799996,
+      "end_backlog": 5
+    },
+    {
+      "minute": 2,
+      "start_sample_ns": 60072683458,
+      "end_sample_ns": 120145546708,
+      "server_cpu_seconds": 99.61,
+      "mean_server_cores": 1.65815302635837,
+      "completed": 4800000,
+      "end_backlog": 5
+    },
+    {
+      "minute": 3,
+      "start_sample_ns": 120145546708,
+      "end_sample_ns": 180210290708,
+      "server_cpu_seconds": 101.32,
+      "mean_server_cores": 1.686846446894038,
+      "completed": 4800001,
+      "end_backlog": 5
+    },
+    {
+      "minute": 4,
+      "start_sample_ns": 180210290708,
+      "end_sample_ns": 240271013500,
+      "server_cpu_seconds": 101.77000000000004,
+      "mean_server_cores": 1.6944518025939517,
+      "completed": 4794658,
+      "end_backlog": 5346
+    },
+    {
+      "minute": 5,
+      "start_sample_ns": 240271013500,
+      "end_sample_ns": 300363086083,
+      "server_cpu_seconds": 162.76,
+      "mean_server_cores": 2.708510340947113,
+      "completed": 4675822,
+      "end_backlog": 129526
+    },
+    {
+      "minute": 6,
+      "start_sample_ns": 300363086083,
+      "end_sample_ns": 360445522958,
+      "server_cpu_seconds": 162.89,
+      "mean_server_cores": 2.711108411579386,
+      "completed": 4682849,
+      "end_backlog": 246675
+    },
+    {
+      "minute": 7,
+      "start_sample_ns": 360445522958,
+      "end_sample_ns": 420532922000,
+      "server_cpu_seconds": 162.68999999999994,
+      "mean_server_cores": 2.7075560366039904,
+      "completed": 4653683,
+      "end_backlog": 392994
+    },
+    {
+      "minute": 8,
+      "start_sample_ns": 420532922000,
+      "end_sample_ns": 480627038208,
+      "server_cpu_seconds": 157.93999999999994,
+      "mean_server_cores": 2.62821071289795,
+      "completed": 4552683,
+      "end_backlog": 640311
+    },
+    {
+      "minute": 9,
+      "start_sample_ns": 480627038208,
+      "end_sample_ns": 540770963791,
+      "server_cpu_seconds": 158.69000000000005,
+      "mean_server_cores": 2.638504195756298,
+      "completed": 4569827,
+      "end_backlog": 870482
+    },
+    {
+      "minute": 10,
+      "start_sample_ns": 540770963791,
+      "end_sample_ns": 600855065375,
+      "server_cpu_seconds": 162.28999999999996,
+      "mean_server_cores": 2.701047294068498,
+      "completed": 4690710,
+      "end_backlog": 979771
+    }
+  ]
+}

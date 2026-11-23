@@ -1,0 +1,2 @@
+\\ expect sub/server.decl.fen:1:1 a library may contain functions
+(library "sub/server.decl.fen")

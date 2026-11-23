@@ -1,0 +1,4 @@
+\\ > outcome: Ok 98
+(define main {I64 --> I64}
+  input -> (let bytes (bytes-concat (if (= input 0) "a" "x") "b")
+             (do yield (bytes-index bytes 1))))

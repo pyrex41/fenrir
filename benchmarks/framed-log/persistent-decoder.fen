@@ -1,0 +1,10 @@
+(library "processor.fen")
+
+\\ Snapshot after two records and the first byte of a two-byte payload.
+(define main {I64 --> (Tuple Bool Bool Bool)}
+  input -> (let state (feed (LengthHi 0 Vacant) #x000200030002020700030005)
+                left (feed state #x0b)
+                right (feed state #x0d)
+             (tuple (= (finish state) (Rejected 12))
+                    (= (finish left) (Accepted (Key 0 2 3 19 (Key 2 1 1 7 NoKeys))))
+                    (= (finish right) (Accepted (Key 0 2 3 21 (Key 2 1 1 7 NoKeys)))))))

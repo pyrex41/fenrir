@@ -1,0 +1,113 @@
+#!/bin/sh
+set -eu
+root=$(cd "$(dirname "$0")/.." && pwd)
+solo5_image=${FENRIR_SOLO5_IMAGE:-fenrir-track1-solo5:38e0c348be23-arm64}
+usage() {
+    cat <<'HELP'
+fenrir check SOURCE
+fenrir build --target TARGET SOURCE -o OUTPUT
+fenrir run --target TARGET [--clock virtual|monotonic] SOURCE [I64]
+fenrir test --target TARGET SOURCE...
+fenrir record TARGET IMAGE I64 RECEIPT
+fenrir record-schedule TARGET IMAGE I64 RECEIPT [TASK_IDS_JSON]
+fenrir replay IMAGE RECEIPT
+
+TARGET is macos-arm64 or solo5-arm64-spt.
+HELP
+}
+invalid_usage() { usage >&2; exit 2; }
+case ${1:-} in
+    --help|-h) usage; exit 0 ;;
+    check)
+        [ "$#" -eq 2 ] || invalid_usage
+        export FENRIR_NATIVE_BUILD=1
+        exec sh "$root/frontend/fenrir.sh" check "$2" ;;
+    record|record-schedule|replay) exec python3 "$root/tools/aarch64/native-replay.py" "$@" ;;
+    test)
+        [ "$#" -ge 4 ] && [ "$2" = --target ] || invalid_usage
+        shift 2
+        exec python3 "$root/tools/aarch64/test-programs.py" "$@" ;;
+    run)
+        clock=virtual
+        if [ "${4:-}" = --clock ]; then
+            [ "$#" -ge 6 ] && [ "$2" = --target ] || invalid_usage
+            target=$3
+            clock=$5
+            case "$clock" in virtual|monotonic) ;; *) invalid_usage ;; esac
+            shift 5
+            set -- run --target "$target" "$@"
+        fi
+        { [ "$#" -eq 4 ] || [ "$#" -eq 5 ]; } && [ "$2" = --target ] || invalid_usage
+        target=$3
+        input=${5-0}
+        digits=${input#-}
+        case "$digits" in ''|*[!0-9]*) invalid_usage ;; esac
+        # Strip leading zeros before the length and lexical I64 bounds check.
+        magnitude=${digits#"${digits%%[!0]*}"}
+        limit=9223372036854775807
+        [ "$input" = "$digits" ] || limit=9223372036854775808
+        if [ "${#magnitude}" -gt 19 ] || { [ "${#magnitude}" -eq 19 ] && [ "$magnitude" \> "$limit" ]; }; then
+            echo 'input exceeds signed I64 range' >&2
+            exit 2
+        fi
+        if [ "$input" != "$digits" ] && [ -n "$magnitude" ]; then
+            input=-$magnitude
+        else
+            input=${magnitude:-0}
+        fi
+        if [ "$clock" = monotonic ]; then input=$input!live; fi
+        run_dir=$(mktemp -d)
+        trap 'rm -rf "$run_dir"' EXIT
+        "$root/bin/fenrir" build --target "$target" "$4" -o "$run_dir/image" >&2
+        sh "$root/tools/aarch64/run-image.sh" "$target" "$run_dir" "$input"
+        exit "$?" ;;
+    build)
+        [ "$#" -eq 6 ] && [ "$2" = --target ] && [ "$5" = -o ] || invalid_usage ;;
+    *) invalid_usage ;;
+esac
+target=$3
+case "$target" in macos-arm64|solo5-arm64-spt) ;; *) invalid_usage ;; esac
+src=$4
+out=$6
+[ ! -d "$out" ] || { echo 'output is a directory' >&2; exit 2; }
+if [ -e "$out" ] && [ "$src" -ef "$out" ]; then
+    echo 'source and output must be different files' >&2
+    exit 2
+fi
+# Stage on the output filesystem so only a complete image is published.
+work=$(mktemp -d "$(dirname "$out")/.fenrir-build.XXXXXX")
+work=$(cd "$work" && pwd)
+trap 'rm -rf "$work"' EXIT
+FENRIR_BUILD_INPUTS_DIR="$work" FENRIR_NATIVE_BUILD=1 sh "$root/frontend/fenrir.sh" emit "$src" "$work/artifact"
+if [ -e "$out" ]; then
+    python3 - "$work/inputs.json" "$out" <<'PYTHON'
+import json
+import os
+import sys
+
+with open(sys.argv[1]) as manifest:
+    for source in json.load(manifest):
+        if os.path.samefile(source, sys.argv[2]):
+            sys.exit(f"build output would overwrite source file {source}")
+PYTHON
+fi
+node "$root/tools/aarch64/native-image.mjs" "$target" "$work/artifact" "$work/program.s"
+case "$target" in
+    macos-arm64)
+        set --
+        if grep -q '^_fenrir_task_entry:$' "$work/program.s"; then
+            set -- "$root/runtime/native/task-entry.c" "$root/runtime/native/scheduler.c" "$root/runtime/native/context.S"
+        fi
+        clang "$@" -O2 -arch arm64 "$work/program.s" "$root/tools/aarch64/darwin-main.c" "$root/runtime/native/heap.c" "$root/runtime/native/managed.c" -o "$work/image" ;;
+    solo5-arm64-spt)
+        if [ "$(uname -sm)" = 'Linux aarch64' ]; then
+            if [ -n "${FENRIR_SOLO5:-}" ]; then export PATH="$FENRIR_SOLO5/bin:$PATH"; fi
+            sh "$root/tools/aarch64/link-spt.sh" "$work/program.s" "$work/image"
+        else
+            docker run --rm --platform linux/arm64 --user "$(id -u):$(id -g)" \
+              -v "$root/tools/aarch64:/compiler:ro" -v "$root/runtime/native:/runtime:ro" -v "$work:/build" \
+              --entrypoint sh "$solo5_image" \
+              -c 'export FENRIR_NATIVE_RUNTIME=/runtime PATH=/opt/solo5-install/bin:$PATH; exec sh /compiler/link-spt.sh /build/program.s /build/image'
+        fi ;;
+esac
+mv -f "$work/image" "$out"

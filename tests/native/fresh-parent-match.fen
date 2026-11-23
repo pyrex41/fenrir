@@ -1,0 +1,8 @@
+(datatype Cell (Cell I64))
+(datatype Parent (Pair Cell I64))
+(define kept {Cell --> (Tuple Parent Cell)}
+  shared -> (let base (Pair shared 1)
+    (match base ((Pair child k) -> (tuple base shared)))))
+(define main {I64 --> (Tuple Cell (Tuple Parent Cell))}
+  n -> (let shared (Cell n) base (Pair shared n)
+    (match base ((Pair child k) -> (tuple child (kept shared))))))

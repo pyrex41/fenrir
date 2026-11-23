@@ -1,0 +1,179 @@
+[
+  {
+    "sample": "0-c-2000.json",
+    "sha256": "e4c52d6607df92435696feb03a30fc284c80c2dcc7089ee07a55e76378a89341",
+    "scheduled": 1200000,
+    "valid": 1200000,
+    "connections": 16,
+    "p99_ns": 2185542,
+    "slowest": {
+      "Index": 689608,
+      "Lane": 8,
+      "ElapsedNs": 49229042,
+      "PreviousRequestNs": 0,
+      "DispatchNs": 75625,
+      "FetchNs": 49153417
+    },
+    "lane_origin": {
+      "Index": 689608,
+      "Lane": 8,
+      "ElapsedNs": 49229042,
+      "PreviousRequestNs": 0,
+      "DispatchNs": 75625,
+      "FetchNs": 49153417,
+      "Valid": true
+    },
+    "episodes": [],
+    "final_backlog": 0
+  },
+  {
+    "sample": "0-fenrir-2000.json",
+    "sha256": "e91e208bfdcfcdd96e266435a312230b4b2ba56dc19038ca391ad6b52b9a2bb0",
+    "scheduled": 1200000,
+    "valid": 1200000,
+    "connections": 16,
+    "p99_ns": 2743837500,
+    "slowest": {
+      "Index": 336553,
+      "Lane": 9,
+      "ElapsedNs": 3356261250,
+      "PreviousRequestNs": 3179831833,
+      "DispatchNs": 250,
+      "FetchNs": 176429167
+    },
+    "lane_origin": {
+      "Index": 319593,
+      "Lane": 9,
+      "ElapsedNs": 106558958,
+      "PreviousRequestNs": 0,
+      "DispatchNs": 105958,
+      "FetchNs": 106453000,
+      "Valid": true
+    },
+    "episodes": [
+      {
+        "start_second": 27,
+        "end_second": 27,
+        "samples": 1,
+        "peak": 40
+      },
+      {
+        "start_second": 39,
+        "end_second": 39,
+        "samples": 1,
+        "peak": 72
+      },
+      {
+        "start_second": 65,
+        "end_second": 65,
+        "samples": 1,
+        "peak": 95
+      },
+      {
+        "start_second": 118,
+        "end_second": 118,
+        "samples": 1,
+        "peak": 19
+      },
+      {
+        "start_second": 123,
+        "end_second": 123,
+        "samples": 1,
+        "peak": 53
+      },
+      {
+        "start_second": 133,
+        "end_second": 133,
+        "samples": 1,
+        "peak": 372
+      },
+      {
+        "start_second": 141,
+        "end_second": 141,
+        "samples": 1,
+        "peak": 49
+      },
+      {
+        "start_second": 160,
+        "end_second": 179,
+        "samples": 20,
+        "peak": 6382
+      }
+    ],
+    "final_backlog": 0
+  },
+  {
+    "sample": "2-c-2000.json",
+    "sha256": "ea6905f7a36fab02f1b332410ceedafa3c187bffdc8cdf824cd25fd023c6ff98",
+    "scheduled": 1200000,
+    "valid": 1200000,
+    "connections": 16,
+    "p99_ns": 3594834,
+    "slowest": {
+      "Index": 984518,
+      "Lane": 6,
+      "ElapsedNs": 257246375,
+      "PreviousRequestNs": 193476500,
+      "DispatchNs": 542,
+      "FetchNs": 63769333
+    },
+    "lane_origin": {
+      "Index": 984422,
+      "Lane": 6,
+      "ElapsedNs": 17366542,
+      "PreviousRequestNs": 0,
+      "DispatchNs": 45209,
+      "FetchNs": 17321333,
+      "Valid": true
+    },
+    "episodes": [
+      {
+        "start_second": 286,
+        "end_second": 286,
+        "samples": 1,
+        "peak": 105
+      },
+      {
+        "start_second": 491,
+        "end_second": 492,
+        "samples": 2,
+        "peak": 21
+      }
+    ],
+    "final_backlog": 0
+  },
+  {
+    "sample": "2-fenrir-2000.json",
+    "sha256": "d678659e3c04d002f243ecd964ffce54386c90f87c7ae6fc5f54399837020cb3",
+    "scheduled": 1200000,
+    "valid": 1200000,
+    "connections": 16,
+    "p99_ns": 1690708,
+    "slowest": {
+      "Index": 1010683,
+      "Lane": 11,
+      "ElapsedNs": 454974000,
+      "PreviousRequestNs": 433352458,
+      "DispatchNs": 750,
+      "FetchNs": 21620792
+    },
+    "lane_origin": {
+      "Index": 1010443,
+      "Lane": 11,
+      "ElapsedNs": 27263750,
+      "PreviousRequestNs": 0,
+      "DispatchNs": 32125,
+      "FetchNs": 27231625,
+      "Valid": true
+    },
+    "episodes": [
+      {
+        "start_second": 506,
+        "end_second": 506,
+        "samples": 1,
+        "peak": 336
+      }
+    ],
+    "final_backlog": 0
+  }
+]

@@ -1,0 +1,2 @@
+(library "inc.decl.fen")
+(define twice {I64 --> I64} x -> (+ (inc x) (inc x)))

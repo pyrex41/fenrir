@@ -1,0 +1,42 @@
+{
+  "source_sha256": "cc2fec12ef4b3d819f0c2bc16bb3565e0706c934855fd23d58b649bb909b45d4",
+  "threshold_ns": 33554432,
+  "trials": {
+    "fenrir": {
+      "valid": 1800000,
+      "phase_counts_at_or_above_threshold": {
+        "PreviousRequest": 23846,
+        "Dispatch": 5,
+        "Fetch": 1187
+      },
+      "median_ns": 247001,
+      "p99_ns": 49553542,
+      "slowest": {
+        "Index": 41919,
+        "Lane": 15,
+        "ElapsedNs": 150008834,
+        "PreviousRequestNs": 144649084,
+        "DispatchNs": 291,
+        "FetchNs": 5359459
+      }
+    },
+    "c": {
+      "valid": 1800000,
+      "phase_counts_at_or_above_threshold": {
+        "PreviousRequest": 23391,
+        "Dispatch": 0,
+        "Fetch": 774
+      },
+      "median_ns": 245667,
+      "p99_ns": 50116167,
+      "slowest": {
+        "Index": 476561,
+        "Lane": 1,
+        "ElapsedNs": 376924584,
+        "PreviousRequestNs": 369213876,
+        "DispatchNs": 333,
+        "FetchNs": 7710375
+      }
+    }
+  }
+}

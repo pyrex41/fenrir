@@ -1,0 +1,8 @@
+{
+  "tenant_key_counts": {
+    "0": 60000,
+    "1": 60000
+  },
+  "submit_lookup_entries_examined": 3599940000,
+  "scope": "Derived from recorded fresh submissions and the linear svc.lookup used by svc.submit. Excludes property checks."
+}

@@ -1,0 +1,62 @@
+{
+  "archives_sha256": {
+    "retained-durable-spt-100-first.tar.gz": "aadacfa039b7d5a1f65fbfc453d0c43230683001d7d0cbb84fc8c2b297e04a84",
+    "durable-mac-five-ten-minute.tar.gz": "785d120c4c0ffe07b25aa187e4d6e8d8311ec79025586255857b0be2601c5276"
+  },
+  "histories": [
+    {
+      "tenants": 2,
+      "worker_implementation": "fenrir-native-spt",
+      "schema": "fenrir.service.history/1",
+      "scenario": "paced-commits",
+      "expect": "accepted",
+      "event_count": 60001,
+      "events_sha256": "e5e9d00ba301b4b1c1f83af8261f0380ba6bbfa5dd03195fabce170041a85396"
+    },
+    {
+      "tenants": 2,
+      "worker_implementation": "elixir",
+      "schema": "fenrir.service.history/1",
+      "scenario": "paced-commits",
+      "expect": "accepted",
+      "event_count": 60001,
+      "events_sha256": "e5e9d00ba301b4b1c1f83af8261f0380ba6bbfa5dd03195fabce170041a85396"
+    },
+    {
+      "tenants": 2,
+      "worker_implementation": "erlang",
+      "schema": "fenrir.service.history/1",
+      "scenario": "paced-commits",
+      "expect": "accepted",
+      "event_count": 60001,
+      "events_sha256": "e5e9d00ba301b4b1c1f83af8261f0380ba6bbfa5dd03195fabce170041a85396"
+    },
+    {
+      "tenants": 2,
+      "worker_implementation": "fenrir-native-mac",
+      "schema": "fenrir.service.history/1",
+      "scenario": "paced-commits",
+      "expect": "accepted",
+      "event_count": 60001,
+      "events_sha256": "e5e9d00ba301b4b1c1f83af8261f0380ba6bbfa5dd03195fabce170041a85396"
+    },
+    {
+      "tenants": 2,
+      "worker_implementation": "nim",
+      "schema": "fenrir.service.history/1",
+      "scenario": "paced-commits",
+      "expect": "accepted",
+      "event_count": 60001,
+      "events_sha256": "e5e9d00ba301b4b1c1f83af8261f0380ba6bbfa5dd03195fabce170041a85396"
+    },
+    {
+      "tenants": 2,
+      "worker_implementation": "rust",
+      "schema": "fenrir.service.history/1",
+      "scenario": "paced-commits",
+      "expect": "accepted",
+      "event_count": 60001,
+      "events_sha256": "e5e9d00ba301b4b1c1f83af8261f0380ba6bbfa5dd03195fabce170041a85396"
+    }
+  ]
+}

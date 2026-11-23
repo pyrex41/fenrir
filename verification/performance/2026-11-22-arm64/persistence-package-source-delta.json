@@ -1,0 +1,41 @@
+{
+  "old_package": "/nix/store/rl8m9lsw0qckh0y5c9gr3z91mzcrq89s-fenrir-0.1-dev",
+  "new_package": "/nix/store/z425j7lirjywvm70bdpa8d46b2j3m4dg-fenrir-0.1-dev",
+  "old_files": 840,
+  "new_files": 841,
+  "changed_sha256": {
+    "benchmarks/framed-log/persistent-counts.fen": [
+      null,
+      "b027b4fed2b9831245779092bc915cbef616fbd3f46d8a2fc41410138a58cf13"
+    ],
+    "tests/native/check-package-apps.sh": [
+      "c246d93d436687e66d274318b9138564ba96ef6b8c150bdd09c16836a547fa53",
+      "982b66b38015721ea89d1b87ac49b7364996e1c094d8661782589302f055f9b7"
+    ]
+  },
+  "identical_rebuilt_artifacts_and_prover_outputs": {
+    "stream-mac": "f338023a6b2db124053020ef9c11b6cf7c931b91cb7a83172739f4b29aef5df9",
+    "stream-spt": "80fb7ebaa02ec28c7f72cd6b822105b6a84109c36021f27d439ae5cfbf4fea5c",
+    "http-mac": "adabab32d9142e03d5269612d9b29af717f98fcd80eb03ae62a5e0ff0930a11f",
+    "http-spt/http.spt": "1cc76ace60af704984c60ef2a72e7c0ed2df634b2a76aad25a8bef3395d3e12c",
+    "http-spt/ingress": "4474b4c968c86a25691c46a2a333cfb286ed4f918b4b249bd4063a6673d962b5",
+    "search-macos-arm64.log": "f22995d66531175a51f47259f92cd78a8a36154e173b36bf90863ebbbeea245a",
+    "search-solo5-arm64-spt.log": "f22995d66531175a51f47259f92cd78a8a36154e173b36bf90863ebbbeea245a",
+    "prefix-macos-arm64.log": "9f3743076c2f607e9059fba704f240875bdd781eadc156eadb074b0679f398b5",
+    "prefix-solo5-arm64-spt.log": "211f691a30240eea659636d046d04dcf35e6575ae5d61fbb2ba1d155d6c6fdf7",
+    "check-macos-arm64.log": "d33344ade50380bbf4000948a0d4c5bf1993a59b7b176dc5feb01035eea85f09",
+    "check-solo5-arm64-spt.log": "d33344ade50380bbf4000948a0d4c5bf1993a59b7b176dc5feb01035eea85f09"
+  },
+  "identical_solo5_prover_kernels": {
+    "search": {
+      "artifact": "553209bdd9cbd16cafc1059deb4e776605872fc0f1f3883f07825a3e06056ce0",
+      "program.s": "a4e562193a3c01198a39c91dd8e197dee3d9d285f5f4dcd7174d6504062014ce",
+      "program.spt": "e3c4067ad81843ea07db806b4faa47df05308dc7af172788b696631bd3ecb4e2"
+    },
+    "check": {
+      "artifact": "59c02fc47a571a616565bc0fb6905ecfc9a3aad2e5561e0ec87fd836880a3863",
+      "program.s": "199e0383f07c649446d285411b11ce5015110012f6fb8de256df333a0fa0bdea",
+      "program.spt": "307a52b8ed2644040c71e7a0e7184f6b2449acd1d131f259452e68eeff1f8ede"
+    }
+  }
+}

@@ -1,0 +1,4 @@
+(define main {I64 --> I64}
+  input -> (let c (channel I64 1)
+             (scope (let child (spawn (lambda (_ : Unit) (do (send c 1) (send c 2) 3)))
+                      4))))

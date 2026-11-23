@@ -1,0 +1,12 @@
+\\ > outcome: Ok 87654321
+(define pack {(Tuple I64 I64 I64 I64 I64 I64 I64 Bytes) --> I64}
+  a b c d e f g bytes ->
+    (+ a (+ (* b 10) (+ (* c 100) (+ (* d 1000)
+      (+ (* e 10000) (+ (* f 100000) (+ (* g 1000000)
+        (* (bytes-index bytes 0) 10000000)))))))))
+
+(define rotate {(Tuple Bytes I64 I64 I64 I64 I64 I64 I64) --> I64}
+  bytes g f e d c b a -> (pack a b c d e f g bytes))
+
+(define main {I64 --> I64}
+  input -> (rotate (bytes-concat #x08 #x00) 7 6 5 4 3 2 (+ input 1)))

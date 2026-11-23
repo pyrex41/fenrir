@@ -1,0 +1,11 @@
+\\ > outcome: Ok 42
+(datatype Record (Entry Bytes Bytes) Empty)
+
+(define reader {Record --> (I64 --> I64)}
+  record -> (match record
+    ((Entry unused bytes) -> (lambda (i : I64) (bytes-index bytes i)))
+    (Empty -> (lambda (i : I64) i))))
+
+(define main {I64 --> I64}
+  i -> (let read (reader (Entry #xff (bytes-concat #x2a #x00)))
+         (read i)))

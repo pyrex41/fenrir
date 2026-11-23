@@ -230,6 +230,9 @@ response_integrity() ->
         {delivered, _} = Deliver(3),
         {{accepted, [1, 4, 1, 0, 0]}, _} = Submit(4, 1),
         {{conflict, 1, 5}, _} = Submit(5, 1),
+        {{accepted, [1, 4, 1, 0, 0]}, _} = Submit(4, 1),
+        ok = fenrir_front:respond({accepted, [1, 4, 1, 0, 0]}),
+        not_in_outbox = fenrir_front:respond({accepted, [1, 4.0, 1, 0, 0]}),
         [{accepted, [1, 4, 1, 0, 0]}, {conflict, 1, 5}] = fenrir_front:outbox(),
         true
     after
@@ -339,7 +342,7 @@ measured_commit_io(C, Mutant) ->
         {W1 - W0, S1 - S0}
     end).
 
-%% Exercise the real SQLite port fault, without making a guest or history claim.
+%% Project observed store operations to model events. The test restarts the store directly.
 lost_commit_ack(C) ->
     Db = filename:join([maps:get(out, C), "unit", "lost-ack.db"]),
     fenrir_drive:fresh_db(Db),
@@ -366,6 +369,36 @@ lost_commit_ack(C) ->
             {reply, {data, <<"Reply">>, <<"Recorded">>, [{int, 1}, Receipt]}} = commit(0, Tx),
             Receipt = receipt(0, 1, 1, 0, 0),
             Snapshot = fenrir_store:snapshot(),
+            Finish = tx(0, pending(0), [w(<<"Finish">>, [i(0), {bool, true}])]),
+            Applied = reply(<<"Applied">>),
+            Applied = commit(0, Finish),
+            Drained = [[[[0, 1]], [[0, 0, <<"done">>]], [[1, 1, [0, 1, 1, 0, 0]]], 1],
+                       [[], [], [], 0]],
+            Drained = fenrir_store:snapshot(),
+            Skipped = reply(<<"Skipped">>),
+            Skipped = commit(0, Finish),
+            Drained = fenrir_store:snapshot(),
+            Evidence = #{schema => <<"fenrir.store-recovery/1">>,
+                         lost_ack_exit => 137, recovered => Snapshot,
+                         retry_receipt => json:decode(fenrir_value:encode(Receipt)),
+                         drained => Drained, duplicate_finish => <<"Skipped">>},
+            ok = file:write_file(filename:join(maps:get(out, C), "store-recovery.json"),
+                                 json:encode(Evidence)),
+            {data, <<"Receipt">>, <<"Receipt">>, Fields} = Receipt,
+            ReceiptFields = [N || {int, N} <- Fields],
+            History = #{schema => <<"fenrir.service.history/1">>, tenants => 2,
+                        scenario => <<"sqlite-port-lost-ack-store-restart">>,
+                        expect => <<"accepted">>,
+                        events => [[<<"submit">>, 0, 1, 1, [<<"indeterminate">>]],
+                                   [<<"observe">>, Snapshot],
+                                   [<<"submit">>, 0, 1, 1, [<<"accepted">>, ReceiptFields]],
+                                   [<<"observe">>, Snapshot],
+                                   [<<"complete">>, 0, 0, true, [<<"delivered">>]],
+                                   [<<"observe">>, Drained],
+                                   [<<"complete">>, 0, 0, true, [<<"delivered">>]],
+                                   [<<"observe">>, Drained]]},
+            ok = file:write_file(filename:join(maps:get(out, C), "store-history.json"),
+                                 json:encode(History)),
             true
         after
             exit(Second, shutdown),

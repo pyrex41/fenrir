@@ -1,0 +1,12 @@
+\\ > emit "first": 0
+\\ > outcome: Trap DivZero
+(define rotate {(Tuple I64 I64 Bytes) --> I64}
+  left right bytes ->
+    (if (= right 0)
+      (rotate (do (emit "first" right) right)
+              (/ left right)
+              (do (emit "third" left) bytes))
+      (bytes-index bytes right)))
+(define main {I64 --> I64}
+  n -> (rotate 7 n "x"))
+\\ native trap-site: 7:15

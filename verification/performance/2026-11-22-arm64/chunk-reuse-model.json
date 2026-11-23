@@ -1,0 +1,49 @@
+{
+  "checked": {
+    "states": 10194,
+    "trace": null
+  },
+  "parent-only": {
+    "states": 20,
+    "trace": [
+      "shared-parent",
+      "update 0",
+      "update 1"
+    ],
+    "observation": "current",
+    "expected": [
+      1,
+      1,
+      0,
+      0
+    ],
+    "actual": [
+      1,
+      1,
+      1,
+      1
+    ]
+  },
+  "keep-bits": {
+    "states": 111,
+    "trace": [
+      "shared-parent",
+      "update 0",
+      "publish and resume 0",
+      "update 0"
+    ],
+    "observation": "snapshot 0",
+    "expected": [
+      1,
+      0,
+      0,
+      0
+    ],
+    "actual": [
+      2,
+      0,
+      0,
+      0
+    ]
+  }
+}

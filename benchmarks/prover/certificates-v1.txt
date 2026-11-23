@@ -1,0 +1,6 @@
+identity ssx
+excluded-middle sssx
+modus-ponens ssssbxx
+distribution ssssbbbsxsxbsxsxbbsxsxbssxssx
+transitivity sssbbssxssxbsssxsssx
+peirce sbssxsx

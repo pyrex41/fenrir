@@ -1,0 +1,7 @@
+(define main {I64 --> I64}
+  input -> (let child (spawn (lambda (_ : Unit) (do yield yield 42)))
+             (do (cancel child)
+                 (match (await child)
+                   ((Ok r) -> r)
+                   (Cancelled -> 17)
+                   ((Failed code) -> 0)))))

@@ -19,6 +19,7 @@
  *                                executed, 5 after the n-th successful COMMIT before its
  *                                answer, 0 disarm every fault; answer 'K'.
  *   'W'                          answer 'R' with the write and fsync counters since open
+ *   'P'                          enable VFS timing and return cumulative write/sync ns
  *   'C'                          close and exit 0
  * Values: 'n' | 'i' i64(BE) | 't' u32 n bytes | 'b' u32 n bytes.
  * Answers: 'K' | 'R' u32 rows u16 cols value* | 'X' i32 primary i32 extended u32 n message.
@@ -31,6 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 #include <sqlite3.h>
 
 /* ---------- framing ---------- */
@@ -78,6 +80,13 @@ static void out_send(void) {
 
 static long fault_write = -1, fault_sync = -1, fault_after_stmt = -1, fault_before_stmt = -1, fault_after_commit = -1;
 static unsigned long writes, syncs;
+static int profile_vfs;
+static uint64_t write_ns, sync_ns;
+static uint64_t monotonic_ns(void) {
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) _exit(2);
+    return (uint64_t)now.tv_sec * 1000000000u + (uint64_t)now.tv_nsec;
+}
 static void die(void) { kill(getpid(), SIGKILL); _exit(9); }
 
 /* ---------- the "fenrir" VFS: the default unix VFS, with counted writes and syncs ---------- */
@@ -92,13 +101,21 @@ static int s_read(sqlite3_file *f, void *b, int n, sqlite3_int64 o) { return REA
 static int s_write(sqlite3_file *f, const void *b, int n, sqlite3_int64 o) {
     writes++;
     if (fault_write > 0 && --fault_write == 0) die();
-    return REAL(f)->pMethods->xWrite(REAL(f), b, n, o);
+    if (!profile_vfs) return REAL(f)->pMethods->xWrite(REAL(f), b, n, o);
+    uint64_t start = monotonic_ns();
+    int rc = REAL(f)->pMethods->xWrite(REAL(f), b, n, o);
+    write_ns += monotonic_ns() - start;
+    return rc;
 }
 static int s_truncate(sqlite3_file *f, sqlite3_int64 s) { return REAL(f)->pMethods->xTruncate(REAL(f), s); }
 static int s_sync(sqlite3_file *f, int fl) {
     syncs++;
     if (fault_sync > 0 && --fault_sync == 0) die();
-    return REAL(f)->pMethods->xSync(REAL(f), fl);
+    if (!profile_vfs) return REAL(f)->pMethods->xSync(REAL(f), fl);
+    uint64_t start = monotonic_ns();
+    int rc = REAL(f)->pMethods->xSync(REAL(f), fl);
+    sync_ns += monotonic_ns() - start;
+    return rc;
 }
 static int s_size(sqlite3_file *f, sqlite3_int64 *s) { return REAL(f)->pMethods->xFileSize(REAL(f), s); }
 static int s_lock(sqlite3_file *f, int l) { return REAL(f)->pMethods->xLock(REAL(f), l); }
@@ -256,6 +273,14 @@ int main(void) {
             answer_ok();
             break;
         }
+        case 'P':
+            if (!db || req_n != 1) _exit(2);
+            profile_vfs = 1;
+            out_reset(); out_u8('R'); out_u32(1); out_u16(2);
+            out_u8('i'); out_i64((int64_t)write_ns);
+            out_u8('i'); out_i64((int64_t)sync_ns);
+            out_send();
+            break;
         case 'W': out_reset(); out_u8('R'); out_u32(1); out_u16(2); out_u8('i'); out_i64((int64_t)writes); out_u8('i'); out_i64((int64_t)syncs); out_send(); break;
         case 'C': if (db) sqlite3_close(db); return 0;
         default: _exit(2);

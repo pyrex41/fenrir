@@ -1,0 +1,13 @@
+\\ > outcome: Ok 127
+(datatype Selection Keep (Replace Bytes))
+
+(define select-bytes {(Tuple Selection Bytes) --> Bytes}
+  choice original -> (match choice
+    (Keep -> original)
+    ((Replace value) -> (bytes-concat value #x00))))
+
+(define main {I64 --> I64}
+  i -> (let original (bytes-concat #x2a #x01)
+        (let kept (select-bytes Keep original)
+         (let replaced (select-bytes (Replace #x55) original)
+          (+ (bytes-index kept i) (bytes-index replaced i))))))

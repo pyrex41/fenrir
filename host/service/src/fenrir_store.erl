@@ -21,7 +21,7 @@
 %% equivalent control equivalent_control. `normal` is the adapter.
 -module(fenrir_store).
 -behaviour(gen_server).
--export([start_link/1, commit/2, snapshot/0, pending_jobs/0, port_os_pid/0, arm_port/2, info/0, io_counters/0]).
+-export([start_link/1, commit/2, snapshot/0, pending_jobs/0, port_os_pid/0, arm_port/2, info/0, connection_settings/0, io_counters/0, vfs_time/0, storage_profile/0]).
 -export([maintenance/1, commit_v2/4, handler_in_force/1, routing_phase/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -export([parse_tx/1, schema/0, read_snapshot/2, open_configured/2]).
@@ -39,6 +39,9 @@ pending_jobs() -> gen_server:call(?MODULE, pending_jobs, 60000).
 port_os_pid() -> gen_server:call(?MODULE, port_os_pid).
 arm_port(Kind, N) -> gen_server:call(?MODULE, {arm_port, Kind, N}).
 info() -> gen_server:call(?MODULE, info).
+connection_settings() -> gen_server:call(?MODULE, connection_settings).
+storage_profile() -> gen_server:call(?MODULE, storage_profile).
+vfs_time() -> gen_server:call(?MODULE, vfs_time).
 io_counters() -> gen_server:call(?MODULE, io_counters).
 %% Adapter-only development interface, not exposed by the service node or worker.
 maintenance(Request) ->
@@ -129,7 +132,7 @@ handle_call({commit, Scope, TxValue}, _From, S0 = #{tenants := N}) ->
             %% Use the host tenant for all SQL, after checking the guest's claim.
             {tenant, HostTenant} = Scope,
             S = flush_deferred(S0),
-            {Out, S1} = do_commit({tx, HostTenant, Guard, Writes}, S), reply_or_stop(Out, S1);
+            {Out, S1} = timed_commit({tx, HostTenant, Guard, Writes}, S), reply_or_stop(Out, S1);
         {ok, {tx, T, _, _}} when Scope =:= {tenant, T} ->
             {reply, {reply, reply(<<"Unauthorized">>)}, S0};
         {ok, _} -> {reply, {aborted, unauthorized_scope}, S0};
@@ -205,7 +208,20 @@ handle_call(pending_jobs, _From, S0) ->
     {reply, Jobs, S};
 handle_call(port_os_pid, _From, S) -> {reply, fenrir_sqlite:os_pid(maps:get(port, S)), S};
 handle_call({arm_port, Kind, N}, _From, S) -> {reply, fenrir_sqlite:arm(maps:get(port, S), Kind, N), S};
+handle_call(storage_profile, _From, S) ->
+    Total = maps:get(transaction_ns, S, 0),
+    {reply, {Total, fenrir_sqlite:vfs_time(maps:get(port, S))}, S#{transaction_ns => Total}};
+handle_call(vfs_time, _From, S) -> {reply, fenrir_sqlite:vfs_time(maps:get(port, S)), S};
 handle_call(io_counters, _From, S) -> {reply, fenrir_sqlite:counters(maps:get(port, S)), S};
+handle_call(connection_settings, _From, S = #{port := Port}) ->
+    Settings = [{journal_mode, "PRAGMA journal_mode"}, {synchronous, "PRAGMA synchronous"},
+                {foreign_keys, "PRAGMA foreign_keys"}, {busy_timeout_ms, "PRAGMA busy_timeout"},
+                {sqlite_version, "SELECT sqlite_version()"}],
+    Values = lists:map(fun({Key, Sql}) ->
+        {rows, [[Value]]} = fenrir_sqlite:exec(Port, Sql),
+        {Key, Value}
+    end, Settings),
+    {reply, maps:from_list(Values), S};
 handle_call(info, _From, S) -> {reply, maps:with([tenants, mutant], S), S}.
 
 handle_cast(_, S) -> {noreply, S}.
@@ -596,6 +612,13 @@ maintenance_commit(Port, Result) ->
         throw:{busy, _} -> rollback(Port), busy;
         throw:Why -> rollback(Port), {aborted, Why}
     end.
+
+timed_commit(Tx, S = #{transaction_ns := Total}) ->
+    Start = erlang:monotonic_time(nanosecond),
+    {Out, Next} = do_commit(Tx, S),
+    Elapsed = erlang:monotonic_time(nanosecond) - Start,
+    {Out, Next#{transaction_ns := Total + Elapsed}};
+timed_commit(Tx, S) -> do_commit(Tx, S).
 
 do_commit(Tx, S = #{mutant := respond_before_commit}) -> early_reply(Tx, S);
 do_commit(Tx, S = #{mutant := no_transaction}) -> {run_tx(Tx, S, false), S};

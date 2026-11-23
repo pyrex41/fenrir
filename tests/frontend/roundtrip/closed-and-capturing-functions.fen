@@ -1,0 +1,11 @@
+\\ > outcome: Ok 42
+(define operation {I64 --> (I64 --> I64)}
+  offset -> (if (= offset 0)
+              (lambda (x : I64) (+ x 2))
+              (lambda (x : I64) (+ x offset))))
+
+(define main {I64 --> I64}
+  input -> (let closed (operation 0)
+                first (operation (+ input 10))
+                second (operation (+ input 30))
+             (closed (first (second 0)))))

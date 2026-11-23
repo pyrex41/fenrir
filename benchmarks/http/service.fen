@@ -1,0 +1,15 @@
+(library "router.fen")
+
+(define response {(Tuple Bytes Bool) --> (Tuple I64 Bool I64 I64)}
+  head complete -> (if complete
+    (match (parse-head head)
+      (Bad -> (tuple 400 true 0 0))
+      (Oversized -> (tuple 431 true 0 0))
+      ((Serve route close) -> (match route
+        (Home -> (tuple 200 close 0 0))
+        (Status -> (tuple 200 close -1 0))
+        ((Item start n) -> (tuple 200 close start n))
+        (Missing -> (tuple 404 close 0 0)))))
+    (tuple 431 true 0 0)))
+
+(define main {I64 --> I64} n -> n)

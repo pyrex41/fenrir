@@ -1,0 +1,11 @@
+\\ > outcome: Ok 0
+(define quotient-or-product {I64 --> (Tuple I64 Bool)}
+  n -> (if (< n 0)
+           (tuple (/ n -1) false)
+           (tuple (* n n) true)))
+
+(define main {I64 --> I64}
+  n -> (let pair (quotient-or-product n)
+         (if (project pair 1)
+             (project pair 0)
+             (- 0 (project pair 0)))))

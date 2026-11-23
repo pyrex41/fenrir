@@ -25,7 +25,8 @@ if(!path||rest.length||(flag!==undefined&&flag!=='--with-input')){
 const bytes=readFileSync(path);
 let report;
 try {
-  const {artifact,input,node_count}=validateFrontendArtifact(bytes);
+  const {artifact,input,node_count}=validateFrontendArtifact(bytes,
+    process.env.FENRIR_NATIVE_BUILD === '1' ? {maxNodes:2000} : undefined);
   const canonical=encode(artifact);
   report={status:'valid',nodes:node_count,functions:String(artifact.functions.length),canonical:canonical.equals(bytes),
     sha256:createHash('sha256').update(canonical).digest('hex')};

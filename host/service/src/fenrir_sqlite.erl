@@ -2,7 +2,7 @@
 %% host/service/c_src/fenrir_sqlite_port.c. The caller owns the port (it is linked to
 %% the process that opens it). No storage decision is made here.
 -module(fenrir_sqlite).
--export([open/1, open/2, exec/2, exec/3, arm/3, counters/1, close/1, os_pid/1, port_program/0]).
+-export([open/1, open/2, exec/2, exec/3, arm/3, counters/1, vfs_time/1, close/1, os_pid/1, port_program/0]).
 
 -define(TIMEOUT, 30000).
 
@@ -39,6 +39,10 @@ exec(Port, Sql, Params) ->
 arm(Port, Kind, N) when is_integer(N), N >= 1 ->
     K = case Kind of disarm -> 0; write -> 1; sync -> 2; after_statement -> 3; before_statement -> 4; after_commit -> 5 end,
     call(Port, <<$F, K, N:32>>).
+
+vfs_time(Port) ->
+    {rows, [[WriteNs, SyncNs]]} = call(Port, <<$P>>),
+    {WriteNs, SyncNs}.
 
 counters(Port) ->
     case call(Port, <<$W>>) of

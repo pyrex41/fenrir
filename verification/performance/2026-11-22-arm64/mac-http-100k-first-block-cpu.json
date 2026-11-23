@@ -1,0 +1,32 @@
+{
+  "fenrir": {
+    "source_sha256": "895a1a0f218212dea01f65b0a17db0d1ad1f3dcbb2f3bbcd2001401e200c7bc8",
+    "samples": 77,
+    "median_sampled_cpu_in_cores": {
+      "server_percent": 2.101,
+      "driver_percent": 3.077,
+      "other_processes_percent": 3.7769999999999997
+    },
+    "server_cpu_us_per_completed": 24.52706069351457
+  },
+  "nim": {
+    "source_sha256": "a5c5027cddc71a462f4309fa034016e08becc3475adb762fd7aee506073f059e",
+    "samples": 117,
+    "median_sampled_cpu_in_cores": {
+      "server_percent": 0.9279999999999999,
+      "driver_percent": 1.847,
+      "other_processes_percent": 6.181
+    },
+    "server_cpu_us_per_completed": 19.295901738078577
+  },
+  "rust": {
+    "source_sha256": "dcca4fb904e6eda6c1846156bc36f550071568086dbb950b34c850bebef303db",
+    "samples": 113,
+    "median_sampled_cpu_in_cores": {
+      "server_percent": 1.8430000000000002,
+      "driver_percent": 2.989,
+      "other_processes_percent": 4.005
+    },
+    "server_cpu_us_per_completed": 20.82881701223534
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "fenrir-native-spt": {
+    "history": {
+      "tenants": 2,
+      "worker_implementation": "fenrir-native-spt",
+      "schema": "fenrir.service.history/1",
+      "scenario": "paced-commits",
+      "expect": "accepted",
+      "event_count": 60001,
+      "events_sha256": "e5e9d00ba301b4b1c1f83af8261f0380ba6bbfa5dd03195fabce170041a85396"
+    },
+    "store": {
+      "commits": 60000,
+      "tenant_counts": [
+        30000,
+        30000
+      ],
+      "checked_tables": [
+        "tenants",
+        "reports",
+        "jobs",
+        "request_keys"
+      ]
+    },
+    "p99_us": 5330,
+    "drain_us": 0,
+    "verdict": "sustained-at-offered-rate",
+    "latency": {
+      "acknowledgement_p99_us": 5330,
+      "tail_count": 601,
+      "tail_mean_us": {
+        "acknowledgement": 6834.216306156406,
+        "service": 2731.9301164725457,
+        "waiting_for_previous": 598.8219633943428,
+        "ready_to_dispatch": 3503.4642262895177
+      }
+    },
+    "container": "sha256:ceafa0a174bc9813fc8a40df149a4570b44b498d8c4b3573e39883fab964e8fc",
+    "cpu": "0",
+    "shared": "db01e30962050c003092ce0e020ea73a69f2787062ef12065ecee7def4fa5668  ebin/fenrir_a4_image.beam\n29be8b0ed5d5c384b0aa7dd649057ee74db84ad1a4b792ddda206f946365a0e1  ebin/fenrir_a4_migration.beam\n328929886dee9d71b0b8513a832bb3f36c7f6b1a7857614cc1045df9f4ecafb1  ebin/fenrir_a4_upgrade.beam\nc30a1ea8c6ecd76274176f0ea183d3ccd389035b69a85ba703a1b718170536a4  ebin/fenrir_authority.beam\n01abec2b5d9ba8bc1143f4118ad429d8783c550d885a5c439694cdb46c026035  ebin/fenrir_erlang_reference.beam\nc43897c460f1fc10448fc7a27d1f04995eef3d7eb8529f5d0ac4548141e4c64a  ebin/fenrir_faults.beam\n2e070b9dbacff7c4d7ebe4301ebd9563158d5b14abb1ac040d0d658415ff4885  ebin/fenrir_front.beam\n872dcf47dca72e4334f0a0de17e4dbe7ac9634c0fbf51406235e80d02c81cfa3  ebin/fenrir_holder.beam\nc7fc8ebcb1c05b26b14cd22132afb03c8d5e14f0b8174fa278d9260a7cd5ef4d  ebin/fenrir_manifest.beam\n82a5a41e9e0c76fd7c3d7f2bfafad292bc42f276db13664e9555fa41b57bd17f  ebin/fenrir_node.beam\n15f60f79af4fdc856c3a46e488a287181d22f7b09adfe5a1d1154bf2cb385d28  ebin/fenrir_port_reference.beam\n889b861b757cfc85328c4e5b6f2c2d253a4cf43867b5ca27848e3575ce5d4f9e  ebin/fenrir_proto.beam\nb3563a413a1b932e86c9dc79830123627b348dc357f80f3138c480e82c560870  ebin/fenrir_runner.beam\n2799c7ed5d070c36ac3e36d1602958c067cdda6b484e39e7d9c9ed31714b3be6  ebin/fenrir_service_app.beam\n2165703555f8cec64e466a8f52a2b4551f332c9e6e367363df77025b6f441011  ebin/fenrir_service_sup.beam\n114a8c21933eecdf9024f454b39396e3e92521bb2bab0aa8f6179f93f774cfb6  ebin/fenrir_sqlite.beam\n7cb70eacb099a9b109d09437e45ea16634178947f5317eb37a04ebf578cbd571  ebin/fenrir_store.beam\nbd8fc0138bd9d5411a1fee88d1d84cd03faabab90a3d1a7eba3d6f7261a28c4c  ebin/fenrir_upgrade_state.beam\n9e4f1181a90bb3d0f577deff4d3a610e048ce97d93dcc3ebc5f033c63b066a1f  ebin/fenrir_value.beam\nc203d683cb07ea0c0a70fb86a5b91438824071fdd3121cf774047be7dbce1bbb  ebin/fenrir_worker.beam\n2758d4bc45cb058adbaa31b8940abf8474916aa6074f226bb6249017ad25836a  sqlite-port\n",
+    "sqlite": {
+      "journal_mode": "wal",
+      "synchronous": 2,
+      "foreign_keys": 1,
+      "busy_timeout_ms": 50,
+      "sqlite_version": "3.53.4"
+    }
+  },
+  "c-native-spt": {
+    "history": {
+      "tenants": 2,
+      "worker_implementation": "c-native-spt",
+      "schema": "fenrir.service.history/1",
+      "scenario": "paced-commits",
+      "expect": "accepted",
+      "event_count": 60001,
+      "events_sha256": "e5e9d00ba301b4b1c1f83af8261f0380ba6bbfa5dd03195fabce170041a85396"
+    },
+    "store": {
+      "commits": 60000,
+      "tenant_counts": [
+        30000,
+        30000
+      ],
+      "checked_tables": [
+        "tenants",
+        "reports",
+        "jobs",
+        "request_keys"
+      ]
+    },
+    "p99_us": 15987,
+    "drain_us": 0,
+    "verdict": "sustained-at-offered-rate",
+    "latency": {
+      "acknowledgement_p99_us": 15987,
+      "tail_count": 601,
+      "tail_mean_us": {
+        "acknowledgement": 112211.99667221298,
+        "service": 6996.38768718802,
+        "waiting_for_previous": 100821.35773710483,
+        "ready_to_dispatch": 4394.251247920133
+      }
+    },
+    "container": "sha256:ceafa0a174bc9813fc8a40df149a4570b44b498d8c4b3573e39883fab964e8fc",
+    "cpu": "0",
+    "shared": "db01e30962050c003092ce0e020ea73a69f2787062ef12065ecee7def4fa5668  ebin/fenrir_a4_image.beam\n29be8b0ed5d5c384b0aa7dd649057ee74db84ad1a4b792ddda206f946365a0e1  ebin/fenrir_a4_migration.beam\n328929886dee9d71b0b8513a832bb3f36c7f6b1a7857614cc1045df9f4ecafb1  ebin/fenrir_a4_upgrade.beam\nc30a1ea8c6ecd76274176f0ea183d3ccd389035b69a85ba703a1b718170536a4  ebin/fenrir_authority.beam\n01abec2b5d9ba8bc1143f4118ad429d8783c550d885a5c439694cdb46c026035  ebin/fenrir_erlang_reference.beam\nc43897c460f1fc10448fc7a27d1f04995eef3d7eb8529f5d0ac4548141e4c64a  ebin/fenrir_faults.beam\n2e070b9dbacff7c4d7ebe4301ebd9563158d5b14abb1ac040d0d658415ff4885  ebin/fenrir_front.beam\n872dcf47dca72e4334f0a0de17e4dbe7ac9634c0fbf51406235e80d02c81cfa3  ebin/fenrir_holder.beam\nc7fc8ebcb1c05b26b14cd22132afb03c8d5e14f0b8174fa278d9260a7cd5ef4d  ebin/fenrir_manifest.beam\n82a5a41e9e0c76fd7c3d7f2bfafad292bc42f276db13664e9555fa41b57bd17f  ebin/fenrir_node.beam\n15f60f79af4fdc856c3a46e488a287181d22f7b09adfe5a1d1154bf2cb385d28  ebin/fenrir_port_reference.beam\n889b861b757cfc85328c4e5b6f2c2d253a4cf43867b5ca27848e3575ce5d4f9e  ebin/fenrir_proto.beam\nb3563a413a1b932e86c9dc79830123627b348dc357f80f3138c480e82c560870  ebin/fenrir_runner.beam\n2799c7ed5d070c36ac3e36d1602958c067cdda6b484e39e7d9c9ed31714b3be6  ebin/fenrir_service_app.beam\n2165703555f8cec64e466a8f52a2b4551f332c9e6e367363df77025b6f441011  ebin/fenrir_service_sup.beam\n114a8c21933eecdf9024f454b39396e3e92521bb2bab0aa8f6179f93f774cfb6  ebin/fenrir_sqlite.beam\n7cb70eacb099a9b109d09437e45ea16634178947f5317eb37a04ebf578cbd571  ebin/fenrir_store.beam\nbd8fc0138bd9d5411a1fee88d1d84cd03faabab90a3d1a7eba3d6f7261a28c4c  ebin/fenrir_upgrade_state.beam\n9e4f1181a90bb3d0f577deff4d3a610e048ce97d93dcc3ebc5f033c63b066a1f  ebin/fenrir_value.beam\nc203d683cb07ea0c0a70fb86a5b91438824071fdd3121cf774047be7dbce1bbb  ebin/fenrir_worker.beam\n2758d4bc45cb058adbaa31b8940abf8474916aa6074f226bb6249017ad25836a  sqlite-port\n",
+    "sqlite": {
+      "journal_mode": "wal",
+      "synchronous": 2,
+      "foreign_keys": 1,
+      "busy_timeout_ms": 50,
+      "sqlite_version": "3.53.4"
+    }
+  }
+}

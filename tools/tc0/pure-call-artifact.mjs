@@ -44,9 +44,11 @@ export const TC1_REMOTE_SCHEMA='tc1-handler-demo/3';
 export const TC1_SERVING_SCHEMA='tc1-handler-demo/4';
 export const TC1_DURABLE_SCHEMA='tc1-durable-demo/1';
 export const TC1_TASK_SCHEMA='tc1-task-demo/1';
+export const TC1_TIME_SCHEMA='tc1-time-demo/1';
+export const isTaskSchema=s=>s===TC1_TASK_SCHEMA||s===TC1_TIME_SCHEMA;
 const TASK_RUNTIME_EFFECTS=Object.freeze(['Task','Channel']);
 const TASK_TYPES=Object.freeze(['Task','Channel','Outcome','SendResult','ReceiveResult']);
-const taskResults=t=>t==='SendResult'?[{name:'Sent',fields:[]},{name:'Closed',fields:[]}]
+export const taskResults=t=>t==='SendResult'?[{name:'Sent',fields:[]},{name:'Closed',fields:[]}]
  :Array.isArray(t)&&t[0]==='Outcome'?[{name:'Ok',fields:[t[1]]},{name:'Cancelled',fields:[]},{name:'Failed',fields:['TrapCode']}]
  :Array.isArray(t)&&t[0]==='ReceiveResult'?[{name:'Item',fields:[t[1]]},{name:'End',fields:[]}]:null;
 // The peer's store: the two effects a serving program is given, with their one operation each.
@@ -118,8 +120,8 @@ function probeInput(type,datatypes,maxDepth,maxNodes){
 // The frontend has no real host request at check/emit time. This explicitly
 // selects a typed probe while retaining the same validator, including value checks.
 const DURABLE_INPUT_PROBE=Symbol('durable input probe');
-export function validateFrontendArtifact(bytes){
- return validatePureCallArtifact(bytes,DURABLE_INPUT_PROBE);
+export function validateFrontendArtifact(bytes,limits){
+ return validatePureCallArtifact(bytes,DURABLE_INPUT_PROBE,limits);
 }
 
 // D1 capability manifest, from a validated artifact rather than from a run.
@@ -135,10 +137,11 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
  const a=decode(bytes),serving=a?.schema_version===TC1_SERVING_SCHEMA;
  object(a,serving?['contract_version','schema_version','slice','module','datatypes','effects','functions','serves','source_map']:['contract_version','schema_version','slice','module','datatypes','effects','functions','entry','input_schema','source_map']);
  const remote=serving||a.schema_version===TC1_REMOTE_SCHEMA,durable=a.schema_version===TC1_DURABLE_SCHEMA;
- const tasks=a.schema_version===TC1_TASK_SCHEMA;
+ const timed=a.schema_version===TC1_TIME_SCHEMA, tasks=isTaskSchema(a.schema_version);
+ const runtimeEffects=timed?[...TASK_RUNTIME_EFFECTS,'Time']:TASK_RUNTIME_EFFECTS;
  if(tasks&&(!Number.isSafeInteger(maxCapacity)||maxCapacity<1))throw new TypeError('Invalid cap');
  const resumptions=tasks||remote||durable||a.schema_version===TC1_RESUMPTION_SCHEMA,handlers=resumptions||a.schema_version===TC1_HANDLER_SCHEMA;
- if(handlers?(a.contract_version!=='tc1-draft-1'||a.slice!==(serving?'TC1-P1':remote?'TC1-R1':durable?'TC1-D1':tasks?'TC1-C1':resumptions?'TC1-H2':'TC1-H1')):(a.contract_version!=='0.2'||!PURE_CALL_SCHEMAS.includes(a.schema_version)||a.slice!=='TC0-A'))fail('Identity');text(a.module);
+ if(handlers?(a.contract_version!=='tc1-draft-1'||a.slice!==(serving?'TC1-P1':remote?'TC1-R1':durable?'TC1-D1':timed?'TC1-T1':tasks?'TC1-C1':resumptions?'TC1-H2':'TC1-H1')):(a.contract_version!=='0.2'||!PURE_CALL_SCHEMAS.includes(a.schema_version)||a.slice!=='TC0-A'))fail('Identity');text(a.module);
  const data=handlers||a.schema_version==='tc0-a-pure-call-demo/2';
  if(array(a.effects).length&&!handlers)fail('Effect declarations unsupported');
  if(a.effects.length>8&&durable)fail('Effect count');
@@ -151,7 +154,7 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
  function effects(v){
   array(v);
   if(!handlers){if(v.length>1||(v.length===1&&v[0]!=='Emit'))fail('Effect set');return;}
-  v.forEach((k,i)=>{text(k);if(k!=='Emit'&&!effectNames.has(k)&&!(serving&&Object.hasOwn(STORE_EFFECTS,k))&&!(tasks&&TASK_RUNTIME_EFFECTS.includes(k)))fail('Effect set');if(i&&Buffer.compare(Buffer.from(v[i-1]),Buffer.from(k))>=0)fail('Effect set order');});
+  v.forEach((k,i)=>{text(k);if(k!=='Emit'&&!effectNames.has(k)&&!(serving&&Object.hasOwn(STORE_EFFECTS,k))&&!(tasks&&runtimeEffects.includes(k)))fail('Effect set');if(i&&Buffer.compare(Buffer.from(v[i-1]),Buffer.from(k))>=0)fail('Effect set order');});
  }
  if(array(a.datatypes).length&&!data)fail('Declarations unsupported');
  // Datatype table: closed declarations, unique names, constructors in declared order.
@@ -207,7 +210,7 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
  for(const f of a.functions){object(f,['id','name','parameter_id','argument_type','result_type','effects','body']);fresh(f.id,true);fresh(f.parameter_id);text(f.name);if(functions.has(f.name))fail('Duplicate function name');type(f.argument_type);type(f.result_type);effects(f.effects);functions.set(f.name,f);}
  if(!serving){
   const entry=functions.get(a.entry);if(!entry)fail('Entry');
-  if(entry.effects.some(k=>k!=='Emit'&&!(remote&&declared.get(k)?.class==='remote')&&!(durable&&declared.get(k)?.class==='durable')&&!(tasks&&TASK_RUNTIME_EFFECTS.includes(k))))fail('Entry must handle every user effect');
+  if(entry.effects.some(k=>k!=='Emit'&&!(remote&&declared.get(k)?.class==='remote')&&!(durable&&declared.get(k)?.class==='durable')&&!(tasks&&runtimeEffects.includes(k))))fail('Entry must handle every user effect');
   if(!plain(entry.argument_type)||!plain(entry.result_type))fail('Serializable entry');object(a.input_schema,['type']);if(!same(a.input_schema.type,entry.argument_type))fail('Input schema');
   if(input===DURABLE_INPUT_PROBE){
    input=durable?probeInput(entry.argument_type,datatypes,maxDepth,maxValueNodes):['int','0'];
@@ -304,6 +307,8 @@ export function validatePureCallArtifact(bytes,input,{maxNodes=200,maxDepth=64,m
    arity(1);unsigned(x[0]);const k=env.get(x[0]);if(!Array.isArray(k)||k[0]!=='Resumption')fail('Unknown resumption');
    uses[x[0]]=(uses[x[0]]??0)+1;t='Unit';
   }
+  else if(timed&&tag==='now'){arity(0);t='I64';eff.add('Time');}
+  else if(timed&&tag==='sleep'){arity(1);const duration=v(x[0]);if(duration.type!=='I64')fail('Sleep duration must be I64');t='Unit';eff=union([duration]);eff.add('Time');fv=duration.free;}
   else if(tasks&&['scope','spawn','await','cancel','yield','channel','send','receive','close'].includes(tag)){
    const handle=(row,kind)=>{if(!Array.isArray(row.type)||row.type[0]!==kind)fail(kind+' handle required');return row.type[1];};
    if(tag==='scope'){arity(1);const body=v(x[0]);if(!plain(body.type))fail('A scope result must be serializable');t=body.type;eff=union([body]);eff.add('Task');fv=body.free;}

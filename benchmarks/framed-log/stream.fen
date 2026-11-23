@@ -1,0 +1,23 @@
+(library "processor.fen")
+
+(define main {I64 --> Decoder} input -> (LengthHi 0 Vacant))
+
+(define invalid-offset {Decoder --> I64}
+  state -> (match state
+    ((LengthHi at totals) -> -1)
+    ((LengthLo at hi totals) -> -1)
+    ((ReadKey at size totals) -> -1)
+    ((Payload at key size left sum totals) -> -1)
+    ((Invalid at) -> at)))
+
+(define final-offset {Summary --> I64}
+  result -> (match result ((Accepted totals) -> -1) ((Rejected at) -> at)))
+
+(define summary-keys {Summary --> Totals}
+  result -> (match result ((Accepted totals) -> totals) ((Rejected at) -> NoKeys)))
+
+(define line-bytes {Output --> Bytes}
+  item -> (match item (End -> "") ((Line bytes rest) -> bytes)))
+
+(define remaining-keys {Output --> Totals}
+  item -> (match item (End -> NoKeys) ((Line bytes rest) -> rest)))

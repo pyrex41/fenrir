@@ -1,0 +1,10 @@
+(library "processor.fen")
+
+(define main {I64 --> (Tuple Bool Bool Bool)}
+  input -> (let base (feed (LengthHi 0 Vacant) #x000100000102000100000100)
+                left (feed base #x000100000102000102000102)
+                right (feed base #x000100000102000110000110)
+             (tuple (= (finish base) (Accepted (Key 0 3 0 0 (Key 2 1 0 0 NoKeys))))
+                    (= (finish left) (Accepted (Key 0 4 0 0 (Key 2 4 0 0 NoKeys))))
+                    (= (finish right) (Accepted (Key 0 4 0 0 (Key 2 2 0 0
+                                                    (Key 16 2 0 0 NoKeys))))))))

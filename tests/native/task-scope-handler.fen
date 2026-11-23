@@ -1,0 +1,7 @@
+\\ > emit "clause": 0 (task 0)
+\\ > outcome: Ok 9
+(effect Choose (choose I64 --> I64))
+(define main {I64 --> I64}
+  n -> (handle Choose
+         ((choose x k) -> (do (emit "clause" x) (discontinue k) 9))
+         (scope (+ 10 (perform Choose choose n)))))

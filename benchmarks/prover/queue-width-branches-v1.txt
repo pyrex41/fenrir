@@ -1,0 +1,6 @@
+wide-model-short exhausted 35 | | | | & a b c | a b | | & a b c | a b | | | & a b c | a b | | & a b c | a b
+wide-model-exact model 36 | | | | & a b c | a b | | & a b c | a b | | | & a b c | a b | | & a b c | a b
+wide-model-spare model 37 | | | | & a b c | a b | | & a b c | a b | | | & a b c | a b | | & a b c | a b
+wide-proof-short exhausted 159 | | | | & a b ! a | ! b c | | & a b ! a | ! b c | | | & a b ! a | ! b c | | & a b ! a | ! b c
+wide-proof-exact proof 160 | | | | & a b ! a | ! b c | | & a b ! a | ! b c | | | & a b ! a | ! b c | | & a b ! a | ! b c
+wide-proof-spare proof 161 | | | | & a b ! a | ! b c | | & a b ! a | ! b c | | | & a b ! a | ! b c | | & a b ! a | ! b c

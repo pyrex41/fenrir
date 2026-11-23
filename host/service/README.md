@@ -163,3 +163,75 @@ from before that name the earlier hash.
 | [CONTRACT.md](CONTRACT.md) | the named assumptions and the tests that exercise each |
 | [../../harness/service-history.shen](../../harness/service-history.shen) | the history checker; format [spec/service/HISTORY_FORMAT.md](../../spec/service/HISTORY_FORMAT.md) |
 | [../../tests/host/histories/](../../tests/host/histories) | the checker's negative tests: fabricated histories with their expected verdicts |
+
+### Replaying supervised recovery on Apple Silicon
+
+With the repository's ARM64 Solo5 Docker image and Shen/JIT available, run
+`sh host/service/check-supervised-recovery.sh`. Set `FENRIR_SOLO5_IMAGE` or
+`FENRIR_SHEN_JIT` to select a local Solo5 image or Shen installation.
+The script emits the v1 handler from source, compares its bytes with the
+committed artifact, builds a two-tenant SPT guest and starts the OTP service
+inside ARM64 Linux. It loses the SQLite commit acknowledgement, waits for store
+replacement, kills the worker, retries through ingress and drains one pending
+job with duplicate delivery. The printed evidence directory retains the
+guest descriptor, container ID, supervisor log, model history and verdict.
+Its timing sample measures worker kill to successful retry and runner start
+to observed empty queue. Both intervals include the guest boots they trigger.
+
+Pass `erlang` to `check-supervised-recovery.sh` to substitute the bounded
+Erlang v1 handler for the guest worker under the same worker supervisor. Its
+requests enter through the same authenticated front and commit through the
+same SQLite store. The worker uses OTP messaging directly. This comparison
+therefore includes the cost of the guest boundary in the Fenrir deployment.
+The history identifies the worker implementation.
+
+Pass `elixir` to exercise the independent Elixir GenServer implementation.
+The script verifies the pinned Elixir 1.19.5 / OTP 28 distribution, compiles
+the worker with warnings as errors and places it under the same supervisor.
+The Elixir worker builds its own guarded transaction and interprets the store
+reply for fresh submissions, replay, conflict and completion.
+
+The recovery history also exercises a conflicting submission after restart,
+the same key accepted independently by a second tenant, replay of that
+tenant's receipt, and draining its job. The test compares the first tenant's
+store snapshot before and after the second tenant's work. To compare runs,
+pass their output directories to
+`python3 benchmarks/durable/compare-recovery.py DIR1 DIR2 ...`.
+
+Pass `rust` to run the bounded Rust v1 worker. A supervised Erlang port
+adapter sends the command to a persistent Rust process, decodes its
+transaction and submits it to the shared store under the authenticated scope.
+On a definite store reply, Rust computes the application response. Store
+failures propagate through the same front-end outcome contract. The binary
+uses optimized code with overflow checks; the run retains the compiler
+version. This path includes two port round trips for a successful request.
+
+Pass `nim` to select the Nim implementation over the same persistent packet
+adapter as Rust. Both native references can also be built on the Mac and
+checked with `python3 benchmarks/durable/check-ports.py RUST_BINARY NIM_BINARY`.
+The 72 packet cases cover both tenant IDs, both keys, both digest values,
+both completion flags, and fresh, replayed and conflicting store replies.
+
+### Direct ARM64 accepted-job worker
+
+Run `sh host/service/check-supervised-recovery.sh fenrir-native-spt` on Apple
+Silicon to compile `examples/service/accepted-job.fen` into a persistent SPT
+worker and exercise it against OTP and SQLite. Then run
+`sh benchmarks/durable/native/check-mac-recovery.sh SPT_RUN_DIRECTORY` for
+the macOS executable. The Mac runner relocates the original image descriptor
+and copies its tender for the supervisor's admission checks. The campaign
+then installs the selected native port and runs the service locally.
+
+The compiler binds the typed `Store.commit` application operation to the packet
+adapter. Fenrir constructs the transaction, waits in the native call while OTP
+commits it, and interprets the typed reply. An aborted store operation can leave
+a pending call without a reply. The next command makes that activation unwind
+before starting another. The adapter encodes typed values and freezes the
+command/reply vocabulary to the accepted-job schema. The recovery fixture
+uses two tenants, two keys, two digests and job IDs 0–1.
+
+Both runs write a checked history, a worker image digest and recovery timings.
+The Mac run also records its local OTP version. To compare any set of accepted
+runs, pass their directories to `python3 benchmarks/durable/compare-recovery.py`.
+This campaign exercises lost acknowledgement, process restart, retry, conflict,
+tenant isolation, duplicate delivery and backlog drain at the recorded bounds.

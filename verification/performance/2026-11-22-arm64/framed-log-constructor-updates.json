@@ -1,0 +1,158 @@
+[
+  {
+    "function": "update-pair",
+    "node": "58",
+    "subject": "3",
+    "datatype": "Counts",
+    "constructor": "Pair",
+    "changed": [
+      1,
+      2,
+      3
+    ]
+  },
+  {
+    "function": "update-pair",
+    "node": "72",
+    "subject": "3",
+    "datatype": "Counts",
+    "constructor": "Pair",
+    "changed": [
+      4,
+      5,
+      6
+    ]
+  },
+  {
+    "function": "update-group",
+    "node": "299",
+    "subject": "103",
+    "datatype": "Counts",
+    "constructor": "Branch",
+    "changed": [
+      0
+    ]
+  },
+  {
+    "function": "update-group",
+    "node": "313",
+    "subject": "103",
+    "datatype": "Counts",
+    "constructor": "Branch",
+    "changed": [
+      1
+    ]
+  },
+  {
+    "function": "update-group",
+    "node": "331",
+    "subject": "103",
+    "datatype": "Counts",
+    "constructor": "Branch",
+    "changed": [
+      2
+    ]
+  },
+  {
+    "function": "update-group",
+    "node": "345",
+    "subject": "103",
+    "datatype": "Counts",
+    "constructor": "Branch",
+    "changed": [
+      3
+    ]
+  },
+  {
+    "function": "update-group",
+    "node": "367",
+    "subject": "103",
+    "datatype": "Counts",
+    "constructor": "Branch",
+    "changed": [
+      4
+    ]
+  },
+  {
+    "function": "update-group",
+    "node": "381",
+    "subject": "103",
+    "datatype": "Counts",
+    "constructor": "Branch",
+    "changed": [
+      5
+    ]
+  },
+  {
+    "function": "update-group",
+    "node": "399",
+    "subject": "103",
+    "datatype": "Counts",
+    "constructor": "Branch",
+    "changed": [
+      6
+    ]
+  },
+  {
+    "function": "update-group",
+    "node": "413",
+    "subject": "103",
+    "datatype": "Counts",
+    "constructor": "Branch",
+    "changed": [
+      7
+    ]
+  },
+  {
+    "function": "add-record",
+    "node": "491",
+    "subject": "430",
+    "datatype": "Counts",
+    "constructor": "Group",
+    "changed": [
+      0
+    ]
+  },
+  {
+    "function": "add-record",
+    "node": "501",
+    "subject": "430",
+    "datatype": "Counts",
+    "constructor": "Group",
+    "changed": [
+      1
+    ]
+  },
+  {
+    "function": "add-record",
+    "node": "515",
+    "subject": "430",
+    "datatype": "Counts",
+    "constructor": "Group",
+    "changed": [
+      2
+    ]
+  },
+  {
+    "function": "add-record",
+    "node": "525",
+    "subject": "430",
+    "datatype": "Counts",
+    "constructor": "Group",
+    "changed": [
+      3
+    ]
+  },
+  {
+    "function": "feed-from",
+    "node": "1120",
+    "subject": "963",
+    "datatype": "Decoder",
+    "constructor": "Payload",
+    "changed": [
+      0,
+      3,
+      4
+    ]
+  }
+]

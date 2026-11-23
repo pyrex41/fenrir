@@ -6,3 +6,12 @@ __pycache__/
 .DS_Store
 
 .lia.cache
+
+# Local Nix output links and checkout-root artifacts from the native guide.
+/result
+/result-*
+/campaign-package
+/fenrir-source.tar.gz
+/sum
+/sum.spt
+/sum-run.json

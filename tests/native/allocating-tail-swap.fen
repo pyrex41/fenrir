@@ -1,0 +1,10 @@
+\\ > outcome: Ok 979898
+(define rotate-roots {(Tuple I64 Bytes Bytes Bytes) --> I64}
+  n left right scratch ->
+    (if (= n 0)
+      (+ (* (bytes-index left 0) 10000)
+         (+ (* (bytes-index right 0) 100) (bytes-index scratch 0)))
+      (rotate-roots (- n 1) right left (bytes-concat left right))))
+
+(define main {I64 --> I64}
+  n -> (rotate-roots (+ n 10000) (bytes-concat "a" "x") (bytes-concat "b" "y") ""))

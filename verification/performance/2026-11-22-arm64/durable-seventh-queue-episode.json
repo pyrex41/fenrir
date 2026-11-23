@@ -1,0 +1,124 @@
+{
+  "c": {
+    "origin": {
+      "index": 4943,
+      "scheduled_us": 49430000,
+      "previous_commit_wait_us": 0,
+      "ready_to_dispatch_us": 1071717,
+      "service_us": 1100058,
+      "acknowledgement_us": 2171775
+    },
+    "worst": {
+      "index": 4943,
+      "scheduled_us": 49430000,
+      "previous_commit_wait_us": 0,
+      "ready_to_dispatch_us": 1071717,
+      "service_us": 1100058,
+      "acknowledgement_us": 2171775
+    },
+    "largest_service_in_episode": {
+      "index": 4943,
+      "scheduled_us": 49430000,
+      "previous_commit_wait_us": 0,
+      "ready_to_dispatch_us": 1071717,
+      "service_us": 1100058,
+      "acknowledgement_us": 2171775
+    },
+    "requests_in_episode": 240,
+    "service_over_10ms": 2,
+    "next_clear": {
+      "index": 5183,
+      "scheduled_us": 51830000,
+      "previous_commit_wait_us": 0,
+      "ready_to_dispatch_us": 1650,
+      "service_us": 695,
+      "acknowledgement_us": 2345
+    },
+    "replay": null,
+    "episodes_reaching_p99": 9,
+    "requests_at_or_above_p99": 601,
+    "top_episodes": [
+      {
+        "origin_index": 4943,
+        "tail_requests": 138
+      },
+      {
+        "origin_index": 5455,
+        "tail_requests": 128
+      },
+      {
+        "origin_index": 295,
+        "tail_requests": 104
+      },
+      {
+        "origin_index": 707,
+        "tail_requests": 89
+      },
+      {
+        "origin_index": 933,
+        "tail_requests": 77
+      }
+    ]
+  },
+  "fenrir": {
+    "origin": {
+      "index": 57515,
+      "scheduled_us": 575150000,
+      "previous_commit_wait_us": 0,
+      "ready_to_dispatch_us": 8879,
+      "service_us": 48515,
+      "acknowledgement_us": 57394
+    },
+    "worst": {
+      "index": 57515,
+      "scheduled_us": 575150000,
+      "previous_commit_wait_us": 0,
+      "ready_to_dispatch_us": 8879,
+      "service_us": 48515,
+      "acknowledgement_us": 57394
+    },
+    "largest_service_in_episode": {
+      "index": 57515,
+      "scheduled_us": 575150000,
+      "previous_commit_wait_us": 0,
+      "ready_to_dispatch_us": 8879,
+      "service_us": 48515,
+      "acknowledgement_us": 57394
+    },
+    "requests_in_episode": 7,
+    "service_over_10ms": 1,
+    "next_clear": {
+      "index": 57522,
+      "scheduled_us": 575220000,
+      "previous_commit_wait_us": 0,
+      "ready_to_dispatch_us": 696,
+      "service_us": 753,
+      "acknowledgement_us": 1449
+    },
+    "replay": "accepted",
+    "episodes_reaching_p99": 523,
+    "requests_at_or_above_p99": 602,
+    "top_episodes": [
+      {
+        "origin_index": 57515,
+        "tail_requests": 6
+      },
+      {
+        "origin_index": 42948,
+        "tail_requests": 5
+      },
+      {
+        "origin_index": 38518,
+        "tail_requests": 4
+      },
+      {
+        "origin_index": 24982,
+        "tail_requests": 3
+      },
+      {
+        "origin_index": 25724,
+        "tail_requests": 3
+      }
+    ]
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "archive": "packaged-http-rust-two-rates.tar.gz",
+  "archive_sha256": "a6ff44aeae6c5fc20ba07ffdd3cabea3f8c1ad61ddb81183b04effaeab3288ea",
+  "trials": [
+    {
+      "source": "sweep/0-rust-80000.json",
+      "sha256": "3b9fae71ddb00ba6b427aa547e47b3c86a81a65470b97ccd46c02a8e6af961b7",
+      "rate": 80000,
+      "first_second_backlog": 2782,
+      "cutoff_backlog": 1579462,
+      "completed_at_cutoff": 46420538,
+      "completed_per_second_during_offer": 77367.5581271414,
+      "completed_after_cutoff": 383663,
+      "elapsed_after_cutoff_seconds": 5.000220708,
+      "missed_after_drain": 1195799,
+      "per_minute_completion_rates": [
+        77927.8,
+        77889.8,
+        77742.1,
+        77809.7,
+        76604.4,
+        77173.3,
+        77203.5,
+        77151.1,
+        77103.1,
+        77070.7
+      ]
+    },
+    {
+      "source": "sweep/1-rust-100000.json",
+      "sha256": "446abd8f743879d60379dd113a385d8a0a5fcaacc1dfbf3edc0f155f33611598",
+      "rate": 100000,
+      "first_second_backlog": 23405,
+      "cutoff_backlog": 14241910,
+      "completed_at_cutoff": 45758090,
+      "completed_per_second_during_offer": 76263.48304200683,
+      "completed_after_cutoff": 387125,
+      "elapsed_after_cutoff_seconds": 5.000260792,
+      "missed_after_drain": 13854785,
+      "per_minute_completion_rates": [
+        77112.8,
+        77077.6,
+        77092.4,
+        76644.5,
+        77014.6,
+        77095.5,
+        77125.2,
+        75250.5,
+        70988.2,
+        77233.5
+      ]
+    }
+  ]
+}

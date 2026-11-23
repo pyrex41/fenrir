@@ -5,7 +5,10 @@
 // harness/service-explore.shen.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
+import {mkdtempSync,readFileSync,rmSync,symlinkSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {AcceptedJobService,Disabled} from '../../runtime/service/accepted-job.mjs';
 import {exploreGraph} from '../../runtime/service/explore-graph.mjs';
 
@@ -74,6 +77,18 @@ test('exploration counts on a hand-derived scope',()=>{
   assert.deepEqual(s.bound_hits,{submits:2,deliveries:2+4+4,responses:1,crashes:3});
   assert.deepEqual(JSON.parse(lines[0]),[[[[[],[],[],0]],[],[]],['submit',0,0,0],
     [[[[[0,0]],[[0,0,'pending']],[[0,0,[0,0,0,0,0]]],1]],[['accepted',[0,0,0,0,0]]],[]],['accepted',[0,0,0,0,0]]]);
+});
+
+test('the explorer CLI writes its graph through a symlinked directory',t=>{
+  const dir=mkdtempSync(join(tmpdir(),'fenrir-graph-'));
+  t.after(()=>rmSync(dir,{recursive:true,force:true}));
+  const link=join(dir,'service link');
+  symlinkSync(new URL('../../runtime/service/',import.meta.url),link,'dir');
+  const edges=join(dir,'edges.jsonl'),summary=join(dir,'summary.json');
+  execFileSync(process.execPath,[join(link,'explore-graph.mjs'),'1','1','1','1','0','1','0','100',edges,summary]);
+  const labels=readFileSync(edges,'utf8').trimEnd().split('\n').map(line=>JSON.parse(line)[1][0]);
+  assert.deepEqual(labels,['submit','respond']);
+  assert.equal(JSON.parse(readFileSync(summary,'utf8')).schedules,'3');
 });
 
 test('a truncated exploration says so',()=>{

@@ -4,6 +4,7 @@
 // per-image proof instance. Every image is re-derived inside Rocq
 // (image_identity, vm_compute), so a divergence from the proved compiler
 // fails the proof. The projection is NOT verified (ARM-02).
+import {specializeTupleArguments} from './tuple-arguments.mjs';
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -16,16 +17,54 @@ export const CALL_ABI = 'fenrir-aarch64-call-abi/1';
 const reject = m => { throw new UnsupportedExprProfile(m); };
 const hasCall = e => Array.isArray(e) && (e[0] === 'call' || e.some(hasCall));
 
+// The native frontend accepts calls inside expressions. Bind each strict
+// operand in source order, and keep branch-local computations in their branch.
+// Symbols are internal binder identities that cannot collide with artifact IDs.
+function normalizeCalls(root) {
+  let nodes = 0;
+  function lower(e, finish) {
+    if (++nodes > 10000) reject('Native expression normalization exceeds its size bound');
+    if (!hasCall(e)) return finish(e);
+    const [tag, id, value] = e;
+    if (tag === 'let') {
+      return lower(e[3], init => ['let', id, value, init, lower(e[4], finish)]);
+    }
+    if (tag === 'if') {
+      return operand(value, c => ['if', id, c, lower(e[3], finish), lower(e[4], finish)]);
+    }
+    if (tag === 'call') {
+      return operand(e[3], arg => finish(['call', id, value, arg]));
+    }
+    if (tag === 'prim') {
+      function args(index, done) {
+        if (index === e.length) return finish(['prim', id, value, ...done]);
+        return operand(e[index], arg => args(index + 1, [...done, arg]));
+      }
+      return args(3, []);
+    }
+    reject('Unsupported native call context: ' + tag);
+  }
+  function operand(e, next) {
+    return lower(e, result => {
+      if (['int', 'bool', 'var'].includes(result[0])) return next(result);
+      const binder = Symbol('operand');
+      return ['let', e[1], binder, result, next(['var', e[1], binder])];
+    });
+  }
+  return lower(root, result => result);
+}
+
 // ---------- projection: artifact -> CallCompile.v statements (unverified) ----------
-export function projectProgram(bytes) {
+export function projectProgram(bytes, normalize = false) {
   const {artifact: a} = validatePureCallArtifact(bytes, ['int', '0'], {maxNodes: 2000});
   if (a.datatypes.length || a.effects.length) reject('No declarations');
-  const index = new Map(a.functions.map((f, i) => [f.name, i]));
-  for (const f of a.functions) {
+  const functions = normalize ? specializeTupleArguments(a) : a.functions;
+  const index = new Map(functions.map((f, i) => [f.name, i]));
+  for (const f of functions) {
     if (!['I64', 'Bool'].includes(f.argument_type) || !['I64', 'Bool'].includes(f.result_type) || f.effects.length)
       reject('First-order pure I64/Bool functions only');
   }
-  const entry = a.functions[index.get(a.entry)];
+  const entry = functions[index.get(a.entry)];
   if (entry.argument_type !== 'I64') reject('The entry takes an I64');
   const callee = name => { if (!index.has(name)) reject('Unknown function'); return index.get(name); };
   const expr = (e, scope) => { if (hasCall(e)) reject('A call is only allowed as a let initializer or in tail position'); return projectExpr(e, scope); };
@@ -42,7 +81,7 @@ export function projectProgram(bytes) {
     if (tag === 'if') return {k: 'if', c: expr(e[2], scope), t: stmt(e[3], scope), f: stmt(e[4], scope)};
     reject('A call is only allowed as a let initializer or in tail position');
   }
-  const fns = a.functions.map(f => stmt(f.body, [f.parameter_id]));
+  const fns = functions.map(f => stmt(normalize ? normalizeCalls(f.body) : f.body, [f.parameter_id]));
   return {artifact: a, fns, main: index.get(a.entry), resultType: entry.result_type};
 }
 
@@ -73,8 +112,8 @@ export function frameNeed(d, st) {
   return d + depth(st.a);
 }
 
-export function compileCallArtifact(bytes) {
-  const {artifact, fns, main, resultType} = projectProgram(bytes);
+export function compileCallArtifact(bytes, normalize = false) {
+  const {artifact, fns, main, resultType} = projectProgram(bytes, normalize);
   const code = compileProg(fns);
   if (!code.every(encodable)) reject('An operand does not fit its encoding field');
   const binary = imageOf(code), starts = fstarts(fns);

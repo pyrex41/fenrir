@@ -61,6 +61,9 @@ if [ ! -f "$work/result" ]; then
   exit 3
 fi
 if [ "$status" -eq 0 ] || [ "$status" -eq 4 ]; then
+  if [ "$command" = emit ] && [ -n "${FENRIR_BUILD_INPUTS_DIR:-}" ] && [ "$status" -eq 0 ]; then
+    cp "$work/inputs.json" "$FENRIR_BUILD_INPUTS_DIR/inputs.json"
+  fi
   cat "$work/result"
 else
   cat "$work/result" >&2

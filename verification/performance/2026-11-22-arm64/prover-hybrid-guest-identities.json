@@ -1,0 +1,50 @@
+{
+  "search": {
+    "program.spt": {
+      "prior": "27df64bd4510f60d01cabd6d8130e20035bd19cedf50d19f5af30ea8d4fdd33e",
+      "current": "03e9ea59ef339cd2fb5de2a10cd545a42ec5197b0f5b24eb7380fd19d10b426d",
+      "identical": false
+    },
+    "reference.spt": {
+      "prior": "befd6afda01ec69e28207ff13ed7746ad195d21f2d77e504057271344b147097",
+      "current": "befd6afda01ec69e28207ff13ed7746ad195d21f2d77e504057271344b147097",
+      "identical": true
+    }
+  },
+  "check": {
+    "program.spt": {
+      "prior": "bad62954e6e12fa0b63842c2002fdef5de747b8853f75296795c6d04ea306d7f",
+      "current": "bad62954e6e12fa0b63842c2002fdef5de747b8853f75296795c6d04ea306d7f",
+      "identical": true
+    },
+    "reference.spt": {
+      "prior": "45d55a280009a836d159a6f76c0b22ce463a34bd8834341c48a3d182b0c5ce37",
+      "current": "45d55a280009a836d159a6f76c0b22ce463a34bd8834341c48a3d182b0c5ce37",
+      "identical": true
+    }
+  },
+  "router": {
+    "c.spt": {
+      "prior": "16ba9009d366457a141dbe666c27ee10d3e7eb198d1d80c2536de94686f1bc82",
+      "current": "16ba9009d366457a141dbe666c27ee10d3e7eb198d1d80c2536de94686f1bc82",
+      "identical": true
+    },
+    "fenrir.spt": {
+      "prior": "2c27a0f56f98b1f43412d493cba7b7abf76c48bf5b49934df6ad5f1e5604cd67",
+      "current": "2c27a0f56f98b1f43412d493cba7b7abf76c48bf5b49934df6ad5f1e5604cd67",
+      "identical": true
+    }
+  },
+  "stream": {
+    "fenrir.spt": {
+      "prior": "3d4a8a20c52e799dc1957abe3709c8dbed68c8e15f5e933a452f238341dc3be2",
+      "current": "3d4a8a20c52e799dc1957abe3709c8dbed68c8e15f5e933a452f238341dc3be2",
+      "identical": true
+    },
+    "c.spt": {
+      "prior": "14cf1bfcf871d38b03ab10eafb9dd5d2763a623c75ba94cce2f6a24abb586350",
+      "current": "14cf1bfcf871d38b03ab10eafb9dd5d2763a623c75ba94cce2f6a24abb586350",
+      "identical": true
+    }
+  }
+}

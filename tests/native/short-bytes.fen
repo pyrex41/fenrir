@@ -1,0 +1,12 @@
+\\ > outcome: Ok (tuple true true false 255 0 55 56 57)
+(define main {I64 --> (Tuple Bool Bool Bool I64 I64 I64 I64 I64)}
+  n -> (let a (if (= n 0) #x00 #x11)
+            b (bytes-concat a #xff)
+            prefix "12345678901234567890123456789012345678901234567890123"
+            short (bytes-concat prefix b)
+            full (bytes-concat short #x00)
+            longer (bytes-concat full #x78)
+         (tuple (= b #x00ff) (= longer (bytes-concat prefix #x00ff0078))
+                (= full (bytes-concat prefix #x00ff78))
+                (bytes-index full 54) (bytes-index longer 55)
+                (bytes-length short) (bytes-length full) (bytes-length longer))))

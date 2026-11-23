@@ -50,6 +50,27 @@
       # the hashes in the pinned source's tools/ci-deps.sh. Fetch both using
       # the build platform's nixpkgs, even though the kernel archive is shared.
       arm-pkgs = nixpkgs.legacyPackages.aarch64-linux;
+      mac-pkgs = nixpkgs.legacyPackages.aarch64-darwin;
+      mac-shen-jit = mac-pkgs.stdenv.mkDerivation {
+        pname = "shen-jit";
+        version = "0.7";
+        src = mac-pkgs.fetchurl {
+          url = "https://github.com/tizoc/shen-jit/releases/download/v0.7/shen-jit-0.7-macos-arm64.tar.gz";
+          sha256 = "4a5170dc135ed3dda9269d1d74a83e99d83fe874172be632b26cfb5a434fd95a";
+        };
+        dontConfigure = true;
+        buildPhase = ''
+          $CC -O2 -dynamiclib -undefined dynamic_lookup -Iinclude lib/process.c -o shen-process.so
+        '';
+        installPhase = ''
+          mkdir -p $out/bin $out/lib $out/share/licenses/shen-jit
+          cp shen-jit $out/bin/
+          cp lib/*.shen shen-process.so $out/lib/
+          cp LICENSE*.txt $out/share/licenses/shen-jit/
+        '';
+        # Preserve the upstream signed executable and appended Shen image.
+        dontFixup = true;
+      };
       mkShenJit = pkgs: bootstrapArch: bootstrapHash:
         let
           kernel = pkgs.fetchurl {
@@ -320,6 +341,52 @@
         default = link-toolchain;
       };
       # Development only: the x86 gate and HVT comparison are not exported here.
+      packages.aarch64-darwin.shen-jit = mac-shen-jit;
+      packages.aarch64-darwin.maude = mac-pkgs.maude;
+      packages.aarch64-darwin.fenrir = mac-pkgs.stdenvNoCC.mkDerivation {
+        pname = "fenrir";
+        version = "0.1-dev";
+        src = mac-pkgs.lib.fileset.toSource {
+          root = ./.;
+          fileset = mac-pkgs.lib.fileset.unions [
+            ./bin ./frontend ./harness ./models ./typing ./tools ./runtime ./package.json
+            ./benchmarks ./examples ./host/service ./spec ./fixtures ./backends/solo5
+            ./README.md ./NATIVE_GUIDE.md ./DEVELOPMENT_HISTORY.md ./PREVIEW.md ./WORK_FILE.md ./tests/native ./tests/frontend/roundtrip ./tests/host/histories ./verification/aarch64
+            ./tests/solo5/durable-hand-cases.mjs
+          ];
+        };
+        nativeBuildInputs = [ mac-pkgs.makeWrapper ];
+        # Copied guest and service launchers also run inside ARM64 Linux.
+        dontPatchShebangs = true;
+        dontBuild = true;
+        installPhase = ''
+          mkdir -p $out/libexec/fenrir $out/bin
+          cp -R README.md NATIVE_GUIDE.md DEVELOPMENT_HISTORY.md PREVIEW.md WORK_FILE.md bin frontend harness models typing tools runtime package.json benchmarks examples fixtures $out/libexec/fenrir/
+          mkdir -p $out/libexec/fenrir/verification $out/libexec/fenrir/host $out/libexec/fenrir/backends
+          cp -R spec $out/libexec/fenrir/
+          cp -R verification/aarch64 $out/libexec/fenrir/verification/
+          cp -R backends/solo5 $out/libexec/fenrir/backends/
+          mkdir -p $out/libexec/fenrir/tests/{solo5,host,frontend}
+          cp -R tests/native $out/libexec/fenrir/tests/
+          cp -R tests/frontend/roundtrip $out/libexec/fenrir/tests/frontend/
+          cp -R tests/host/histories $out/libexec/fenrir/tests/host/
+          cp tests/solo5/durable-hand-cases.mjs $out/libexec/fenrir/tests/solo5/
+          cp -R host/service $out/libexec/fenrir/host/
+          makeWrapper /usr/bin/env $out/bin/fenrir-toolchain \
+            --prefix CPATH : "${mac-pkgs.lib.getDev mac-pkgs.sqlite}/include" \
+            --prefix LIBRARY_PATH : "${mac-pkgs.lib.getLib mac-pkgs.sqlite}/lib" \
+            --set FENRIR_SHEN_JIT ${mac-shen-jit} \
+            --prefix PATH : ${mac-pkgs.lib.makeBinPath [ mac-pkgs.nodejs_22 mac-pkgs.python3 mac-pkgs.stdenv.cc
+              mac-pkgs.beam_minimal.interpreters.erlang mac-pkgs.beam_minimal.packages.erlang.elixir_1_19 ]}
+          makeWrapper $out/libexec/fenrir/bin/fenrir $out/bin/fenrir \
+            --set FENRIR_SHEN_JIT ${mac-shen-jit} \
+            --prefix PATH : ${mac-pkgs.lib.makeBinPath [ mac-pkgs.nodejs_22 mac-pkgs.python3 mac-pkgs.stdenv.cc ]}
+        '';
+      };
+      devShells.aarch64-darwin.default = mac-pkgs.mkShell {
+        packages = [ mac-pkgs.nodejs_22 mac-pkgs.python3 mac-shen-jit ];
+        FENRIR_SHEN_JIT = "${mac-shen-jit}";
+      };
       packages.aarch64-linux = {
         shen-jit = arm-shen-jit;
         solo5 = arm-solo5;
@@ -329,7 +396,7 @@
       };
       devShells.aarch64-linux = {
         default = arm-pkgs.mkShell {
-          packages = [ arm-pkgs.nodejs_22 arm-shen-jit arm-solo5 ];
+          packages = [ arm-pkgs.nodejs_22 arm-pkgs.python3 arm-shen-jit arm-solo5 ];
           FENRIR_SHEN_JIT = "${arm-shen-jit}";
           FENRIR_SOLO5 = "${arm-solo5}";
         };

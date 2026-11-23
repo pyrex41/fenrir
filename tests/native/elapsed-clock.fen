@@ -1,0 +1,4 @@
+\\ > outcome: Ok 25000000
+(define main {I64 --> I64}
+  input -> (let start now
+             (do (sleep 25000000) (- now start))))

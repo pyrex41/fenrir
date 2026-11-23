@@ -1,0 +1,24 @@
+{
+  "scope": "two consecutive endpoint probes after the Fenrir 3000/s trial",
+  "observation": {
+    "container_id": "194e4b5d37f7fa972be7aabcabc82886193624f6a703e838ade73b024b67096f",
+    "before": {
+      "tender_rollup_rss_bytes": 208896,
+      "container_lifetime_peak_bytes": 12304384,
+      "tender_rss_bytes": 208896,
+      "tender_lifetime_hwm_bytes": 827392,
+      "vm_total_bytes": 16818991104,
+      "vm_available_bytes": 15979831296
+    },
+    "after": {
+      "tender_rollup_rss_bytes": 208896,
+      "container_lifetime_peak_bytes": 12304384,
+      "tender_rss_bytes": 208896,
+      "tender_lifetime_hwm_bytes": 827392,
+      "vm_total_bytes": 16818991104,
+      "vm_available_bytes": 15987015680
+    },
+    "tender_hwm_status": "observed",
+    "tender_lifetime_peak_bytes": 827392
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "nim": {
+    "acknowledgement_p99_us": 3545,
+    "tail_count": 601,
+    "tail_mean_us": {
+      "acknowledgement": 5152.567387687188,
+      "service": 3151.1464226289518,
+      "waiting_for_previous": 564.0482529118136,
+      "ready_to_dispatch": 1437.3727121464226
+    }
+  },
+  "elixir": {
+    "acknowledgement_p99_us": 3491,
+    "tail_count": 601,
+    "tail_mean_us": {
+      "acknowledgement": 5932.948419301165,
+      "service": 3070.3194675540767,
+      "waiting_for_previous": 1254.3710482529118,
+      "ready_to_dispatch": 1608.2579034941764
+    }
+  },
+  "rust": {
+    "acknowledgement_p99_us": 3826,
+    "tail_count": 601,
+    "tail_mean_us": {
+      "acknowledgement": 13927.424292845259,
+      "service": 5957.312811980033,
+      "waiting_for_previous": 6996.319467554076,
+      "ready_to_dispatch": 973.7920133111481
+    }
+  },
+  "erlang": {
+    "acknowledgement_p99_us": 2859,
+    "tail_count": 601,
+    "tail_mean_us": {
+      "acknowledgement": 4302.599001663893,
+      "service": 2951.6772046589017,
+      "waiting_for_previous": 204.61896838602328,
+      "ready_to_dispatch": 1146.3028286189683
+    }
+  },
+  "fenrir-native-mac": {
+    "acknowledgement_p99_us": 3713,
+    "tail_count": 601,
+    "tail_mean_us": {
+      "acknowledgement": 4711.487520798669,
+      "service": 3076.420965058236,
+      "waiting_for_previous": 65.30116472545757,
+      "ready_to_dispatch": 1569.765391014975
+    }
+  }
+}

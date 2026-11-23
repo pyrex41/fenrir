@@ -1,0 +1,100 @@
+(datatype Route Home Status (Item I64 I64) Missing)
+(datatype Decision Bad Oversized (Serve Route Bool))
+
+(define between {(Tuple I64 I64 I64) --> Bool}
+  c lo hi -> (if (< c lo) false (<= c hi)))
+
+(define lower {I64 --> I64}
+  c -> (if (between c 65 90) (+ c 32) c))
+
+(define same-at {(Tuple Bytes I64 Bytes I64 Bool) --> Bool}
+  buf pos word i fold ->
+    (if (= i (bytes-length word)) true
+      (if (>= pos (bytes-length buf)) false
+        (let c (bytes-index buf pos)
+          (if (= (if fold (lower c) c) (bytes-index word i))
+            (same-at buf (+ pos 1) word (+ i 1) fold) false)))))
+
+(define field-is {(Tuple Bytes I64 I64 Bytes) --> Bool}
+  buf start end name -> (if (= (- end start) (bytes-length name))
+    (same-at buf start name 0 true) false))
+
+(define path-end {(Tuple Bytes I64) --> I64}
+  buf i -> (if (= i (bytes-length buf)) -1
+    (let c (bytes-index buf i)
+      (if (= c 32) i (if (between c 33 126) (path-end buf (+ i 1)) -1)))))
+
+(define digits {(Tuple Bytes I64 I64) --> Bool}
+  buf i end -> (if (= i end) true
+    (if (between (bytes-index buf i) 48 57) (digits buf (+ i 1) end) false)))
+
+(define route-path {(Tuple Bytes I64) --> Route}
+  buf end -> (if (= end 5) Home
+    (if (if (= end 11) (same-at buf 4 "/status" 0 false) false) Status
+      (if (if (> end 11) (same-at buf 4 "/items/" 0 false) false)
+        (if (digits buf 11 end) (Item 11 (- end 11)) Missing) Missing))))
+
+(define contains-byte {(Tuple Bytes I64 I64) --> Bool}
+  set c i -> (if (= i (bytes-length set)) false
+    (if (= c (bytes-index set i)) true (contains-byte set c (+ i 1)))))
+
+(define token-byte {I64 --> Bool}
+  c -> (if (between c 48 57) true (if (between (lower c) 97 122) true
+    (contains-byte #x2123242526272a2b2d2e5e5f607c7e c 0))))
+
+(define colon-at {(Tuple Bytes I64) --> I64}
+  buf i -> (if (= i (bytes-length buf)) -1
+    (let c (bytes-index buf i) (if (= c 58) i
+      (if (token-byte c) (colon-at buf (+ i 1)) -1)))))
+
+(define value-end {(Tuple Bytes I64) --> I64}
+  buf i -> (if (= i (bytes-length buf)) -1
+    (let c (bytes-index buf i) (if (= c 13) i
+      (if (if (= c 9) true (between c 32 126)) (value-end buf (+ i 1)) -1)))))
+
+(define white {I64 --> Bool} c -> (if (= c 32) true (= c 9)))
+
+(define skip-white {(Tuple Bytes I64 I64) --> I64}
+  buf i end -> (if (= i end) end
+    (if (white (bytes-index buf i)) (skip-white buf (+ i 1) end) i)))
+
+(define trim-end {(Tuple Bytes I64 I64) --> I64}
+  buf start end -> (if (= start end) end
+    (if (white (bytes-index buf (- end 1))) (trim-end buf start (- end 1)) end)))
+
+(define comma-at {(Tuple Bytes I64 I64) --> I64}
+  buf i end -> (if (= i end) end
+    (if (= (bytes-index buf i) 44) i (comma-at buf (+ i 1) end))))
+
+(define wants-close {(Tuple Bytes I64 I64) --> Bool}
+  buf i end -> (let comma (comma-at buf i end)
+    (let start (skip-white buf i comma)
+      (if (field-is buf start (trim-end buf start comma) "close") true
+        (if (= comma end) false (wants-close buf (+ comma 1) end))))))
+
+(define headers {(Tuple Bytes I64 Route Bool Bool) --> Decision}
+  buf i route host close ->
+    (if (same-at buf i #x0d0a 0 false)
+      (if (if host (= (+ i 2) (bytes-length buf)) false) (Serve route close) Bad)
+      (let colon (colon-at buf i)
+        (if (<= colon i) Bad
+          (let start (+ colon 1)
+            (let end (value-end buf start)
+              (if (< end 0) Bad
+                (if (same-at buf end #x0d0a 0 false)
+                  (if (field-is buf i colon "host")
+                    (if (if host true (= (skip-white buf start end) end)) Bad
+                      (headers buf (+ end 2) route true close))
+                    (if (if (field-is buf i colon "content-length") true
+                          (field-is buf i colon "transfer-encoding")) Bad
+                      (headers buf (+ end 2) route host
+                        (if close true (if (field-is buf i colon "connection")
+                          (wants-close buf start end) false))))) Bad))))))))
+
+(define parse-head {Bytes --> Decision}
+  buf -> (if (> (bytes-length buf) 8192) Oversized
+    (if (same-at buf 0 "GET /" 0 false)
+      (let end (path-end buf 4)
+        (if (< end 0) Bad
+          (if (same-at buf end #x20485454502f312e310d0a 0 false)
+            (headers buf (+ end 11) (route-path buf end) false false) Bad))) Bad)))

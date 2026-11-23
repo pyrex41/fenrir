@@ -1,0 +1,110 @@
+[
+  {
+    "block": 1,
+    "worker": "fenrir",
+    "acknowledgement_p99_us": 5330,
+    "tail_count": 601,
+    "tail_mean_us": {
+      "acknowledgement": 6834.216306156406,
+      "service": 2731.9301164725457,
+      "waiting_for_previous": 598.8219633943428,
+      "ready_to_dispatch": 3503.4642262895177
+    }
+  },
+  {
+    "block": 1,
+    "worker": "c",
+    "acknowledgement_p99_us": 15987,
+    "tail_count": 601,
+    "tail_mean_us": {
+      "acknowledgement": 112211.99667221298,
+      "service": 6996.38768718802,
+      "waiting_for_previous": 100821.35773710483,
+      "ready_to_dispatch": 4394.251247920133
+    }
+  },
+  {
+    "block": 2,
+    "worker": "fenrir",
+    "acknowledgement_p99_us": 13102,
+    "tail_count": 601,
+    "tail_mean_us": {
+      "acknowledgement": 73167.99168053245,
+      "service": 9331.475873544094,
+      "waiting_for_previous": 62086.28286189684,
+      "ready_to_dispatch": 1750.2329450915142
+    }
+  },
+  {
+    "block": 2,
+    "worker": "c",
+    "acknowledgement_p99_us": 7756,
+    "tail_count": 601,
+    "tail_mean_us": {
+      "acknowledgement": 66830.07986688853,
+      "service": 5453.16306156406,
+      "waiting_for_previous": 57009.30116472546,
+      "ready_to_dispatch": 4367.615640599001
+    }
+  },
+  {
+    "block": 3,
+    "worker": "fenrir",
+    "acknowledgement_p99_us": 5109,
+    "tail_count": 601,
+    "tail_mean_us": {
+      "acknowledgement": 19802.971713810315,
+      "service": 4475.524126455907,
+      "waiting_for_previous": 12880.559068219634,
+      "ready_to_dispatch": 2446.8885191347754
+    }
+  },
+  {
+    "block": 3,
+    "worker": "c",
+    "acknowledgement_p99_us": 5162,
+    "tail_count": 601,
+    "tail_mean_us": {
+      "acknowledgement": 6787.602329450915,
+      "service": 3063.1064891846922,
+      "waiting_for_previous": 407.33444259567386,
+      "ready_to_dispatch": 3317.161397670549
+    }
+  },
+  {
+    "block": 4,
+    "worker": "fenrir",
+    "acknowledgement_p99_us": 7542,
+    "tail_count": 601,
+    "tail_mean_us": {
+      "acknowledgement": 37935.9234608985,
+      "service": 7914.495840266223,
+      "waiting_for_previous": 27762.517470881863,
+      "ready_to_dispatch": 2258.910149750416
+    }
+  },
+  {
+    "block": 4,
+    "worker": "c",
+    "acknowledgement_p99_us": 4756,
+    "tail_count": 601,
+    "tail_mean_us": {
+      "acknowledgement": 5534.480865224626,
+      "service": 2116.8452579034943,
+      "waiting_for_previous": 46.7720465890183,
+      "ready_to_dispatch": 3370.863560732113
+    }
+  },
+  {
+    "block": 5,
+    "worker": "fenrir",
+    "acknowledgement_p99_us": 6537,
+    "tail_count": 601,
+    "tail_mean_us": {
+      "acknowledgement": 21700.905158069883,
+      "service": 7390.956738768718,
+      "waiting_for_previous": 12258.07986688852,
+      "ready_to_dispatch": 2051.8685524126454
+    }
+  }
+]

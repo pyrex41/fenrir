@@ -104,7 +104,7 @@
         [Text Report]
         (fe.finish 3 (make-string "~A: internal error in the frontend: the artifact is valid but not in canonical encoding~%" Source)))
   Source _ Report "limit" ->
-    (fe.finish 1 (make-string "~A: error: the program exceeds a size limit of the artifact validator (~A). Its limits are 200 expression nodes, nesting depth 64, and 256 octets in a bytes literal~%"
+    (fe.finish 1 (make-string "~A: error: the program exceeds a size limit of the artifact validator (~A)~%"
                               Source (fh.member "message" Report)))
   Source _ Report _ ->
     (fe.finish 3 (make-string "~A: internal error: the artifact validator rejects what the frontend produced (~A). The elaborator should have reported this itself~%"
@@ -213,7 +213,7 @@
   Text Fuel Schedule ->
     (let Artifact (json.parse Text [[byte-limit 16777216]])
          Schema (fh.field "schema_version" Artifact)
-      (cond ((= Schema "tc1-task-demo/1")
+      (cond ((element? Schema ["tc1-task-demo/1" "tc1-time-demo/1"])
               (do (load (cn (value fh.*root*) "harness/tc1-task-common.shen"))
                   (load (cn (value fh.*root*) "frontend/tasks.shen"))
                   (fe.execute-tasks Text Artifact Fuel (if (= Schedule default) "fifo" Schedule))))
@@ -251,6 +251,8 @@
       (fe.execute (hd Checked) (fe.natural Fuel 0) Schedule))
   ["emit" Source Module Out] ->
     (let Checked (fe.checked Source (fe.artifact Source Module))
+         Manifest (write-to-file (cn (value fe.*work*) "inputs.json")
+                       (json.stringify (value fe.*input-files*) [[byte-limit 16777216]]))
          Written (trap-error (write-to-file Out (hd Checked))
                              (/. E (fe.finish 2 (make-string "~A: error: the file cannot be written~%" Out))))
       (fe.finish 0 (make-string "wrote ~A: ~A~%" Out (fe.summary (hd (tl Checked))))))

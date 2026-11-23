@@ -1,0 +1,13 @@
+\\ > emit "outer": 100
+\\ > emit "inner": 3
+\\ > emit "body": 5
+\\ > emit "after": 2
+\\ > outcome: Ok 17
+(effect Ask (ask I64 --> I64))
+(define main {I64 --> I64}
+  n -> (handle Ask
+    ((ask x k) -> (let r (- (do (emit "outer" 100) 100)
+                            (* (do (emit "inner" 3) 3) (resume k (+ x 1))))
+                    (- r (do (emit "after" 2) 2))))
+    (let a (perform Ask ask 4)
+      (do (emit "body" a) (+ a 22)))))

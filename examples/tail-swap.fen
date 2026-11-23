@@ -1,0 +1,7 @@
+\\ > outcome: Ok 21
+(define rotate {(Tuple Bytes I64 I64 I64) --> I64}
+  bytes n left right -> (if (= n 0) (+ (* left 10) right)
+    (rotate bytes (- n 1) right left)))
+
+(define main {I64 --> I64}
+  input -> (rotate #x00 (+ input 1) 1 2))

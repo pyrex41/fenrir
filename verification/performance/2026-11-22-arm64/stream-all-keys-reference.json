@@ -1,0 +1,16 @@
+{
+  "fixtures": {
+    "check.py": {
+      "check.py": "df7ed4508a797cc50c34641df1359c406812f3d8961cad053c6068856c4a02b7",
+      "boundary_cases.py": "676ea943300e1ad65961b571b74d08468b36c3ef380ee17cd288814e0492400f"
+    },
+    "check-spt.py": {
+      "check-spt.py": "6c8c2f67f8d52531a0f704f2cb973f17a868b4bc2b9b687ef9d478f424297f4a",
+      "boundary_cases.py": "676ea943300e1ad65961b571b74d08468b36c3ef380ee17cd288814e0492400f"
+    }
+  },
+  "reference_guest_sha256": "14cf1bfcf871d38b03ab10eafb9dd5d2763a623c75ba94cce2f6a24abb586350",
+  "reference_verdict": "Solo5 block stream passed 24 cases",
+  "tender_image": "sha256:2973c75c0af0a7a3d9d960cd66031bbb994089a46b3741b9ce6ca08427902409",
+  "fenrir_and_mac_reference_archive_sha256": "7ecbd7a3c1287c5bdcfae0f24f21cfacea86faedf957859ed610157730e3c17f"
+}

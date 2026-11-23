@@ -1,0 +1,12 @@
+\\ > outcome: Ok 43
+(datatype Tree (Leaf Bytes) (Fork Tree Tree))
+
+(define payload {Tree --> I64}
+  tree -> (match tree
+    ((Leaf bytes) -> (bytes-index bytes 0))
+    ((Fork left right) -> (+ (payload left) (payload right)))))
+
+(define main {I64 --> I64}
+  n -> (let image (Fork (Leaf #x14) (Fork (Leaf #x01) (Leaf #x16)))
+         (let dynamic (Fork (Leaf (bytes-concat #x14 #x)) (Fork (Leaf #x01) (Leaf #x16)))
+           (if (= image dynamic) (+ n (payload image)) 0))))

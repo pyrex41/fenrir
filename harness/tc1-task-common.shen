@@ -39,6 +39,8 @@
   ["spawn" Node E] -> [spawn Node (fh.task-expr E)]
   ["await" Node E] -> [await Node (fh.task-expr E)]
   ["cancel" Node E] -> [cancel Node (fh.task-expr E)]
+  ["now" Node] -> [now Node]
+  ["sleep" Node E] -> [sleep Node (fh.task-expr E)]
   ["yield" Node] -> [yield Node]
   ["channel" Node _ Capacity] -> [channel Node Capacity]
   ["send" Node C V] -> [send Node (fh.task-expr C) (fh.task-expr V)]
@@ -51,18 +53,20 @@
 
 \\ [Prog InitialState] for a decoded tc1-task-demo/1 artifact, input ["int","0"].
 (define fh.task-program
-  Artifact -> (error "harness: TC1-C1 artifact required") where (not (= (fh.field "schema_version" Artifact) "tc1-task-demo/1"))
+  Artifact -> (error "harness: TC1-C1 artifact required") where (not (element? (fh.field "schema_version" Artifact) ["tc1-task-demo/1" "tc1-time-demo/1"]))
   Artifact ->
     (let Rows (map (/. F (fh.task-function F)) (fh.field "functions" Artifact))
          Names (map (/. R [(fh.function-name (hd (tl R))) (hd R)]) Rows)
          Entry (fh.entry-row (fh.field "entry" Artifact) Rows)
-      [[(fh.function-codes Rows) Names] (tm.initial (hd Entry) (hd (tl Entry)) [int "0"])]))
+         Initial (tm.initial (hd Entry) (hd (tl Entry)) [int "0"])
+      [[(fh.function-codes Rows) Names] (if (= (fh.field "schema_version" Artifact) "tc1-time-demo/1") (tm.with-clock Initial "0") Initial)]))
 
 \\ ---------- JSON shapes (CONCURRENCY.md section 10) ----------
 
 (define fh.task-trap
   overflow -> "Overflow"
   div-zero -> "DivZero"
+  invalid-duration -> "InvalidDuration"
   bounds -> "Bounds"
   child-failed -> "ChildFailed")
 
@@ -76,6 +80,9 @@
   Kind Task Fields -> [object ["kind" Kind] ["task" Task] | Fields])
 
 (define fh.task-event
+  [sleep T D] -> (fh.ev "Sleep" T [["deadline" D]])
+  [timer-removed T D] -> (fh.ev "TimerRemoved" T [["deadline" D]])
+  [advance-time D] -> [object ["kind" "AdvanceTime"] ["time" D]]
   [emit T L V] -> (fh.ev "Emit" T [["label" L] ["value" (fh.value V)]])
   [scope-enter T S] -> (fh.ev "ScopeEnter" T [["scope" S]])
   [scope-exit T S O] -> (fh.ev "ScopeExit" T [["scope" S] ["outcome" (fh.task-outcome O)]])

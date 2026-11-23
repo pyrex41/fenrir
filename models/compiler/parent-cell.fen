@@ -1,0 +1,9 @@
+(datatype Cell (Pair Bool))
+(datatype Parent (Branch Cell I64))
+
+(define updated {Parent --> Parent}
+  parent -> (match parent
+    ((Branch cell id) -> (match cell ((Pair old) -> (Branch (Pair (not old)) id))))))
+
+(define observed {Parent --> Bool}
+  parent -> (match parent ((Branch cell id) -> (match cell ((Pair bit) -> bit)))))

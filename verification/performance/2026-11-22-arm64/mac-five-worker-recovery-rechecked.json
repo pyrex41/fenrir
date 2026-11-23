@@ -1,0 +1,22 @@
+{
+  "elixir": {
+    "samples": 10,
+    "median_retry_us": 332.5
+  },
+  "erlang": {
+    "samples": 10,
+    "median_retry_us": 321.5
+  },
+  "fenrir-native-mac": {
+    "samples": 10,
+    "median_retry_us": 3123.0
+  },
+  "nim": {
+    "samples": 10,
+    "median_retry_us": 3102.5
+  },
+  "rust": {
+    "samples": 10,
+    "median_retry_us": 3174.5
+  }
+}

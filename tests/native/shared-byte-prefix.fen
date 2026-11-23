@@ -1,0 +1,8 @@
+\\ > outcome: Ok (tuple true false)
+(define grow {(Tuple Bytes I64) --> Bytes}
+  b n -> (if (= n 0) b (grow (bytes-concat b b) (- n 1))))
+(define main {I64 --> (Tuple Bool Bool)}
+  input -> (let shared (grow (if (= input 0) #x00 #x01) 35)
+                a (bytes-concat (bytes-concat shared #x01) #x02)
+             (tuple (= a (bytes-concat shared #x0102))
+                    (= a (bytes-concat shared #x0103)))))

@@ -1,0 +1,12 @@
+{
+  "history_sha256": "4415a0079833e765e2c3fe2b898eb226e1f3a0553f7d53dc8c76071706c78ef4",
+  "events_per_run": 18,
+  "replays": 50,
+  "median_worker_kill_to_retry_us": {
+    "elixir": 276.0,
+    "erlang": 298.0,
+    "fenrir-native-mac": 2946.0,
+    "nim": 3444.5,
+    "rust": 3063.5
+  }
+}

@@ -1,0 +1,10 @@
+\\ > outcome: Ok 23
+(effect Ask (ask I64 --> I64))
+
+(define main {I64 --> I64}
+  n -> (let offset (+ n 10)
+         (handle Ask
+           ((ask x) -> (+ offset x))
+           (handle Ask
+             ((ask x) -> (perform Ask ask (+ x 1)))
+             (+ (perform Ask ask 0) (perform Ask ask 1))))))

@@ -91,6 +91,7 @@ form     ::= (datatype Name constructor...)            constructor ::= Name | (N
            | (effect Name (operation type --> type)...)
            | (remote-effect Name remote-operation...)
            | (define name {type --> type} parameter... -> e)
+           | (library "file")                          local functions and declarations
            | (include "file")                          the declarations of another file, at this place
            | (serve Effect implementation...)          Effect remote: this program is a peer's
 
@@ -138,7 +139,7 @@ uppercase letter and continues with letters, digits or `_`: datatypes,
 constructors and effects. `name` starts with a lowercase letter or `_`:
 functions and variables, which may also contain `-`, and operations, which
 may not. `_` alone is a binder that names nothing. The words of the grammar
-(`let`, `if`, `handle`, `unit`, `not`, `remote-effect`, `read-only`, `include`,
+(`let`, `if`, `handle`, `unit`, `not`, `remote-effect`, `read-only`, `include`, `library`,
 `serve`, ...) cannot be used as names.
 
 ## 2 What the forms mean
@@ -236,6 +237,8 @@ takes an `I64` and gives a `(Tuple I64 I64)`.
 - Which member an effect's operations go to is not in the source: the system
   manifest binds each remote effect of a caller to a member (EFFECTS.md
   §12.6; owner ruling of 16 November 2026).
+
+**Local library.** `(library "router.fen")` inserts functions and declarations into the surrounding program at that position. Names share one namespace. Libraries may use `library` and `include` with the relative-path and cycle rules below. Only the entry file may define `main` or use `serve`. Duplicate definitions are errors.
 
 **Include** (EFFECTS.md §12.12; owner ruling of 16 November 2026: include,
 not import). `(include "ledger.decl.fen")` at the top level stands for the
@@ -542,3 +545,9 @@ Items 14, 15 and 16 are not touched by the rulings of 16 November 2026 on
 questions 11, 12, 14 and 16 and stay as listed. Question 12 (each read-only
 perform is its own request) has no surface spelling. The direction on
 questions 13 and 15 is carried out by items 20 to 23.
+
+### Native virtual time
+
+The development artifact profile `tc1-time-demo/1` (slice `TC1-T1`) extends the task profile with two contextual forms. The expression `now` reads the scheduler clock as I64 nanoseconds. The expression `(sleep d)` takes an I64 duration and returns Unit. Both carry the runtime effect `Time`. A user binding named `now` or `sleep` retains its ordinary meaning.
+
+Time starts at zero. A positive sleep suspends the task until its deadline. When the runnable queue empties, the scheduler advances to the earliest remaining deadline and wakes all tasks due there in numeric task-ID order. A zero-duration sleep yields. A negative duration traps InvalidDuration, and a deadline above the I64 maximum traps Overflow. Cancelling a sleeping task removes its timer. The native CLI can build, run, record, and replay these programs on both ARM64 targets. The Shen task model executes this profile with the existing schedule policies or an explicit schedule file. For a live deadline, use `bin/fenrir run --target TARGET --clock monotonic SOURCE [I64]`. The clock measures elapsed nanoseconds from scheduler startup. A sleeping task becomes eligible at or after its deadline, and the cooperative scheduler checks expired timers between dispatches. When every task is blocked, the adapter waits on the host clock and rechecks it after waking. The Mac adapter uses CLOCK_MONOTONIC and Solo5 uses the guest monotonic clock. Default runs, model execution, and schedule record/replay use virtual time.

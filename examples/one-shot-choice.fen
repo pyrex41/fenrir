@@ -1,0 +1,12 @@
+\\ > outcome: Ok (tuple 15 9)
+(effect Choose (choose I64 --> I64))
+
+(define choose-value {I64 --> I64}
+  n -> (handle Choose
+         ((choose x k) -> (if (< x 0)
+                              (do (discontinue k) 9)
+                              (resume k (+ x 1))))
+         (+ 10 (perform Choose choose n))))
+
+(define main {I64 --> (Tuple I64 I64)}
+  n -> (tuple (choose-value (+ n 4)) (choose-value (- n 1))))

@@ -1,0 +1,8 @@
+(library "parent-cell.fen")
+
+(define main {I64 --> (Tuple Bool Bool)}
+  input -> (let child (Pair (< input 0))
+                left (Branch child input)
+                right (Branch child (+ input 1))
+                changed (updated left)
+             (tuple (observed changed) (observed right))))

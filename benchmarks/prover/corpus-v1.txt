@@ -1,0 +1,10 @@
+identity proof 100 > a a
+excluded-middle proof 100 | a ! a
+modus-ponens proof 100 > & a > a b b
+distribution proof 100 > & a | b c | & a b & a c
+transitivity proof 200 > & > a b > b c > a c
+peirce proof 200 > > > a b a a
+conjunction model 100 & a b
+converse model 100 > > a b > b a
+partial-search exhausted 3 > & a | b c | & a b & a c
+zero-budget exhausted 0 a

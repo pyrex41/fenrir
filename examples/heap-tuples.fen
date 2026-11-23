@@ -1,0 +1,8 @@
+\\ > outcome: Ok 3
+(define pair {I64 --> (Tuple I64 I64)}
+  x -> (tuple x (+ x 1)))
+(define nested {I64 --> (Tuple (Tuple I64 I64) (Tuple I64 I64))}
+  x -> (tuple (pair x) (pair (+ x 2))))
+(define main {I64 --> I64}
+  x -> (let both (nested x)
+         (+ (project (project both 0) 0) (project (project both 1) 1))))

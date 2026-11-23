@@ -72,19 +72,33 @@
   _ _ _ -> false)
 
 (define svcp.report-good?
-  Store Keys [N D] ->
+  Store Receipts [N D] ->
     (and (< N (svc.next Store))
          (svcp.job? N N (svc.jobs Store))
-         (svcp.any? (/. K (svcp.backs? N D (svc.lookup K (svc.keys Store)))) Keys)))
+         (svcp.any? (/. Rc (svcp.backs? N D Rc)) Receipts)))
 
 (define svcp.job-good?
   Store [J R _] -> (and (< J (svc.next Store)) (svcp.any? (/. Rep (= (hd Rep) R)) (svc.reports Store))))
 
+\\ A single pass proves the same invariant when all three lists are aligned.
+\\ Strictly decreasing identifiers make reports unique; strictly decreasing
+\\ keys make each listed receipt the first lookup result for its key.
+(define svcp.aligned-good?
+  _ [] [] [] _ _ -> true
+  T [[N D] | Rs] [[N N _] | Js] [[K D [receipt T K D N N]] | Ks] Limit Previous ->
+    (and (< N Limit)
+         (and (number? K)
+              (and (or (= Previous none) (< K Previous))
+                   (svcp.aligned-good? T Rs Js Ks N K))))
+  _ _ _ _ _ _ -> false)
+
 (define svcp.good?
+  T [store Rs Js Ks N] -> true where (svcp.aligned-good? T Rs Js Ks N none)
   T Store ->
     (let Keys (svcp.key-set (svc.keys Store) [])
+         Receipts (map (/. K (svc.lookup K (svc.keys Store))) Keys)
       (and (svcp.all? (/. K (svcp.entry-good? T K (svc.lookup K (svc.keys Store)) Store)) Keys)
-           (svcp.all? (/. Rep (svcp.report-good? Store Keys Rep)) (svc.reports Store))
+           (svcp.all? (/. Rep (svcp.report-good? Store Receipts Rep)) (svc.reports Store))
            (svcp.all? (/. Job (svcp.job-good? Store Job)) (svc.jobs Store))
            (svcp.distinct? (map (/. Rep (hd Rep)) (svc.reports Store))))))
 
@@ -143,14 +157,34 @@
   [ok [sys Stores _ _] _] T J R -> (and (svc.tenant? T Stores) (svcp.terminal-job? J R (svc.jobs (svc.store T Stores))))
   _ _ _ _ -> false)
 
+\\ Stores retain fresh keys newest first. An outbox surviving later submissions
+\\ can contain only a subset of those receipts after a crash. Match each
+\\ outstanding acceptance against one aligned store entry in canonical order.
+(define svcp.consume-receipts
+  _ [] -> []
+  [] Events -> Events
+  [[_ _ Rc] | Ks] [[accepted Rc] | Es] -> (svcp.consume-receipts Ks Es)
+  [_ | Ks] Events -> (svcp.consume-receipts Ks Events))
+
+(define svcp.aligned-durable-outbox?
+  _ [] Events -> (= Events [])
+  T [[store Rs Js Ks N] | Ss] Events ->
+    (and (svcp.aligned-good? T Rs Js Ks N none)
+         (let Rest (if (empty? Events) [] (svcp.consume-receipts (reverse Ks) Events))
+           (svcp.aligned-durable-outbox? (+ T 1) Ss Rest))))
+
+\\ Each matched acceptance witnesses durability. Conflicts, unordered entries,
+\\ or unmatched receipts fall through to the general predicates.
 (define svcp.state-violations
   Step _ [sys Stores Outbox Trace] ->
-    (append
-      (svcp.flag (svcp.all-good? 0 Stores) [atomicity "atomicity.records"])
-      (svcp.flag (svcp.all? (/. Rc (svcp.durable-acceptance? Stores Rc)) (svcp.acceptances (append Outbox Trace)))
-                 [response "response.durable"])
-      (svcp.flag (svcp.all? (/. Rc (svcp.dischargeable? Step [sys Stores Outbox Trace] Rc)) (svcp.acceptances Trace))
-                 [progress "progress.dischargeable"])))
+    (let Full (and (empty? Trace) (svcp.aligned-durable-outbox? 0 Stores Outbox))
+      (append
+        (svcp.flag (or Full (svcp.all-good? 0 Stores)) [atomicity "atomicity.records"])
+        (svcp.flag (or Full (svcp.all? (/. Rc (svcp.durable-acceptance? Stores Rc))
+                                      (svcp.acceptances (append Outbox Trace))))
+                   [response "response.durable"])
+        (svcp.flag (svcp.all? (/. Rc (svcp.dischargeable? Step [sys Stores Outbox Trace] Rc)) (svcp.acceptances Trace))
+                   [progress "progress.dischargeable"]))))
 
 \\ ---------- edge predicates ----------
 
@@ -226,10 +260,15 @@
   _ _ _ -> true)
 
 \\ progress: terminal jobs stay terminal; a delivery leaves its job not pending.
+(define svcp.terminal-jobs-kept?
+  Jobs Jobs -> true
+  Jobs [_ | Jobs] -> true
+  Jobs After -> (svcp.all? (/. Job (or (not (svcp.terminal? (nth 3 Job))) (element? Job After))) Jobs))
+
 (define svcp.terminal-kept?
   [] [] -> true
   [X | Xs] [Y | Ys] ->
-    (and (svcp.all? (/. Job (or (not (svcp.terminal? (nth 3 Job))) (element? Job (svc.jobs Y)))) (svc.jobs X))
+    (and (svcp.terminal-jobs-kept? (svc.jobs X) (svc.jobs Y))
          (svcp.terminal-kept? Xs Ys))
   _ _ -> false)
 

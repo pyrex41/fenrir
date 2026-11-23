@@ -1,0 +1,12 @@
+balanced-2 model 512 | a a
+spine-2 model 512 | a a
+balanced-4 model 512 | | a a | a a
+spine-4 model 512 | a | a | a a
+balanced-8 model 512 | | | a a | a a | | a a | a a
+spine-8 model 512 | a | a | a | a | a | a | a a
+balanced-16 model 512 | | | | a a | a a | | a a | a a | | | a a | a a | | a a | a a
+spine-16 model 512 | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a a
+balanced-32 model 512 | | | | | a a | a a | | a a | a a | | | a a | a a | | a a | a a | | | | a a | a a | | a a | a a | | | a a | a a | | a a | a a
+spine-32 model 512 | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a a
+balanced-64 model 512 | | | | | | a a | a a | | a a | a a | | | a a | a a | | a a | a a | | | | a a | a a | | a a | a a | | | a a | a a | | a a | a a | | | | | a a | a a | | a a | a a | | | a a | a a | | a a | a a | | | | a a | a a | | a a | a a | | | a a | a a | | a a | a a
+spine-64 model 512 | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a a

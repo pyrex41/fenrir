@@ -1,0 +1,10 @@
+\\ > outcome: Ok 2345617
+(define rotate {(Tuple I64 I64 I64 I64 I64 I64 I64 Bytes) --> I64}
+  n a b c d e f bytes ->
+    (if (= n 0)
+      (+ (* a 1000000) (+ (* b 100000) (+ (* c 10000) (+ (* d 1000)
+        (+ (* e 100) (+ (* f 10) (bytes-index bytes 0)))))))
+      (rotate (- n 1) b c d e f a bytes)))
+
+(define main {I64 --> I64}
+  n -> (rotate (+ n 1) 1 2 3 4 5 6 (bytes-concat #x07 #x00)))

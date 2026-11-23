@@ -1,0 +1,503 @@
+# Fenrir development history
+
+These dated development notes preserve earlier qualification claims, commands and open questions. For the current developer preview, start with the [README](README.md).
+
+## Direction (November 2026)
+
+[04_DIRECTION_AMENDMENT.md](04_DIRECTION_AMENDMENT.md) records the owner's
+rulings of 12 November 2026. Fenrir keeps this repository and identity. Shen
+stays the semantic authority; proofs that Shen cannot give alone go through
+[Búri](https://github.com/pyrex41/buri)'s Rocq-proved contract rules. The
+effect system gets one-shot resumptions and inferred effect rows (TC1). Solo5
+is the first execution target, with BEAM as supervisor and SQLite as the first
+store. The amendment changes no TC0 evidence.
+
+- **Solo5 lane (development).** Fenrir programs run as guests of a stock Solo5
+  `spt` tender, built from the pinned Solo5 commit on Linux x86-64 with no
+  Docker and no KVM. `sh harness/run-solo5-pure-call.sh` compares every
+  reference step of 5,774 programs (calls, closures, datatypes, match, bytes;
+  86,286 steps) with the Shen model: all agree, and the guest's two injected
+  defects are detected (4,019 and 238 programs). The host observes a free run;
+  step control and replay are not there yet. See
+  [backends/solo5/README.md](backends/solo5/README.md).
+- **The gate is Shen.** On 13 November 2026 the registered TC0-A evaluator
+  changed from Python to [harness/gate.shen](harness/README.md), running on
+  Shen/JIT 0.7 pinned in the flake, by the owner's instruction
+  ([record](campaigns/tc0/G1_SHEN_EVALUATOR_SWITCH.md)). Its checks are Shen
+  programs: hand cases, the exhaustive scope, exact arithmetic, catalog
+  coverage, strict replay, the discovery-and-reduction campaign and the repair
+  evaluation. The model's integers are now exact on any Shen port
+  (`models/tc0/i64.shen`). The Python gate, its checkers and the JavaScript
+  tools that read their reports are removed; receipts they issued are
+  historical. `sh harness/run-gate.sh` on a committed tree gives verdict PASS
+  on 15 of 15 required rows in about two minutes; a controller run on a
+  supported runner is still needed for a receipt. JavaScript remains for the
+  second implementation, program generation and validation, tape replay and
+  the sandbox. **Sections below from "How far along are we?" onward describe
+  work done with the Python tools and keep its numbers; where they name a
+  `tools/check-tc0-*.py` command, the equivalent is now under `harness/`.**
+- **A frontend.** Programs can be written as text and run:
+  `sh frontend/fenrir.sh run examples/transaction.fen`. The reader and
+  elaborator are Shen ([frontend/](frontend/)); they resolve names, synthesize
+  types, infer effect sets, check the one-shot rule and report errors with
+  line and column. The syntax is S-expressions and is a draft
+  ([spec/tc1/SURFACE.md](spec/tc1/SURFACE.md)). `sh frontend/test.sh` runs 12
+  programs to their stated results, checks 89 rejected programs, and shows 27
+  existing fixtures rewritten in surface syntax elaborate to the same program.
+- **Effects and handlers (TC1).** [spec/tc1/EFFECTS.md](spec/tc1/EFFECTS.md)
+  is a draft effect contract: declared effects, `perform` and `handle`, finite
+  effect sets, dynamic handler selection, and explicit one-shot resumptions
+  (`resume`, `discontinue`) whose exactly-once use is checked at validation.
+  It runs in a Shen model, an independent JavaScript implementation and the
+  Solo5 guest. All three agree step for step on twenty hand fixtures and on
+  every one of 12,693 enumerated handler programs, and six injected defects
+  are each detected. A separate TC1 gate (`sh harness/run-tc1-gate.sh`) passes
+  22 of 22 required rows on a committed tree. It was registered on 15 November
+  2026 by the owner's instruction, not by line review
+  ([record](campaigns/tc1/TC1_GATE_REGISTRATION.md)); no run through the
+  workflow controller has been made, so it has no qualification receipt.
+- **Remote perform between images.** EFFECTS.md §12: a perform that crosses an
+  image boundary returns `reply v`, `not_delivered` or `timed_out`. A remote
+  effect is declared in the source (`remote-effect`), a perform of it may
+  only be written as the value a `match` takes apart, with an arm for each of
+  the three outcomes, so no outcome is ignored, and an operation may be
+  marked read-only. Which member serves the effect is stated in the system
+  manifest
+  ([examples/remote/ledger-system.json](examples/remote/ledger-system.json))
+  and checked when the system is assembled. There is a
+  Shen model, explored exhaustively on ten small systems, and a first
+  implementation, an Erlang/OTP supervisor ([supervisor/](supervisor/README.md))
+  relaying between two Solo5 `spt` guests through block-device mailboxes,
+  whose recorded runs the model accepts. Both images run programs of the
+  language: the caller is
+  [examples/remote/ledger-caller.fen](examples/remote/ledger-caller.fen), and
+  the peer is [examples/remote/ledger-peer.fen](examples/remote/ledger-peer.fen),
+  which *serves* the effect, reaches a durable key-value store through two
+  effects, and has each request's writes committed with its idempotency
+  record in one step. The type checker rejects a read-only operation whose
+  implementation can write; the two programs include one declarations file,
+  and the supervisor refuses to assemble images whose digests of an effect's
+  signature differ. The three checks are rows of the TC1 gate.
+  That is bounded exploration of a model, observed histories of two small
+  systems, and three machines agreeing on single requests: no `hvt` run and
+  no proof.
+- **Service model.** [verification/service/](verification/service/) is a Rocq
+  model of a tenant-scoped request that atomically records a report, a durable
+  job and its retry result before answering, with write isolation, atomicity,
+  acceptance durability, retry safety and crash recovery proved **for the model
+  only** (`sh verification/service/check.sh`, Coq 8.18).
+- **Proving in Shen.** [verification/shen-proving/](verification/shen-proving/)
+  shows what Shen's sequent checker does and does not establish alone.
+- [campaigns/RECONCILIATION_2026-11.md](campaigns/RECONCILIATION_2026-11.md)
+  reviews open PRs #5–#8 against the direction.
+
+## AArch64 proof development
+
+The [AArch64 verification lane](verification/aarch64/README.md) compiles a closed
+checked-I64 subset of existing TC0-A artifacts to actual instruction bytes, proves
+its lowering in Rocq/Coq, and checks execution against the existing candidate with
+QEMU. The proof currently uses a **handwritten instruction model**; authoritative
+ARM refinement, JSON/source correspondence and whole-image execution remain open.
+This lane does not promote the historical TC0 or Solo5 qualification status.
+See the [implementation roadmap](verification/aarch64/PLAN.md).
+
+## How far along are we?
+
+We have moved beyond plans: there are executable Shen models, independently
+structured development candidates, checked artifacts, hand fixtures, generated
+counterexamples, reduction and strict replay. A small arithmetic candidate has
+also run natively inside Solo5 with an external Shen comparison.
+
+**TC0-A (the pure slice, G1) qualifies at `1db7471` under recorded owner waivers.**
+The owner-reviewed gate, registered as `tc0-a-qualification`, ran through the
+workflow controller and returned a qualification PASS: 15 of 15 required rows, and
+all six required claims. The waivers matter. The independent repair used
+instruction-only isolation, the scopes are bounded (grammar up to 5 nodes, three
+mutants), and the evaluator runs trusted-local with only candidates sandboxed. See
+[the review](campaigns/tc0/G1_EVALUATOR_REVIEW.md). Later source changes need a
+fresh run. Slices B and C, full TC0, native execution and everything after them
+are not qualified.
+
+A percentage would be misleading: a bounded arithmetic/closure slice is very
+different from the compiler, runtime and tools needed for the full vision. This is
+**early executable work, before a qualified full-language release**; the narrow
+TC0-A gate does not qualify B, C, full TC0, native execution or production use.
+
+| Area | What exists | What is not established |
+| --- | --- | --- |
+| Specification | v0.2 architecture, core contract and phased plan | Full-language frozen, executable acceptance authority |
+| Pure-language development | Shen models and an independent candidate for the whole TC0-A expression grammar (schema `/2`: calls, closures, Bytes, TrapCode, tuples, datatypes, match, byte primitives, eq); closed validator; 24 hand fixtures; catalog coverage 112/112; every program of a bounded grammar up to 5 nodes (5,695) agreeing on two Shen ports; an exact-arithmetic ledger | Fresh current-head G1 receipt; independent catalog review |
+| Counterexample loop | Generated discovery and typed reduction for three candidate mutants, exact original/minimized replay, and an S3 clean-room repair packet with a frozen evaluator that sandboxes candidate execution; one candidate-only repair evaluated DEVELOPMENT-PASS under the instruction-only independence waiver | Enforced repairer isolation (repair 1 used instruction-only isolation) and fresh qualification on current source |
+| Native arithmetic spike | Small C/Solo5 candidate; historical model comparisons, hand cases, generated failure and cold replay | Full language backend, machine-level determinism, native startup/counter closure |
+| Native host | Go orchestration, bounded readers/output, source inventories, owned process/container cleanup, session/replay and selected campaigns | Current-source live validation of recent repairs; full hostile-peer/corpus/perturbation obligations |
+| Qualification | Registered, owner-reviewed TC0-A gate: last recorded qualification PASS at `1db7471` with all six claims, under waivers; requirement ledger, pinned toolchain flake, measured candidate sandbox | Fresh current-head G1 receipt; waiver-free G1 (enforced repairer isolation, an isolated evaluator); B/C/full TC0 qualification |
+| Later language/product phases | Requirements and dependency order | Qualified handlers, concurrency/lifetimes/time, production compiler/runtime, practical surface language, package tooling and deployment |
+
+The current pure candidates are development machines, not a production Fenrir
+compiler or end-user language distribution. See [`runtime/tc0/`](runtime/tc0/),
+[`models/tc0/`](models/tc0/) and [`tools/tc0/`](tools/tc0/) for the executable work.
+
+## Latest pure-language progress
+
+The integrated pure-call demo now has a second closed schema,
+`tc0-a-pure-call-demo/2`. It adds the remaining TC0-A built-in data surface:
+`Bytes`, the `TrapCode` enum, tuples (`tuple`/`project`), declared and
+recursive datatypes (`construct`/`match` with exhaustive, duplicate-free
+arms), `bytes_length`, `bytes_index` (`Bounds` trap), `bytes_concat` and
+structural `eq` over equality-compatible types. Schema `/1` is unchanged and
+still rejects all of these. Each feature is implemented independently in the
+validator, the JS candidate and the Shen model, and is recorded in
+[`spec/tc0/pure-call-demo.json`](spec/tc0/pure-call-demo.json) (catalog `/2`).
+
+Evidence from this pass (development only):
+
+- 10 new hand fixtures (`fixtures/tc0/pure-data-hand-cases.mjs`) agree step for
+  step with the Shen model (shen-scheme v0.26 Linux binary), and all 19
+  pure-call hand cases pass strict replay through `tc0-pure-call-oracle`.
+- Five injected candidate defects were each caught by that check: a
+  `bytes_index` off-by-one bound, a non-tail match arm, reversed tuple fields,
+  a shallow `eq` and swapped constructor metadata.
+- `tests/tc0/pure-data.test.mjs` adds 25 validator, machine, reducer and replay
+  tests; the full TC0 suite passes (108 tests).
+
+**Generated discovery and reduction (S2) over the data constructs.** A finite
+deterministic family (`tools/tc0/pure-data-generate.mjs`, 24 configurations)
+uses every schema `/2` construct in each case. The campaign driver
+`tools/check-tc0-pure-call-reduction.py` now takes `--family` and `--mutant`.
+It adds a data-specific candidate-only mutant, `--arm-by-position`, which
+selects a match arm by the constructor's declared position instead of its
+name. Each reduction proposal is revalidated and confirmed against fresh Shen
+and candidate observations. A proposal is accepted when it keeps the same
+discrepancy class; the outcome may change. New typed rules: `if-to-branch`,
+`project-tuple-literal`, `match-to-arm`, `prim-to-operand`,
+`call-to-argument` and `drop-tuple-element`, plus pruning of unused datatypes.
+
+```sh
+# Now: discovery, reduction and replay in one Shen program (LIB and ROOT as in harness/jit.sh)
+shen-jit script harness/reduction.shen LIB ROOT OUTDIR pure-data arm-by-position
+```
+
+| Family / mutant | Discovered at | Attempts (accepted) | Nodes | Exact replay (first divergence) |
+| --- | --- | --- | --- | --- |
+| pure-data / arm-by-position | case 12 of 24 (cases 0–11 are equivalent declared-order survivors) | 35 (18) | 64 → 17 | original epoch 88, minimized epoch 29 |
+| pure-data / reverse-operands | case 0 | 30 (10) | 64 → 15 | original epoch 20, minimized epoch 2 |
+| pure-call / reverse-operands (regression) | case 0 | 36 (8) | 37 → 18 | original epoch 27, minimized epoch 9 |
+
+The minimized arm-by-position failure returns the same value as the model
+(`Rect`'s arm returns the same field as `Sq`'s). Only the step trace shows the
+wrong arm was entered. A cold repeat of both pure-data campaigns reproduced
+every observation, the reduction history and both failures identically. The
+only difference was the Shen loader's nonsemantic `run time:` line. The
+reverse-operands discovery at case 0 is trivial: every case emits from a
+tuple. Reductions are smallest-found by typed rules, not globally minimal.
+
+**Exhaustive-small scope.** `tools/check-tc0-pure-data-exhaustive.py` runs every
+program of a bounded grammar G (defined in `tools/tc0/pure-data-enumerate.mjs`;
+I64/Bool/Bytes/Opt/Pair/Tri expressions over all schema `/2` constructs plus an
+emitting `tap` call). `Tri` is a three-constructor enum matched in all six arm
+orders. It uses one Shen batch and one candidate batch. Counts per
+size are hand-derived in the tests.
+
+| Max nodes | Programs | Shen/candidate agreement | Outcomes | reverse-operands killed / survived | arm-by-position killed / survived | Time |
+| --- | --- | --- | --- | --- | --- | --- |
+| 5 | 5,695 | 5,695 / 5,695 (max 47 steps) | 4,350 Ok, 595 DivZero, 517 Bounds, 233 Overflow | 3,940 / 1,755 | 975 / 4,720 | ~82 s |
+
+Survivors are programs on which that mutant is equivalent, for example
+programs with no collected operand pair or no `Some`-first match; no mutant
+crashed. Two subtle injected candidate defects that the hand fixtures do not
+target were each caught at bound 4: a bytes `eq` that ignores the last octet
+(4 programs disagree) and `bytes_length` of empty bytes returning 1
+(37 programs disagree).
+
+**G0 exact-arithmetic ledger.** `tools/check-tc0-exact-arithmetic.py` runs 2,908
+programs through the full pure-call machine (core §17). They are the boundary
+product V × V for `add`/`sub`/`mul`/`div`/`lt`/`le`/`gt`/`ge` and `neg` over V.
+V spans the I64 extremes, ±2^53 and 2^53 + 1, the multiplication boundary
+±3037000499/3037000500, 2^62 and small signed values. One more program carries
+function, node and binding IDs above 2^53 and 2^64, with a closure whose captures
+must be ordered numerically. Expected outcomes come from Python's exact integers.
+Both Shen ports and the candidate were exact on all 2,908: 2,587 Ok, 302 Overflow,
+19 DivZero, and the correct capture order. An injected off-by-one I64 bound in the
+model was flagged on the 15 results equal to the maximum.
+
+**Requirement ledger (G0 row).** [`spec/tc0/requirement-ledger-a.json`](spec/tc0/requirement-ledger-a.json)
+lists each TC0-A and G1-relevant G0 requirement with its evidence or its gap, and
+`tools/tc0/check-requirement-ledger.mjs` keeps it honest: no verdict statuses, every
+cited file exists, and every open row states its gap. The ledger records evidence
+and gaps; it does not issue the gate verdict. The TC0-A evaluator is now registered
+and owner-reviewed. The last recorded qualification PASS is at `1db7471`; current
+master requires a fresh run before that result is treated as current. Three rows are
+deferred to B/C. The mandatory bad-overflow mutant (`--wrap-overflow`, two's-complement wrap
+instead of the trap) is now in the candidate; it is killed on exactly the Overflow
+programs of the exhaustive scope (233 at 5 nodes).
+
+**Candidate execution boundary (G0 row, measured).** `tools/tc0/sandbox.mjs` runs a
+candidate inside a fresh network namespace (`unshare -n`) under Node's permission
+model, with an empty environment. Reads are limited to the candidate tree and its
+inputs; there are no writes beyond a named output, and no child processes, workers
+or addons. `tools/tc0/check-sandbox.mjs` measures it with eight benign probes
+packaged as candidate patches. Each probe first runs without the sandbox as a
+control, to show the action really happens. Effects are measured from outside
+where possible: file hashes, a local TCP listener, and canary strings only a
+successful probe could print. All eight capabilities are obtained in the control
+and denied in the sandbox: writing the protected model, writing a new file,
+reading a secret file, reading the model source, reading an environment
+credential, spawning a process, starting a worker thread and connecting to the
+network. The baseline candidate's output is byte-identical inside and outside the
+sandbox. The hand-case and exhaustive checkers take `--sandbox`, and the S3
+evaluator uses it for every step that runs the untrusted repaired candidate. Its
+regression suite needs processes and scratch files, so it gets the network and
+environment isolation only, and the report says so. Not bounded: CPU, memory and
+time (watchdogs remain), Node's own startup reads, side channels, and defects in
+the kernel or the permission model. This is measured development evidence, not a
+qualified isolation claim.
+
+**Second Shen port.** The Yggdrasil-shaken oracle was rebuilt for the schema `/2`
+model: an eval-free shen-cl/SBCL slice that matched host Shen on all 19 hand cases.
+On all 5,695 exhaustive-small programs it produced traces identical to
+shen-scheme v0.26. The bootstrap steps are in the
+[workflow README](.pi/extensions/fenrir-workflow/README.md). Two ports agreeing
+supports portability only, not semantic truth (core §17).
+
+**Invalid programs.** `tools/tc0/pure-data-invalid.mjs` applies 27 named single
+mutations to a generated seed: duplicate IDs, bad hex, tuple arity, projection
+range, unknown or ill-typed constructors, non-exhaustive, duplicate or
+ill-scoped match arms, `eq`/byte primitive typing, datatype declaration errors,
+non-serializable entry and source-map gaps. Each case records the rejection it
+must produce. The tests check the exact rejection class, and that the runner
+exits nonzero without output, so invalid artifacts never execute.
+
+**Catalog coverage.** `tools/tc0/check-pure-call-coverage.mjs` maps every step of
+the Shen-agreeing traces to a catalog transition: dispatch by tag, collect/ready by
+operation, trap routing by code, frame kinds (from a frame stack simulated from the
+step records and checked against each step's depth), tail-call contexts, emit and
+root event sequences. These come from the 24 hand cases and the 5,695
+exhaustive-small programs; each exhaustive program is admitted only when its trace
+hash matches the Shen-agreeing one. It covers **112 of 112** transitions the catalog
+defines for schema `/2`, and no step maps outside the catalog. Five fixtures were
+added for the last 18 gaps: `gt`/`ge`/`mul`, Overflow from `sub`, `neg` minimum,
+`mul` and minimum ÷ −1, exact values around 2^53, and unwinding through `let`
+initializers and `if` conditions. This covers the catalog's named transitions, not
+every frame/context combination.
+
+**TC0-A gate, as it was under the Python evaluator (replaced 13 November 2026; see the top of this file).** [`spec/tc0/tc0-a-requirements.json`](spec/tc0/tc0-a-requirements.json)
+was a versioned manifest of 15 required rows and 1 optional row.
+`tools/check-tc0-a-gate.py` ran every row freshly
+against a clean, committed HEAD and aggregates per TC0-GATE. That includes
+rebuilding an S3 packet and re-evaluating the retained independent patch. After
+the owner's review decisions
+([`campaigns/tc0/G1_EVALUATOR_REVIEW.md`](campaigns/tc0/G1_EVALUATOR_REVIEW.md)), it
+is registered as `tc0-a-qualification`. Through the workflow controller it returned
+a qualification PASS at `1db7471`: 15 of 15 required rows, all six claims, and one
+recorded waiver (instruction-only repairer isolation). A negative control with a
+subtly broken candidate gave FAIL.
+
+**S3 repair packet and independent repair 1.** See
+[`campaigns/tc0/S3_REPAIR_PACKET.md`](campaigns/tc0/S3_REPAIR_PACKET.md).
+`tools/tc0/s3-prepare.mjs` builds a clean-room workspace: a history-free export
+with the arm-by-position defect made unconditional in the candidate, the retained
+original and minimized failures, and evaluator-side tooling withheld.
+`tools/check-tc0-s3-repair.py` is the frozen evaluator. It checks protected inputs
+and the allowed path, replays the exact original failures against the preserved
+defective original, then checks the patch fresh: retained failures, hand cases,
+regressions, held-out generated and exhaustive scopes, and a mutation control.
+Dry runs fail the untouched, overfit and tampered workspaces, and pass the reference
+and a minimal one-line fix. Both passing patches are self-authored evaluator
+checks, not independent repairs. A fresh local subagent then repaired the
+candidate from the workspace alone, without being told the defect: a one-line fix
+selecting the match arm by constructor name. The frozen evaluator gave it
+DEVELOPMENT-PASS on all 10 steps, including the 5,051 held-out exhaustive programs
+with the candidate sandboxed. Caveats: the subagent's isolation was by instruction,
+not enforced, and it shares a model family with the packet author; see
+[`campaigns/tc0/s3/independent-repair-1.md`](campaigns/tc0/s3/independent-repair-1.md).
+
+Not established: a repair under enforced repairer isolation, or any B/C behavior
+(`Outcome`, `SendResult`, `ReceiveResult` and the runtime operations). This packet
+does not issue a verdict; the separate G1 evaluator's last recorded TC0-A PASS is
+at `1db7471` under waivers, and current master still needs a fresh run.
+
+## Latest native-host progress
+
+The recent Go host pass added executable checks for:
+
+- Exact consistency between Node lowering data and its generated C data header.
+- Docker-reported command/entrypoint/path/arguments against intended launch argv.
+- Recorded replay command policy, mode, image and guest-path consistency.
+- Partial campaign attempt counts bounded by the selected plan.
+- Versioned **build receipt v2**, binding the actual compilation command to the
+  unchanged fixed recipe and canonical fuel, without reinterpreting old receipts.
+
+The pass retained fail-before vectors: 19 header/data contradictions, 14 launch
+metadata contradictions, seven recorded-command contradictions, two partial-count
+contradictions and seven compilation-command contradictions. Additional vectors
+check swapped replay identities, unsafe representation tokens and preflight order.
+These are **adapter/unit development evidence**, not live security certification.
+Daemon launch checks occur after launch; receipt consistency is not independent
+binary-to-fuel attestation.
+
+Latest local measurements from that pass:
+
+- Pinned Nix **Go 1.27.1** full host race suite: PASS (12.428s), including all 13
+  retained real Node hand lowerings.
+- Node TC0/lowering regressions: 88 PASS in the same pass, before later Go-only
+  repairs.
+- Approved workflow development checks: PASS; these test the controller, not
+  language conformance.
+- Live Shen transport test: skipped in that test invocation, therefore unmeasured.
+- **No new native compilation, guest, replay or peer attempts in this pass.**
+
+Historical native evidence includes 13 arithmetic hands and a finite 16-case
+generated family whose first evaluated case exposed the operand-order mutant.
+Retained reductions found a 9 → 6 → 3-node failure; a valid one-node proposal lost
+the failure. This is not full generated coverage or a global-minimality proof.
+Later selected campaigns add bounded observations, not full-corpus qualification.
+See the [native host README](tools/solo5/native-arithmetic/README.md) and
+[repair handoff](tools/solo5/native-arithmetic/REPAIR_HANDOFF.md).
+
+## Current blockers and next steps
+
+**TC0-A / G1.** S1–S3 development artifacts and the registered qualification gate
+are present. The gate recorded PASS at `1db7471` with 15/15 required rows and six
+claims, under the owner waivers in
+[`campaigns/tc0/G1_EVALUATOR_REVIEW.md`](campaigns/tc0/G1_EVALUATOR_REVIEW.md).
+That receipt is tied to its recorded source identity. Master has advanced since
+then, so run `tc0-a-qualification` on the clean current HEAD before treating G1 as
+current. Use a supported Linux x86-64 runner with Nix and the pinned Shen output;
+no measured macOS qualification path is provided. Retain the controller receipt
+with source/configuration, executable and evidence identities, then stop for review.
+A separate reviewed P2 task packet and bounded run follow only after PASS. Protected
+P2 edits make affected G1 evidence historical; G2 reruns A and B rows on final source.
+The stale evaluator header and ledger registration descriptions need separately
+reviewed cleanup, but their text is not a technical prerequisite for read-only G1
+refresh. Keep the instruction-only
+repairer isolation and trusted-local evaluator limitations visible. Remove those
+waivers through a separately reviewed and measured boundary before relying on the
+gate beyond its accepted G1 scope.
+
+**The latest native closure pass is blocked before its live bootstrap.** The local
+Docker daemon is responding again, but both exact retained stock/control images
+are absent. The local archive search did not locate an image backup. No pull,
+rebuild, replacement image or guest execution was performed during restore review.
+
+An exact restore needs the original Docker/OCI archive or a registry recovery
+source containing those immutable identities. The repository flake pins the TC0
+development toolchain, but that does not open the separate native-host dependency
+epoch. The planned remedy is to rebuild the images from pinned sources, record new
+identities and leave old receipts historical (never rewritten). That epoch has not
+been opened; see the [execution plan §4 and §18](03_PHASED_EXECUTION_PLAN.md#18-current-implementation-sequence).
+
+Other outstanding gates before live work:
+
+1. Finish ownership-specific current resource review while preserving the old
+   failed run's missing-ownership uncertainty. New cleanup success does not erase
+   a historical failure.
+2. Reconcile inherited attempt accounting with retained evidence. The recorded
+   hardening totals are 26 guest attempts / 17 two-build attempts / 7 peer scenarios;
+   final reconciliation remains incomplete.
+3. Explicitly review the proposed cumulative 160/72/40 envelope. It is **not yet
+   effective**; existing v1 limits remain 100 executions / 40 two-build attempts,
+   with the prior peer scope capped at 24.
+4. Complete remaining saved-report/footer consistency checks and live prerequisites.
+5. Only after those gates, perform one fresh arithmetic bootstrap, stopping without
+   retry on cleanup ambiguity; then measure the bounded hostile-peer and corpus scope.
+
+The next language milestone is **TC0-B / G2**: add dynamic handlers through the
+model, candidate, validator, generator, reducer, replay and evaluator while keeping
+the A suite as a regression baseline. Begin after the registered G1 gate passes on
+current master. The three development checks provide semantic feedback but do not
+replace the qualification gate. Native hardening outside named blockers stays
+frozen until its dependency order permits it.
+
+The amendment also sets the long-term direction: Fenrir programs deploy as
+single-application unikernels whose declared effects determine the image's
+capabilities. This is a plan, not an implemented or qualified property; see
+[vision §7](01_FULL_VISION.md#7-solo5-as-the-first-isolated-backend) and
+[plan §19](03_PHASED_EXECUTION_PLAN.md#19-direction-amendment-unikernel-target-and-agent-back-pressure).
+
+Overall language qualification and native startup/counter closure remain
+**UNKNOWN** beyond TC0-A. TC0-A's last recorded qualification PASS is at `1db7471`
+under the recorded waivers; current master needs a fresh gate run.
+
+## Plans and task packets
+
+- [Full vision](01_FULL_VISION.md)
+- [Tiny core v0.2](02_TINY_LANGUAGE_CORE.md)
+- [Vertical-slice execution plan and gates](03_PHASED_EXECUTION_PLAN.md)
+- [Original review](review.md)
+- [Workflow research](workflow_research.md)
+- [Pure calls/closures next-slice packet](campaigns/tc0/NEXT_SLICE.md)
+- [Native host closure packet](campaigns/solo5/NATIVE_HOST_CLOSURE_PASS.md)
+- [Development build receipt v2](spec/solo5/native-arithmetic-demo/build-receipt-v2.md)
+
+Task packets propose work; they do not authorize execution or prove completion.
+The specification ZIP is a historical v0.1 snapshot, not current authority.
+
+## Running development checks
+
+The project-local [Pi workflow extension](.pi/extensions/fenrir-workflow/README.md)
+drives bounded development work alongside `pi-clm` continuous context. Review the
+manifest, available prerequisites and finite scope before starting; do not resume
+a blocked pass merely because some tests pass. The manifest now registers the
+owner-reviewed `tc0-a-qualification` gate; its receipt is source-bound and a
+development-check PASS cannot substitute for it.
+
+```sh
+# Controller tests only; Node 22.19+, no downloaded dependencies/model calls.
+npm test
+
+# TC0 and native-lowering Node regressions.
+node --test tests/tc0/*.test.mjs tests/solo5/native-arithmetic-lowering.test.mjs
+```
+
+The TC0 Shen toolchain is pinned by the repository flake (x86-64 Linux): shen-scheme
+v0.26, shen-cl `dff7445` built from the S41.2 kernel, Yggdrasil `a40d8c5`, and SBCL,
+Node 22, Python and Go 1.27 from one nixpkgs release. Sources are fetched by Nix
+and locked in `flake.lock`.
+
+```sh
+sh harness/run-gate.sh                 # the whole gate, on the flake's Shen/JIT
+sh harness/run-hand-cases.sh           # hand cases and strict replay
+sh harness/run-model-vs-candidate.sh   # exhaustive scope to 5 nodes
+sh harness/run-solo5-pure-call.sh exact  # exact arithmetic (needs Solo5 built)
+nix build .#shen-jit                   # the pinned Shen/JIT with its libraries
+```
+
+The flake also still builds shen-scheme v0.26, shen-cl and Yggdrasil, which the
+gate no longer uses.
+
+### ARM64 Linux development
+
+On an ARM64 Linux machine (Nix system `aarch64-linux`), the flake provides
+Shen/JIT 0.7, the stock Solo5 0.9.3 build and its
+`aarch64-solo5-none-static-*` guest toolchain. The development shell sets
+`FENRIR_SHEN_JIT` and `FENRIR_SOLO5` and provides Node 22 and Python for the CLI recorder:
+
+```sh
+nix build --no-link .#shen-jit .#solo5
+nix develop --command sh harness/run-solo5-pure-call.sh 4
+nix develop --command sh harness/run-solo5-pure-call.sh tc1
+```
+
+Run these commands from ARM64 Linux, not directly from macOS. The runtime
+commands use `spt` (Linux seccomp, no KVM); the stock build also includes
+`hvt`, whose execution requires a usable ARM64 `/dev/kvm`. The ARM64 flake
+does not export the x86-64 HVT comparison or the legacy Shen ports. This is
+development support only; it does not change the x86-64 qualification profile
+or establish any ARM64 qualification.
+
+The separate [ARM64 Linux Solo5 development workflow](.github/workflows/arm64-solo5-development.yml)
+builds the locked toolchain on GitHub's ARM64 Linux runner. It compares the
+stock SPT guest's traces with the Shen model for the TC1 handler and TC0-A
+hand cases, and requires both guest fault variants to diverge. The artifact
+includes the source and toolchain pins, host details, guest image and report.
+Its separate A3 job builds the pinned host prefix and runs OTP/SQLite host-only
+tests, not the A3 guest or history campaign. Neither job runs HVT.
+
+For Go host tests, pinned toolchain instructions and optional explicit Shen/Node
+integration vectors, use the [native host README](tools/solo5/native-arithmetic/README.md).
+Live commands additionally require the exact images and reviewed isolation/cleanup
+prerequisites; ordinary unit tests do not supply them.
+
+Private development captures live under ignored `build/` and workflow journals.
+They are local source-bound evidence, not automatically available from a clean
+checkout or published qualification receipts.

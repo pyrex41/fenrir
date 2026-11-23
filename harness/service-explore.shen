@@ -48,9 +48,19 @@
   X [Y | Ys] -> [X Y | Ys] where (<= (hd X) (hd Y))
   X [Y | Ys] -> [Y | (sx.insert-by-head X Ys)])
 
+(define sx.strictly-descending?
+  _ [] -> true
+  N [Y | Ys] -> (and (> N (hd Y)) (sx.strictly-descending? (hd Y) Ys)))
+
+(define sx.insertion-sort
+  [] -> []
+  [X | Xs] -> (sx.insert-by-head X (sx.insertion-sort Xs)))
+
 (define sx.sort-by-head
   [] -> []
-  [X | Xs] -> (sx.insert-by-head X (sx.sort-by-head Xs)))
+  [X | Xs] -> (if (sx.strictly-descending? (hd X) Xs)
+                   (reverse [X | Xs])
+                   (sx.insertion-sort [X | Xs])))
 
 (define sx.receipt
   [receipt T K D R J] -> [T K D R J])

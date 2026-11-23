@@ -1,0 +1,192 @@
+(datatype Totals NoKeys (Key I64 I64 I64 I64 Totals))
+(datatype Counts Vacant
+  (Pair I64 I64 I64 I64 I64 I64 I64)
+  (Group Counts Counts Counts Counts)
+  (Branch Counts Counts Counts Counts Counts Counts Counts Counts))
+(datatype Decoder (LengthHi I64 Counts) (LengthLo I64 I64 Counts)
+                  (ReadKey I64 I64 Counts) (Payload I64 I64 I64 I64 I64 Counts)
+                  (Invalid I64))
+(datatype Summary (Accepted Totals) (Rejected I64))
+
+\\ A pair holds the even key, then record count, byte count and sum for each sibling.
+(define update-pair {(Tuple Counts I64 I64 I64) --> Counts}
+  tree key size sum -> (let even (* 2 (/ key 2))
+    (match tree
+      (Vacant -> (if (= key even) (Pair even 1 size sum 0 0 0) (Pair even 0 0 0 1 size sum)))
+      ((Pair k n s v m t w) -> (if (= key even)
+        (Pair k (+ n 1) (+ s size) (+ v sum) m t w)
+        (Pair k n s v (+ m 1) (+ t size) (+ w sum))))
+      ((Group a b c d) -> tree)
+      ((Branch a b c d e f g h) -> tree))))
+
+(define update-group {(Tuple Counts I64 I64 I64) --> Counts}
+  tree key size sum -> (match tree
+    (Vacant -> (update-pair Vacant key size sum))
+    ((Pair k n s v m t w) ->
+      (if (= k (* 2 (/ key 2))) (update-pair tree key size sum)
+        (let index (/ (- k (* 16 (/ k 16))) 2)
+          (update-group
+            (if (< index 4)
+              (if (< index 2)
+                (if (< index 1)
+                  (Branch tree Vacant Vacant Vacant Vacant Vacant Vacant Vacant)
+                  (Branch Vacant tree Vacant Vacant Vacant Vacant Vacant Vacant))
+                (if (< index 3)
+                  (Branch Vacant Vacant tree Vacant Vacant Vacant Vacant Vacant)
+                  (Branch Vacant Vacant Vacant tree Vacant Vacant Vacant Vacant)))
+              (if (< index 6)
+                (if (< index 5)
+                  (Branch Vacant Vacant Vacant Vacant tree Vacant Vacant Vacant)
+                  (Branch Vacant Vacant Vacant Vacant Vacant tree Vacant Vacant))
+                (if (< index 7)
+                  (Branch Vacant Vacant Vacant Vacant Vacant Vacant tree Vacant)
+                  (Branch Vacant Vacant Vacant Vacant Vacant Vacant Vacant tree)))) key size sum))))
+    ((Group a b c d) -> tree)
+    ((Branch a b c d e f g h) ->
+      (let index (/ (- key (* 16 (/ key 16))) 2)
+        (if (< index 4)
+          (if (< index 2)
+            (if (< index 1)
+              (Branch (update-pair a key size sum) b c d e f g h)
+              (Branch a (update-pair b key size sum) c d e f g h))
+            (if (< index 3)
+              (Branch a b (update-pair c key size sum) d e f g h)
+              (Branch a b c (update-pair d key size sum) e f g h)))
+          (if (< index 6)
+            (if (< index 5)
+              (Branch a b c d (update-pair e key size sum) f g h)
+              (Branch a b c d e (update-pair f key size sum) g h))
+            (if (< index 7)
+              (Branch a b c d e f (update-pair g key size sum) h)
+              (Branch a b c d e f g (update-pair h key size sum)))))))))
+
+(define add-record {(Tuple Counts I64 I64 I64) --> Counts}
+  tree key size sum -> (match tree
+    (Vacant -> (add-record (Group Vacant Vacant Vacant Vacant) key size sum))
+    ((Pair k n s v m t w) -> tree)
+    ((Branch a b c d e f g h) -> tree)
+    ((Group a b c d) ->
+      (let index (/ key 16)
+        (if (< index 2)
+          (if (< index 1)
+            (Group
+              (update-group a key size sum) b c d)
+            (Group a
+              (update-group b key size sum) c d))
+          (if (< index 3)
+            (Group a b
+              (update-group c key size sum) d)
+            (Group a b c
+              (update-group d key size sum))))))))
+
+(define flatten {(Tuple Counts Totals) --> Totals}
+  tree rest -> (match tree
+    (Vacant -> rest)
+    ((Pair k n s v m t w) -> (let tail (if (= m 0) rest (Key (+ k 1) m t w rest))
+      (if (= n 0) tail (Key k n s v tail))))
+    ((Group a b c d) -> (flatten a (flatten b (flatten c (flatten d rest)))))
+    ((Branch a b c d e f g h) -> (flatten a (flatten b (flatten c (flatten d
+      (flatten e (flatten f (flatten g (flatten h rest)))))))))))
+
+(define sum-range {(Tuple Bytes I64 I64 I64) --> I64}
+  chunk i end sum -> (if (= i end) sum
+    (sum-range chunk (+ i 1) end (+ sum (bytes-index chunk i)))))
+
+\\ Keep the four 16-key groups separate until a chunk ends or a frame spans chunks.
+(define walk {(Tuple I64 Bytes I64 Counts Counts Counts Counts) --> Decoder}
+  at chunk i a b c d -> (if (= i (bytes-length chunk)) (LengthHi at (Group a b c d))
+    (let hi (* (bytes-index chunk i) 256)
+          (if (< (- (bytes-length chunk) i) 3)
+            (feed-from (LengthLo (+ at 1) hi (Group a b c d)) chunk (+ i 1))
+            (let size (+ hi (bytes-index chunk (+ i 1)))
+              (if (= size 0) (Invalid at)
+                (let key (bytes-index chunk (+ i 2))
+                  (if (> key 63) (Invalid (+ at 2))
+                    (let start (+ i 3)
+                      (let n (- size 1)
+                        (if (<= n (- (bytes-length chunk) start))
+                          (let end (+ start n)
+                            (let count (sum-range chunk start end 0)
+                              (if (< key 32)
+                                (if (< key 16)
+                                  (walk (+ (+ at 3) n) chunk end
+                                    (update-group a key n count) b c d)
+                                  (walk (+ (+ at 3) n) chunk end a
+                                    (update-group b key n count) c d))
+                                (if (< key 48)
+                                  (walk (+ (+ at 3) n) chunk end a b
+                                    (update-group c key n count) d)
+                                  (walk (+ (+ at 3) n) chunk end a b c
+                                    (update-group d key n count))))))
+                          (feed-from (Payload (+ at 3) key n n 0 (Group a b c d)) chunk start))))))))))))
+
+(define feed-ready {(Tuple I64 Counts Bytes I64) --> Decoder}
+  at totals chunk i -> (match totals
+    (Vacant -> (walk at chunk i Vacant Vacant Vacant Vacant))
+    ((Group a b c d) -> (walk at chunk i a b c d))
+    ((Branch a b c d e f g h) -> (Invalid at))
+    ((Pair k n s v m t w) -> (Invalid at))))
+
+(define feed-from {(Tuple Decoder Bytes I64) --> Decoder}
+  state chunk i -> (if (= i (bytes-length chunk)) state
+    (match state
+      ((Invalid at) -> state)
+      ((LengthHi at totals) -> (feed-ready at totals chunk i))
+      ((LengthLo at hi totals) ->
+        (let size (+ hi (bytes-index chunk i))
+          (if (= size 0) (Invalid (- at 1))
+            (feed-from (ReadKey (+ at 1) size totals) chunk (+ i 1)))))
+      ((ReadKey at size totals) ->
+        (let key (bytes-index chunk i)
+          (if (< 63 key) (Invalid at)
+            (feed-from (if (= size 1) (LengthHi (+ at 1) (add-record totals key 0 0))
+                         (Payload (+ at 1) key (- size 1) (- size 1) 0 totals))
+                       chunk (+ i 1)))))
+      ((Payload at key size left sum totals) ->
+        (let available (- (bytes-length chunk) i)
+          (let take (if (< available left) available left)
+            (let end (+ i take)
+              (let count (sum-range chunk i end sum)
+                (if (= take left)
+                  (feed-from (LengthHi (+ at take) (add-record totals key size count)) chunk end)
+                  (Payload (+ at take) key size (- left take) count totals))))))))))
+
+(define feed {(Tuple Decoder Bytes) --> Decoder}
+  state chunk -> (feed-from state chunk 0))
+
+(define finish {Decoder --> Summary}
+  state -> (match state
+    ((LengthHi at totals) -> (Accepted (flatten totals NoKeys)))
+    ((LengthLo at hi totals) -> (Rejected at))
+    ((ReadKey at size totals) -> (Rejected at))
+    ((Payload at key size left sum totals) -> (Rejected at))
+    ((Invalid at) -> (Rejected at))))
+
+(define digit {I64 --> Bytes}
+  n -> (if (< n 5)
+    (if (< n 2) (if (= n 0) "0" "1")
+      (if (= n 2) "2" (if (= n 3) "3" "4")))
+    (if (< n 7) (if (= n 5) "5" "6")
+      (if (= n 7) "7" (if (= n 8) "8" "9")))))
+
+(define decimal {I64 --> Bytes}
+  n -> (if (< n 10) (digit n)
+    (let high (/ n 10)
+      (bytes-concat (decimal high) (digit (- n (* high 10)))))))
+
+(define summary-line {(Tuple I64 I64 I64 I64) --> Bytes}
+  key records size sum ->
+    (bytes-concat (bytes-concat (decimal key) (bytes-concat " " (decimal records)))
+      (bytes-concat (bytes-concat " " (decimal size))
+        (bytes-concat " " (bytes-concat (decimal sum) #x0a)))))
+
+(define rejection-line {I64 --> Bytes}
+  offset -> (bytes-concat "reject " (bytes-concat (decimal offset) #x0a)))
+
+(datatype Output End (Line Bytes Totals))
+
+(define next-line {Totals --> Output}
+  totals -> (match totals
+    (NoKeys -> End)
+    ((Key key records size sum rest) ->
+      (Line (summary-line key records size sum) rest))))

@@ -35,9 +35,9 @@ export function projectExpr(e, scope) {
   if (tag === 'if') return {k: 'if', c: project(e[2], scope), t: project(e[3], scope), f: project(e[4], scope)};
   if (tag === 'prim') {
     const op = e[2], args = e.slice(3).map(x => project(x, scope));
-    if (op === 'neg') return {k: 'neg', a: args[0]};
+    if (op === 'neg') return {k: 'neg', origin: e[1], a: args[0]};
     if (op === 'not') return {k: 'not', a: args[0]};
-    if (op in BINOPS) return {k: 'bin', op, a: args[0], b: args[1]};
+    if (op in BINOPS) return {k: 'bin', origin: e[1], op, a: args[0], b: args[1]};
     if (op in CMPOPS) return {k: 'cmp', op, a: args[0], b: args[1]};
     reject(`Unsupported primitive ${op}`);
   }
@@ -77,15 +77,15 @@ const CSET_INV = {lt: GE, le: GT, gt: LE, ge: LT, eq: NE};
 
 // ---------- compiler: Compile.v comp / compile_fn ----------
 const push0 = I.strPre(0, -16), pop1 = I.ldrPost(1, 16);
-const trapSeq = c => [I.addSubImm(false, false, 31, 9, 0), I.movz(1, c, 0), I.ret(30)];
+const trapSeq = (c, origin) => [I.addSubImm(false, false, 31, 9, 0), I.movz(1, c, 0), {...I.ret(30), origin}];
 const half = (n, k) => Number(((((n % M64) + M64) % M64) >> BigInt(16 * k)) & 0xffffn);
 const loadImm = n => [I.movz(0, half(n, 0), 0), I.movk(0, half(n, 1), 1), I.movk(0, half(n, 2), 2), I.movk(0, half(n, 3), 3)];
-function binopCode(op) {
-  if (op === 'add') return [I.addSubReg(false, true, 0, 1, 0, 'LSL', 0), I.bcond(VC, 4), ...trapSeq(1)];
-  if (op === 'sub') return [I.addSubReg(true, true, 0, 1, 0, 'LSL', 0), I.bcond(VC, 4), ...trapSeq(1)];
-  if (op === 'mul') return [I.smulh(3, 1, 0), I.madd(0, 1, 0, 31), I.addSubReg(true, true, 31, 3, 0, 'ASR', 63), I.bcond(EQ, 4), ...trapSeq(1)];
-  return [I.cbz(true, 0, 4), ...trapSeq(2), I.addSubImm(false, true, 31, 0, 1), I.bcond(NE, 6),
-    I.addSubReg(true, true, 31, 31, 1, 'LSL', 0), I.bcond(VC, 4), ...trapSeq(1), I.sdiv(0, 1, 0)];
+function binopCode(op, origin) {
+  if (op === 'add') return [I.addSubReg(false, true, 0, 1, 0, 'LSL', 0), I.bcond(VC, 4), ...trapSeq(1, origin)];
+  if (op === 'sub') return [I.addSubReg(true, true, 0, 1, 0, 'LSL', 0), I.bcond(VC, 4), ...trapSeq(1, origin)];
+  if (op === 'mul') return [I.smulh(3, 1, 0), I.madd(0, 1, 0, 31), I.addSubReg(true, true, 31, 3, 0, 'ASR', 63), I.bcond(EQ, 4), ...trapSeq(1, origin)];
+  return [I.cbz(true, 0, 4), ...trapSeq(2, origin), I.addSubImm(false, true, 31, 0, 1), I.bcond(NE, 6),
+    I.addSubReg(true, true, 31, 31, 1, 'LSL', 0), I.bcond(VC, 4), ...trapSeq(1, origin), I.sdiv(0, 1, 0)];
 }
 export {I, trapSeq, push0, pop1};
 export function comp(ctx, d, e) {
@@ -93,8 +93,8 @@ export function comp(ctx, d, e) {
     case 'int': return loadImm(e.n);
     case 'bool': return [I.movz(0, e.b ? 1 : 0, 0)];
     case 'var': { if (e.i >= ctx.length) return []; return [I.ldrUoff(0, 2 * (d - 1 - ctx[e.i]))]; }
-    case 'neg': return [...comp(ctx, d, e.a), I.addSubReg(true, true, 0, 31, 0, 'LSL', 0), I.bcond(VC, 4), ...trapSeq(1)];
-    case 'bin': return [...comp(ctx, d, e.a), push0, ...comp(ctx, d + 1, e.b), pop1, ...binopCode(e.op)];
+    case 'neg': return [...comp(ctx, d, e.a), I.addSubReg(true, true, 0, 31, 0, 'LSL', 0), I.bcond(VC, 4), ...trapSeq(1, e.origin)];
+    case 'bin': return [...comp(ctx, d, e.a), push0, ...comp(ctx, d + 1, e.b), pop1, ...binopCode(e.op, e.origin)];
     case 'cmp': return [...comp(ctx, d, e.a), push0, ...comp(ctx, d + 1, e.b), pop1,
       I.addSubReg(true, true, 31, 1, 0, 'LSL', 0), I.csinc(0, 31, 31, CSET_INV[e.op])];
     case 'not': return [...comp(ctx, d, e.a), I.addSubImm(true, true, 31, 0, 0), I.csinc(0, 31, 31, NE)];

@@ -1,0 +1,11 @@
+\\ > outcome: Ok 0
+(datatype Counter (Count I64 I64))
+
+(define count {Counter --> I64}
+  state -> (match state
+    ((Count remaining total) ->
+      (if (<= remaining 0) total
+          (count (Count (- remaining 1) (+ total 1)))))))
+
+(define main {I64 --> I64}
+  n -> (count (Count n 0)))

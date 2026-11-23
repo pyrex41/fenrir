@@ -1,0 +1,406 @@
+{
+  "macos-arm64": {
+    "kernel_verdict": "meets-threshold",
+    "host_identity": "matched",
+    "prover_input_identity": "matched",
+    "prover_completed_work": "matched",
+    "prover_work_rates": "matched",
+    "router_and_stream_input_identity": "matched",
+    "shared_source_identity": "matched",
+    "target": "macos-arm64",
+    "stream_profile": "mixed",
+    "rows": {
+      "search": {
+        "reference": "rust",
+        "pairs": 20,
+        "median": 0.9691422675181143,
+        "rss_ratio": 0.835820895522388,
+        "eligible_references": {
+          "nim": {
+            "pairs": 20,
+            "median": 0.48041006192515,
+            "bootstrap95": [
+              0.46779789121566184,
+              0.49013437441161944
+            ]
+          },
+          "rust": {
+            "pairs": 20,
+            "median": 0.9691422675181143,
+            "bootstrap95": [
+              0.9545488946203827,
+              1.0102068368730857
+            ]
+          },
+          "koka": {
+            "pairs": 20,
+            "median": 0.7030673216188605,
+            "bootstrap95": [
+              0.6933630991043849,
+              0.7191347233663961
+            ]
+          },
+          "shen": {
+            "pairs": 20,
+            "median": 0.5843372987301128,
+            "bootstrap95": [
+              0.5731851257583613,
+              0.6049991796398149
+            ]
+          }
+        },
+        "memory": {
+          "pairs": 20,
+          "ratio": 0.835820895522388,
+          "bootstrap95": [
+            0.8296296296296296,
+            0.835820895522388
+          ],
+          "verdict": "meets-threshold"
+        },
+        "elapsed_bootstrap95": [
+          0.9545488946203827,
+          1.0102068368730857
+        ],
+        "elapsed_verdict": "meets-threshold"
+      },
+      "check": {
+        "reference": "rust",
+        "pairs": 20,
+        "median": 0.8107647773440357,
+        "rss_ratio": 0.8549618320610687,
+        "eligible_references": {
+          "nim": {
+            "pairs": 20,
+            "median": 0.39629250026025026,
+            "bootstrap95": [
+              0.3931511058125828,
+              0.4059746028295861
+            ]
+          },
+          "rust": {
+            "pairs": 20,
+            "median": 0.8107647773440357,
+            "bootstrap95": [
+              0.7800103760737445,
+              0.8283784043869517
+            ]
+          },
+          "koka": {
+            "pairs": 20,
+            "median": 0.7041793927403017,
+            "bootstrap95": [
+              0.6909644698525401,
+              0.711417468836224
+            ]
+          },
+          "shen": {
+            "pairs": 20,
+            "median": 0.424909353413749,
+            "bootstrap95": [
+              0.420455529254689,
+              0.43614010774428025
+            ]
+          }
+        },
+        "memory": {
+          "pairs": 20,
+          "ratio": 0.8549618320610687,
+          "bootstrap95": [
+            0.8549618320610687,
+            0.8549618320610687
+          ],
+          "verdict": "meets-threshold"
+        },
+        "elapsed_bootstrap95": [
+          0.7800103760737445,
+          0.8283784043869517
+        ],
+        "elapsed_verdict": "meets-threshold"
+      },
+      "router": {
+        "reference": "rust",
+        "pairs": 15,
+        "median": 0.9628939585345917,
+        "rss_ratio": 0.9416666666666667,
+        "eligible_references": {
+          "nim": {
+            "pairs": 15,
+            "median": 0.17455285733808124,
+            "bootstrap95": [
+              0.17270791785695036,
+              0.17854089477900809
+            ]
+          },
+          "rust": {
+            "pairs": 15,
+            "median": 0.9628939585345917,
+            "bootstrap95": [
+              0.9550670640834575,
+              0.9695423273291284
+            ]
+          },
+          "koka": {
+            "pairs": 15,
+            "median": 0.15098176718092568,
+            "bootstrap95": [
+              0.14952693492671085,
+              0.1520577481953689
+            ]
+          }
+        },
+        "memory": {
+          "pairs": 15,
+          "ratio": 0.9416666666666667,
+          "bootstrap95": [
+            0.9416666666666667,
+            0.9416666666666667
+          ],
+          "verdict": "meets-threshold"
+        },
+        "elapsed_bootstrap95": [
+          0.9551575695330426,
+          0.9666795084246498
+        ],
+        "elapsed_verdict": "meets-threshold"
+      },
+      "stream": {
+        "reference": "rust",
+        "pairs": 80,
+        "median": 1.5335168548701097,
+        "rss_ratio": 0.9416666666666667,
+        "eligible_references": {
+          "nim": {
+            "pairs": 80,
+            "median": 1.4783141301037137,
+            "bootstrap95": [
+              1.4507104479941495,
+              1.502401651339732
+            ]
+          },
+          "rust": {
+            "pairs": 80,
+            "median": 1.5335168548701097,
+            "bootstrap95": [
+              1.5014990839845994,
+              1.5687940893455123
+            ]
+          },
+          "koka": {
+            "pairs": 80,
+            "median": 0.34931106327729156,
+            "bootstrap95": [
+              0.345125073001639,
+              0.3525498475949744
+            ]
+          },
+          "shen": {
+            "pairs": 80,
+            "median": 0.324409249425897,
+            "bootstrap95": [
+              0.31892544486638663,
+              0.3291779894597919
+            ]
+          }
+        },
+        "memory": {
+          "pairs": 80,
+          "ratio": 0.9416666666666667,
+          "bootstrap95": [
+            0.9416666666666667,
+            0.9416666666666667
+          ],
+          "verdict": "meets-threshold"
+        },
+        "elapsed_bootstrap95": [
+          1.5014148264530678,
+          1.5592200889116874
+        ],
+        "elapsed_verdict": "meets-threshold"
+      }
+    },
+    "elapsed_ratio_geomean": 1.0378566105906246,
+    "bootstrap95": [
+      1.0236070479680415,
+      1.051617041389115
+    ],
+    "bootstrap_seed": 1147,
+    "geomean_verdict": "meets-threshold",
+    "elapsed_verdict": "meets-threshold",
+    "elapsed_point_estimates_within_gates": true,
+    "reports": {
+      "prover": {
+        "path": "prover/report.json",
+        "sha256": "4dd8c53bb7ea1b842155e9303dba8fc36043dbeec4d248b1844960be545dc25c"
+      },
+      "router": {
+        "path": "router/report.json",
+        "sha256": "ecec7cf6e077d1452b41e708c77f3858b6ff056256fb5b7b16c051066fba2644"
+      },
+      "stream": {
+        "path": "stream/report.json",
+        "sha256": "2c6b1913cf601450845590f4c62e18cd770b56d04dcc7ca2a041b4c956afdb4b"
+      }
+    }
+  },
+  "solo5-arm64-spt": {
+    "kernel_verdict": "above-threshold",
+    "host_identity": "matched",
+    "prover_input_identity": "matched",
+    "prover_completed_work": "matched",
+    "prover_work_rates": "matched",
+    "router_and_stream_input_identity": "matched",
+    "shared_source_identity": "matched",
+    "target": "solo5-arm64-spt",
+    "stream_profile": "mixed",
+    "rows": {
+      "search": {
+        "reference": "c",
+        "pairs": 12,
+        "median": 5.126336128169269,
+        "rss_ratio": 1.0,
+        "memory": {
+          "pairs": 12,
+          "ratio": 1.0,
+          "bootstrap95": [
+            1.0,
+            1.0023696682464456
+          ],
+          "verdict": "meets-threshold"
+        },
+        "memory_scope": "Linux maximum resident set size of the Solo5 tender process including the guest",
+        "elapsed_bootstrap95": [
+          4.975475096859201,
+          5.23801445246548
+        ],
+        "elapsed_verdict": "above-threshold",
+        "eligible_references": {
+          "c": {
+            "pairs": 12,
+            "median": 5.126336128169269,
+            "bootstrap95": [
+              4.975475096859201,
+              5.23801445246548
+            ]
+          }
+        }
+      },
+      "check": {
+        "reference": "c",
+        "pairs": 12,
+        "median": 4.530714860996531,
+        "rss_ratio": 1.0,
+        "memory": {
+          "pairs": 12,
+          "ratio": 1.0,
+          "bootstrap95": [
+            1.0,
+            1.0
+          ],
+          "verdict": "meets-threshold"
+        },
+        "memory_scope": "Linux maximum resident set size of the Solo5 tender process including the guest",
+        "elapsed_bootstrap95": [
+          4.347008716476896,
+          4.622034556746631
+        ],
+        "elapsed_verdict": "above-threshold",
+        "eligible_references": {
+          "c": {
+            "pairs": 12,
+            "median": 4.530714860996531,
+            "bootstrap95": [
+              4.347008716476896,
+              4.622034556746631
+            ]
+          }
+        }
+      },
+      "router": {
+        "reference": "c",
+        "pairs": 12,
+        "median": 1.5196241682045897,
+        "rss_ratio": 1.0,
+        "memory": {
+          "pairs": 12,
+          "ratio": 1.0,
+          "bootstrap95": [
+            0.985981308411215,
+            1.0165876777251184
+          ],
+          "verdict": "meets-threshold"
+        },
+        "memory_scope": "Linux maximum resident set size of the Solo5 tender process including the guest",
+        "elapsed_bootstrap95": [
+          1.4939971108280798,
+          1.5352902300910376
+        ],
+        "elapsed_verdict": "meets-threshold",
+        "eligible_references": {
+          "c": {
+            "pairs": 12,
+            "median": 1.5196241682045897,
+            "bootstrap95": [
+              1.4939971108280798,
+              1.5352902300910376
+            ]
+          }
+        }
+      },
+      "stream": {
+        "reference": "c",
+        "pairs": 12,
+        "median": 3.4835880381829494,
+        "rss_ratio": 1.1184834123222749,
+        "memory": {
+          "pairs": 12,
+          "ratio": 1.1184834123222749,
+          "bootstrap95": [
+            1.0754716981132075,
+            1.1706161137440758
+          ],
+          "verdict": "meets-threshold"
+        },
+        "memory_scope": "Linux maximum resident set size of the Solo5 tender process including the guest",
+        "elapsed_bootstrap95": [
+          3.2950619977783964,
+          3.553627372344745
+        ],
+        "elapsed_verdict": "above-threshold",
+        "eligible_references": {
+          "c": {
+            "pairs": 12,
+            "median": 3.4835880381829494,
+            "bootstrap95": [
+              3.2950619977783964,
+              3.553627372344745
+            ]
+          }
+        }
+      }
+    },
+    "elapsed_ratio_geomean": 3.3299230534304,
+    "bootstrap95": [
+      3.2637222702987905,
+      3.366587240508432
+    ],
+    "bootstrap_seed": 1147,
+    "geomean_verdict": "above-threshold",
+    "elapsed_verdict": "above-threshold",
+    "elapsed_point_estimates_within_gates": false,
+    "reports": {
+      "prover": {
+        "path": "prover/report.json",
+        "sha256": "9495602268a862073edb18cf5b8d9dcdac4d578ba68605a580231b05d4cb340f"
+      },
+      "router": {
+        "path": "router/report.json",
+        "sha256": "7e3e84934b5d83895396c580b6f6b4fcd65334396742b08ec57748daeb93b19b"
+      },
+      "stream": {
+        "path": "stream/report.json",
+        "sha256": "d018a696194aef255ae52c3b53565ee7bebedfa272e85467c31584f3d0af453a"
+      }
+    }
+  }
+}

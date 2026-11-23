@@ -1,0 +1,64 @@
+--- One update consumes root p0; a second root stays live until observation.
+--- Branches have one selected Pair field. Disjoint address sorts rule out
+--- cycles. pf and cf are fresh addresses reserved for copying.
+mod CONSTRUCTOR-REUSE is
+  protecting BOOL .
+  sorts Parent Child Parents Children Observation Policy State .
+  ops p0 p1 pf : -> Parent [ctor] .
+  ops c0 c1 cf : -> Child [ctor] .
+  op branches : Child Child Child -> Parents [ctor] .
+  op pairs : Bool Bool Bool -> Children [ctor] .
+  op observed : Bool Bool -> Observation [ctor] .
+  ops checked parentOnly : -> Policy [ctor] .
+  op start : Policy -> State [ctor] .
+  op start : Policy Bool Bool -> State [ctor] .
+  eq start(M:Policy) = start(M:Policy,false,false) .
+  op update : Policy Parent Parents Children -> State [ctor] .
+  op result : Parent Parents Children Observation Observation -> State [ctor] .
+
+  vars X Y Z C : Child .
+  vars A B D V : Bool .
+  vars P Q : Parent .
+  var H : Parents .
+  var K : Children .
+  var M : Policy .
+  op child : Parents Parent -> Child .
+  eq child(branches(X,Y,Z), p0) = X .
+  eq child(branches(X,Y,Z), p1) = Y .
+  eq child(branches(X,Y,Z), pf) = Z .
+  op value : Children Child -> Bool .
+  eq value(pairs(A,B,D), c0) = A .
+  eq value(pairs(A,B,D), c1) = B .
+  eq value(pairs(A,B,D), cf) = D .
+  op setChild : Parents Parent Child -> Parents .
+  eq setChild(branches(X,Y,Z), p0, C) = branches(C,Y,Z) .
+  eq setChild(branches(X,Y,Z), pf, C) = branches(X,Y,C) .
+  op setValue : Children Child Bool -> Children .
+  eq setValue(pairs(A,B,D), c0, V) = pairs(V,B,D) .
+  eq setValue(pairs(A,B,D), cf, V) = pairs(A,B,V) .
+
+  --- The immutable source returns a new value and keeps the survivor intact.
+  op source : Parent Parents Children -> Observation .
+  eq source(Q,H,K) = observed(not value(K, child(H,p0)), value(K, child(H,Q))) .
+  op observe : Parent Parent Parents Children -> Observation .
+  eq observe(P,Q,H,K) = observed(value(K, child(H,P)), value(K, child(H,Q))) .
+
+  op destination : Parent -> Parent .
+  eq destination(p0) = pf .
+  eq destination(p1) = p0 .
+  op destinationChild : Policy Parent Parents -> Child .
+  eq destinationChild(M,p0,H) = cf .
+  eq destinationChild(parentOnly,p1,H) = child(H,p0) .
+  eq destinationChild(checked,p1,H) =
+    if child(H,p0) == child(H,p1) then cf else child(H,p0) fi .
+
+  op finish : Parent Parents Children Parent Child -> State .
+  eq finish(Q,H,K,P,C) = result(Q,H,K,source(Q,H,K),
+    observe(P,Q,setChild(H,P,C),setValue(K,C,not value(K,child(H,p0))))) .
+
+  --- Exhaustive reachable alias shapes up to renaming for two unary roots.
+  rl [same-parent] : start(M,A,B) => update(M,p0,branches(c0,c1,cf),pairs(A,B,false)) .
+  rl [shared-child] : start(M,A,B) => update(M,p1,branches(c0,c0,cf),pairs(A,B,false)) .
+  rl [disjoint] : start(M,A,B) => update(M,p1,branches(c0,c1,cf),pairs(A,B,false)) .
+  rl [lower] : update(M,Q,H,K) => finish(Q,H,K,destination(Q),destinationChild(M,Q,H)) .
+endm

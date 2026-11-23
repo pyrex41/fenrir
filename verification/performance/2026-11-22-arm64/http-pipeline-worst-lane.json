@@ -1,0 +1,26 @@
+{
+  "source_sha256": "950f690bac63522385fe4f16e706977112a665b3de19e3c3f311c019624aa17b",
+  "origin": {
+    "Index": 2419009,
+    "Lane": 1,
+    "ElapsedNs": 1075367542,
+    "PreviousRequestNs": 0,
+    "DispatchNs": 32208,
+    "FetchNs": 1075335334,
+    "Valid": true
+  },
+  "slowest": {
+    "Index": 2441569,
+    "Lane": 1,
+    "ElapsedNs": 5703344875,
+    "PreviousRequestNs": 5699830250,
+    "DispatchNs": 208,
+    "FetchNs": 3514417
+  },
+  "intervening_lane_intervals": 1410,
+  "scheduled_interval_s": 4.512,
+  "completion_interval_s": 9.139977333,
+  "completed_per_second_between_endpoints": 154.2673410041377,
+  "offered_per_lane": 312.5,
+  "fetches_at_least_536870912ns": 272
+}

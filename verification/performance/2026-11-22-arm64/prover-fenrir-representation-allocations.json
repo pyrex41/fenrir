@@ -1,0 +1,27 @@
+{
+  "search": {
+    "rounds": 1,
+    "successful_cases": 10,
+    "guest_sha256": "86c4bc2b58de28c45448506b6a9e58a9847fa2adcd4930de23bf8af592195f5d",
+    "all_fen_allocate_calls": 168,
+    "source_sites": {
+      "append-queue": 31,
+      "enqueue": 27,
+      "search-steps": 66
+    },
+    "remaining_runtime_calls": 44
+  },
+  "check": {
+    "rounds": 1,
+    "successful_cases": 6,
+    "guest_sha256": "a4451feb11f051a121af1d0da6f83f1c3229ad596d1233c768b0a694d0d964fc",
+    "all_fen_allocate_calls": 83,
+    "source_sites": {
+      "append-queue": 28,
+      "enqueue": 25,
+      "verify-step": 24,
+      "verify-proof": 6
+    },
+    "remaining_runtime_calls": 0
+  }
+}

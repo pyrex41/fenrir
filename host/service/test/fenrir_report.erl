@@ -258,9 +258,10 @@ negative_scope(Root) ->
              {"concurrent-either-order", A, null}, {"cross-tenant-effect", R, 1},
              {"delivery-not-deduplicated", R, 3}, {"duplicated-mutation-on-retry", R, 2},
              {"duplicated-mutation-seen-in-store", R, 2}, {"full-cycle", A, null},
+             {"impossible-first-submit", R, 0},
              {"indeterminate-committed-then-retry", A, null}, {"indeterminate-not-committed-then-retry", A, null},
              {"indeterminate-unresolved", A, null}, {"job-lost-after-acceptance", R, 3},
-             {"job-lost-runner-drained", R, 3}, {"recorder-gap", I, 1},
+             {"job-lost-runner-drained", R, 3}, {"recorder-gap", I, 1}, {"repeated-concurrent-group", R, 0},
              {"response-after-crash", R, 2}, {"response-without-commit", R, 0},
              {"reused-key-accepted", R, 1}, {"submit-answered-refused", R, 0}],
     maps:from_list([begin

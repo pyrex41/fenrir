@@ -1,0 +1,44 @@
+{
+  "image": "sha256:2973c75c0af0a7a3d9d960cd66031bbb994089a46b3741b9ce6ca08427902409",
+  "sha256": {
+    "link-spt.sh": "1b56bc7a0d1463fed8ad56201330c008422f7bcb3985fe13c42e5886c6f22c21",
+    "timed-spt.c": "630e8ab888b471a37a5f731f78e5b209cc7023cd207c6c18eca053e030928ba2",
+    "native/heap.c": "b630d5e299808519c9d3f296728af5bf8659fb08605b17b9447f3579a2b130f5",
+    "native/scheduler.h": "157a17a9d5e0e8216422d237b4dad046dc835c293763fa39ef91162e1c856a1c",
+    "native/context.S": "ab437ac49e6f9a12f54dbde8eb3cfba82165363ba210622a6272ffb28d4dc14c",
+    "native/task-entry.c": "efc4907f8bbe85874a11272bd77ad3a7626d73eb4f8def10abc1fbe7b4b97dc2",
+    "native/context.h": "137e953469fb8d810f179aeff3ee43be0acd64ef9a0702ee4073d96367c42cc8",
+    "native/task-state.h": "c961cf0188b6030472daf75fde94cce0f6a6fff19d38b0a79e59de4b9aafc832",
+    "native/heap.h": "222e3ecd95f2c8c3bd1b22017dccb79e8b3c39e20b8d19120208e3161045a035",
+    "native/task-entry.h": "3040991faf2d5d00cab261919d6ed8e2bdc6c80c69b4981df8dfa478e21c8860",
+    "native/scheduler.c": "3a8a4c8be942d4d5e67002b512ca3991bab2893a6a783d681e976ba156d8897b",
+    "native/managed.c": "625b1e8d8243833a8fbb3831e953afd3e4a9575c06ae523427f1d3366e936a54",
+    "baseline/search.fen": "32f10b8eafea72f159b4fe5d735a2e9f2c6be072d4ee1f99afc4f02a069eff75",
+    "baseline/search.artifact": "2dfa365ff45341f1a4d5681425f5551263171c697224c1340507f93c5c1be5d8",
+    "baseline/search-guest.s": "008b5bb5c6ccd4718f45a0a2a7e1fcf923e8a0036a57351d51b3a5d17cd83f5e",
+    "baseline/search.spt": "b227d36bd6838b8ce55085eab592511c64b7a67a0f63ff3727b5d80db14ea11f",
+    "candidate/search.fen": "3ad73e10400c12530b93272ab8094df7b2bc5b9d4a7aa2a4768e752a855e4572",
+    "candidate/search.artifact": "d39fff0a83860258516dc819db2b4032cf4cd2e7c16bafafb5a5ae09e4d5be44",
+    "candidate/search-guest.s": "98969016fa4040da24b33bfc32ba70fb014cdff64461692e7bdb8bdaeca4e487",
+    "candidate/search.spt": "3f9e6cc741f7bce7f85db69aceb05ec0876d63face0f665b8615d30bedb892bb",
+    "baseline/check.fen": "f814ca714f2eb9a50c161a592968837570f740f326c1621bb6b2c2d41b06d376",
+    "baseline/check.artifact": "e6cc3c7ecec28a1ed8c85a8697e8ae18e937d181a24d7f7c97e4ea197e023fbc",
+    "baseline/check-guest.s": "b2aef9e68c30ed97a8a2755129f62cf9e482e2a8f513750bcd8eb4c1e90a318e",
+    "baseline/check.spt": "1a3cb254697d15f3b0feea96280dfcc2f68344a2dea6664770b940b051e2ea14",
+    "candidate/check.fen": "a801a5a1341f08f02ea5c38c3603f5f7ff7432f5b3b80feb880d6f949feb5a70",
+    "candidate/check.artifact": "627071c614cb0c47321cfbb211749246cfcd612298c87132bf5dcd7d90497a6d",
+    "candidate/check-guest.s": "5d2281e4b3a2fe8cd629d689d2c402360ef70ff87ade1124ce34111e04123d54",
+    "candidate/check.spt": "1dd5613a99312f20cd0c7c2646f1071fc15e71860f9b28426f15f5ed7e6f4383"
+  },
+  "smoke": {
+    "baseline": [
+      10,
+      6
+    ],
+    "candidate": [
+      10,
+      6
+    ]
+  },
+  "scope": "one search and certificate corpus round per variant"
+}

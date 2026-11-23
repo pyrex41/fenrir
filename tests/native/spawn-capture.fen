@@ -1,0 +1,6 @@
+\\ > emit "child": 7 (task 1)
+\\ > outcome: Ok 4
+(define main {I64 --> I64}
+  input -> (let n (+ input 7)
+             (let child (spawn (lambda (_ : Unit) (do (emit "child" n) n)))
+               4)))

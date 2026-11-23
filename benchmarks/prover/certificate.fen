@@ -1,0 +1,42 @@
+(define verify-step {(Tuple Queue Queue I64 I64 Bytes I64) --> I64}
+  q rear pos negative tape cursor ->
+    (match q
+      (Empty -> (match rear (Empty -> -1) ((More s g tail) -> (verify-step rear Empty pos negative tape cursor))))
+      ((More sign f rest) ->
+        (if (< cursor 0) -1
+          (if (>= cursor (bytes-length tape)) -1
+            (let rule (bytes-index tape cursor) next (+ cursor 1)
+              (match f
+                ((Atom bit) ->
+                  (if (present (if sign negative pos) bit)
+                      (if (= rule 120) next -1)
+                      (if (= rule 115)
+                          (verify-step rest rear (if sign (insert pos bit) pos)
+                                            (if sign negative (insert negative bit)) tape next)
+                          -1)))
+                ((Neg a) ->
+                  (if (= rule 115)
+                      (match rest
+                        (Empty -> (verify-step rear (More (not sign) a Empty) pos negative tape next))
+                        ((More hs hf ht) -> (verify-step rest (enqueue rear (not sign) a) pos negative tape next)))
+                      -1))
+                ((Binary op a b) ->
+                  (let sign-a (if (= op 2) (not sign) sign)
+                    (if (= sign (= op 0))
+                        (if (= rule 115)
+                            (match rest
+                              (Empty -> (verify-step rear (More sign-a a (More sign b Empty)) pos negative tape next))
+                              ((More hs hf ht) -> (verify-step rest (append-queue rear (More sign-a a (More sign b Empty))) pos negative tape next)))
+                            -1)
+                        (if (= rule 98)
+                            (let after (match rest
+                                         (Empty -> (verify-step rear (More sign-a a Empty) pos negative tape next))
+                                         ((More hs hf ht) -> (verify-step rest (enqueue rear sign-a a) pos negative tape next)))
+                              (match rest
+                                (Empty -> (verify-step rear (More sign b Empty) pos negative tape after))
+                                ((More hs hf ht) -> (verify-step rest (enqueue rear sign b) pos negative tape after))))
+                            -1)))))))))))
+
+(define verify-proof {(Tuple Formula Bytes) --> Bool}
+  goal tape -> (= (verify-step (More false goal Empty) Empty 0 0 tape 0)
+                  (bytes-length tape)))

@@ -1,0 +1,101 @@
+{
+  "target": "solo5",
+  "sample_origin_version": 1,
+  "reference": "c",
+  "rate": 2000,
+  "seconds": 600,
+  "pairs": [
+    {
+      "block": 0,
+      "p99_ns": {
+        "fenrir": 2743837500,
+        "c": 2185542
+      },
+      "ratio": 1255.4494491526586,
+      "host_cpu": {
+        "fenrir": {
+          "server_percent": {
+            "samples": 105,
+            "median": 4.8,
+            "peak": 9.5
+          },
+          "driver_percent": {
+            "samples": 105,
+            "median": 18.4,
+            "peak": 22.8
+          },
+          "other_processes_percent": {
+            "samples": 105,
+            "median": 865.8,
+            "peak": 881.3
+          }
+        },
+        "c": {
+          "server_percent": {
+            "samples": 119,
+            "median": 4.8,
+            "peak": 5.3
+          },
+          "driver_percent": {
+            "samples": 119,
+            "median": 21.5,
+            "peak": 23.4
+          },
+          "other_processes_percent": {
+            "samples": 119,
+            "median": 740.5,
+            "peak": 882.1
+          }
+        }
+      }
+    },
+    {
+      "block": 1,
+      "p99_ns": {
+        "fenrir": 1690708,
+        "c": 3594834
+      },
+      "ratio": 0.4703160145920507,
+      "host_cpu": {
+        "fenrir": {
+          "server_percent": {
+            "samples": 114,
+            "median": 4.8,
+            "peak": 5.7
+          },
+          "driver_percent": {
+            "samples": 114,
+            "median": 21.4,
+            "peak": 23.4
+          },
+          "other_processes_percent": {
+            "samples": 114,
+            "median": 669.25,
+            "peak": 881.0
+          }
+        },
+        "c": {
+          "server_percent": {
+            "samples": 113,
+            "median": 3.3,
+            "peak": 5.0
+          },
+          "driver_percent": {
+            "samples": 113,
+            "median": 16.7,
+            "peak": 22.7
+          },
+          "other_processes_percent": {
+            "samples": 113,
+            "median": 878.1,
+            "peak": 904.1
+          }
+        }
+      }
+    }
+  ],
+  "paired_median": 627.9598825836254,
+  "bootstrap95": null,
+  "seed": 1147,
+  "meets_duration_and_pair_count": false
+}

@@ -1,0 +1,2 @@
+\\ expect sub/entry.decl.fen:1:1 main belongs to the entry file
+(library "sub/entry.decl.fen")

@@ -1,0 +1,21 @@
+(datatype Formula (Atom I64) (Neg Formula) (Binary I64 Formula Formula))
+(datatype Queue Empty (More Bool Formula Queue))
+
+(define append-queue {(Tuple Queue Queue) --> Queue}
+  q suffix -> (match q
+    (Empty -> suffix)
+    ((More sign f rest) -> (match rest
+      (Empty -> (More sign f suffix))
+      ((More t g tail) -> (More sign f (More t g (append-queue tail suffix))))))))
+
+(define enqueue {(Tuple Queue Bool Formula) --> Queue}
+  q sign f -> (append-queue q (More sign f Empty)))
+
+(define present {(Tuple I64 I64) --> Bool}
+  mask bit -> (if (< mask bit) false
+                (let quotient (/ mask bit)
+                  (= (- quotient (* 2 (/ quotient 2))) 1))))
+
+(define insert {(Tuple I64 I64) --> I64}
+  mask bit -> (if (< mask bit) (+ mask bit)
+                (if (present mask bit) mask (+ mask bit))))

@@ -1,0 +1,106 @@
+{
+  "fenrir-native-spt": {
+    "source_sha256": "06353c695d85451125d5b72d1ef78d406b45282db668fafb7a59753137800c33",
+    "worst": {
+      "index": 8066,
+      "scheduled_us": 80660000,
+      "ack_us": 69156,
+      "service_us": 67449,
+      "previous_us": 0,
+      "dispatch_us": 1707
+    },
+    "episode_first": {
+      "index": 8066,
+      "scheduled_us": 80660000,
+      "ack_us": 69156,
+      "service_us": 67449,
+      "previous_us": 0,
+      "dispatch_us": 1707
+    },
+    "episode_last": {
+      "index": 8073,
+      "scheduled_us": 80730000,
+      "ack_us": 5895,
+      "service_us": 845,
+      "previous_us": 5050,
+      "dispatch_us": 0
+    },
+    "episode_requests": 8,
+    "episode_tail_requests": 8,
+    "total_tail_requests": 601,
+    "peak_service": {
+      "index": 8066,
+      "scheduled_us": 80660000,
+      "ack_us": 69156,
+      "service_us": 67449,
+      "previous_us": 0,
+      "dispatch_us": 1707
+    },
+    "peak_dispatch": {
+      "index": 8066,
+      "scheduled_us": 80660000,
+      "ack_us": 69156,
+      "service_us": 67449,
+      "previous_us": 0,
+      "dispatch_us": 1707
+    },
+    "tail_mean_us": {
+      "ack_us": 6834.216306156406,
+      "previous_us": 598.8219633943428,
+      "dispatch_us": 3503.4642262895177,
+      "service_us": 2731.9301164725457
+    }
+  },
+  "c-native-spt": {
+    "source_sha256": "fd1bdaf57e32af95db1b40ad76f3ef5b2b2b656f20a9e8630bdf92102911247d",
+    "worst": {
+      "index": 36575,
+      "scheduled_us": 365750000,
+      "ack_us": 727344,
+      "service_us": 2078,
+      "previous_us": 0,
+      "dispatch_us": 725266
+    },
+    "episode_first": {
+      "index": 36575,
+      "scheduled_us": 365750000,
+      "ack_us": 727344,
+      "service_us": 2078,
+      "previous_us": 0,
+      "dispatch_us": 725266
+    },
+    "episode_last": {
+      "index": 36656,
+      "scheduled_us": 366560000,
+      "ack_us": 5761,
+      "service_us": 973,
+      "previous_us": 4788,
+      "dispatch_us": 0
+    },
+    "episode_requests": 82,
+    "episode_tail_requests": 80,
+    "total_tail_requests": 601,
+    "peak_service": {
+      "index": 36623,
+      "scheduled_us": 366230000,
+      "ack_us": 303060,
+      "service_us": 2489,
+      "previous_us": 300571,
+      "dispatch_us": 0
+    },
+    "peak_dispatch": {
+      "index": 36575,
+      "scheduled_us": 365750000,
+      "ack_us": 727344,
+      "service_us": 2078,
+      "previous_us": 0,
+      "dispatch_us": 725266
+    },
+    "tail_mean_us": {
+      "ack_us": 112211.99667221298,
+      "previous_us": 100821.35773710483,
+      "dispatch_us": 4394.251247920133,
+      "service_us": 6996.38768718802
+    }
+  }
+}

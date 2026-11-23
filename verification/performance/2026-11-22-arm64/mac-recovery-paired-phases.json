@@ -1,0 +1,524 @@
+{
+  "fields": [
+    "worker_kill_to_replacement_observed_us",
+    "replacement_observed_to_successful_retry_us",
+    "worker_kill_to_successful_retry_us"
+  ],
+  "workers": {
+    "fenrir-native-mac": {
+      "rows": [
+        {
+          "block": 0,
+          "values_us": [
+            1250,
+            6042,
+            7292
+          ],
+          "timings_sha256": "6d44e084bb6132616cf03330a99718060b639db406f5eee398fc435b2f5c135a"
+        },
+        {
+          "block": 1,
+          "values_us": [
+            1267,
+            6921,
+            8188
+          ],
+          "timings_sha256": "d759fea456be2405297c0bc2b3f2f5765c0743e161c6ce9cbde59e718f34019d"
+        },
+        {
+          "block": 2,
+          "values_us": [
+            678,
+            2259,
+            2937
+          ],
+          "timings_sha256": "34af2722ea4f083cf65996ed049b5cde347613f7bd1c53580aa1b007bf458b71"
+        },
+        {
+          "block": 3,
+          "values_us": [
+            473,
+            2008,
+            2481
+          ],
+          "timings_sha256": "f27ae9a707afad834d250ad509eeb4bfa09608d4ac3bfc44306f171905fcfc10"
+        },
+        {
+          "block": 4,
+          "values_us": [
+            718,
+            2811,
+            3529
+          ],
+          "timings_sha256": "cc902867ff09fe53037f1927834911ac44c63fd8530b961dd49a7f7fc5fe5f45"
+        },
+        {
+          "block": 5,
+          "values_us": [
+            682,
+            2273,
+            2955
+          ],
+          "timings_sha256": "f050f87dc16dafebfbfede379037c2cb9871834109090ed819c8a5c0640a3576"
+        },
+        {
+          "block": 6,
+          "values_us": [
+            492,
+            2230,
+            2722
+          ],
+          "timings_sha256": "a3f4f999a942c9bddedb19e631e5d49f403b93cf7c6dc6e63b0d80aed4b19cac"
+        },
+        {
+          "block": 7,
+          "values_us": [
+            586,
+            2182,
+            2768
+          ],
+          "timings_sha256": "0078e2a0be3080bd109d5866207c0ea731b12d0998f62edd1d15d50d17f35f4c"
+        },
+        {
+          "block": 8,
+          "values_us": [
+            487,
+            2212,
+            2699
+          ],
+          "timings_sha256": "3caa891004515da8535ee035ca28a9493c58c2656be5d843d6060e4ef38fd6c7"
+        },
+        {
+          "block": 9,
+          "values_us": [
+            923,
+            2093,
+            3016
+          ],
+          "timings_sha256": "be07445ab46e12d20bf5a69a9878569ef22296c753b95b9300dc1856cdec03b6"
+        }
+      ],
+      "medians_us": [
+        680.0,
+        2244.5,
+        2946.0
+      ]
+    },
+    "rust": {
+      "rows": [
+        {
+          "block": 0,
+          "values_us": [
+            1888,
+            3711,
+            5599
+          ],
+          "timings_sha256": "cddc10e49530f02dbc2426697abc31c5a04f3329357c11027802a33ac33d6fcb"
+        },
+        {
+          "block": 1,
+          "values_us": [
+            2520,
+            12842,
+            15362
+          ],
+          "timings_sha256": "dc55a808bb806dc87a8c118b65b385126ee6b03870f3699b78964586e8c6d119"
+        },
+        {
+          "block": 2,
+          "values_us": [
+            726,
+            2573,
+            3299
+          ],
+          "timings_sha256": "e54bec8e05f56e5eb02f85a989480271c10519d870ccb7af831bca676b1186fe"
+        },
+        {
+          "block": 3,
+          "values_us": [
+            625,
+            2243,
+            2868
+          ],
+          "timings_sha256": "5841620f8f32dd6d1145c65bcb0c0dfff58d5754789e0a74133d261fac9606c7"
+        },
+        {
+          "block": 4,
+          "values_us": [
+            504,
+            2341,
+            2845
+          ],
+          "timings_sha256": "8ea8a1c2554ac4e7131ba2d050fbccac59afa84a6e23da6fbbe0131e251668ee"
+        },
+        {
+          "block": 5,
+          "values_us": [
+            549,
+            2354,
+            2903
+          ],
+          "timings_sha256": "36b5885dcc5de018ef659aec3a225f9bc773245f4e815d69694ffebc36018ba3"
+        },
+        {
+          "block": 6,
+          "values_us": [
+            503,
+            2334,
+            2837
+          ],
+          "timings_sha256": "1a3400b0e8eff7dc7ff0928013227e2bf628955e7866cb40af9cd5a884dd7a2c"
+        },
+        {
+          "block": 7,
+          "values_us": [
+            724,
+            2351,
+            3075
+          ],
+          "timings_sha256": "311e75622441ad4f84da7778937cb55ba8877d8a7ca2b1ade302f0f8cb033afb"
+        },
+        {
+          "block": 8,
+          "values_us": [
+            691,
+            2366,
+            3057
+          ],
+          "timings_sha256": "f360db1b8c993b86b5be70ecb54568cda2159b106da125c796d4e67d5d3b007b"
+        },
+        {
+          "block": 9,
+          "values_us": [
+            459,
+            2611,
+            3070
+          ],
+          "timings_sha256": "cc86093d96c5f34fe18b5b90b52c3eb6a70082c06902ba726dbbceb7229a228d"
+        }
+      ],
+      "medians_us": [
+        658.0,
+        2360.0,
+        3063.5
+      ],
+      "paired_fenrir_minus_reference_median_us": [
+        -93.0,
+        -161.5,
+        -211.0
+      ]
+    },
+    "nim": {
+      "rows": [
+        {
+          "block": 0,
+          "values_us": [
+            1170,
+            7535,
+            8705
+          ],
+          "timings_sha256": "49c772720031e914f9b9fae90abb5de7aa4221897fdc5b38545b1e6034666765"
+        },
+        {
+          "block": 1,
+          "values_us": [
+            1128,
+            4634,
+            5762
+          ],
+          "timings_sha256": "67d0ccd3be0aef05b340e2c72c0824f1f67d0a9e09732d5b6670078b9d6333ba"
+        },
+        {
+          "block": 2,
+          "values_us": [
+            2143,
+            4101,
+            6244
+          ],
+          "timings_sha256": "84f2373091d8c46679d6de9180e1988d34010657e4aa0dda708e8ef34e49df42"
+        },
+        {
+          "block": 3,
+          "values_us": [
+            576,
+            3307,
+            3883
+          ],
+          "timings_sha256": "67dfb550b544b21f12d3ac824d2cc45812c47ae7b32685faaf7f5aea94181a42"
+        },
+        {
+          "block": 4,
+          "values_us": [
+            489,
+            2472,
+            2961
+          ],
+          "timings_sha256": "3fdd84880550eece663dcbedf3b3ed2872ca2e3811bdbca62d3253de28bdcf87"
+        },
+        {
+          "block": 5,
+          "values_us": [
+            734,
+            1945,
+            2679
+          ],
+          "timings_sha256": "3809e8a4acf34d32a9029452ed6353265eac7532afa47dbad4d84c3db51b1ed9"
+        },
+        {
+          "block": 6,
+          "values_us": [
+            506,
+            10841,
+            11347
+          ],
+          "timings_sha256": "3ed182136e857b1180d7b182ed678d8330ef568423b2bda3a96740ff013e8941"
+        },
+        {
+          "block": 7,
+          "values_us": [
+            775,
+            2231,
+            3006
+          ],
+          "timings_sha256": "5c4f6e7bc7d4807bfb85827fd49c588b6e50f1d731f4c0a1ee6074553716cb1e"
+        },
+        {
+          "block": 8,
+          "values_us": [
+            504,
+            2295,
+            2799
+          ],
+          "timings_sha256": "0e2867065a42b966f922926063e99746abf549d684951e4e5ed55c9d6f4b3730"
+        },
+        {
+          "block": 9,
+          "values_us": [
+            613,
+            1986,
+            2599
+          ],
+          "timings_sha256": "b27d7e3dc41bd85ab54b8a3404d398f7ee6a6396e1a5446d6582344933d4c836"
+        }
+      ],
+      "medians_us": [
+        673.5,
+        2889.5,
+        3444.5
+      ],
+      "paired_fenrir_minus_reference_median_us": [
+        -15.5,
+        -66.0,
+        -169.0
+      ]
+    },
+    "elixir": {
+      "rows": [
+        {
+          "block": 0,
+          "values_us": [
+            163,
+            1104,
+            1267
+          ],
+          "timings_sha256": "5031555795db07c3b6c50c64ed55de1afc61d64307c8b11db1be5b5f4a2cabbf"
+        },
+        {
+          "block": 1,
+          "values_us": [
+            1250,
+            764,
+            2014
+          ],
+          "timings_sha256": "43c09bfbe9a4bd2a364606fcccf88099393ab905a29551ba604d33930aa0eb4d"
+        },
+        {
+          "block": 2,
+          "values_us": [
+            83,
+            126,
+            209
+          ],
+          "timings_sha256": "8cceb2683a30fdae87ce086cc1fcdde6a8b57f6fbbcfde85c280d07b231ce094"
+        },
+        {
+          "block": 3,
+          "values_us": [
+            72,
+            192,
+            264
+          ],
+          "timings_sha256": "be9b6289c7ca50a436015576bc5ec0b9df54f49d66222ed7916339aa837bf013"
+        },
+        {
+          "block": 4,
+          "values_us": [
+            75,
+            187,
+            262
+          ],
+          "timings_sha256": "99ff201770abbb402fc56c4993f2627373ba549b199e8bfdea280c44d8923d2e"
+        },
+        {
+          "block": 5,
+          "values_us": [
+            81,
+            195,
+            276
+          ],
+          "timings_sha256": "ccad01aad1d87a42d0af81abf612a1d941a4d59bf4dddbe3b4dbd886391821c2"
+        },
+        {
+          "block": 6,
+          "values_us": [
+            72,
+            169,
+            241
+          ],
+          "timings_sha256": "7a1a49adb433849e38d69a6036ef56cd94c45ab1fa81045d38c3d9bdb9e7fa95"
+        },
+        {
+          "block": 7,
+          "values_us": [
+            97,
+            200,
+            297
+          ],
+          "timings_sha256": "4924ac84e349956660dd27202775906edebf0c7148415ba202c69f76b7c5ac9a"
+        },
+        {
+          "block": 8,
+          "values_us": [
+            83,
+            193,
+            276
+          ],
+          "timings_sha256": "f90ab1ccf976a7de76a66abcebb89a59a545c0a03394c1dcf3db43ec448a7d06"
+        },
+        {
+          "block": 9,
+          "values_us": [
+            79,
+            247,
+            326
+          ],
+          "timings_sha256": "d0d6f0b3770863aa7d9aa43eb5e4ed9faba9ee2c56241ddc4b47b228d8456d9d"
+        }
+      ],
+      "medians_us": [
+        82.0,
+        194.0,
+        276.0
+      ],
+      "paired_fenrir_minus_reference_median_us": [
+        542.0,
+        2069.5,
+        2684.5
+      ]
+    },
+    "erlang": {
+      "rows": [
+        {
+          "block": 0,
+          "values_us": [
+            89,
+            173,
+            262
+          ],
+          "timings_sha256": "5d6a50849ce08a3f514ea4c59f79dde85e2faa9289f805ae946724f9b88c56ea"
+        },
+        {
+          "block": 1,
+          "values_us": [
+            608,
+            1303,
+            1911
+          ],
+          "timings_sha256": "458910a19d0931829cde97453d4b01c05d5226c6a77ce0ac8c07f0258941dc46"
+        },
+        {
+          "block": 2,
+          "values_us": [
+            294,
+            718,
+            1012
+          ],
+          "timings_sha256": "c8ff2dc910b739e59cccd10b80a69caccab0a3f346f84c5167b19487508a3396"
+        },
+        {
+          "block": 3,
+          "values_us": [
+            75,
+            217,
+            292
+          ],
+          "timings_sha256": "f58af6117c86559cc027251127346c7703d59b37e276bbdbd670e57661a6df60"
+        },
+        {
+          "block": 4,
+          "values_us": [
+            90,
+            185,
+            275
+          ],
+          "timings_sha256": "30eb45a4a5be4b6a69b2d16bea4adbc39313b8961106fba874b9164b30c43338"
+        },
+        {
+          "block": 5,
+          "values_us": [
+            91,
+            259,
+            350
+          ],
+          "timings_sha256": "b3f82ebc75e30e20758e23bdb11adc17a567b724b998a950d6d5788d2de4af64"
+        },
+        {
+          "block": 6,
+          "values_us": [
+            79,
+            183,
+            262
+          ],
+          "timings_sha256": "e19718a2f564561b10cb2612495a0b37c9098d2e5a1aea3dd7c79a29ec1ded7b"
+        },
+        {
+          "block": 7,
+          "values_us": [
+            96,
+            251,
+            347
+          ],
+          "timings_sha256": "2339e5963b66d0f2bc6a63baa158746625750b474554eda3cdf1f42ab6deafed"
+        },
+        {
+          "block": 8,
+          "values_us": [
+            74,
+            230,
+            304
+          ],
+          "timings_sha256": "81bc2aa0ab062de5f626e02e70e9964b1043372da46bf1f3d66c40bc1ae92e80"
+        },
+        {
+          "block": 9,
+          "values_us": [
+            80,
+            176,
+            256
+          ],
+          "timings_sha256": "9d64f0e841569d32a4067804808d2799f32491b6ccc0667a7b20b33af48cbf79"
+        }
+      ],
+      "medians_us": [
+        89.5,
+        223.5,
+        298.0
+      ],
+      "paired_fenrir_minus_reference_median_us": [
+        540.5,
+        1998.0,
+        2532.5
+      ]
+    }
+  }
+}

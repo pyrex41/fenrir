@@ -1,0 +1,12 @@
+\\ > emit "before": 4
+\\ > emit "body": 5
+\\ > emit "after": 15
+\\ > outcome: Ok 37
+(effect Ask (ask I64 --> I64))
+(define main {I64 --> I64}
+  n -> (handle Ask
+    ((ask x k) -> (- (do (emit "before" x) 100)
+                     (resume k (+ x 1))))
+    (let a (perform Ask ask 4)
+         b (do (emit "body" a) (+ a 10))
+      (do (emit "after" b) (+ b 48)))))

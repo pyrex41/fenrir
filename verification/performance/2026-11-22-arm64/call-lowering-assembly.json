@@ -1,0 +1,19 @@
+{
+  "assembly_sha256": {
+    "check-macos-arm64": "a15c15aaa4c44390e503b8d4ee5de88c7a9a43f0948308c3d4b82d50e2e1d0ef",
+    "check-solo5-arm64-spt": "abfb1ae254f4fcf7dcec972287ca18a0881de9f55f9450c3f6959feb6bb2baf3",
+    "http-macos-arm64": "255380ee8c308d624ef76d20c2420e9fbaac6310572e359672a4a6402558ecc6",
+    "http-solo5-arm64-spt": "e677610675e86940a6031a716068da2dcbbcc32e985fbb12c4a410d8000dd965",
+    "search-macos-arm64": "85cd8b89ef33e70d5fae6c5836271100504ea63424df314ba73bf56ece9d8ea4",
+    "search-solo5-arm64-spt": "43e2caf7946c61f49f88753af9eb2a951b994e3606686eba119a1725e89fa5da",
+    "stream-macos-arm64": "e3c5a88d1eb51ab941dedf328f126e43d53ba9d25c197d402547b41553b5a25a",
+    "stream-solo5-arm64-spt": "a51bbd2077958b15e88f5e941618e51f978fcf7234eab018d617bad698952b24"
+  },
+  "artifact_sha256": {
+    "search.json": "f91a9464c7a7f45610cfb0af4f4e211d3dca70c6c4078c09503d3c78cc839c7e",
+    "http.json": "d14e17bc22f7d2d26a590f479c52449af891d48a6749fb6811f1f967c043aedf",
+    "stream.json": "d9bd8d5c82970aa9048c8dc8a7da6291e1fef16caea46edddced302f9ad9fb05",
+    "check.json": "e1ba55485abfcb889cb797be851c70c1045ae6ae6c0cb226a240fdf3335fcd84"
+  },
+  "emitter_sha256": "a0ef1b4eabb2664e6d61517db76a6eb0acfa7ae4b0489efbc256876730a72890"
+}
