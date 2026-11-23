@@ -10,10 +10,10 @@
   S -> (or (element? S ["fifo" "lowest" "highest"]) (fh.starts? "random:" S) (fh.starts? "prandom:" S)))
 
 (define fe.choices
-  _ "" _ -> (fe.finish 2 (make-string "a schedule policy or file path is required~%"))
-  Path Schedule Fuel ->
+  _ "" _ _ -> (fe.finish 2 (make-string "a schedule policy or file path is required~%"))
+  Path Schedule Fuel Profile ->
     (if (fe.policy? Schedule)
-        (let R (fh.exec "node" [(cn (value fh.*root*) "frontend/schedule.mjs") Path Schedule (str Fuel)] 120)
+        (let R (fh.exec "node" [(cn (value fh.*root*) "frontend/schedule.mjs") Path Schedule (str Fuel) Profile] 120)
              J (fh.last-report (hd (tl R)))
           (if (and (= (hd R) 0) (cons? J) (fe.schedule-ids? (fh.field "choices" J))) (fh.field "choices" J)
               (fe.finish 2 (make-string "the schedule policy ~A could not be applied: ~A~%" Schedule (hd (tl (tl R)))))))
@@ -32,6 +32,18 @@
   [] -> true
   [X | Xs] -> (and (string? X) (fe.decimal-id? X) (fe.schedule-ids? Xs))
   _ -> false)
+
+(define fe.native-profile
+  "portable" -> (set tm.*spawn-limits* [])
+  Profile ->
+    (let Path (cn (value fh.*root*) "spec/native/standalone-v1.json")
+         Manifest (json.parse (read-file-as-string Path) [[byte-limit 65536]])
+         Limits (fh.field "limits" Manifest)
+         Children (json.integer (fh.field "max_live_nonroot_children" Limits))
+         Handlers (json.integer (fh.field "max_inherited_handlers" Limits))
+      (if (and (= Profile (fh.field "id" Manifest)) (> Children 0) (>= Handlers 0))
+          (set tm.*spawn-limits* [Children Handlers])
+          (fe.finish 2 (make-string "invalid task limits for execution profile ~A~%" Profile)))))
 
 (define fe.decimal-id?
   "" -> false
@@ -66,10 +78,11 @@
   [W | Ws] -> (cn (fe.wait-text (fh.canon W)) (cn ", " (fe.waits Ws))))
 
 (define fe.execute-tasks
-  Text Artifact Fuel Schedule ->
+  Text Artifact Fuel Schedule Profile ->
     (let Path (cn (value fe.*work*) "run-artifact.json")
          Written (write-to-file Path Text)
-         Choices (fe.choices Path Schedule Fuel)
+         _ (fe.native-profile Profile)
+         Choices (fe.choices Path Schedule Fuel Profile)
          Program (fh.task-program Artifact)
          Run (fh.task-run (hd Program) (hd (tl Program)) Choices Fuel)
          Steps (nth 3 Run)

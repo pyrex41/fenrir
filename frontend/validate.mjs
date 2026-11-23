@@ -15,6 +15,7 @@
 // The exit status is 0 whenever a verdict was reached.
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
+import {nativeProfile} from '../tools/tc1/native-profile.mjs';
 import {validateFrontendArtifact,InvalidPureCallArtifact,PureCallValidationLimit} from '../tools/tc0/pure-call-artifact.mjs';
 import {encode,EncodingError,EncodingLimit} from '../tools/tc0/canonical.mjs';
 
@@ -26,7 +27,7 @@ const bytes=readFileSync(path);
 let report;
 try {
   const {artifact,input,node_count}=validateFrontendArtifact(bytes,
-    process.env.FENRIR_NATIVE_BUILD === '1' ? {maxNodes:2000} : undefined);
+    process.env.FENRIR_NATIVE_BUILD === '1' ? {maxNodes:nativeProfile.limits.max_nodes} : undefined);
   const canonical=encode(artifact);
   report={status:'valid',nodes:node_count,functions:String(artifact.functions.length),canonical:canonical.equals(bytes),
     sha256:createHash('sha256').update(canonical).digest('hex')};

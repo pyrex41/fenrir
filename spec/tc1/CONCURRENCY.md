@@ -3,10 +3,10 @@
 Draft 1 • 15 November 2026 • For owner review
 
 **Status.** The first slice of step B4 of
-[04_DIRECTION_AMENDMENT.md](../../04_DIRECTION_AMENDMENT.md) (§10), written
+[04_DIRECTION_AMENDMENT.md](../../docs/design/04_DIRECTION_AMENDMENT.md) (§10), written
 before its two machines, which were then written from it: a Shen model and an
 independent JavaScript implementation. Nothing here is qualified. It takes the
-reference semantics of [02_TINY_LANGUAGE_CORE.md](../../02_TINY_LANGUAGE_CORE.md)
+reference semantics of [02_TINY_LANGUAGE_CORE.md](../../docs/design/02_TINY_LANGUAGE_CORE.md)
 §6–§10 (machine state, reference scheduler, structured tasks, scope failure and
 joins, cancellation, buffered channels) and the concurrency sketch of the
 amendment (§14), and states what slice **C1** keeps, what it changes and what it
@@ -36,11 +36,14 @@ obligation between them (§9).
   the simpler lifetime rule of §3 instead;
 - durable effects (transaction, durable job, durable inbox) and actors (the
   second and third levels of amendment §14);
-- the `TaskLimit` quota (a configured live-task bound is a harness limit, never a
-  trap);
+- the `TaskLimit` quota in the portable C1 profile (its exploration bounds are harness limits);
 - compiler-inserted budget checks (amendment §14 "Long pure computations"): there
   is no compiler yet; when there is one, an inserted check is a scheduling point
   of §8.
+
+### Standalone ARM64 execution profile
+
+The [standalone profile](../native/standalone-v1.json) selects two runtime quotas for macOS ARM64 and Solo5 SPT. At spawn, up to 16 nonterminal children may occupy child slots across the image. The root has its own stack. A retained handle to a terminal child takes no child slot. Each new child can inherit up to 32 active handler frames. Exceeding either quota traps with `TaskLimit` at the spawn. Trapping follows the usual child-failure and scope-unwind rules. The parameterized Shen run and the schedule-policy generator apply the same limits when this profile is selected. The portable oracle remains available for programs that do not select these target bounds. [CLI and model invocation](../../docs/NATIVE_GUIDE.md#choose-an-execution-profile)
 
 ## 2 Expressions and types
 

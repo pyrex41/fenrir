@@ -1,0 +1,12 @@
+(effect Quota (tick Unit --> Unit))
+
+(define exercise {I64 --> I64}
+  depth -> (if (= depth 0)
+             (let t (spawn (lambda (_ : Unit) 42))
+               (match (await t)
+                 ((Ok x) -> x)
+                 (Cancelled -> 0)
+                 ((Failed code) -> 1)))
+             (handle Quota
+               ((tick x) -> unit)
+               (exercise (- depth 1)))))

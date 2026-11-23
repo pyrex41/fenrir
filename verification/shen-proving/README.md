@@ -1,7 +1,7 @@
 # What "proved in Shen" establishes
 
 A small experiment behind decision 1 of
-[04_DIRECTION_AMENDMENT.md](../../04_DIRECTION_AMENDMENT.md): can Shen's own
+[04_DIRECTION_AMENDMENT.md](../../docs/design/04_DIRECTION_AMENDMENT.md): can Shen's own
 sequent type system be the place Fenrir's theorems are proved?
 
 ```sh

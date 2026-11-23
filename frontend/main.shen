@@ -210,13 +210,13 @@
 \\ outcome of a remote perform comes from a supervisor and a peer, and this
 \\ driver has neither.
 (define fe.execute
-  Text Fuel Schedule ->
+  Text Fuel Schedule Profile ->
     (let Artifact (json.parse Text [[byte-limit 16777216]])
          Schema (fh.field "schema_version" Artifact)
       (cond ((element? Schema ["tc1-task-demo/1" "tc1-time-demo/1"])
               (do (load (cn (value fh.*root*) "harness/tc1-task-common.shen"))
                   (load (cn (value fh.*root*) "frontend/tasks.shen"))
-                  (fe.execute-tasks Text Artifact Fuel (if (= Schedule default) "fifo" Schedule))))
+                  (fe.execute-tasks Text Artifact Fuel (if (= Schedule default) "fifo" Schedule) Profile)))
             ((not (= Schedule default))
               (fe.finish 2 (make-string "a schedule applies only to TC1-C1 task programs~%")))
             ((= Schema "tc1-durable-demo/1") (fe.execute-durable Artifact Fuel))
@@ -245,10 +245,13 @@
   ["check" Source Module] ->
     (let Checked (fe.checked Source (fe.artifact Source Module))
       (fe.finish 0 (make-string "ok: ~A: ~A~%" Source (fe.summary (hd (tl Checked))))))
-  ["run" Source Module Fuel] -> (fe.command ["run" Source Module Fuel default])
-  ["run" Source Module Fuel Schedule] ->
-    (let Checked (fe.checked Source (fe.artifact Source Module))
-      (fe.execute (hd Checked) (fe.natural Fuel 0) Schedule))
+  ["run" Source Module Fuel] -> (fe.command ["run" Source Module Fuel default "portable"])
+  ["run" Source Module Fuel Schedule] -> (fe.command ["run" Source Module Fuel Schedule "portable"])
+  ["run" Source Module Fuel Schedule Profile] ->
+    (if (element? Profile ["portable" "fenrir-native-standalone/1"])
+        (let Checked (fe.checked Source (fe.artifact Source Module))
+          (fe.execute (hd Checked) (fe.natural Fuel 0) Schedule Profile))
+        (fe.finish 2 (make-string "unknown execution profile ~A~%" Profile)))
   ["emit" Source Module Out] ->
     (let Checked (fe.checked Source (fe.artifact Source Module))
          Manifest (write-to-file (cn (value fe.*work*) "inputs.json")
@@ -258,11 +261,18 @@
       (fe.finish 0 (make-string "wrote ~A: ~A~%" Out (fe.summary (hd (tl Checked))))))
   \\ An existing artifact, such as a hand fixture: validated, then run, and reported
   \\ as run reports. This is how the tests compare a surface program with a fixture.
-  ["run-artifact" Path Fuel] -> (fe.command ["run-artifact" Path Fuel default])
-  ["run-artifact" Path Fuel Schedule] ->
-    (fe.run-checked-artifact Path (fe.snapshot Path) (fe.natural Fuel 0) Schedule)
+  ["run-artifact" Path Fuel] -> (fe.command ["run-artifact" Path Fuel default "portable"])
+  ["run-artifact" Path Fuel Schedule] -> (fe.command ["run-artifact" Path Fuel Schedule "portable"])
+  ["run-artifact" Path Fuel "" Profile] -> (fe.command ["run-artifact" Path Fuel default Profile])
+  ["run-artifact" Path Fuel Schedule Profile] ->
+    (if (element? Profile ["portable" "fenrir-native-standalone/1"])
+        (fe.run-checked-artifact Path (fe.snapshot Path) (fe.natural Fuel 0) Schedule Profile)
+        (fe.finish 2 (make-string "unknown execution profile ~A~%" Profile)))
     where (value fe.*require-shen-typing*)
-  ["run-artifact" Path Fuel Schedule] -> (fe.run-checked-artifact Path Path (fe.natural Fuel 0) Schedule)
+  ["run-artifact" Path Fuel Schedule Profile] ->
+    (if (element? Profile ["portable" "fenrir-native-standalone/1"])
+        (fe.run-checked-artifact Path Path (fe.natural Fuel 0) Schedule Profile)
+        (fe.finish 2 (make-string "unknown execution profile ~A~%" Profile)))
   _ -> (fe.finish 3 (make-string "internal error: frontend/main.shen was started with arguments it does not understand~%")))
 
 \\ In strict mode both validators and the model consume one byte snapshot.
@@ -278,12 +288,12 @@
   Source _ _ -> (fe.finish 2 (make-string "~A: error: cannot read an artifact snapshot (file or size limit)~%" Source)))
 
 (define fe.run-checked-artifact
-  Source Path Fuel Schedule ->
+  Source Path Fuel Schedule Profile ->
     (let Text (trap-error (read-file-as-string Path)
                           (/. E (fe.finish 2 (make-string "~A: error: the file cannot be read~%" Source))))
          Report (fe.validation Path)
       (if (= (fh.member "status" Report) "valid")
-          (do (fe.require-typing Source Text Report) (fe.execute Text Fuel Schedule))
+          (do (fe.require-typing Source Text Report) (fe.execute Text Fuel Schedule Profile))
           (fe.finish 1 (make-string "~A: error: not a valid artifact (~A)~%" Source (fh.member "message" Report))))))
 
 (fe.command (value fe.*command*))

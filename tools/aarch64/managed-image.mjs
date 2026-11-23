@@ -1,4 +1,6 @@
 import {isTaskSchema,TRAP_CODES} from '../tc0/pure-call-artifact.mjs';
+import {NativeProfileError} from './native-profile.mjs';
+import {nativeProfile} from '../tc1/native-profile.mjs';
 import {byteScanTable} from './byte-scan.mjs';
 import {resultPrinter, nativeVariants} from './result-printer.mjs';
 // Recover the ordered field bindings introduced by frontend argument destructuring.
@@ -288,27 +290,41 @@ export function managedImage(program, prefix, codes, exports = new Map(), host =
       bindings.set(id, [...free]);
       positions.set(id, positions.get(origin));
     }
+    // Without task scopes, abandoning a segment has no observable cleanup.
+    // Keep direct, non-tail discontinue available throughout that profile.
+    const abandonScopes = isTaskSchema(program.schema_version);
+    const isUse = node => node[2] === resumption &&
+      (node[0] === 'resume' || (abandonScopes && node[0] === 'discontinue'));
+    // Both branches of an if can supply the argument of the same one-shot
+    // resume. Select the argument on the original path and keep one copy of
+    // the enclosing continuation, including its trap sites and captures.
+    function resumeArgument(node) {
+      if (node[0] === 'resume' && node[2] === resumption) return node[3];
+      if (node[0] === 'let') {
+        const result = resumeArgument(node[4]);
+        return result && [...node.slice(0, 4), result];
+      }
+      if (node[0] !== 'if') return null;
+      const yes = resumeArgument(node[3]);
+      if (!yes) return null;
+      const no = resumeArgument(node[4]);
+      return no && ['if', node[1], node[2], yes, no];
+    }
     // Find a resumption through strict operands. Build its evaluation context
     // only after finding the use, so an unsuccessful search emits no code.
-    function splitResume(node) {
-      if (node[0] === 'resume' && node[2] === resumption) {
+    function splitResume(node, operand = false) {
+      if (isUse(node)) {
         const id = node[1] + 'answer';
         return {node, id, after: ['var', id, id], before: []};
       }
-      let indices;
-      switch (node[0]) {
-        case 'prim': case 'call': case 'emit':
-          indices = node.slice(3).map((_, i) => i + 3); break;
-        case 'tuple': case 'apply':
-          indices = node.slice(2).map((_, i) => i + 2); break;
-        case 'construct':
-          indices = node.slice(4).map((_, i) => i + 4); break;
-        case 'project': case 'if': case 'match': indices = [2]; break;
-        case 'let': indices = [3]; break;
-        default: return null;
+      if (operand && node[0] === 'if') {
+        const argument = resumeArgument(node);
+        if (argument) return splitResume(['resume', node[1], resumption, argument]);
       }
+      const indices = strictResumeIndices(node);
+      if (!indices.length) return null;
       for (const index of indices) {
-        const part = splitResume(node[index]);
+        const part = splitResume(node[index], true);
         if (!part) continue;
         const after = [...node];
         const before = [];
@@ -323,11 +339,22 @@ export function managedImage(program, prefix, codes, exports = new Map(), host =
       }
       return null;
     }
+    function strictResumeIndices(node) {
+      switch (node[0]) {
+        case 'prim': case 'call': case 'emit': return node.slice(3).map((_, i) => i + 3);
+        case 'tuple': case 'apply': return node.slice(2).map((_, i) => i + 2);
+        case 'construct': return node.slice(4).map((_, i) => i + 4);
+        case 'project': case 'if': case 'match': return [2];
+        case 'let': return [3];
+        case 'perform': return [4];
+        default: return [];
+      }
+    }
     function emit(e, tail = false) {
       const [tag, , v] = e;
       let type;
       if (tag === 'var') return env.get(v);
-      if (tail && resumption && tag !== 'resume' && !(tag === 'let' && e[3][0] === 'resume')) {
+      if (tail && resumption && !isUse(e) && !(tag === 'let' && isUse(e[3]))) {
         const part = splitResume(e);
         if (part) {
           for (const [id, expr] of part.before) env.set(id, emit(expr));
@@ -337,14 +364,20 @@ export function managedImage(program, prefix, codes, exports = new Map(), host =
         }
       }
       if (tag === 'let') {
-        if (e[3][0] === 'resume' && e[3][2] === resumption && tail) {
-          const payload = emit(e[3][3]);
+        if (resumption && isUse(e[3]) && tail) {
+          const resume = e[3][0] === 'resume';
+          const payload = resume ? emit(e[3][3]) : emit(['unit', e[3][1]]);
           const id = e[1] + 'after';
           captureBindings(id, e[4], e[1]);
           const answer = answerTypes.get(resumption);
-          const closure = emit(['lambda', id, v, answer, answer, [], [], e[4]]);
+          // An abandoned segment unwinds through its scope frames before the
+          // saved clause runs. Its continuation receives Unit, even when the
+          // handled expression has a pointer-valued answer.
+          const closure = emit(['lambda', id, v, resume ? answer : 'Unit', answer, [], [], e[4]]);
           load(closure);
-          code.push('bl ' + prefix + 'fen_defer_clause', 'cbnz x0, ' + failure(e[3][1], 3));
+          mayCollect = true;
+          code.push('bl ' + prefix + (resume ? 'fen_defer_clause' : 'fen_defer_abandon'),
+                    'cbnz x0, ' + failure(e[3][1], 3));
           return payload;
         }
         const body = e[4];
@@ -593,8 +626,8 @@ export function managedImage(program, prefix, codes, exports = new Map(), host =
         load(tuple);
         code.push('ldr x0, [x0, #' + (8*Number(e[3])) + ']');
       } else if (tag === 'resume' || tag === 'discontinue') {
-        if (v !== resumption || (tag === 'resume' && !tail))
-          throw Error('Native resume with a following clause continuation is pending');
+        if (v !== resumption || (!tail && (tag === 'resume' || abandonScopes)))
+          throw new NativeProfileError(positions.get(e[1]), `Unsupported clause continuation following ${tag} in this context`);
         const payload = tag === 'resume' ? emit(e[3]) : null;
         code.push('mov x0, #' + (payload ? 1 : 2), 'bl ' + prefix + 'fen_use_resumption',
                   'cbz x0, ' + failure(e[1], 6));
@@ -617,7 +650,8 @@ export function managedImage(program, prefix, codes, exports = new Map(), host =
         type = effect.ops[op].result_type;
       } else if (tag === 'handle') {
         const effect = effects.get(v);
-        if (effect.ops.length > 8) throw Error('Native handler exceeds eight operations');
+        if (effect.ops.length > nativeProfile.limits.max_handler_operations)
+          throw new NativeProfileError(positions.get(e[1]), `Handler has ${effect.ops.length} operations, exceeding the limit of ${nativeProfile.limits.max_handler_operations}`);
         const closures = effect.ops.map((op,i) => {
           const clause = e[3].find(c => c[0] === op.name);
           const binder = clause[1], body = clause.at(-1);
@@ -649,7 +683,8 @@ export function managedImage(program, prefix, codes, exports = new Map(), host =
         return result;
       } else if (tag === 'lambda') {
         const captures = bindings.get(e[1]).map(id => ({id, type: env.get(id).type}));
-        if (captures.length > 7) throw Error('Closure exceeds seven inline captures');
+        if (captures.length > nativeProfile.limits.max_inline_captures)
+          throw new NativeProfileError(positions.get(e[1]), `Closure captures ${captures.length} bindings, exceeding the limit of ${nativeProfile.limits.max_inline_captures}`);
         const bodyLabel = 'Llambda' + e[1];
         pending.push({label: bodyLabel, captures, resumption: explicit.get(e[1]),
           f: {parameter_id: v, argument_type: e[3], body: e[7]}});
@@ -950,7 +985,8 @@ export function managedImage(program, prefix, codes, exports = new Map(), host =
       !elidedSlots.has(s.id) && !registers.has(s.id)));
     const frame = 48 + handlerCount * 32 + scopeCount * 64; // result/status at 0..15, root descriptor at 16..39
     const size = Math.ceil((frame + 8 * ordered.length)/16)*16;
-    if (size > 4080) throw Error('Managed stack frame exceeds alpha limit');
+    if (size > nativeProfile.limits.max_managed_frame_bytes)
+      throw new NativeProfileError(positions.get(f.id ?? f.body[1]), `Managed stack frame needs ${size} bytes, exceeding the limit of ${nativeProfile.limits.max_managed_frame_bytes}`);
     ordered.forEach((s,i) => { s.offset = frame + 8*i; });
     for (const slot of slots) {
       if (slot.rootIndex !== undefined) slot.offset = roots[slot.rootIndex].offset;

@@ -12,10 +12,14 @@ import subprocess
 import sys
 import tempfile
 
+from profile_section import image_profile
+
 LIMIT = 1024 * 1024
 LEGACY = "fenrir-native-observations/1"
 SCHEMA = "fenrir-native-observations/2"
 SCHEDULE = "fenrir-native-schedule/1"
+PROFILE_OBSERVATION = "fenrir-native-observations/3"
+PROFILE_SCHEDULE = "fenrir-native-schedule/2"
 LAUNCH = Path(__file__).resolve().parent / "run-image.sh"
 
 
@@ -53,7 +57,8 @@ def encode_choices(ids):
     return encoded
 
 
-def observe(image, target, argument, expected_hash=None, schema=SCHEMA, expected_env=None, choices=None):
+def observe(image, target, argument, expected_hash=None, schema=SCHEMA, expected_env=None,
+            choices=None, expected_profile=None):
     if target not in ("macos-arm64", "solo5-arm64-spt"):
         raise ValueError("unknown target")
     if not isinstance(argument, str) or not re.fullmatch(r"-?[0-9]+", argument):
@@ -71,15 +76,26 @@ def observe(image, target, argument, expected_hash=None, schema=SCHEMA, expected
         snapshot = Path(work) / "image"
         shutil.copyfile(image, snapshot)
         snapshot.chmod(0o500)
-        image_hash = hashlib.sha256(snapshot.read_bytes()).hexdigest()
+        image_bytes = snapshot.read_bytes()
+        image_hash = hashlib.sha256(image_bytes).hexdigest()
+        profile = image_profile(image_bytes, target)
+        scheduled = schema in (SCHEDULE, PROFILE_SCHEDULE)
+        if profile:
+            schema = PROFILE_SCHEDULE if scheduled else PROFILE_OBSERVATION
+        elif schema in (PROFILE_OBSERVATION, PROFILE_SCHEDULE):
+            raise ValueError("image has no execution profile")
         if expected_hash is not None and image_hash != expected_hash:
             raise ValueError("image identity mismatch")
+        if expected_hash is not None and profile != expected_profile:
+            raise ValueError("execution profile mismatch")
         env = os.environ.copy()
         environment = {} if schema == LEGACY else {"execution": execution_environment(target, env)}
+        if profile:
+            environment["profile"] = profile
         if expected_env is not None and environment.get("execution") != expected_env:
             raise ValueError("execution environment mismatch")
         wire = argument
-        if schema == SCHEDULE:
+        if scheduled:
             wire += "@" + ("r" if choices is None else encode_choices(choices))
         with tempfile.TemporaryFile() as trace:
             run = subprocess.run(["sh", LAUNCH, target, work, wire],
@@ -89,7 +105,7 @@ def observe(image, target, argument, expected_hash=None, schema=SCHEMA, expected
             data = trace.read(LIMIT)
         if len(data) == LIMIT:
             raise ValueError("observation exceeds recording limit")
-        if schema == SCHEDULE:
+        if scheduled:
             pattern = rb"^fenrir schedule ([0-9]+(?:,[0-9]+)*)\n"
             rows = re.findall(pattern, data, re.M)
             if len(rows) != 1:
@@ -137,15 +153,16 @@ def main(args):
         if len(raw) > 2 * LIMIT:
             raise ValueError("receipt exceeds size limit")
         receipt = json.loads(raw)
-        if not isinstance(receipt, dict) or receipt.get("schema") not in (SCHEMA, LEGACY, SCHEDULE):
+        schemas = (LEGACY, SCHEMA, SCHEDULE, PROFILE_OBSERVATION, PROFILE_SCHEDULE)
+        if not isinstance(receipt, dict) or receipt.get("schema") not in schemas:
             raise ValueError("unsupported replay schema")
         if not isinstance(receipt.get("image_sha256"), str):
             raise ValueError("missing image identity")
         choices = receipt.get("dispatches")
-        if receipt["schema"] == SCHEDULE:
+        if receipt["schema"] in (SCHEDULE, PROFILE_SCHEDULE):
             encode_choices(choices)
         current = observe(image, receipt["target"], receipt["input"], receipt["image_sha256"],
-                          receipt["schema"], receipt.get("execution"), choices)
+                          receipt["schema"], receipt.get("execution"), choices, receipt.get("profile"))
         if json.dumps(current, sort_keys=True) != json.dumps(receipt, sort_keys=True):
             raise ValueError("native observation or identity mismatch")
         print("exact native observations")

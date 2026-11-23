@@ -1,0 +1,19 @@
+\\ > emit "early": 1 (task 0)
+\\ > emit "late": DivZero (task 0)
+\\ > outcome: Trap ChildFailed
+(define main {I64 --> I64}
+  input -> (let f (lambda (_ : Unit) (/ 1 input))
+                early (spawn (lambda (_ : Unit) (do yield (/ 1 input))))
+             (do (cancel early)
+                 (match (await early)
+                   ((Ok x) -> (emit "unexpected ok" x))
+                   (Cancelled -> (emit "early" 1))
+                   ((Failed code) -> (emit "unexpected failure" code)))
+                 (let late (spawn f)
+                   (do yield
+                       (cancel late)
+                       (match (await late)
+                         ((Ok x) -> (emit "unexpected ok" x))
+                         (Cancelled -> (emit "unexpected cancellation" 1))
+                         ((Failed code) -> (emit "late" code)))
+                       0)))))

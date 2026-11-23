@@ -4,11 +4,20 @@ extern int fenrir_task_result_is_object(void);
 extern const char *fenrir_task_root_location(void);
 
 /* The CLI executes one root task per process or guest. */
+#ifndef FEN_CHILD_SLOTS
+#define FEN_CHILD_SLOTS 16
+#endif
+#ifndef FEN_HANDLER_SLOTS
+#define FEN_HANDLER_SLOTS 32
+#endif
+#ifndef FEN_TASK_STACK_BYTES
+#define FEN_TASK_STACK_BYTES (256 * 1024)
+#endif
 extern const char *fen_trap_location;
 static fen_scheduler scheduler;
 static fen_fiber root;
 static uint64_t next_scope, next_channel;
-static _Alignas(16) unsigned char stack[256 * 1024];
+static _Alignas(16) unsigned char stack[FEN_TASK_STACK_BYTES];
 typedef struct { int64_t input; fen_result result; const char *location; } invocation;
 
 static void run_root(void *arg) {
@@ -58,12 +67,12 @@ int fen_spawn_current(fen_fiber *child, void *child_stack, size_t size,
 
 /* Completed handles remain ordinary heap objects. Only concurrently live
  * children occupy stacks and keep a scheduler-owned root. */
-enum { child_slots = 16, handler_slots = 32 };
+enum { child_slots = FEN_CHILD_SLOTS, handler_slots = FEN_HANDLER_SLOTS };
 typedef struct {
     fen_fiber fiber;
     uint64_t implicit_scope;
     fen_inherited_handler handlers[handler_slots];
-    _Alignas(16) unsigned char stack[256 * 1024];
+    _Alignas(16) unsigned char stack[FEN_TASK_STACK_BYTES];
     fen_object *handle;
     fen_roots roots;
     fen_parked_roots pin;

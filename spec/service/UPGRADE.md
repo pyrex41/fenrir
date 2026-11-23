@@ -2,7 +2,7 @@
 
 Draft 1 • 15 November 2026 • For owner review
 
-Stage A4 of [04_DIRECTION_AMENDMENT.md](../../04_DIRECTION_AMENDMENT.md) §8: "a
+Stage A4 of [04_DIRECTION_AMENDMENT.md](../../docs/design/04_DIRECTION_AMENDMENT.md) §8: "a
 versioned upgrade that preserves pending work", under the amendment's §13 default:
 **version-pinned**, not hot code swap. It extends the A1 contract
 ([ACCEPTED_JOB.md](ACCEPTED_JOB.md)), the A2 storage contract ([HANDLER.md](HANDLER.md))

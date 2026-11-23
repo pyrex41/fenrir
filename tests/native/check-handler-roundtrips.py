@@ -8,14 +8,19 @@ import subprocess
 import sys
 
 root = Path(__file__).resolve().parents[2]
-fixtures = root / "tests/frontend/roundtrip"
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("output", type=Path, help="new evidence directory")
 parser.add_argument("fixtures", nargs="*", help="fixture filenames (default: handler fixtures)")
 parser.add_argument("--all", action="store_true", help="run every frontend round-trip fixture")
+parser.add_argument("--native-fixtures", action="store_true", help="check named, annotated programs from tests/native")
+parser.add_argument("--cli", type=Path, default=root / "bin/fenrir", help="Fenrir CLI used to build both images")
 args = parser.parse_args()
 if args.all and args.fixtures:
     parser.error("choose --all or specific fixture names")
+if args.native_fixtures and not args.fixtures:
+    parser.error("--native-fixtures requires fixture filenames")
+fixtures = root / ("tests/native" if args.native_fixtures else "tests/frontend/roundtrip")
+cli = args.cli.resolve()
 out = args.output.resolve()
 out.mkdir(parents=True, exist_ok=False)
 report = []
@@ -35,13 +40,28 @@ else:
             line.startswith("(effect ") for line in p.read_text().splitlines())]
 if not sources:
     sys.exit(f"no round-trip fixtures found in {fixtures}")
+if args.native_fixtures:
+    profile = run([cli, "profile"], root)
+    profile.check_returncode()
+    profile_id = json.loads(profile.stdout)["id"]
+    model_command = [cli, "model", "--profile", profile_id]
+else:
+    model_command = ["sh", root / "frontend/fenrir.sh", "run"]
 for source in sources:
     case = out / source.stem
     case.mkdir()
-    model = run(["sh", root / "frontend/fenrir.sh", "run", source.name], source.parent)
+    model = run([*model_command, source.name], source.parent)
     (case / "shen.txt").write_text(model.stdout)
+    if model.returncode:
+        raise ValueError((source, model.returncode, model.stdout))
     expected = []
     expected_code = None
+    if args.native_fixtures:
+        marker = r"\\ > "
+        annotated = [line[len(marker):] for line in source.read_text().splitlines() if line.startswith(marker)]
+        observations = [line for line in model.stdout.splitlines() if line.startswith(("emit ", "outcome: "))]
+        if not annotated or observations != annotated:
+            raise ValueError(f"{source.name}: expected {annotated!r}, Shen reported {observations!r}")
     for line in model.stdout.splitlines():
         if line.startswith(("emit ", "trap at:")):
             expected.append(line)
@@ -54,16 +74,18 @@ for source in sources:
         elif line.startswith("outcome: Trap "):
             expected_code = 1
             expected.append("trap: " + line[len("outcome: Trap "):])
-    if expected_code is None or model.returncode != 0:
+    if expected_code is None:
         raise ValueError((source, model.stdout))
     for target in ("macos-arm64", "solo5-arm64-spt"):
         work = case / target
         work.mkdir()
         image = work / "image"
-        build = run([root / "bin/fenrir", "build", "--target", target, source.name, "-o", image], source.parent)
+        build = run([cli, "build", "--target", target, source.name, "-o", image], source.parent)
         (work / "build.txt").write_text(build.stdout)
         record = dict(fixture=source.name, target=target, expected=expected,
                       source_sha256=hashlib.sha256(source.read_bytes()).hexdigest())
+        if args.native_fixtures:
+            record["model_profile"] = profile_id
         if build.returncode:
             record.update(status="build-failed", exit=build.returncode)
         else:

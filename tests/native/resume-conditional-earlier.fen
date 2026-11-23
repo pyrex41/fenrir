@@ -1,0 +1,8 @@
+\\ > emit "before": 4
+\\ > outcome: Ok 6
+(effect Ask (ask I64 --> I64))
+(define main {I64 --> I64}
+  n -> (handle Ask
+    ((ask x k) -> (+ (do (emit "before" x) 1)
+      (if (= x 4) (resume k (+ x 1)) (resume k (- x 1)))))
+    (perform Ask ask 4)))

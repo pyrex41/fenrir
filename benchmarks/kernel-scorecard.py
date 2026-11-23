@@ -51,15 +51,35 @@ def matched_ratios(blocks, subject, references, selected):
     return [b[subject] / b[selected] for b in blocks]
 
 
-def reference_timings(blocks, subject, names):
-    comparisons = {}
-    for language, key in names.items():
-        values = [b[subject] / b[key] for b in blocks]
+def elapsed_comparison(values):
+    n = len(values)
+    if n % 2:
+        # For an odd sample the resampled median is an order statistic. At
+        # rank r its CDF is P(Binomial(n, r/n) >= (n+1)/2). Count resamples
+        # exactly so a marginal percentile cannot move by a whole rank.
+        ordered = sorted(values)
+        middle = n // 2 + 1
+        total = n ** n
+        lo, hi = 1, middle
+        while lo < hi:
+            rank = (lo + hi) // 2
+            below = sum(math.comb(n, k) * rank ** k * (n - rank) ** (n - k)
+                        for k in range(middle, n + 1))
+            if 40 * below >= total:
+                hi = rank
+            else:
+                lo = rank + 1
+        interval = [ordered[lo - 1], ordered[n - lo]]
+    else:
         rng = random.Random(1147)
-        boot = sorted(statistics.median(rng.choices(values, k=len(values))) for _ in range(10000))
-        comparisons[language] = dict(pairs=len(blocks), median=statistics.median(values),
-                                     bootstrap95=[boot[249], boot[9749]])
-    return comparisons
+        boot = sorted(statistics.median(rng.choices(values, k=n)) for _ in range(10000))
+        interval = [boot[249], boot[9749]]
+    return dict(pairs=n, median=statistics.median(values), bootstrap95=interval)
+
+
+def reference_timings(blocks, subject, names):
+    return {language: elapsed_comparison([b[subject] / b[key] for b in blocks])
+            for language, key in names.items()}
 
 
 def memory_report(blocks, subject, reference, reported=None):
@@ -235,13 +255,13 @@ def summarize(prover, http, stream):
     source_identity = "unrecorded"
     if any(m is not None for m in manifests):
         schema = run_path(str(Path(__file__).with_name("solo5-build-inputs.py")))
-        supported = (set(schema["SHARED_PATHS"]), set(schema["ORIGINAL_PATHS"]))
+        supported = [set(schema[name]) for name in ("SHARED_PATHS", "PRE_PROFILE_PATHS", "ORIGINAL_PATHS")]
         if (not manifests[0] or set(manifests[0]) not in supported
                 or any(not isinstance(h, str) or not re.fullmatch("[0-9a-f]{64}", h)
                        for h in manifests[0].values())
                 or any(m != manifests[0] for m in manifests)):
             raise ValueError("different or missing shared build inputs")
-        if set(manifests[0]) == supported[0]:
+        if set(manifests[0]) != set(schema["ORIGINAL_PATHS"]):
             source_identity = "matched"
     if prover["target"] == "macos-arm64":
         if http["target"] != "darwin-arm64" or "compilers" not in stream:
@@ -249,6 +269,11 @@ def summarize(prover, http, stream):
         inputs = [prover["fenrir_build_inputs"], http["source_sha256"], stream["compilers"]["fenrir"]["sources"]]
         common = {"runtime/native/heap.c", "runtime/native/heap.h", "runtime/native/managed.c",
                   "tools/aarch64/managed-image.mjs", "tools/aarch64/byte-scan.mjs"}
+        if manifests[0] and "spec/native/standalone-v1.json" in manifests[0]:
+            common.update(schema["PROFILE_PATHS"])
+            stamp = inputs[0].get("tools/aarch64/native-profile-stamp.mjs")
+            if not isinstance(stamp, str) or not re.fullmatch("[0-9a-f]{64}", stamp):
+                raise ValueError("missing standalone image stamp source identity")
         seen = dict(manifests[0] or {})
         for manifest in inputs:
             if not common.issubset(manifest):
@@ -319,22 +344,19 @@ def summarize(prover, http, stream):
         raise ValueError("unrecognized target")
     rng = random.Random(1147)
     means = []
-    medians = [[] for _ in ratios]
     for _ in range(10000):
         draw = [statistics.median(rng.choices(v, k=len(v))) for v in ratios]
         means.append(statistics.geometric_mean(draw))
-        for population, value in zip(medians, draw):
-            population.append(value)
     means.sort()
     mean_interval = [means[249], means[9749]]
     verdicts = [threshold_verdict(mean_interval, 1.5)]
-    for row, population in zip(rows.values(), medians):
-        population.sort()
-        interval = [population[249], population[9749]]
+    for row, values in zip(rows.values(), ratios):
+        reference = row["reference"]
+        if "eligible_references" not in row:
+            row["eligible_references"] = {reference: elapsed_comparison(values)}
+        interval = row["eligible_references"][reference]["bootstrap95"]
         row["elapsed_bootstrap95"] = interval
         row["elapsed_verdict"] = threshold_verdict(interval, 2)
-        if prover["target"] == "solo5-arm64-spt":
-            row["eligible_references"] = {"c": dict(pairs=row["pairs"], median=row["median"], bootstrap95=interval)}
         verdicts.append(row["elapsed_verdict"])
     if "above-threshold" in verdicts:
         elapsed_verdict = "above-threshold"

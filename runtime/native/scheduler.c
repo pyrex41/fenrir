@@ -32,7 +32,6 @@ static void cancel_children(fen_scope *scope) {
 
 static _Noreturn void finish(fen_fiber *fiber) {
     fen_scheduler *scheduler = fiber->scheduler;
-    fiber->cancelled = fiber->cancel_requested;
     fiber->finished = 1;
     --scheduler->unfinished;
     fen_scope *scope = fiber->owner_scope;
@@ -63,8 +62,8 @@ _Noreturn void fen_fiber_fail(fen_scheduler *scheduler, unsigned code) {
 }
 
 static void check_cancel(fen_fiber *fiber) {
-    if (!fiber->cancel_requested || fiber->cancelling_scopes) return;
-    fiber->cancelling_scopes = 1;
+    if (!fiber->cancel_requested) return;
+    fiber->cancelled = 1;
     while (fiber->active_scope) {
         fen_scope *scope = fiber->active_scope;
         fen_scope_abort(fiber->scheduler, scope);
@@ -92,7 +91,6 @@ int fen_fiber_start(fen_scheduler *scheduler, fen_fiber *fiber, void *stack, siz
     fiber->id = scheduler->next_task++;
     fiber->scheduler = scheduler;
     fiber->owner_scope = fiber->active_scope = NULL;
-    fiber->cancelling_scopes = 0;
     fiber->trap_code = 0;
     fiber->spawned = 0;
     fiber->run = run;
@@ -130,21 +128,32 @@ static void suspend(fen_scheduler *scheduler) {
     fen_context_switch(&fiber->context, &scheduler->context);
 }
 
+static void reschedule(fen_scheduler *scheduler) {
+    enqueue(scheduler, scheduler->running);
+    suspend(scheduler);
+}
+
+static void join_scope(fen_scheduler *scheduler, fen_scope *scope, int normal) {
+    fen_fiber *owner = scheduler->running;
+    for (;;) {
+        if (normal) check_cancel(owner);
+        if (!scope->unfinished) break;
+        wait_on(owner, &scope->joiner, " joins scope ", scope->id);
+        suspend(scheduler);
+    }
+    reschedule(scheduler);
+}
+
 void fen_scope_abort(fen_scheduler *scheduler, fen_scope *scope) {
+    /* A trap, cancellation or abandoned continuation already owns this
+     * unwind. ScopeAbort and Join still schedule while preserving its reason. */
     cancel_children(scope);
-    fen_fiber_yield(scheduler);
-    fen_scope_join(scheduler, scope);
+    reschedule(scheduler);
+    join_scope(scheduler, scope, 0);
 }
 
 void fen_scope_join(fen_scheduler *scheduler, fen_scope *scope) {
-    fen_fiber *owner = scheduler->running;
-    check_cancel(owner);
-    while (scope->unfinished) {
-        wait_on(owner, &scope->joiner, " joins scope ", scope->id);
-        suspend(scheduler);
-        check_cancel(owner);
-    }
-    fen_fiber_yield(scheduler);
+    join_scope(scheduler, scope, 1);
 }
 
 int fen_fiber_request_cancel(fen_fiber *target) {
@@ -166,14 +175,12 @@ int fen_fiber_request_cancel(fen_fiber *target) {
 void fen_fiber_cancel(fen_scheduler *scheduler, fen_fiber *target) {
     check_cancel(scheduler->running);
     fen_fiber_request_cancel(target);
-    enqueue(scheduler, scheduler->running);
-    suspend(scheduler);
+    reschedule(scheduler);
 }
 
 void fen_fiber_yield(fen_scheduler *scheduler) {
     check_cancel(scheduler->running);
-    enqueue(scheduler, scheduler->running);
-    suspend(scheduler);
+    reschedule(scheduler);
 }
 
 int64_t fen_scheduler_now(fen_scheduler *s) {

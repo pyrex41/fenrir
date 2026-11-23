@@ -16,7 +16,7 @@ export const isProduction=spec=>spec.policy==='fifo'||spec.policy.startsWith('pr
 // Choices for `spec` on a program: runs the correct machine to a terminal root, a
 // deadlock or `fuel` steps. Returns {choices, steps}.
 export function scheduleFor(artifact,input,spec,fuel=1000) {
-  const m=new TaskMachine(artifact,input),choices=[],steps=[];
+  const m=new TaskMachine(artifact,input,{profile:spec.profile??'portable'}),choices=[],steps=[];
   const [kind,arg]=spec.policy.split(':'),pick=arg===undefined?null:rng(arg);
   let queue=['0'],current=null,switchable=true,script=spec.script?[...spec.script]:[];
   while(!m.footer()&&steps.length<fuel) {

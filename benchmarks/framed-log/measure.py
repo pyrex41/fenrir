@@ -141,6 +141,7 @@ def main():
     inputs = [source / filename for filename in ("processor.fen", "stream.fen", "stream-main.c", "stream-darwin.c", "stream-io.h",
               "build-stream.mjs", "build-mac.sh")]
     inputs += [root / filename for filename in ("tools/aarch64/managed-image.mjs", "tools/aarch64/byte-scan.mjs",
+               "spec/native/standalone-v1.json", "tools/tc1/native-profile.mjs", "tools/aarch64/native-profile.mjs",
                "runtime/native/managed.c", "runtime/native/heap.c", "runtime/native/heap.h")]
     report["compilers"]["fenrir"] = dict(command=cmd, build_ns=time.monotonic_ns() - started,
         clang=version("clang", "--version"), binary_sha256=digest(binary),

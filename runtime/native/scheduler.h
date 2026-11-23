@@ -57,7 +57,7 @@ struct fen_fiber {
     fen_fiber *older_sibling, *younger_sibling;
     unsigned trap_code;
     int spawned;
-    int cancel_requested, cancelling_scopes, cancelled, finished;
+    int cancel_requested, cancelled, finished;
 };
 
 /* All storage is caller-owned. Initialize the scheduler to zero. The fiber,

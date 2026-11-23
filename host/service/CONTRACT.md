@@ -2,7 +2,7 @@
 
 Draft 1 • 15 November 2026 • For owner review
 
-The host of stage A3 ([04_DIRECTION_AMENDMENT.md](../../04_DIRECTION_AMENDMENT.md) §8) is
+The host of stage A3 ([04_DIRECTION_AMENDMENT.md](../../docs/design/04_DIRECTION_AMENDMENT.md) §8) is
 **infrastructure with a stated contract**: OTP code that supervises Solo5 tender
 processes and a SQLite adapter that discharges the handler's durable effect. Nothing here
 is covered by Fenrir's proofs. Each statement below is a **named assumption** that the

@@ -4,9 +4,13 @@ set -eu
 [ "$#" = 2 ] || { echo 'usage: check-package.sh ABSOLUTE_CLI NEW_DIRECTORY' >&2; exit 2; }
 cli=$1
 case "$cli" in /*) ;; *) exit 2 ;; esac
+profile_test=$(cd "$(dirname "$0")" && pwd)/check-execution-profile.py
 mkdir "$2"
 cd "$2"
 unset FENRIR_SHEN_JIT
+python3 "$profile_test" "$cli"
+"$cli" profile > execution-profile.json
+export FENRIR_TEST_CLI="$cli"
 cat > program.fen <<'FEN'
 (library "arithmetic.fen")
 (define main {I64 --> I64} n -> (- (twice n) 1))
@@ -59,7 +63,9 @@ for target in macos-arm64 solo5-arm64-spt; do
 done
 python3 - <<'PY'
 import base64
+import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 
@@ -68,6 +74,8 @@ for malformed in ("+1", " 1", " -1", "- 1", "1 ", "1x"):
     if result.returncode != 2 or result.stdout:
         raise ValueError(f"Darwin image accepted malformed input {malformed!r}")
 
+profile = Path("execution-profile.json").read_bytes()
+expected_profile = {"id": json.loads(profile)["id"], "sha256": hashlib.sha256(profile).hexdigest()}
 for target in ("macos-arm64", "solo5-arm64-spt"):
     for case, status, output in [
         ("task-trap", 1, b'emit "resumed": 9223372036854775807 (task 0)\ntrap: Overflow\ntrap at: arithmetic.fen:1:36\n'),
@@ -77,10 +85,20 @@ for target in ("macos-arm64", "solo5-arm64-spt"):
         ("outer-trap", 1, b"trap: Overflow\ntrap at: arithmetic.fen:2:34\n"),
     ]:
         row = json.loads(Path(f"{target}-{case}.json").read_bytes())
+        schema = "fenrir-native-schedule/2" if case == "concurrent" else "fenrir-native-observations/3"
+        if row["profile"] != expected_profile or row["schema"] != schema:
+            raise ValueError((target, case, "execution profile mismatch"))
         if case == "concurrent" and set(row["dispatches"]) != {0, 1}:
             raise ValueError((target, "missing root or worker dispatch"))
         if row["exit_status"] != status or base64.b64decode(row["observations"]) != output:
             raise ValueError((target, case, row))
+    tampered = json.loads(Path(f"{target}-normal.json").read_bytes())
+    tampered["profile"]["sha256"] = "0" * 64
+    path = Path(f"{target}-altered-profile.json")
+    path.write_text(json.dumps(tampered))
+    bad = subprocess.run([os.environ["FENRIR_TEST_CLI"], "replay", target, path], capture_output=True)
+    if bad.returncode == 0 or b"execution profile mismatch" not in bad.stderr:
+        raise ValueError("replay accepted or misdiagnosed an altered profile digest")
 PY
 # A rejected rebuild must preserve both the executable and its replay identity.
 cat > invalid.fen <<'FEN'
@@ -106,3 +124,12 @@ for target in macos-arm64 solo5-arm64-spt; do
     printf 'emit "worker": 43 (task 1)\n43\n' | cmp - "$target-edited.txt"
     "$cli" replay "./$target-concurrent" "$target-concurrent.json"
 done
+
+package=$(cd "$(dirname "$cli")/.." && pwd -P)
+native_tests="$package/libexec/fenrir/tests/native"
+"$package/bin/fenrir-toolchain" python3 "$native_tests/check-handler-roundtrips.py" \
+    --native-fixtures --cli "$cli" "$PWD/native-roundtrips" \
+    cancel-during-trap.fen discontinue-joins-child.fen discontinue-pending-resume.fen \
+    resume-under-perform.fen resume-before-perform.fen resume-conditional-operand.fen \
+    resume-nested-conditional.fen resume-conditional-earlier.fen resume-conditional-trap.fen
+"$package/bin/fenrir-toolchain" python3 "$native_tests/check-task-limits.py" "$cli" "$PWD/task-limits"

@@ -1,0 +1,8 @@
+(define children {(Tuple I64 (Channel I64)) --> Unit}
+  n c -> (if (= n 0) unit
+           (do (spawn (lambda (_ : Unit) (receive c)))
+               (children (- n 1) c))))
+
+(define exercise {I64 --> I64}
+  count -> (let c (channel I64 1)
+             (do (children count c) (close c) 42)))

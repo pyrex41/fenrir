@@ -3,9 +3,9 @@
 # (spec/tc1/SURFACE.md, a draft).
 #
 #   sh frontend/fenrir.sh check FILE.fen           elaborate and validate
-#   sh frontend/fenrir.sh run FILE.fen [SCHEDULE]   check, then run on the Shen model
+#   sh frontend/fenrir.sh run FILE.fen [SCHEDULE] [PROFILE]   check, then run on the Shen model
 #   sh frontend/fenrir.sh emit FILE.fen OUT.json   check, then write the artifact
-#   sh frontend/fenrir.sh run-artifact FILE.json [SCHEDULE]
+#   sh frontend/fenrir.sh run-artifact FILE.json [SCHEDULE] [PROFILE]
 #
 # The entry point is the function main, run with input 0. FENRIR_FUEL bounds the
 # model steps of a run (default 100000). Shen/JIT: see harness/jit.sh.
@@ -34,10 +34,10 @@ case $fuel in ''|*[!0-9]*) echo "FENRIR_FUEL must be a number of steps" >&2; exi
 case $command in
   check) [ $# -eq 2 ] || usage; set -- check "$file" "$module" ;;
   run)
-    case $# in 2) set -- run "$file" "$module" "$fuel" ;; 3) set -- run "$file" "$module" "$fuel" "$3" ;; *) usage ;; esac ;;
+    case $# in 2) set -- run "$file" "$module" "$fuel" ;; 3) set -- run "$file" "$module" "$fuel" "$3" ;; 4) set -- run "$file" "$module" "$fuel" "$3" "$4" ;; *) usage ;; esac ;;
   emit) [ $# -eq 3 ] || usage; set -- emit "$file" "$module" "$3" ;;
   run-artifact)
-    case $# in 2) set -- run-artifact "$file" "$fuel" ;; 3) set -- run-artifact "$file" "$fuel" "$3" ;; *) usage ;; esac ;;
+    case $# in 2) set -- run-artifact "$file" "$fuel" ;; 3) set -- run-artifact "$file" "$fuel" "$3" ;; 4) set -- run-artifact "$file" "$fuel" "$3" "$4" ;; *) usage ;; esac ;;
   *) usage ;;
 esac
 case ${FENRIR_REQUIRE_SHEN_TYPING:-0} in

@@ -9,11 +9,14 @@ ORIGINAL_PATHS = ["frontend/fenrir.sh", "frontend/main.shen", "frontend/reader.s
              "tools/aarch64/managed-image.mjs", "tools/aarch64/byte-scan.mjs",
              "runtime/native/heap.h", "runtime/native/heap.c", "runtime/native/managed.c"]
 
-SHARED_PATHS = ORIGINAL_PATHS + [
+PRE_PROFILE_PATHS = ORIGINAL_PATHS + [
     "tools/aarch64/result-printer.mjs", "tools/tc0/canonical.mjs", "runtime/native/task-state.h",
     "harness/jit.sh", "harness/common.shen", "models/tc0/i64.shen",
     "models/tc0/pure-call-machine.shen", "models/tc1/handler-machine.shen",
 ]
+
+PROFILE_PATHS = ["spec/native/standalone-v1.json", "tools/tc1/native-profile.mjs", "tools/aarch64/native-profile.mjs"]
+SHARED_PATHS = PRE_PROFILE_PATHS + PROFILE_PATHS
 
 
 def shared_inputs():

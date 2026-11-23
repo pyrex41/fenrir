@@ -145,12 +145,42 @@ add source-reporting branches on arithmetic trap paths. The existing Rocq
 exact-image results apply to the function tables produced by the verification
 compiler. The instrumented CLI images have execution-test coverage.
 
-The development CLI compiles first-order scalar programs and a managed subset
-with tuples, declared constructors, and pattern matching. The entry takes an
-I64. Structured results print in Fenrir syntax. From the checkout on Apple Silicon:
+### Choose an execution profile
+
+The public CLI builds standalone programs with the `fenrir-native-standalone/1`
+profile. Both targets take one I64 input and return a serializable value.
+`fenrir profile` prints the versioned JSON descriptor with the supported targets,
+artifact schemas, adapter conditions and compiler limits. A source closure or
+compiler-generated handler closure can capture up to seven bindings. Native
+frontend validation accepts up to 2,000 expression nodes.
+
+| What you want to check or run | Command from the checkout |
+|---|---|
+| Validate syntax, types and effects, including programs that need a host | `bin/fenrir check SOURCE` |
+| Validate and lower every function to assembly for a standalone target, without invoking a linker or Docker | `bin/fenrir check --target TARGET SOURCE` |
+| Evaluate the admitted artifact in Shen at input 0 with the standalone task and inherited-handler limits | `bin/fenrir model --profile fenrir-native-standalone/1 SOURCE` |
+| Build or run that same standalone program | `bin/fenrir build --target TARGET SOURCE -o IMAGE` or `bin/fenrir run --target TARGET SOURCE I64` |
+| Run the accepted-job worker with its durable host | `sh host/service/check-supervised-recovery.sh fenrir-native-spt` on the configured development Mac |
+| Run the ledger caller and peer using their system manifest | `sh supervisor/run.sh` in a Linux repository checkout with Solo5 and Erlang |
+
+A durable operation handled entirely by the program can execute standalone.
+A remote declaration can also appear when no function performs a remote
+operation. The public target check identifies sources that need either adapter
+before linking. For task programs, the model command also takes a schedule after
+the source path, such as `fifo` or a JSON file of task IDs as decimal strings.
+The default is FIFO. Both the Shen model and the native runtime check the
+spawn limits of 16 live children and 32 inherited handlers per child. The
+standalone compiler also fixes the native managed heap at 1,024 object slots
+and the stack for each scheduled task, including the root, at 262,144 bytes.
+Heap exhaustion and machine-stack consumption require a native run to observe.
+The native runtime covers checked arithmetic, tuples,
+constructors, pattern matching, closures, handlers and structured tasks.
+
+From the checkout on Apple Silicon:
 
 ```sh
-bin/fenrir check examples/recursive-sum.fen
+bin/fenrir profile
+bin/fenrir check --target macos-arm64 examples/recursive-sum.fen
 bin/fenrir test --target solo5-arm64-spt examples/closures.fen examples/bytes.fen
 bin/fenrir run --target macos-arm64 examples/list-sum.fen
 bin/fenrir run --target solo5-arm64-spt examples/recursive-sum.fen 10
@@ -165,7 +195,7 @@ Native replay checks the caller-supplied image digest, input, exit status, and
 combined console bytes, including emitted values and trap locations. Version 2
 receipts also check the launcher digest, OS, architecture, and kernel release.
 For Solo5 they identify the container image on Mac or the tender digest on
-ARM64 Linux. Version 1 receipts retain their original observation checks.
+ARM64 Linux. New standalone images also embed the target, profile ID, and SHA-256 of the exact JSON printed by `fenrir profile`. Observation receipts (version 3) and schedule receipts (version 2) bind this identity to the executable. Replay checks the embedded identity before launch. Earlier images and receipts retain their original checks.
 
 For a compiled task program, record the native dispatch sequence with
 `bin/fenrir record-schedule TARGET IMAGE I64 RECEIPT`. The default records

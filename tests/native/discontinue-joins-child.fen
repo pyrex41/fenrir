@@ -1,0 +1,10 @@
+\\ > emit "after": 0 (task 0)
+\\ > outcome: Ok 42
+(effect Stop (stop I64 --> I64))
+(define main {I64 --> I64}
+  n -> (let c (channel I64 1)
+         (handle Stop
+           ((stop x k) -> (do (discontinue k) (close c) yield (emit "after" x) 42))
+           (scope (let worker (spawn (lambda (_ : Unit)
+                                       (do (receive c) (emit "child" 7) 9)))
+                    (do yield (perform Stop stop n)))))))

@@ -157,3 +157,30 @@ export const resumptionCases=[
         node('let',v,node('perform','Tell','tell',int(node,1)),node('let',fresh(),node('emit','never',int(node,0)),int(node,3)))));})],ok(9),
    {expected_performs:['Tell.tell','Ask.ask'],expected_emissions:[]})
 ];
+
+// Frontend round-trip companion. Exercise simultaneous closed and capturing
+// functions without changing the enumerated H1/H2 qualification catalogs.
+export const closedAndCapturing = fixture('closed-and-capturing-functions', [],
+  ({fresh, node, fn}) => {
+    const variable = id => node('var', id);
+    const literal = n => int(node, n);
+    const add = (a, b) => node('prim', 'add', a, b);
+    const operation = fn('operation', 'I64', ['Arrow', 'I64', 'I64', []], [], offset => {
+      const make = term => {
+        const arg = fresh();
+        return node('lambda', arg, 'I64', 'I64', [], [], add(variable(arg), term));
+      };
+      return node('if', node('prim', 'eq', variable(offset), literal(0)),
+        make(literal(2)), make(variable(offset)));
+    });
+    const main = fn('main', 'I64', 'I64', [], input => {
+      const closed = fresh(), first = fresh(), second = fresh();
+      const call = offset => node('call', 'operation', offset);
+      const apply = (id, x) => node('apply', variable(id), x);
+      return node('let', closed, call(literal(0)),
+        node('let', first, call(add(variable(input), literal(10))),
+          node('let', second, call(add(variable(input), literal(30))),
+            apply(closed, apply(first, apply(second, literal(0)))))));
+    });
+    return [operation, main];
+  }, ok(42), {}, 'H2');

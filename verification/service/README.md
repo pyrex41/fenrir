@@ -1,7 +1,7 @@
 # Service example: accepted work is durable (model level)
 
 First stage (A0) of the application example in
-[04_DIRECTION_AMENDMENT.md](../../04_DIRECTION_AMENDMENT.md) §8:
+[04_DIRECTION_AMENDMENT.md](../../docs/design/04_DIRECTION_AMENDMENT.md) §8:
 
 > A tenant-scoped request atomically writes business state, records a durable
 > job, records its retry result, and then returns acceptance.

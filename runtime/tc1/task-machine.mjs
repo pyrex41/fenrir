@@ -19,6 +19,7 @@
 //   lostWakeupClose    a first close does not commit End to waiting receivers
 //   lostWakeupAwait    a terminating task does not commit its outcome to pending awaits
 import {HandlerMachine} from './handler-machine.mjs';
+import {NATIVE_PROFILE,nativeLimits} from '../../tools/tc1/native-profile.mjs';
 
 export class ScheduleError extends Error {}
 const RUNTIME=new Set(['spawn','await','cancel','sleep','yield','channel','send','receive','close']);
@@ -203,6 +204,14 @@ export class TaskMachine {
     if(op==='spawn') {
       const owning=th.frames.findLast(f=>f.kind==='Scope').scope,s=this.scopes.get(owning);
       if(s.failed)return th.trap('ChildFailed');
+      if (this.options.profile === NATIVE_PROFILE) {
+        const liveChildren = [...this.tasks.values()].filter(t => t.id !== '0' && t.status !== 'Terminal').length;
+        const inheritedHandlers = th.frames.filter(f => f.kind === 'Handle').length;
+        if (liveChildren >= nativeLimits.max_live_nonroot_children || inheritedHandlers > nativeLimits.max_inherited_handlers) {
+          events.push({kind: 'TaskLimit', task: id});
+          return th.trap('TaskLimit');
+        }
+      }
       const child=this.fresh('task'),implicit=this.fresh('scope');
       const ct=new Thread(this,this.artifact,this.input);
       // Copies of the active handler frames, in order, above the child's implicit scope.

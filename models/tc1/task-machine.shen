@@ -21,6 +21,17 @@
 \\ The program context Prog is [Codes Names], as the handler machine takes them.
 \\ The schedule is an input: tm.step runs one step of the task it is given.
 
+\\ The native standalone profile is opt-in. Its fixed child and inherited-handler
+\\ capacities mirror runtime/native/task-entry.c. Portable model runs retain the
+\\ unbounded development semantics.
+(set tm.*spawn-limits* [])
+
+(define tm.live-nonroot
+  [] -> 0
+  [[task "0" | _] | Ts] -> (tm.live-nonroot Ts)
+  [[task _ [terminal _] | _] | Ts] -> (tm.live-nonroot Ts)
+  [[task _ | _] | Ts] -> (+ 1 (tm.live-nonroot Ts)))
+
 \\ ---------- initial state (section 4) ----------
 
 \\ The root, task 0, runs the entry function's body on its input, over the frame of its
@@ -41,6 +52,7 @@
   X [Y | Rs] -> [Y | (tm.replace X Rs)])
 
 (define tm.task Id [tm Ts _ _ _ _] -> (tm.find Id Ts))
+(define tm.tasks [tm Ts _ _ _ _] -> Ts)
 (define tm.scope Id [tm _ Ss _ _ _] -> (tm.find Id Ss))
 (define tm.chan Id [tm _ _ Cs _ _] -> (tm.find Id Cs))
 (define tm.put-task X [tm Ts Ss Cs As N] -> [tm (tm.replace X Ts) Ss Cs As N])
@@ -81,6 +93,7 @@
   div-zero -> "DivZero"
   invalid-duration -> "InvalidDuration"
   bounds -> "Bounds"
+  task-limit -> "TaskLimit"
   child-failed -> "ChildFailed")
 
 \\ A task outcome as the Outcome value await returns.
@@ -379,7 +392,17 @@
   [[handler | H] | Fs] -> [[handler | H] | (tm.handlers Fs)]
   [_ | Fs] -> (tm.handlers Fs))
 
+(define tm.over-spawn-limit?
+  [] _ _ -> false
+  [Children Handlers] M Frames ->
+    (or (>= (tm.live-nonroot (tm.tasks M)) Children)
+        (> (length (tm.handlers Frames)) Handlers)))
+
 (define tm.spawn
+  M I N Clo Frames Owning ->
+    (tm.result (tm.continue M I [unwind task-limit] runnable)
+               [node N ready] [[task-limit I]] true)
+    where (tm.over-spawn-limit? (value tm.*spawn-limits*) M Frames)
   [tm Ts Ss Cs As [NT NS NC | Clock]] I N Clo Frames Owning ->
     (let Child (str NT)
          Implicit (str NS)

@@ -1,6 +1,6 @@
 # Reconciling open branches with the direction amendment
 
-12 November 2026 • Review notes, step B0 of [04_DIRECTION_AMENDMENT.md](../04_DIRECTION_AMENDMENT.md) §10
+12 November 2026 • Review notes, step B0 of [04_DIRECTION_AMENDMENT.md](../docs/design/04_DIRECTION_AMENDMENT.md) §10
 
 Updated the same day for the owner's rulings (amendment §12): Shen stays the
 semantic authority, Solo5 is the first target, and Búri is a separate project

@@ -1,0 +1,12 @@
+\\ > emit "unit": unit (task 0)
+\\ > emit "outer": #x6f6b (task 0)
+\\ > outcome: Ok #x6f6b21
+(effect Stop (stop I64 --> I64))
+(define main {I64 --> Bytes}
+  n -> (do yield
+         (handle Stop
+           ((stop x k) -> (if (= x 0)
+             (let b (resume k 1) (do (emit "outer" b) (bytes-concat b "!")))
+             (let u (discontinue k) (do (emit "unit" u) "ok"))))
+           (let y (perform Stop stop n)
+             (do (perform Stop stop y) (emit "never" y) "bad")))))

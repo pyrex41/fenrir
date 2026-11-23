@@ -1,0 +1,11 @@
+\\ > emit "body": 1
+\\ > emit "observe": 11
+\\ > outcome: Ok 111
+(effect Ask (ask I64 --> I64))
+(effect Observe (observe I64 --> I64))
+(define main {I64 --> I64}
+  n -> (handle Observe
+         ((observe y) -> (do (emit "observe" y) (+ y 100)))
+         (handle Ask
+           ((ask x k) -> (let y (resume k (+ x 1)) (perform Observe observe y)))
+           (let y (perform Ask ask n) (do (emit "body" y) (+ 10 y))))))

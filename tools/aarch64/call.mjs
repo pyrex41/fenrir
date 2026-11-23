@@ -55,8 +55,8 @@ function normalizeCalls(root) {
 }
 
 // ---------- projection: artifact -> CallCompile.v statements (unverified) ----------
-export function projectProgram(bytes, normalize = false) {
-  const {artifact: a} = validatePureCallArtifact(bytes, ['int', '0'], {maxNodes: 2000});
+export function projectProgram(bytes, normalize = false, limits = {maxNodes: 2000}) {
+  const {artifact: a} = validatePureCallArtifact(bytes, ['int', '0'], limits);
   if (a.datatypes.length || a.effects.length) reject('No declarations');
   const functions = normalize ? specializeTupleArguments(a) : a.functions;
   const index = new Map(functions.map((f, i) => [f.name, i]));
@@ -112,8 +112,8 @@ export function frameNeed(d, st) {
   return d + depth(st.a);
 }
 
-export function compileCallArtifact(bytes, normalize = false) {
-  const {artifact, fns, main, resultType} = projectProgram(bytes, normalize);
+export function compileCallArtifact(bytes, normalize = false, limits) {
+  const {artifact, fns, main, resultType} = projectProgram(bytes, normalize, limits);
   const code = compileProg(fns);
   if (!code.every(encodable)) reject('An operand does not fit its encoding field');
   const binary = imageOf(code), starts = fstarts(fns);

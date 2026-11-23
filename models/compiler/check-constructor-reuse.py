@@ -49,7 +49,7 @@ for policy, first, second in product(("checked", "parentOnly"), ("false", "true"
             for target, digest in images.items():
                 path = args.receipts / f"{target}-{index}.json"
                 receipt = json.loads(path.read_bytes())
-                if (receipt["schema"] != "fenrir-native-observations/2" or receipt["target"] != target
+                if (receipt["schema"] not in ("fenrir-native-observations/2", "fenrir-native-observations/3") or receipt["target"] != target
                         or receipt["input"] != str(index) or receipt["image_sha256"] != digest
                         or type(receipt["exit_status"]) is not int or receipt["exit_status"] != 0
                         or base64.b64decode(receipt["observations"], validate=True)

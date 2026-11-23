@@ -248,15 +248,21 @@ void fen_task_resume(fen_task_state *state) {
     *state = (fen_task_state){0};
 }
 
-unsigned fen_defer_clause(fen_object *closure) {
+static unsigned defer_clause(fen_object *closure, unsigned mode) {
     if (!selected_handler || !current_use || *current_use) return 6;
     fen_object *link = fen_allocate(3, 0);
     if (!link) return 3;
     link->fields[0] = (uintptr_t)closure;
     link->fields[1] = (uintptr_t)*selected_handler->pending;
     *selected_handler->pending = link;
-    *current_use = 1;
+    *current_use = mode;
     return 0;
+}
+unsigned fen_defer_clause(fen_object *closure) {
+    return defer_clause(closure, 1);
+}
+unsigned fen_defer_abandon(fen_object *closure) {
+    return defer_clause(closure, 2);
 }
 unsigned fen_use_resumption(unsigned mode) {
     if (!current_use || *current_use) return 0;

@@ -1,6 +1,6 @@
 # host/service: stage A3, the accepted-job service on OTP, SQLite and Solo5
 
-Stage A3 of [04_DIRECTION_AMENDMENT.md](../../04_DIRECTION_AMENDMENT.md) §8: "SQLite
+Stage A3 of [04_DIRECTION_AMENDMENT.md](../../docs/design/04_DIRECTION_AMENDMENT.md) §8: "SQLite
 adapter under an OTP supervisor, Fenrir worker in Solo5, black-box crash and history
 tests against the contract". The Fenrir handler
 ([examples/service/accepted-job.fen](../../examples/service/accepted-job.fen)) runs

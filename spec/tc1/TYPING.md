@@ -9,8 +9,8 @@ Draft 1 • 15 November 2026 • For owner review
 written as named inference rules, together with the structural checks that are
 not typing. Nothing here is qualified. The rules restate what
 [EFFECTS.md](EFFECTS.md) §1–§3 and §7 and
-[02_TINY_LANGUAGE_CORE.md](../../02_TINY_LANGUAGE_CORE.md) §2–§4 say, in the
-form the amendment asks for ([04_DIRECTION_AMENDMENT.md](../../04_DIRECTION_AMENDMENT.md)
+[02_TINY_LANGUAGE_CORE.md](../../docs/design/02_TINY_LANGUAGE_CORE.md) §2–§4 say, in the
+form the amendment asks for ([04_DIRECTION_AMENDMENT.md](../../docs/design/04_DIRECTION_AMENDMENT.md)
 §3, "Programmable typing, fixed checking"); where those texts are silent the
 rule follows the JavaScript validator and says so.
 

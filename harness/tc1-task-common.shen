@@ -63,16 +63,9 @@
 
 \\ ---------- JSON shapes (CONCURRENCY.md section 10) ----------
 
-(define fh.task-trap
-  overflow -> "Overflow"
-  div-zero -> "DivZero"
-  invalid-duration -> "InvalidDuration"
-  bounds -> "Bounds"
-  child-failed -> "ChildFailed")
-
 (define fh.task-outcome
   [ok V] -> ["Ok" (fh.value V)]
-  [trap C] -> ["Trap" (fh.task-trap C)]
+  [trap C] -> ["Trap" (tm.trap-ctor C)]
   cancelled -> ["Cancelled"]
   abandoned -> ["Abandoned"])
 
@@ -87,6 +80,7 @@
   [scope-enter T S] -> (fh.ev "ScopeEnter" T [["scope" S]])
   [scope-exit T S O] -> (fh.ev "ScopeExit" T [["scope" S] ["outcome" (fh.task-outcome O)]])
   [spawn T C S CS] -> (fh.ev "Spawn" T [["child" C] ["scope" S] ["child_scope" CS]])
+  [task-limit T] -> (fh.ev "TaskLimit" T [])
   [await T X] -> (fh.ev "Await" T [["target" X]])
   [await-wait T X] -> (fh.ev "AwaitWait" T [["target" X]])
   [await-removed T X] -> (fh.ev "AwaitRemoved" T [["target" X]])
@@ -106,7 +100,7 @@
   [receive-wait T C] -> (fh.ev "ReceiveWait" T [["channel" C]])
   [receive-removed T C] -> (fh.ev "ReceiveRemoved" T [["channel" C]])
   [close T C First] -> (fh.ev "Close" T [["channel" C] ["first" First]])
-  [scope-failure T S C] -> (fh.ev "ScopeFailure" T [["scope" S] ["code" (fh.task-trap C)]])
+  [scope-failure T S C] -> (fh.ev "ScopeFailure" T [["scope" S] ["code" (tm.trap-ctor C)]])
   [termination T O] -> (fh.ev "Termination" T [["outcome" (fh.task-outcome O)]]))
 
 (define fh.task-rule

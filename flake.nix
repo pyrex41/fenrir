@@ -351,7 +351,7 @@
           fileset = mac-pkgs.lib.fileset.unions [
             ./bin ./frontend ./harness ./models ./typing ./tools ./runtime ./package.json
             ./benchmarks ./examples ./host/service ./spec ./fixtures ./backends/solo5
-            ./README.md ./NATIVE_GUIDE.md ./DEVELOPMENT_HISTORY.md ./PREVIEW.md ./WORK_FILE.md ./tests/native ./tests/frontend/roundtrip ./tests/host/histories ./verification/aarch64
+            ./README.md ./docs/NATIVE_GUIDE.md ./docs/history/DEVELOPMENT_HISTORY.md ./docs/PREVIEW.md ./docs/WORK_FILE.md ./tests/native ./tests/frontend/roundtrip ./tests/host/histories ./verification/aarch64 ./verification/developer-preview-review.md
             ./tests/solo5/durable-hand-cases.mjs
           ];
         };
@@ -361,10 +361,10 @@
         dontBuild = true;
         installPhase = ''
           mkdir -p $out/libexec/fenrir $out/bin
-          cp -R README.md NATIVE_GUIDE.md DEVELOPMENT_HISTORY.md PREVIEW.md WORK_FILE.md bin frontend harness models typing tools runtime package.json benchmarks examples fixtures $out/libexec/fenrir/
+          cp -R README.md docs bin frontend harness models typing tools runtime package.json benchmarks examples fixtures $out/libexec/fenrir/
           mkdir -p $out/libexec/fenrir/verification $out/libexec/fenrir/host $out/libexec/fenrir/backends
           cp -R spec $out/libexec/fenrir/
-          cp -R verification/aarch64 $out/libexec/fenrir/verification/
+          cp -R verification/aarch64 verification/developer-preview-review.md $out/libexec/fenrir/verification/
           cp -R backends/solo5 $out/libexec/fenrir/backends/
           mkdir -p $out/libexec/fenrir/tests/{solo5,host,frontend}
           cp -R tests/native $out/libexec/fenrir/tests/

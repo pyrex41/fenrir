@@ -1,0 +1,49 @@
+{
+  "schema": "fenrir-execution-profile/1",
+  "id": "fenrir-native-standalone/1",
+  "targets": ["macos-arm64", "solo5-arm64-spt"],
+  "entry": {"name": "main", "argument": "I64", "result": "serializable"},
+  "one_shot_handlers": {
+    "uses": ["resume", "discontinue"],
+    "strict_contexts": ["prim", "call", "emit", "tuple", "apply", "construct", "project", "if-test", "match-scrutinee", "let-initializer", "perform-argument"],
+    "admission": "Target checking lowers every clause, including conditional resume branches, and reports unsupported compositions at the operation."
+  },
+  "runtime": {
+    "scheduler": "single-threaded cooperative",
+    "spawn_limit_trap": "TaskLimit",
+    "heap_exhaustion_trap": "HeapExhausted"
+  },
+  "artifact_schemas": [
+    "tc0-a-pure-call-demo/1", "tc0-a-pure-call-demo/2",
+    "tc1-handler-demo/1", "tc1-handler-demo/2",
+    "tc1-task-demo/1", "tc1-time-demo/1",
+    "tc1-handler-demo/3", "tc1-durable-demo/1"
+  ],
+  "limits": {
+    "max_nodes": 2000,
+    "max_live_nonroot_children": 16,
+    "max_inherited_handlers": 32,
+    "managed_heap_slots": 1024,
+    "task_stack_bytes": 262144,
+    "max_inline_captures": 7,
+    "max_handler_operations": 8,
+    "max_managed_frame_bytes": 4080
+  },
+  "adapter_schemas": {
+    "tc1-handler-demo/3": {
+      "condition": "contains-remote-perform",
+      "runner": "sh supervisor/run.sh",
+      "description": "a system manifest and remote supervisor in the repository checkout"
+    },
+    "tc1-handler-demo/4": {
+      "condition": "serves-remote-effect",
+      "runner": "sh supervisor/run.sh",
+      "description": "a system manifest and remote supervisor in the repository checkout"
+    },
+    "tc1-durable-demo/1": {
+      "condition": "host-input-or-unhandled-durable-effect",
+      "runner": "sh host/service/check-supervised-recovery.sh fenrir-native-spt",
+      "description": "a durable host adapter"
+    }
+  }
+}

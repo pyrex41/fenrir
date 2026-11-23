@@ -12,7 +12,7 @@ an independent JavaScript implementation
 ([runtime/tc1/durable-machine.mjs](../../runtime/tc1/durable-machine.mjs)) and
 the C machine of the Solo5 guest, driven over control protocol
 [v2](../solo5/pure-call-control-v2.md). Nothing here is qualified. It is the
-third effect class of [04_DIRECTION_AMENDMENT.md](../../04_DIRECTION_AMENDMENT.md)
+third effect class of [04_DIRECTION_AMENDMENT.md](../../docs/design/04_DIRECTION_AMENDMENT.md)
 §4 (ordinary, runtime, durable), the one [EFFECTS.md](EFFECTS.md) §8 named and
 left unimplemented, and it is what stage A2 of the application example
 (amendment §8) needs: a handler written in Fenrir whose durable operations cross

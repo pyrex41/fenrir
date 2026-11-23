@@ -9,7 +9,7 @@ in the C machine that runs as a Solo5 guest, and checked by the harness: H1,
 tail-resumptive handlers, and H2, explicit one-shot resumption. The TC1 gate
 is registered (§9); no receipt from the workflow controller exists for it yet,
 and nothing here is proved. It supersedes §5 of
-[02_TINY_LANGUAGE_CORE.md](../../02_TINY_LANGUAGE_CORE.md) for TC1 and answers
+[02_TINY_LANGUAGE_CORE.md](../../docs/design/02_TINY_LANGUAGE_CORE.md) for TC1 and answers
 the open questions of the earlier handler task packet (PR #7); §10 lists them.
 Draft 4 added §12, remote perform between images: a contract, a Shen model
 checked by bounded exploration, and a first implementation. Draft 5 records

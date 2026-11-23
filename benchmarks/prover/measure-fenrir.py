@@ -216,6 +216,8 @@ def main():
             "bin/fenrir", "frontend/elaborate.shen", "frontend/main.shen",
             "tools/aarch64/managed-image.mjs", "tools/aarch64/byte-scan.mjs", "tools/aarch64/native-image.mjs",
             "tools/aarch64/result-printer.mjs", "tools/aarch64/darwin-main.c",
+            "spec/native/standalone-v1.json", "tools/tc1/native-profile.mjs",
+            "tools/aarch64/native-profile.mjs", "tools/aarch64/native-profile-stamp.mjs",
             "runtime/native/managed.c", "runtime/native/heap.c", "runtime/native/heap.h")
     }
     commands = {}
@@ -299,6 +301,9 @@ def main():
             peak_rss_ratio=report["images"][lane]["median_peak_rss_bytes"] / reference["median_peak_rss_bytes"])
     if identify() != build_inputs:
         raise ValueError("shared compiler or runtime sources changed during measurement")
+    for name, digest in report["fenrir_build_inputs"].items():
+        if sha(root / name) != digest:
+            raise ValueError("prover build input changed during measurement: " + name)
     report["shared_build_inputs"] = build_inputs
     (out / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     print(out / "report.json", {k:v["work_units_per_second"] for k,v in report["images"].items()})

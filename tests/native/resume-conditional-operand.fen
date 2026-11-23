@@ -1,0 +1,8 @@
+\\ > outcome: Ok (tuple 35 36)
+(effect Ask (ask I64 --> I64))
+(define ask-once {I64 --> I64}
+  n -> (handle Ask
+    ((ask x k) -> (+ (if (< x 1) (resume k 5) (resume k 6)) 10))
+    (+ (perform Ask ask n) 20)))
+(define main {I64 --> (Tuple I64 I64)}
+  n -> (tuple (ask-once n) (ask-once (+ n 1))))

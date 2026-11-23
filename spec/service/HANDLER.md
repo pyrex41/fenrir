@@ -2,7 +2,7 @@
 
 Draft 1 • 15 November 2026 • For owner review
 
-Stage A2 of [04_DIRECTION_AMENDMENT.md](../../04_DIRECTION_AMENDMENT.md) §8: "the
+Stage A2 of [04_DIRECTION_AMENDMENT.md](../../docs/design/04_DIRECTION_AMENDMENT.md) §8: "the
 handler written as a Fenrir program against `atomic`, `once`, `jobs.stage` library
 interfaces". The program is [examples/service/accepted-job.fen](../../examples/service/accepted-job.fen);
 the language contract it needs is [spec/tc1/DURABLE.md](../tc1/DURABLE.md) (durable

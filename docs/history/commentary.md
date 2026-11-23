@@ -32,7 +32,7 @@ Different implementation languages alone do not guarantee independence. Two mach
 
 ## The intended Shen ownership boundary
 
-The [execution plan](03_PHASED_EXECUTION_PLAN.md#3-repository-and-ownership-strategy) places semantic models and properties in Shen and keeps generic campaign/history capabilities in ShenCheck, connected through a versioned TC0 adapter. That is a meaningful architectural commitment.
+The [execution plan](../design/03_PHASED_EXECUTION_PLAN.md#3-repository-and-ownership-strategy) places semantic models and properties in Shen and keeps generic campaign/history capabilities in ShenCheck, connected through a versioned TC0 adapter. That is a meaningful architectural commitment.
 
 | Component | Intended responsibility |
 | --- | --- |
@@ -46,13 +46,13 @@ Host infrastructure can use Rust or another suitable implementation language. Th
 
 The current bootstrap has drifted from that organization. Node implements the JavaScript candidates, artifact validation, generators, reduction proposals, and semantic replay machinery. Python implements several comparison and campaign runners, including discrepancy classification and reduction orchestration. Shen supplies executable reference models that those programs invoke. Those are substantial harness responsibilities, rather than incidental build glue.
 
-There is a recent change in the native arithmetic slice: its [Go host](tools/solo5/native-arithmetic/README.md) now invokes Shen and Docker directly, replacing that slice's Python build/session adapters. Node remains involved in artifact validation and data lowering. Earlier Python tools and the Node pure-language harness remain elsewhere in the repository. Moving the native host to Go changes its implementation language; integration with the intended Shen/ShenCheck ownership boundary is still separate work.
+There is a recent change in the native arithmetic slice: its [Go host](../../tools/solo5/native-arithmetic/README.md) now invokes Shen and Docker directly, replacing that slice's Python build/session adapters. Node remains involved in artifact validation and data lowering. Earlier Python tools and the Node pure-language harness remain elsewhere in the repository. Moving the native host to Go changes its implementation language; integration with the intended Shen/ShenCheck ownership boundary is still separate work.
 
 JavaScript's exact BigInt arithmetic and Python's convenient subprocess handling are plausible bootstrap conveniences. The inspected checkout does not establish the original decision history. The useful fixtures and counterexamples can survive an architectural correction without making those temporary implementations the permanent harness.
 
 ## What Pi and fenrir-workflow actually do
 
-The [fenrir-workflow extension](.pi/extensions/fenrir-workflow/README.md) turns the current Pi coding session into a serial, bounded development worker. A human starts a finite run with a goal, turn limit, deadline, and repair-attempt limit. The extension then keeps that session working through explicit phases.
+The [fenrir-workflow extension](../../.pi/extensions/fenrir-workflow/README.md) turns the current Pi coding session into a serial, bounded development worker. A human starts a finite run with a goal, turn limit, deadline, and repair-attempt limit. The extension then keeps that session working through explicit phases.
 
 Its key integration point is Pi's `agent_before_settle` boundary. When the agent would normally finish, the extension checks workflow state and can request another continuation with the next phase instruction. The installed Pi runtime implements that boundary. This gives the project sustained work without requiring periodic human nudges.
 
@@ -85,13 +85,13 @@ The inspected Pi session recorded nine development runs, 38 `fenrir_check` resul
 
 For example, a language-development run reached its 120-turn limit. The native arithmetic sprint stopped at 184 of 200 turns after preparing an independent-review handoff. Those journal records are stronger evidence of actual controller use than examples in the README. They remain historical session records, rather than evidence that a controller is currently running.
 
-The native sprint's [handoff](tools/solo5/native-arithmetic/REPAIR_HANDOFF.md) reports 13 native hand artifacts, generated mutant discovery, bounded reduction, and strict original/smaller failure replay. Only the first case of its 16-case generated family was executed before discovery stopped; the other 15 do not provide coverage. Genuinely independent repair remains unexecuted. During this review, the 18 files referenced by its final checkpoint matched their recorded hashes. That verifies retained file identity, not fresh native execution or every claim in the report.
+The native sprint's [handoff](../../tools/solo5/native-arithmetic/REPAIR_HANDOFF.md) reports 13 native hand artifacts, generated mutant discovery, bounded reduction, and strict original/smaller failure replay. Only the first case of its 16-case generated family was executed before discovery stopped; the other 15 do not provide coverage. Genuinely independent repair remains unexecuted. During this review, the 18 files referenced by its final checkpoint matched their recorded hashes. That verifies retained file identity, not fresh native execution or every claim in the report.
 
 The review freshly ran all 40 workflow-controller tests and loaded the extension through installed Pi 1.0.1; both passed. It also freshly compared eight pure-call hand cases against the Shen executable, with agreement on the tested transitions and outcomes. Native Solo5 campaigns were not rerun as part of this commentary review.
 
 ## The missing connection
 
-The [workflow manifest](.pi/fenrir-workflow.json) registers only `workflow-tests`, a development command that tests the controller itself. It names `tc0-a-qualification` as required, but that evaluator is intentionally unconfigured.
+The [workflow manifest](../../.pi/fenrir-workflow.json) registers only `workflow-tests`, a development command that tests the controller itself. It names `tc0-a-qualification` as required, but that evaluator is intentionally unconfigured.
 
 Consequently, passing the registered development check verifies the controller, while Shen/candidate comparison, reduction, and replay are executed separately and referenced in progress reports and checkpoints. The controller can require a fresh receipt before advancing, but its currently registered command does not establish that the selected language milestone passed.
 
