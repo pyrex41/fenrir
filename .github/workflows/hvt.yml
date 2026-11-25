@@ -41,3 +41,18 @@ jobs:
       # deeper, which depends on the runner exposing virtualisation to its guests.
       - name: hvt against the Shen model and spt, in a NixOS VM
         run: nix build .#checks.x86_64-linux.hvt -L
+
+  # Separate from the Solo5 job. The regressions use a stub peer (see the script
+  # header): killing the Erlang VM cannot be done with a guest the VM owns, and
+  # these checks do not need a Solo5 image. They assert the contract and fail
+  # on master until the journal is durable and the digest covers the function.
+  # There is no xfail convention here, so this job is red on purpose.
+  remote-effect-regress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Erlang/OTP
+        run: sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y erlang-nox erlang-dev
+      - name: Remote-effect regressions (expected red)
+        run: sh harness/run-remote-effect-regress.sh
