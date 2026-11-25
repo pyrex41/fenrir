@@ -5,7 +5,7 @@
 \\ against cold boots, and run hostile-peer tests in both directions. Development
 \\ evidence only; no qualification verdict.
 \\
-\\ Host: Shen/JIT 0.7 with its JSON, buffer and subprocess libraries. The tender is the
+\\ Host: Shen/JIT 0.12 with its JSON, buffer and subprocess libraries. The tender is the
 \\ STOCK solo5-spt; the channel is two Solo5 net devices it attaches to the pipes this
 \\ process holds (--net:ctlin=@0 --net:ctlout=@2). No helper process sits between this
 \\ program and the tender, and every protocol decision is made here.
@@ -123,7 +123,7 @@
   Bytes -> (let V (buffer.from-string Bytes)
                 N (buffer.length V)
                 R (fc.reader [] (+ N 1))
-             (do (buffer.copy! (<-address R 1) 0 V 0 N) (address-> R 3 N) R)))
+             (do (buffer.copy-into! (<-address R 1) 0 V 0 N) (address-> R 3 N) R)))
 
 (define fc.available
   R -> (- (<-address R 3) (<-address R 2)))
@@ -139,12 +139,12 @@
         false
         (let B (<-address R 1)
              _ (if (> (<-address R 2) 0)
-                   (do (buffer.copy! B 0 B (<-address R 2) (fc.available R))
+                   (do (buffer.copy-into! B 0 B (<-address R 2) (fc.available R))
                        (address-> R 3 (fc.available R)) (address-> R 2 0))
                    true)
              _ (if (>= (<-address R 3) (buffer.length B)) (fc.fail "Protocol" "Flood") true)
              E (process.pipe-until (<-address R 0) (clock.deadline Ms) (freeze false))
-             Result (io.read-some E (buffer.slice B (<-address R 3) (- (buffer.length B) (<-address R 3))) [])
+             Result (fh.read-result (io.read-some E (buffer.slice B (<-address R 3) (- (buffer.length B) (<-address R 3))) []))
           (cond ((= (hd Result) read) (do (address-> R 3 (+ (<-address R 3) (hd (tl Result)))) true))
                 ((= (hd Result) eof) (do (address-> R 4 true) false))
                 ((= (io.error-domain (hd (tl Result))) timeout)
@@ -182,7 +182,7 @@
 
 (define fc.spawn
   Program Args Console ->
-    (let R (process.spawn Program Args [[stdin pipe] [stdout [file Console]] [stderr pipe]])
+    (let R (fh.process-result (process.spawn Program Args [[stdin pipe] [stdout [file Console]] [stderr pipe]]))
          _ (set fc.*boots* (+ 1 (value fc.*boots*)))
       (if (= (hd R) ok)
           (fc.session (hd (tl R)) (fc.reader (process.stderr (hd (tl R))) 262144) Console)
@@ -199,7 +199,7 @@
     (if (= (<-address S 0) [])
         true
         (let R (io.write-all (process.stdin (<-address S 0)) (buffer.from-string Bytes) [])
-          (if (= (hd R) ok) true (fc.fail "Transport" "request write failed")))))
+          (if (result.ok? R) true (fc.fail "Transport" "request write failed")))))
 
 \\ Send one request of Type with Payload; the sequence number is the session's.
 (define fc.send
@@ -230,17 +230,12 @@
             ((not (= (nth 2 F) Type)) (fc.fail "Protocol" "UnexpectedType"))
             (true J))))
 
-(define fc.status
-  [ok [exited N]] -> N
-  [ok [signalled N]] -> (- 0 N)
-  _ -> pending)
-
 \\ Wait for the tender to exit; its exit status, or a HarnessTimeout.
 (define fc.exit-status
   S -> (if (= (<-address S 0) [])
            0
            (let C (<-address S 0)
-                St (fc.status (process.wait C 5000))
+                St (fh.status (process.wait C 5000))
              (if (= St pending)
                  (do (process.kill C) (process.wait C 5000) (process.close C)
                      (fc.fail "HarnessTimeout" "tender did not exit"))
@@ -466,7 +461,7 @@
 
 (define fc.fr-range
   Mode First End ->
-    (let R (process.run (value fc.*tender*) ["--mem=32" (value fc.*guest*) (make-string "~A ~A ~A" Mode First End)]
+    (let R (fh.run-process (value fc.*tender*) ["--mem=32" (value fc.*guest*) (make-string "~A ~A ~A" Mode First End)]
                         (buffer.from-string "") [[timeout 120000] [stdout-limit 134217728]])
          V (if (and (= (hd R) ok) (process.success? (hd (tl R)))) (process.output-bytes (hd (tl R)))
                (error "harness: free-run guest failed"))
@@ -1015,7 +1010,7 @@
 
 (define fc.unhex-into
   V _ [] -> V
-  V I [A B | Cs] -> (do (buffer.u8! V I (+ (* 16 (fc.hex-digit A)) (fc.hex-digit B))) (fc.unhex-into V (+ I 1) Cs)))
+  V I [A B | Cs] -> (do (buffer.u8-> V I (+ (* 16 (fc.hex-digit A)) (fc.hex-digit B))) (fc.unhex-into V (+ I 1) Cs)))
 
 (define fc.chars
   0 _ -> ""

@@ -6,9 +6,9 @@
 \\ Transport and comparison support only: no transition logic lives here.
 
 (set process.*adapter-files* [(cn (value fh.*lib*) "shen-process.so")])
-(map (/. F (load (cn (value fh.*lib*) F)))
-     ["ffi.shen" "buffer.shen" "cursor.shen" "grammar.shen" "json.shen" "io.shen" "io-file.shen"
-      "deadline.shen" "clock.shen" "process.shen" "process-io.shen"])
+(module.set-path [(value fh.*lib*)])
+(module.use [json process/io])
+(load (cn (value fh.*root*) "harness/jit-process.shen"))
 
 \\ The models: exact integer arithmetic, the TC0-A pure-call machine, and the TC1
 \\ handler machine. Which machine runs a program is decided by its schema.
@@ -310,7 +310,7 @@
   V I End -> (buffer.string (buffer.slice V 0 (- (fh.next-line V 0 End) (if (> End 0) 1 0)))))
 
 (define fh.node-path
-  -> (let R (process.run "node" ["-p" "process.execPath"] (buffer.from-string "") [[timeout 30000]])
+  -> (let R (fh.run-process "node" ["-p" "process.execPath"] (buffer.from-string "") [[timeout 30000]])
           V (if (and (= (hd R) ok) (process.success? (hd (tl R)))) (process.output-bytes (hd (tl R))) (error "harness: node is not available"))
        (fh.first-line V 0 (buffer.length V))))
 
@@ -323,7 +323,7 @@
          Written (write-to-file In (cn Identity (cn "c#10;" (fh.replay-lines Cases))))
          \\ The tape header binds the node executable's identity, so the sandbox must let it be read.
          Node (if Sandbox (fh.node-path) "")
-         R (process.run "node" (fh.node-arguments "tools/tc0/replay-reference.mjs" [In Out] (if Sandbox ["spec/tc0" In Node] []) Out Sandbox)
+         R (fh.run-process "node" (fh.node-arguments "tools/tc0/replay-reference.mjs" [In Out] (if Sandbox ["spec/tc0" In Node] []) Out Sandbox)
                         (buffer.from-string "") [[timeout 300000]])
       (if (and (= (hd R) ok) (process.success? (hd (tl R))))
           (let View (buffer.from-string (read-file-as-string Out)) (fh.json-lines View 0 (buffer.length View) []))
@@ -351,14 +351,10 @@
 
 \\ ---------- processes and text ----------
 
-(define fh.exit-code
-  [exited N] -> N
-  _ -> -1)
-
 \\ [ExitCode Stdout Stderr]; -1 when the process did not exit normally in time.
 (define fh.exec
   Program Args Seconds ->
-    (let R (process.run Program Args (buffer.from-string "")
+    (let R (fh.run-process Program Args (buffer.from-string "")
                         [[cwd (value fh.*root*)] [timeout (* Seconds 1000)] [stdout-limit 67108864] [stderr-limit 4194304]])
       (if (= (hd R) ok)
           [(fh.exit-code (process.status (hd (tl R))))

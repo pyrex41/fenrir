@@ -21,7 +21,7 @@ const fixture = String.raw`
 `;
 
 test('legacy gate platform guard is fail-closed without disabling bare development measurements', {
-  skip: installation ? false : 'set FENRIR_SHEN_JIT to an existing Shen/JIT 0.7 install',
+  skip: installation ? false : 'set FENRIR_SHEN_JIT to an existing Shen/JIT 0.12 install',
 }, t => {
   const base = realpathSync(mkdtempSync(join(tmpdir(), 'fenrir-platform-fixture-')));
   t.after(() => rmSync(base, { recursive: true, force: true }));
@@ -30,7 +30,7 @@ test('legacy gate platform guard is fail-closed without disabling bare developme
   const out = join(base, 'output');
   for (const path of [join(tree, 'harness'), join(tree, '.pi'), join(tree, 'models/tc0'), join(tree, 'models/tc1'), bin, out])
     mkdirSync(path, { recursive: true });
-  for (const path of ['harness/common.shen', 'harness/gate-core.shen', '.pi/fenrir-workflow.json',
+  for (const path of ['harness/common.shen', 'harness/jit-process.shen', 'harness/gate-core.shen', '.pi/fenrir-workflow.json',
     'models/tc0/i64.shen', 'models/tc0/pure-call-machine.shen', 'models/tc1/handler-machine.shen'])
     cpSync(new URL(path, root), join(tree, path));
   writeFileSync(join(tree, 'fixture.shen'), fixture);

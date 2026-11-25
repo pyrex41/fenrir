@@ -447,7 +447,7 @@
          Summary (cn (value fh.*out*) "js-summary.json")
          Args (map (/. N (str N)) [T K D S C R X Cap])
          T0 (get-time run)
-         Run (process.run "node" (fh.node-arguments "runtime/service/explore-graph.mjs" (append Args [Out Summary])
+         Run (fh.run-process "node" (fh.node-arguments "runtime/service/explore-graph.mjs" (append Args [Out Summary])
                                                     ["runtime/service"] (value fh.*out*) Sandbox)
                           (buffer.from-string "") [[timeout 600000] [stdout-limit 4194304] [stderr-limit 4194304]])
          Ran (and (= (hd Run) ok) (process.success? (hd (tl Run))))

@@ -140,7 +140,7 @@
 
 (define fh.main
   -> (let File (cn (value fh.*out*) "tasks.jsonl")
-          R (process.run "node" (fh.node-arguments "tools/tc1/run-task-cases.mjs" [File] ["runtime/tc1" "tools/tc1" "fixtures/tc1"] File (value fh.*sandbox*))
+          R (fh.run-process "node" (fh.node-arguments "tools/tc1/run-task-cases.mjs" [File] ["runtime/tc1" "tools/tc1" "fixtures/tc1"] File (value fh.*sandbox*))
                          (buffer.from-string "") [[timeout 300000]])
           Ran (if (and (= (hd R) ok) (process.success? (hd (tl R)))) true (error "harness: the JavaScript task run did not complete"))
           View (buffer.from-string (read-file-as-string File))

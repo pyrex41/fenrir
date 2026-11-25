@@ -34,7 +34,7 @@
 \\ Decoded JSON printed by a node tool, or an error.
 (define fh.node-json
   Script Args ->
-    (let R (process.run "node" [(cn (value fh.*root*) Script) | Args] (buffer.from-string "")
+    (let R (fh.run-process "node" [(cn (value fh.*root*) Script) | Args] (buffer.from-string "")
                         [[timeout 30000] [stdout-limit 8388608] [stderr-limit 1048576]])
       (if (and (= (hd R) ok) (process.success? (hd (tl R))))
           (json.decode (process.output-bytes (hd (tl R))) [[byte-limit 8388608]])

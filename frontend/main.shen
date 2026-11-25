@@ -277,13 +277,13 @@
 
 \\ In strict mode both validators and the model consume one byte snapshot.
 (define fe.snapshot
-  Path -> (let Result (io.read-file Path 1048577)
+  Path -> (let Result (fh.process-result (io.read-file Path 1048577))
                Snapshot (cn (value fe.*work*) "artifact.json")
             (fe.save-snapshot Path Result Snapshot)))
 
 (define fe.save-snapshot
   Source [ok Bytes] Dest ->
-    (if (= (hd (io.write-file Dest Bytes)) ok) Dest
+    (if (result.ok? (io.write-file Dest Bytes)) Dest
         (fe.finish 2 (make-string "~A: error: cannot write an artifact snapshot~%" Source)))
   Source _ _ -> (fe.finish 2 (make-string "~A: error: cannot read an artifact snapshot (file or size limit)~%" Source)))
 

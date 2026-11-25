@@ -2,7 +2,7 @@
 \\ Solo5 guest and compare every reference step with the Shen model, which runs
 \\ in this same process. Development evidence only; no qualification verdict.
 \\
-\\ Host: Shen/JIT 0.7 with its JSON, buffer and subprocess libraries.
+\\ Host: Shen/JIT 0.12 with its JSON, buffer and subprocess libraries.
 \\   shen-jit script harness/solo5-pure-call.shen LIBDIR ROOT BATCHDIR
 \\ LIBDIR   Shen/JIT lib directory (with shen-process.so built)
 \\ ROOT     repository root
@@ -77,7 +77,7 @@
 
 (define fh.guest-range
   Tender Guest Batch Mode First End ->
-    (let R (process.run Tender ["--mem=32" Guest (make-string "~A ~A ~A" Mode First End)] (buffer.from-string "")
+    (let R (fh.run-process Tender ["--mem=32" Guest (make-string "~A ~A ~A" Mode First End)] (buffer.from-string "")
                         [[timeout 120000] [stdout-limit 134217728]])
       (if (and (= (hd R) ok) (process.success? (hd (tl R))))
           (fh.guest-traces (fh.frames (process.output-bytes (hd (tl R)))) Batch)

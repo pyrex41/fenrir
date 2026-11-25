@@ -109,7 +109,7 @@
                [["boundary" "sandbox"] ["cases" (fh.member "cases" Report)] ["failures" (fh.member "failures" Report)]])))
 
 (define fh.regressions
-  -> (let R (process.run "unshare" ["-n" "--" "sh" "-c" (cn (fh.node-path) " --test tests/tc0/*.test.mjs")] (buffer.from-string "")
+  -> (let R (fh.run-process "unshare" ["-n" "--" "sh" "-c" (cn (fh.node-path) " --test tests/tc0/*.test.mjs")] (buffer.from-string "")
                          [[cwd (value fh.*workspace*)] [clear-environment true] [environment [["PATH" "/usr/bin:/bin"]]]
                           [timeout 900000] [stdout-limit 16777216]])
           Ok (and (= (hd R) ok) (process.success? (hd (tl R))))

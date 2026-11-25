@@ -103,7 +103,7 @@ model and, separately, with the JS candidate on every step. `reverse-operands` m
 detected on 4,019 programs and `wrap-overflow` on 238 by both comparisons.
 
 The comparison with the Shen model is a Shen program,
-[harness/solo5-pure-call.shen](../../harness/README.md), running on Shen/JIT 0.7: it runs
+[harness/solo5-pure-call.shen](../../harness/README.md), running on Shen/JIT 0.12: it runs
 the model in-process, launches the tender, parses the guest's frames and compares, in
 about 5 seconds. The model's integers are decimal strings (`models/tc0/i64.shen`), since
 Shen/JIT integers are 62-bit. Earlier in

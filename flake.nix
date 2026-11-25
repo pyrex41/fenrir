@@ -18,8 +18,8 @@
     # Sources fetched by Nix itself and locked by NAR hash in flake.lock.
     shen-cl-src = { url = "git+https://github.com/Shen-Language/shen-cl?rev=dff7445e6cd3ed9c021fdf6e8a45ffafa3128347"; flake = false; };
     yggdrasil-src = { url = "git+https://github.com/pyrex41/yggdrasil?rev=a40d8c5b6ed1eb2b5d7a4511e61d0304ce9a2e3d"; flake = false; };
-    # Shen/JIT v0.7: host of the Shen harness (harness/) and of the model it runs.
-    shen-jit-src = { url = "git+https://github.com/tizoc/shen-jit?rev=2f4b48bf9aabc2b93379d15f1818e4209137eb60"; flake = false; };
+    # Shen/JIT v0.12: host of the Shen harness (harness/) and of the model it runs.
+    shen-jit-src = { url = "git+https://github.com/tizoc/shen-jit?rev=02c7dd31ff9402c1e00f6bd2823bca591d5ddbb5"; flake = false; };
     # Solo5 v0.9.3, the commit tools/solo5/freerun.mjs pins as SOLO5_COMMIT.
     solo5-src = { url = "git+https://github.com/Solo5/solo5?ref=refs/tags/v0.9.3&rev=38e0c348be231a2a3c59510a5caabf562792679f"; flake = false; };
     # The V9.2.0 standard library source used by the historical Rocq 9.3 run.
@@ -51,39 +51,19 @@
       # the build platform's nixpkgs, even though the kernel archive is shared.
       arm-pkgs = nixpkgs.legacyPackages.aarch64-linux;
       mac-pkgs = nixpkgs.legacyPackages.aarch64-darwin;
-      mac-shen-jit = mac-pkgs.stdenv.mkDerivation {
-        pname = "shen-jit";
-        version = "0.7";
-        src = mac-pkgs.fetchurl {
-          url = "https://github.com/tizoc/shen-jit/releases/download/v0.7/shen-jit-0.7-macos-arm64.tar.gz";
-          sha256 = "4a5170dc135ed3dda9269d1d74a83e99d83fe874172be632b26cfb5a434fd95a";
-        };
-        dontConfigure = true;
-        buildPhase = ''
-          $CC -O2 -dynamiclib -undefined dynamic_lookup -Iinclude lib/process.c -o shen-process.so
-        '';
-        installPhase = ''
-          mkdir -p $out/bin $out/lib $out/share/licenses/shen-jit
-          cp shen-jit $out/bin/
-          cp lib/*.shen shen-process.so $out/lib/
-          cp LICENSE*.txt $out/share/licenses/shen-jit/
-        '';
-        # Preserve the upstream signed executable and appended Shen image.
-        dontFixup = true;
-      };
-      mkShenJit = pkgs: bootstrapArch: bootstrapHash:
+      mkShenJit = pkgs: bootstrapPlatform: bootstrapHash:
         let
           kernel = pkgs.fetchurl {
-            url = "https://github.com/Shen-Language/shen-sources/releases/download/shen-43.6/ShenOSKernel-43.6.tar.gz";
-            sha256 = "61d1795755a57da252ba8108cdfccc680f95a04bfd395a54f533ab6724647ef5";
+            url = "https://github.com/Shen-Language/shen-sources/releases/download/shen-43.7/ShenOSKernel-43.7.tar.gz";
+            sha256 = "55911dd95b719aa0eaeff8fbd926fcbbb9cfafab04dc01f6e283750b9461e487";
           };
           bootstrap = pkgs.fetchurl {
-            url = "https://github.com/tizoc/shen-jit/releases/download/v0.1/shen-jit-0.1-linux-${bootstrapArch}-static.tar.gz";
+            url = "https://github.com/tizoc/shen-jit/releases/download/v0.1/shen-jit-0.1-${bootstrapPlatform}.tar.gz";
             sha256 = bootstrapHash;
           };
         in pkgs.stdenv.mkDerivation {
           pname = "shen-jit";
-          version = "0.7";
+          version = "0.12";
           src = shen-jit-src;
           buildPhase = ''
             mkdir -p .deps/kernel .deps/shen-jit
@@ -93,9 +73,10 @@
             make process
           '';
           installPhase = ''
-            mkdir -p $out/bin $out/lib
+            mkdir -p $out/bin $out/lib $out/share/licenses/shen-jit
+            cp LICENSE LICENSE-shen-kernel.txt $out/share/licenses/shen-jit/
             cp build/shen-jit $out/bin/
-            cp lib/*.shen $out/lib/
+            cp -R lib/. $out/lib/
             cp build/shen-process.so $out/lib/
           '';
           # The Shen image is appended to the executable and must stay intact.
@@ -103,8 +84,10 @@
           dontPatchELF = true;
           dontFixup = true;
         };
-      shen-jit = mkShenJit pkgs "x86_64" "4e569fe92e24a722afe406807e7ad3271fd2d6cc4b7744c981536f732e2953bd";
-      arm-shen-jit = mkShenJit arm-pkgs "arm64" "2aad3cce35a39be0d9f8859122a4ad1582564ba6afad597054b2cfb2011f0f9d";
+      shen-jit = mkShenJit pkgs "linux-x86_64-static" "4e569fe92e24a722afe406807e7ad3271fd2d6cc4b7744c981536f732e2953bd";
+      arm-shen-jit = mkShenJit arm-pkgs "linux-arm64-static" "2aad3cce35a39be0d9f8859122a4ad1582564ba6afad597054b2cfb2011f0f9d";
+
+      mac-shen-jit = mkShenJit mac-pkgs "macos-arm64" "4c21b9e3b100dec8411ca5a1685fd7acb6afc79d8c304b930af6bde4c5a7fb91";
 
       # Solo5 at the pinned commit, built from source and installed with its own
       # `make install`: bin/ holds solo5-spt, solo5-hvt, solo5-elftool and the
@@ -184,7 +167,7 @@
       # guest modes. Tender banners are not frames and are dropped.
       harness-src = fs.toSource {
         root = ./.;
-        fileset = fs.unions [ ./harness/common.shen ./harness/solo5-pure-call.shen ./models ];
+        fileset = fs.unions [ ./harness/common.shen ./harness/jit-process.shen ./harness/solo5-pure-call.shen ./models ];
       };
       hvt-compare = pkgs.writeShellApplication {
         name = "fenrir-hvt-compare";

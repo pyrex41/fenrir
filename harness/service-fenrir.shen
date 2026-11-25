@@ -304,7 +304,7 @@
 (define sfx.javascript
   Name Runs SamplePath Sandbox ->
     (let Out (cn (value fh.*out*) "js-sample.jsonl")
-         Run (process.run "node" (fh.node-arguments "tools/service/run-fenrir-sample.mjs" [SamplePath Out]
+         Run (fh.run-process "node" (fh.node-arguments "tools/service/run-fenrir-sample.mjs" [SamplePath Out]
                                                     ["runtime/tc1" "tools/service" "fixtures/tc1" SamplePath] (value fh.*out*) Sandbox)
                           (buffer.from-string "") [[timeout 600000] [stdout-limit 4194304] [stderr-limit 4194304]])
          Ran (and (= (hd Run) ok) (process.success? (hd (tl Run))))

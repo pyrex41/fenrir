@@ -21,7 +21,7 @@ def literal(expr):
 
 def main():
     directory = Path(__file__).resolve().parent
-    default = directory.parents[1] / "build/toolchain/shen-jit-0.7"
+    default = directory.parents[1] / "build/toolchain/shen-jit-0.12"
     jit = Path(os.environ.get("FENRIR_SHEN_JIT", default)) / "bin/shen-jit"
     checking = len(sys.argv) == 3
     proofs = dict(line.split() for line in Path(sys.argv[2]).read_text().splitlines()) if checking else {}

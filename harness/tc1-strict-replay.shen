@@ -43,7 +43,7 @@
 \\ The hand fixtures: agreement and expectations first; only agreeing cases are replayed.
 (define fh.s-hand
   -> (let File (cn (value fh.*out*) "handlers.jsonl")
-          R (process.run "node" (fh.node-arguments "tools/tc1/run-handler-cases.mjs" [File] ["runtime/tc1" "tools/tc1" "fixtures/tc1"] File (value fh.*sandbox*))
+          R (fh.run-process "node" (fh.node-arguments "tools/tc1/run-handler-cases.mjs" [File] ["runtime/tc1" "tools/tc1" "fixtures/tc1"] File (value fh.*sandbox*))
                          (buffer.from-string "") [[timeout 120000]])
           Ran (if (and (= (hd R) ok) (process.success? (hd (tl R)))) true (error "harness: the JavaScript handler run did not complete"))
           View (buffer.from-string (read-file-as-string File))

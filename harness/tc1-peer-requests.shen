@@ -86,7 +86,7 @@
 
 (define fq.guest-range
   Tender Guest Batch Mode First End ->
-    (let R (process.run Tender ["--mem=32" Guest (make-string "~A ~A ~A" Mode First End)] (buffer.from-string "")
+    (let R (fh.run-process Tender ["--mem=32" Guest (make-string "~A ~A ~A" Mode First End)] (buffer.from-string "")
                         [[timeout 120000] [stdout-limit 134217728]])
       (if (and (= (hd R) ok) (process.success? (hd (tl R))))
           (let V (process.output-bytes (hd (tl R)))

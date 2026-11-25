@@ -40,7 +40,7 @@
 
 (define fh.main
   -> (let File (cn (value fh.*out*) "hand.jsonl")
-          R (process.run "node" (fh.node-arguments "tools/tc0/run-pure-call-hand.mjs" [File | (value fh.*family*)] ["fixtures/tc0"] File (value fh.*sandbox*))
+          R (fh.run-process "node" (fh.node-arguments "tools/tc0/run-pure-call-hand.mjs" [File | (value fh.*family*)] ["fixtures/tc0"] File (value fh.*sandbox*))
                          (buffer.from-string "") [[timeout 60000]])
           Ran (if (and (= (hd R) ok) (process.success? (hd (tl R)))) true (error "harness: the JavaScript hand-case run did not complete"))
           View (buffer.from-string (read-file-as-string File))

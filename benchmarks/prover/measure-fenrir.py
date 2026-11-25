@@ -176,7 +176,7 @@ def shen_image(here, out, corpus, rows, lane):
                     '(output "~A~%" (pv.repeat (hd (read-from-string (hd (tl (value *argv*))))) 0))'])
     src = out / f"shen-{lane}.shen"
     src.write_text("\n".join(program))
-    default = here.parents[1] / "build/toolchain/shen-jit-0.7"
+    default = here.parents[1] / "build/toolchain/shen-jit-0.12"
     jit = Path(os.environ.get("FENRIR_SHEN_JIT", default)).resolve() / "bin/shen-jit"
     return [jit, "script", src], dict(source_sha256=sha(src), reference_sha256=sha(ref),
                                       jit_sha256=sha(jit), jit=str(jit),

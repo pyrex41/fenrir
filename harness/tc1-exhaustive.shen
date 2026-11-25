@@ -132,7 +132,7 @@
 
 (define fh.main
   -> (let Bound (tc0.i64.small (value fh.*bound*))
-          R (process.run "node" (fh.node-arguments "tools/tc1/run-handler-exhaustive.mjs" [(value fh.*bound*) (value fh.*out*)]
+          R (fh.run-process "node" (fh.node-arguments "tools/tc1/run-handler-exhaustive.mjs" [(value fh.*bound*) (value fh.*out*)]
                                                    ["runtime/tc1" "tools/tc1"] (value fh.*out*) (value fh.*sandbox*))
                          (buffer.from-string "") [[timeout 600000]])
           Ran (if (and (= (hd R) ok) (process.success? (hd (tl R)))) true

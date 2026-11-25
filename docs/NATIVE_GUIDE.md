@@ -14,7 +14,7 @@ For a qualification campaign, use
 `sh tools/aarch64/package-mac.sh --out-link ./campaign-package ./fenrir-source.tar.gz`.
 The new link keeps the package and its toolchain available across Nix garbage
 collection. Keep it until the campaign and its verification have finished.
-It carries the pinned Shen/JIT 0.7 macOS distribution, its compiled process
+It carries the pinned Shen/JIT 0.12 built from the upstream tag, its compiled process
 extension, Node, Python and Clang in its Nix closure. For work in the checkout,
 `nix develop` supplies the same Shen/JIT frontend. The Solo5 target also needs
 an ARM64 Linux Docker engine and guest toolchain image. With a fresh engine,

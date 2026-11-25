@@ -17,7 +17,7 @@
              J (fh.last-report (hd (tl R)))
           (if (and (= (hd R) 0) (cons? J) (fe.schedule-ids? (fh.field "choices" J))) (fh.field "choices" J)
               (fe.finish 2 (make-string "the schedule policy ~A could not be applied: ~A~%" Schedule (hd (tl (tl R)))))))
-        (let Input (io.read-file Schedule 1048576)
+        (let Input (fh.process-result (io.read-file Schedule 1048576))
              J (fe.schedule-file Schedule Input)
           (if (fe.schedule-ids? J) J
               (fe.finish 2 (make-string "~A: error: a schedule file holds a JSON list of task IDs, such as [c#34;0c#34;,c#34;1c#34;]~%" Schedule))))))

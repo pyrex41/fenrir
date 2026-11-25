@@ -64,7 +64,7 @@
 
 (define fh.main
   -> (let File (cn (value fh.*out*) (cn "candidate-" (cn (value fh.*bound*) ".jsonl")))
-          R (process.run "node" (fh.node-arguments "tools/tc0/run-pure-data-exhaustive.mjs" [(value fh.*bound*) File] [] File (value fh.*sandbox*))
+          R (fh.run-process "node" (fh.node-arguments "tools/tc0/run-pure-data-exhaustive.mjs" [(value fh.*bound*) File] [] File (value fh.*sandbox*))
                          (buffer.from-string "") [[timeout 600000]])
           Ran (if (and (= (hd R) ok) (process.success? (hd (tl R)))) true
                   (error "harness: the JavaScript batch did not complete"))

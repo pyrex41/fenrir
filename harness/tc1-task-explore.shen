@@ -414,7 +414,7 @@
   T -> (fh.keep (/. P (element? (hd P) (fh.task-defect-names))) T))
 
 (define fh.run-node
-  Mode Seconds -> (let R (process.run "node" (fh.node-arguments "tools/tc1/run-task-explore.mjs" [Mode (value fh.*out*)] ["runtime/tc1" "tools/tc1" (value fh.*out*)] (value fh.*out*) (value fh.*sandbox*))
+  Mode Seconds -> (let R (fh.run-process "node" (fh.node-arguments "tools/tc1/run-task-explore.mjs" [Mode (value fh.*out*)] ["runtime/tc1" "tools/tc1" (value fh.*out*)] (value fh.*out*) (value fh.*sandbox*))
                                       (buffer.from-string "") [[timeout (* Seconds 1000)]])
                     (if (and (= (hd R) ok) (process.success? (hd (tl R)))) true (error "harness: the JavaScript ~A step did not complete" Mode))))
 

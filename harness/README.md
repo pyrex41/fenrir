@@ -2,7 +2,7 @@
 
 The owner's direction (12 November 2026): the machinery around the Shen model
 should itself be Shen, not Python or JavaScript. This directory is where it
-moves to, piece by piece. Host: Shen/JIT 0.7, using its own JSON, buffer and
+moves to, piece by piece. Host: Shen/JIT 0.12, using its own JSON, buffer and
 subprocess libraries.
 
 ## What runs today

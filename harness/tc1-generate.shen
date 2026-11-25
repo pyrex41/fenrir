@@ -547,7 +547,7 @@
 (define fh.g-implementation
   File Out Fuel Mode Sandbox ->
     (let Made (fh.exec "mkdir" ["-p" Out] 30)
-         R (process.run "node" (fh.node-arguments "tools/tc1/run-handler-generated.mjs" [File Out (str Fuel) Mode]
+         R (fh.run-process "node" (fh.node-arguments "tools/tc1/run-handler-generated.mjs" [File Out (str Fuel) Mode]
                                                   ["runtime/tc1" "tools/tc1" File] Out Sandbox)
                         (buffer.from-string "") [[timeout 600000]])
       (if (and (= (hd R) ok) (process.success? (hd (tl R))))

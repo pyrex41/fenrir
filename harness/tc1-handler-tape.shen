@@ -16,7 +16,7 @@
          Written (write-to-file In (cn Identity (cn "c#10;" (fh.replay-lines Cases))))
          \\ The tape header binds the node executable's identity, so the sandbox must let it be read.
          Node (if Sandbox (fh.node-path) "")
-         R (process.run "node" (fh.node-arguments "tools/tc1/replay-reference.mjs" [In Out]
+         R (fh.run-process "node" (fh.node-arguments "tools/tc1/replay-reference.mjs" [In Out]
                                                   (if Sandbox ["runtime/tc1" "tools/tc1" "spec/tc1" In Node] []) Out Sandbox)
                         (buffer.from-string "") [[timeout 300000]])
       (if (and (= (hd R) ok) (process.success? (hd (tl R))))

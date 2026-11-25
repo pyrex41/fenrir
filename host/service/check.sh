@@ -28,7 +28,7 @@ repo=$root
 # jit.sh derives its default prefix from $0, which is in host/service here.
 # Supply the repository-relative fallback explicitly if Nix is not available.
 if [ -z "${FENRIR_SHEN_JIT:-}" ] && ! command -v nix >/dev/null 2>&1; then
-  FENRIR_SHEN_JIT="$repo/build/toolchain/shen-jit-0.7"
+  FENRIR_SHEN_JIT="$repo/build/toolchain/shen-jit-0.12"
 fi
 . "$repo/harness/jit.sh"
 root=$repo # jit.sh sets root from $0, which is two levels down here

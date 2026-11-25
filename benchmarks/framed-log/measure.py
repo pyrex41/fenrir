@@ -146,7 +146,7 @@ def main():
         sources={str(path.relative_to(root)): digest(path) for path in inputs})
     subprocess.run([sys.executable, source / "check.py", binary], check=True, timeout=120)
 
-    jit = Path(os.environ.get("FENRIR_SHEN_JIT", root / "build/toolchain/shen-jit-0.7")).resolve()
+    jit = Path(os.environ.get("FENRIR_SHEN_JIT", root / "build/toolchain/shen-jit-0.12")).resolve()
     env = dict(os.environ, FENRIR_SHEN_JIT=str(jit))
     shen = out / "shen"
     subprocess.run(["sh", source / "build-shen.sh", shen], check=True)

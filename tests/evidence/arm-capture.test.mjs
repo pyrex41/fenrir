@@ -82,7 +82,7 @@ test('capture does not accept a caller-selected Shen/JIT install', async () => {
 });
 
 test('actual Shen TC1 dispatch binds a fresh nested G1 in development mode', {
-  skip: !process.env.FENRIR_SHEN_JIT && 'set FENRIR_SHEN_JIT to an existing Shen/JIT 0.7 install',
+  skip: !process.env.FENRIR_SHEN_JIT && 'set FENRIR_SHEN_JIT to an existing Shen/JIT 0.12 install',
 }, async t => {
   // Exercise the real two Shen entry points with tiny fixture manifests. Only
   // platform observation is mocked; no fixture row executes candidate code.
@@ -95,7 +95,7 @@ test('actual Shen TC1 dispatch binds a fresh nested G1 in development mode', {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, text, opts);
   };
-  for (const file of ['harness/gate-core.shen', 'harness/common.shen', 'harness/gate.shen', 'harness/tc1-gate.shen',
+  for (const file of ['harness/gate-core.shen', 'harness/common.shen', 'harness/jit-process.shen', 'harness/gate.shen', 'harness/tc1-gate.shen',
     'harness/tc1-random-rows.shen', 'harness/tc1-random-guest.shen', 'harness/tc1-remote-rows.shen',
     'models/tc0/i64.shen', 'models/tc0/pure-call-machine.shen', 'models/tc1/handler-machine.shen']) {
     const dest = join(root, file);
