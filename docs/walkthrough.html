@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Walk the Fenrir repository</title>
+<style>
+  :root {
+    --paper: #f3efe6;
+    --board: #f7f4ec;
+    --ink: #1c1915;
+    --muted: #5c564c;
+    --line: #1c1915;
+    --blue-fill: #d7e6f8;
+    --blue-stroke: #1d4e89;
+    --violet-fill: #e7dff8;
+    --violet-stroke: #53378a;
+    --sand-fill: #f6e7c1;
+    --sand-stroke: #8a5a10;
+    --green-fill: #d5f0de;
+    --green-stroke: #1c6b3a;
+    --rust-fill: #f8dcc8;
+    --rust-stroke: #8d3d12;
+    --rose-fill: #f8d4dc;
+    --rose-stroke: #8d2438;
+    --teal-fill: #d3efef;
+    --teal-stroke: #0e5c60;
+    --quiet: #e7e1d6;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+    font-size: 18px;
+    line-height: 1.45;
+  }
+  a { color: inherit; }
+  a:focus-visible { outline: 3px solid var(--blue-stroke); outline-offset: 3px; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 32px 20px 80px; }
+  header h1 { font-size: 42px; line-height: 1.05; font-weight: 500; margin: 0 0 12px; letter-spacing: -0.02em; }
+  header p { max-width: 68ch; margin: 0; }
+  .lede { font-size: 20px; }
+  .note { color: var(--muted); font-size: 15px; margin-top: 10px; }
+  h2 { font-size: 28px; font-weight: 500; margin: 48px 0 8px; letter-spacing: -0.02em; }
+  h3 { font-size: 20px; font-weight: 500; margin: 0 0 6px; }
+  .deck { color: var(--muted); margin: 0 0 16px; max-width: 68ch; }
+  ol.five { list-style: none; padding: 0; margin: 16px 0 0; display: flex; flex-direction: column; gap: 8px; }
+  ol.five a {
+    display: grid;
+    grid-template-columns: 1.6rem minmax(10rem, 16rem) minmax(0, 1fr);
+    gap: 10px 16px;
+    align-items: baseline;
+    background: #fffdf8;
+    border: 2px solid var(--ink);
+    border-radius: 12px 10px 14px 11px;
+    box-shadow: 3px 3px 0 var(--ink);
+    padding: 8px 14px;
+    text-decoration: none;
+  }
+  ol.five a:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink); }
+  ol.five .n { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 15px; }
+  ol.five strong { font-size: 17px; font-weight: 500; }
+  ol.five .path { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 14px; line-height: 1.35; }
+  .board {
+    background-color: var(--board);
+    background-image: radial-gradient(#ddd6c8 1.1px, transparent 1.1px);
+    background-size: 18px 18px;
+    border: 2px solid var(--ink);
+    border-radius: 18px 14px 16px 20px;
+    box-shadow: 4px 4px 0 var(--ink);
+    padding: 12px 8px 4px;
+    overflow-x: auto;
+  }
+  .board svg { display: block; width: 100%; min-width: 720px; height: auto; }
+  svg text { font-family: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif; }
+  svg a { cursor: pointer; }
+  svg a rect { filter: drop-shadow(3px 3px 0 rgba(28, 25, 21, 0.14)); }
+  svg a:hover rect { stroke-width: 3; }
+  figcaption { font-size: 15px; color: var(--muted); margin: 8px 4px 0; }
+  .lanes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  .lane {
+    background: #fffdf8;
+    border: 2px solid var(--ink);
+    border-radius: 14px 12px 16px 13px;
+    box-shadow: 3px 3px 0 var(--ink);
+    padding: 14px 14px 16px;
+    text-decoration: none;
+    display: block;
+  }
+  .lane:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink); }
+  .lane ol { margin: 8px 0 0; padding: 0; list-style: none; }
+  .lane li { position: relative; padding: 7px 0 7px 18px; font-size: 16px; }
+  .lane li + li { border-top: 1.5px dashed #c9c1b4; }
+  .lane li::before {
+    content: "";
+    position: absolute; left: 2px; top: 0; bottom: 0; width: 2px; background: var(--ink);
+  }
+  .lane li:first-child::before { top: 14px; }
+  .lane li:last-child::before { bottom: 14px; }
+  .lane .dot {
+    position: absolute; left: -2px; top: 13px; width: 10px; height: 10px;
+    border: 2px solid var(--ink); border-radius: 50%; background: var(--board);
+  }
+  .lane.job { background: var(--teal-fill); }
+  .lane.remote { background: var(--blue-fill); }
+  .lane code, .stop code, .room code {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.86em;
+  }
+  .layout { display: grid; grid-template-columns: 190px 1fr; gap: 28px; align-items: start; margin-top: 8px; }
+  nav.toc { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 4px; font-size: 15px; }
+  nav.toc a { text-decoration: none; padding: 3px 0; border-bottom: 1px solid transparent; }
+  nav.toc a:hover { border-bottom-color: var(--ink); }
+  .stop {
+    border: 2px solid transparent;
+    border-radius: 12px;
+    padding: 14px 14px 6px;
+    margin: 0 0 8px;
+    scroll-margin-top: 16px;
+  }
+  .stop:target {
+    background: #fffdf8;
+    border-color: var(--ink);
+    box-shadow: 4px 4px 0 var(--ink);
+  }
+  .stop p { margin: 0 0 10px; max-width: 68ch; }
+  .files { list-style: none; padding: 0; margin: 0 0 8px; }
+  .files li { margin: 0 0 4px; }
+  .files a { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 14px; }
+  .kicker { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .rooms { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .room {
+    background: #fffdf8;
+    border: 2px solid var(--ink);
+    border-radius: 12px 14px 11px 13px;
+    padding: 12px 14px 8px;
+  }
+  .room ul { margin: 8px 0 6px; padding: 0; list-style: none; font-size: 15px; }
+  .room li { margin: 0 0 5px; }
+  .room a { text-decoration: none; border-bottom: 1px solid #c9c1b4; }
+  .room a:hover { border-bottom-color: var(--ink); }
+  .room p { margin: 0 0 8px; color: var(--muted); font-size: 15px; }
+  .room.later { background: var(--quiet); }
+  .swatch { width: 100%; height: 8px; border-radius: 4px; margin-bottom: 8px; border: 1.5px solid var(--ink); }
+  .s-blue { background: var(--blue-fill); }
+  .s-violet { background: var(--violet-fill); }
+  .s-sand { background: var(--sand-fill); }
+  .s-green { background: var(--green-fill); }
+  .s-rust { background: var(--rust-fill); }
+  .s-rose { background: var(--rose-fill); }
+  .s-teal { background: var(--teal-fill); }
+  .s-quiet { background: #d9d3c7; }
+  body:has(#stop-program:target) a[href="#stop-program"] rect,
+  body:has(#stop-frontend:target) a[href="#stop-frontend"] rect,
+  body:has(#stop-model:target) a[href="#stop-model"] rect,
+  body:has(#stop-compiler:target) a[href="#stop-compiler"] rect,
+  body:has(#stop-harness:target) a[href="#stop-harness"] rect {
+    stroke: var(--ink);
+    stroke-width: 3.5;
+  }
+  body:has(#stop-service:target) .lane.job,
+  body:has(#stop-remote:target) .lane.remote {
+    outline: 3px solid var(--ink);
+    outline-offset: 2px;
+  }
+  details { margin-top: 28px; }
+  details pre {
+    overflow: auto;
+    background: #fffdf8;
+    border: 2px solid var(--ink);
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  summary { cursor: pointer; font-size: 18px; }
+  @media (max-width: 860px) {
+    ol.five a { grid-template-columns: 1.6rem minmax(0, 1fr); }
+    ol.five .n { grid-column: 1; grid-row: 1; }
+    ol.five strong { grid-column: 2; grid-row: 1; }
+    ol.five .path { grid-column: 2; grid-row: 2; }
+    .lanes, .layout, .rooms { grid-template-columns: 1fr; }
+    nav.toc { position: static; flex-direction: row; flex-wrap: wrap; gap: 8px 14px; }
+    header h1 { font-size: 34px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    ol.five a, .lane, svg a rect { transition: none; }
+    ol.five a:hover, .lane:hover { transform: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Walk the repository</h1>
+    <p class="lede">The folders are stages of one pipeline. A <code>.fen</code> file becomes JSON. A Shen machine steps those bytes, and a Shen compiler emits ARM64 from the same bytes. Gleipnir compares what they observe.</p>
+    <p class="note">Click a box to jump to that stop. The same walk, with Mermaid, is <a href="WALKTHROUGH.md">WALKTHROUGH.md</a> — that is the page GitHub renders. This file is the one to open in a browser.</p>
+  </header>
+
+  <h2>Five files, if that is all you open</h2>
+  <ol class="five">
+    <li><a href="#stop-claim"><span class="n">1</span><strong>The claim</strong><span class="path">README.md</span></a></li>
+    <li><a href="#stop-program"><span class="n">2</span><strong>A whole program</strong><span class="path">examples/recursive-sum.fen</span></a></li>
+    <li><a href="#stop-frontend"><span class="n">3</span><strong>Stages kept apart</strong><span class="path">frontend/main.shen</span></a></li>
+    <li><a href="#stop-model"><span class="n">4</span><strong>The machine state</strong><span class="path">models/tc1/task-machine.shen</span></a></li>
+    <li><a href="#stop-cli"><span class="n">5</span><strong>Where the CLI forks</strong><span class="path">bin/fenrir</span></a></li>
+  </ol>
+
+  <h2>One source, two readers</h2>
+  <p class="deck">The validator judges the artifact and does not rewrite it. The model and the compiler both read the bytes elaborate wrote.</p>
+  <figure class="board">
+    <svg viewBox="0 0 960 520" role="img" aria-labelledby="pipe-title pipe-desc">
+      <title id="pipe-title">From a Fenrir source file to a comparison</title>
+      <desc id="pipe-desc">Source goes through the frontend to an artifact. The artifact is read by the Shen model and by the ARM64 backend. Both sides meet in the harness.</desc>
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M 0 1.2 L 9 5 L 0 8.8 Z" fill="#1c1915"></path>
+        </marker>
+      </defs>
+      <path d="M280 78 H336" fill="none" stroke="#1c1915" stroke-width="2" marker-end="url(#arrow)"></path>
+      <path d="M620 78 H676" fill="none" stroke="#1c1915" stroke-width="2" marker-end="url(#arrow)"></path>
+      <path d="M785 120 V168 H248" fill="none" stroke="#1c1915" stroke-width="2"></path>
+      <path d="M712 168 V206" fill="none" stroke="#1c1915" stroke-width="2" marker-end="url(#arrow)"></path>
+      <path d="M248 168 V206" fill="none" stroke="#1c1915" stroke-width="2" marker-end="url(#arrow)"></path>
+      <path d="M248 338 V378 H712 V338" fill="none" stroke="#1c1915" stroke-width="2"></path>
+      <path d="M480 378 V404" fill="none" stroke="#1c1915" stroke-width="2" marker-end="url(#arrow)"></path>
+
+      <a href="#stop-program">
+        <rect x="70" y="36" width="210" height="84" rx="12" fill="#d7e6f8" stroke="#1d4e89" stroke-width="2"></rect>
+        <text x="175" y="70" text-anchor="middle" font-size="18">.fen source</text>
+        <text x="175" y="94" text-anchor="middle" font-size="13" fill="#5c564c">examples/ or your file</text>
+      </a>
+      <a href="#stop-frontend">
+        <rect x="340" y="36" width="280" height="84" rx="11" fill="#e7dff8" stroke="#53378a" stroke-width="2"></rect>
+        <text x="480" y="66" text-anchor="middle" font-size="18">frontend</text>
+        <text x="480" y="90" text-anchor="middle" font-size="13" fill="#5c564c">reader · elaborate · validate</text>
+      </a>
+      <a href="#stop-frontend">
+        <rect x="680" y="36" width="210" height="84" rx="13" fill="#f6e7c1" stroke="#8a5a10" stroke-width="2"></rect>
+        <text x="785" y="70" text-anchor="middle" font-size="18">artifact JSON</text>
+        <text x="785" y="94" text-anchor="middle" font-size="13" fill="#5c564c">the shared bytes</text>
+      </a>
+      <a href="#stop-model">
+        <rect x="48" y="210" width="400" height="128" rx="14" fill="#d5f0de" stroke="#1c6b3a" stroke-width="2"></rect>
+        <text x="248" y="252" text-anchor="middle" font-size="18">models/tc1</text>
+        <text x="248" y="278" text-anchor="middle" font-size="14" fill="#5c564c">handler machine, then tasks</text>
+        <text x="248" y="302" text-anchor="middle" font-size="14" fill="#5c564c">one step, then an observation</text>
+      </a>
+      <a href="#stop-compiler">
+        <rect x="512" y="210" width="400" height="128" rx="12" fill="#f8dcc8" stroke="#8d3d12" stroke-width="2"></rect>
+        <text x="712" y="246" text-anchor="middle" font-size="18">backends/arm64</text>
+        <text x="712" y="272" text-anchor="middle" font-size="14" fill="#5c564c">the same bytes, as ARM64</text>
+        <text x="712" y="296" text-anchor="middle" font-size="14" fill="#5c564c">runtime/native · macOS or Solo5</text>
+      </a>
+      <a href="#stop-harness">
+        <rect x="220" y="408" width="520" height="78" rx="13" fill="#f8d4dc" stroke="#8d2438" stroke-width="2"></rect>
+        <text x="480" y="440" text-anchor="middle" font-size="18">harness · Gleipnir</text>
+        <text x="480" y="464" text-anchor="middle" font-size="14" fill="#5c564c">compare observations, keep the first difference</text>
+      </a>
+    </svg>
+    <figcaption>Validate sits inside the frontend stop. It accepts or rejects the artifact. It does not produce a second one.</figcaption>
+  </figure>
+
+  <h2>Two hosted paths</h2>
+  <p class="deck">Both use Erlang. They are not the same program. <code>host/service</code> commits a durable job. <code>supervisor/</code> carries remote messages between images.</p>
+  <div class="lanes">
+    <a class="lane job" href="#stop-service">
+      <h3>Durable job</h3>
+      <ol>
+        <li><span class="dot"></span><code>examples/service/accepted-job.fen</code></li>
+        <li><span class="dot"></span>same frontend, Solo5 worker</li>
+        <li><span class="dot"></span><code>host/service</code> — OTP, SQLite <code>Store.commit</code></li>
+        <li><span class="dot"></span><code>models/service/accepted-job.shen</code> accepts the history</li>
+      </ol>
+    </a>
+    <a class="lane remote" href="#stop-remote">
+      <h3>Remote perform</h3>
+      <ol>
+        <li><span class="dot"></span>caller image and peer image</li>
+        <li><span class="dot"></span><code>supervisor/</code> — outside the images, carries every message</li>
+        <li><span class="dot"></span>reply, not delivered, or timed out</li>
+        <li><span class="dot"></span><code>models/tc1/remote-system.shen</code></li>
+      </ol>
+    </a>
+  </div>
+
+  <h2>The path</h2>
+  <div class="layout">
+    <nav class="toc" aria-label="Stops">
+      <a href="#stop-claim">1. The claim</a>
+      <a href="#stop-program">2. A program</a>
+      <a href="#stop-spec">3. The spelling</a>
+      <a href="#stop-frontend">4. The bytes</a>
+      <a href="#stop-model">5. The rules</a>
+      <a href="#stop-compiler">6. The machine</a>
+      <a href="#stop-cli">7. The fork</a>
+      <a href="#stop-harness">8. A disagreement</a>
+      <a href="#stop-service">9. The job</a>
+      <a href="#stop-remote">10. Remote</a>
+      <a href="#stop-direction">11. What is settled</a>
+    </nav>
+    <div>
+      <section class="stop" id="stop-claim">
+        <p class="kicker">Stop 1</p>
+        <h3>The claim</h3>
+        <p>Two runs can return the same value and still disagree. In the cancellation example both sides return 42. Before the fix, the native runtime also emitted <code>child</code>. The harness compares the ordered events, not only the answer.</p>
+        <ul class="files">
+          <li><a href="../README.md">README.md</a></li>
+          <li><a href="../tests/native/discontinue-joins-child.fen">tests/native/discontinue-joins-child.fen</a></li>
+        </ul>
+      </section>
+      <section class="stop" id="stop-program">
+        <p class="kicker">Stop 2</p>
+        <h3>A program you can hold</h3>
+        <p><code>main</code> is the entry point. This one sums 1 through its input, unless the input is above 500. The other short files in <code>examples/</code> are arithmetic, closures, and handlers. Leave <code>examples/service</code> and <code>examples/remote</code> until the pipeline is familiar.</p>
+        <ul class="files">
+          <li><a href="../examples/recursive-sum.fen">examples/recursive-sum.fen</a></li>
+        </ul>
+      </section>
+      <section class="stop" id="stop-spec">
+        <p class="kicker">Stop 3</p>
+        <h3>How the text is spelled</h3>
+        <p>The surface is a draft. It elaborates into a versioned artifact schema. What a program means is the Shen model. The standalone profile allows 16 live child tasks.</p>
+        <ul class="files">
+          <li><a href="../spec/tc1/SURFACE.md">spec/tc1/SURFACE.md</a></li>
+          <li><a href="../spec/tc1/EFFECTS.md">spec/tc1/EFFECTS.md</a></li>
+          <li><a href="../spec/tc1/CONCURRENCY.md">spec/tc1/CONCURRENCY.md</a></li>
+          <li><a href="../spec/native/standalone-v1.json">spec/native/standalone-v1.json</a></li>
+        </ul>
+      </section>
+      <section class="stop" id="stop-frontend">
+        <p class="kicker">Stop 4</p>
+        <h3>Text becomes bytes</h3>
+        <p>The header of <code>main.shen</code> is the contract of the pipeline: the elaborator writes an artifact, a JavaScript validator judges those exact bytes, and the model runs what it decodes from the same bytes. Nothing in the frontend interprets a program. <code>typing/</code> is a separate Shen checker, used only when <code>FENRIR_REQUIRE_SHEN_TYPING=1</code>.</p>
+        <ul class="files">
+          <li><a href="../frontend/fenrir.sh">frontend/fenrir.sh</a></li>
+          <li><a href="../frontend/main.shen">frontend/main.shen</a></li>
+          <li><a href="../frontend/reader.shen">frontend/reader.shen</a></li>
+          <li><a href="../frontend/elaborate.shen">frontend/elaborate.shen</a></li>
+          <li><a href="../frontend/validate.mjs">frontend/validate.mjs</a></li>
+        </ul>
+      </section>
+      <section class="stop" id="stop-model">
+        <p class="kicker">Stop 5</p>
+        <h3>The rules</h3>
+        <p>Read the two headers and stop. The task machine adds scopes, channels, and cancellation on top of the handler machine. A step that is not one of those is the handler machine’s own step. A schedule is an input: one step runs the task it is given. <code>models/tc0</code> is the earlier pure-call machine, including decimal I64 arithmetic. Open it when a TC0 gate is the question.</p>
+        <ul class="files">
+          <li><a href="../models/tc1/handler-machine.shen">models/tc1/handler-machine.shen</a></li>
+          <li><a href="../models/tc1/task-machine.shen">models/tc1/task-machine.shen</a></li>
+        </ul>
+      </section>
+      <section class="stop" id="stop-compiler">
+        <p class="kicker">Stop 6</p>
+        <h3>The other reader</h3>
+        <p><code>emit.shen</code> parses the artifact and selects ARM64 instructions. The C runtime is the heap, the managed collector, and the scheduler. <code>bin/fenrir</code> calls <code>tools/aarch64/native-image.sh</code>, then clang for macOS, or a Solo5 link inside Docker when the host is not Linux ARM64.</p>
+        <ul class="files">
+          <li><a href="../backends/arm64/emit.shen">backends/arm64/emit.shen</a></li>
+          <li><a href="../runtime/native/scheduler.c">runtime/native/scheduler.c</a></li>
+          <li><a href="../tools/aarch64/native-image.sh">tools/aarch64/native-image.sh</a></li>
+        </ul>
+      </section>
+      <section class="stop" id="stop-cli">
+        <p class="kicker">Stop 7</p>
+        <h3>One CLI, then a fork</h3>
+        <p><code>model</code>, <code>check</code>, and <code>build</code> all emit an artifact first. <code>model</code> runs it on the Shen machine. <code>check</code> stops once the program lowers for the target. <code>build</code> assembles and links. <code>run</code> builds, then executes. Record and replay go through <code>tools/aarch64/native-replay.py</code>.</p>
+        <ul class="files">
+          <li><a href="../bin/fenrir">bin/fenrir</a></li>
+        </ul>
+      </section>
+      <section class="stop" id="stop-harness">
+        <p class="kicker">Stop 8</p>
+        <h3>Where a disagreement is kept</h3>
+        <p>The harness and the model share one Shen process. A useful failure is a small program, a schedule, and the first observation that differs. Native regressions are <code>.fen</code> files under <code>tests/native</code>.</p>
+        <ul class="files">
+          <li><a href="../harness/README.md">harness/README.md</a></li>
+          <li><a href="../tests/native/discontinue-joins-child.fen">tests/native/discontinue-joins-child.fen</a></li>
+        </ul>
+      </section>
+      <section class="stop" id="stop-service">
+        <p class="kicker">Stop 9</p>
+        <h3>The durable job</h3>
+        <p>The worker describes the writes. The OTP host authenticates the tenant and commits them in one SQLite transaction. On a retry with the same digest the model returns the original receipt. This host is <code>host/service</code>, not <code>supervisor/</code>.</p>
+        <ul class="files">
+          <li><a href="PREVIEW.md">docs/PREVIEW.md</a></li>
+          <li><a href="../examples/service/accepted-job.fen">examples/service/accepted-job.fen</a></li>
+          <li><a href="../host/service/README.md">host/service/README.md</a></li>
+          <li><a href="../models/service/accepted-job.shen">models/service/accepted-job.shen</a></li>
+          <li><a href="../spec/service/HANDLER.md">spec/service/HANDLER.md</a></li>
+        </ul>
+      </section>
+      <section class="stop" id="stop-remote">
+        <p class="kicker">Stop 10</p>
+        <h3>Remote perform</h3>
+        <p>A system is one image per member plus this supervisor, which sits outside the images and carries every message. A remote operation returns a reply, <code>not_delivered</code>, or <code>timed_out</code>. The model of that system is <code>remote-system.shen</code>.</p>
+        <ul class="files">
+          <li><a href="../supervisor/README.md">supervisor/README.md</a></li>
+          <li><a href="../models/tc1/remote-system.shen">models/tc1/remote-system.shen</a></li>
+          <li><a href="../examples/remote/ledger-caller.fen">examples/remote/ledger-caller.fen</a></li>
+        </ul>
+      </section>
+      <section class="stop" id="stop-direction">
+        <p class="kicker">Stop 11</p>
+        <h3>What is settled</h3>
+        <p>Sections 1 and 2 of the direction amendment are enough. Where that file conflicts with the full vision or the phased plan on direction, it is the newer statement. The tiny-language document remains the TC0 contract. History, campaigns, and performance dumps are records of a date, not the map.</p>
+        <ul class="files">
+          <li><a href="design/04_DIRECTION_AMENDMENT.md">docs/design/04_DIRECTION_AMENDMENT.md</a></li>
+          <li><a href="NATIVE_GUIDE.md">docs/NATIVE_GUIDE.md</a></li>
+        </ul>
+      </section>
+    </div>
+  </div>
+
+  <h2>Where a directory sits</h2>
+  <p class="deck">The color on each room matches the diagram. The grey room is the record of later work.</p>
+  <div class="rooms">
+    <article class="room">
+      <div class="swatch s-blue"></div>
+      <h3>Read a program</h3>
+      <ul>
+        <li><a href="../README.md">README.md</a></li>
+        <li><a href="PREVIEW.md">docs/PREVIEW.md</a></li>
+        <li><a href="../examples/recursive-sum.fen">examples/</a> — short programs first</li>
+        <li><a href="../spec/tc1/SURFACE.md">spec/tc1</a> — surface, effects, tasks, durable</li>
+      </ul>
+    </article>
+    <article class="room">
+      <div class="swatch s-violet"></div>
+      <h3>Make the bytes</h3>
+      <p>Elaborate, then an independent check.</p>
+      <ul>
+        <li><a href="../frontend/main.shen">frontend/</a></li>
+        <li><a href="../typing/validate.shen">typing/</a> — optional Shen checker</li>
+      </ul>
+    </article>
+    <article class="room">
+      <div class="swatch s-green"></div>
+      <h3>What it means</h3>
+      <ul>
+        <li><a href="../models/tc1/task-machine.shen">models/tc1</a> — handlers, tasks, remote</li>
+        <li><a href="../models/service/accepted-job.shen">models/service</a> — the job contract as steps</li>
+        <li><a href="../models/tc0/i64.shen">models/tc0</a> — earlier machine, when you need it</li>
+      </ul>
+    </article>
+    <article class="room">
+      <div class="swatch s-rust"></div>
+      <h3>Make a machine</h3>
+      <ul>
+        <li><a href="../backends/arm64/emit.shen">backends/arm64</a></li>
+        <li><a href="../runtime/native/scheduler.c">runtime/native</a></li>
+        <li><a href="../tools/aarch64/native-image.sh">tools/aarch64</a></li>
+        <li><a href="../bin/fenrir">bin/fenrir</a></li>
+      </ul>
+    </article>
+    <article class="room">
+      <div class="swatch s-rose"></div>
+      <h3>Did they agree</h3>
+      <ul>
+        <li><a href="../harness/README.md">harness/</a> — Gleipnir</li>
+        <li><a href="../tests/native/discontinue-joins-child.fen">tests/native</a></li>
+        <li><a href="../fixtures/tc1/handler-hand-cases.mjs">fixtures/</a></li>
+      </ul>
+    </article>
+    <article class="room">
+      <div class="swatch s-teal"></div>
+      <h3>Hosts</h3>
+      <p>A job commit, and messages between images.</p>
+      <ul>
+        <li><a href="../host/service/README.md">host/service</a> — durable job, SQLite</li>
+        <li><a href="../supervisor/README.md">supervisor/</a> — remote messages between images</li>
+        <li><a href="../benchmarks/prover/README.md">benchmarks/</a> — prover, HTTP, framed log, durable</li>
+      </ul>
+    </article>
+    <article class="room later">
+      <div class="swatch s-quiet"></div>
+      <h3>After the pipeline is familiar</h3>
+      <ul>
+        <li><a href="NATIVE_GUIDE.md">docs/NATIVE_GUIDE.md</a> — build on a Mac, including Solo5</li>
+        <li><a href="WORK_FILE.md">docs/WORK_FILE.md</a> — alpha plan and scorecards</li>
+        <li><a href="design/04_DIRECTION_AMENDMENT.md">docs/design/04_DIRECTION_AMENDMENT.md</a> — current direction</li>
+        <li><a href="../verification/backend-migration/README.md">verification/backend-migration</a> — Shen versus the old backend</li>
+        <li><a href="history/DEVELOPMENT_HISTORY.md">docs/history</a>, <a href="../campaigns/RECONCILIATION_2026-11.md">campaigns/</a>, <a href="../verification/performance/2026-11-22-arm64/validated-package-kernel-rescore.json">verification/performance</a> — a date or a measurement</li>
+      </ul>
+    </article>
+    <article class="room later">
+      <div class="swatch s-sand"></div>
+      <h3>Older on purpose</h3>
+      <p>TC0 still has gates and evidence. It is not the front door.</p>
+      <ul>
+        <li><a href="design/02_TINY_LANGUAGE_CORE.md">docs/design/02_TINY_LANGUAGE_CORE.md</a> — TC0 contract</li>
+        <li><a href="design/01_FULL_VISION.md">docs/design/01_FULL_VISION.md</a> and <a href="design/03_PHASED_EXECUTION_PLAN.md">03_PHASED_EXECUTION_PLAN.md</a> — older direction; 04 wins on conflict</li>
+        <li><a href="../models/compiler/README.md">models/compiler</a> — constructor-reuse experiment</li>
+      </ul>
+    </article>
+  </div>
+
+  <details>
+    <summary>The same diagrams as Mermaid</summary>
+    <pre>flowchart TD
+  src[".fen source"] --&gt; reader["frontend/reader.shen"]
+  reader --&gt; elab["frontend/elaborate.shen"]
+  elab --&gt; art["artifact JSON"]
+  art --&gt; val["frontend/validate.mjs"]
+  art --&gt; model["models/tc1"]
+  art --&gt; arm["backends/arm64"]
+  arm --&gt; rt["runtime/native"]
+  rt --&gt; mac["macOS ARM64 executable"]
+  rt --&gt; solo["Solo5 guest image"]
+  model --&gt; harness["harness"]
+  mac --&gt; harness
+  solo --&gt; harness</pre>
+  </details>
+</div>
+</body>
+</html>

@@ -6,9 +6,11 @@ Fenrir is an experimental, statically typed functional language that compiles ah
 
 The idea is to develop applications and their semantics together. Write down what a program should do, compile it, and compare what happened with what the rules permit. When the two disagree, the most useful bug report is a small program, the choices that led to the failure, and the first observable difference. An implementation agent can use that same evidence to check a repair.
 
-[Build a native program](#build-a-native-arm64-program) · [Walk through a service](docs/PREVIEW.md) · [Explore the models](models/tc1)
+[Walk the repository](docs/WALKTHROUGH.md) · [Build a native program](#build-a-native-arm64-program) · [Walk through a service](docs/PREVIEW.md) · [Explore the models](models/tc1)
 
 ## How Fenrir is built and checked
+
+The directories are stages of one pipeline. [Walk the repository](docs/WALKTHROUGH.md) is a reading order and a map of those stages. Open [the drawn map](docs/walkthrough.html) in a browser if you want the same path as a picture.
 
 1. **Read the source.** The frontend is written in Shen. It reads a `.fen` file, resolves names, checks types and effects, and emits a JSON representation of the program. Source locations travel with it so a trap can point back to the expression that caused it. [Frontend](frontend)
 2. **Run the rules or build an executable.** Two independent Shen implementations read the validated program. The model executes its rules one step at a time. The compiler selects ARM64 instructions and emits assembly. The target toolchain assembles and links that code with the C runtime to produce a Mac executable or a Solo5 guest image. The standalone profile specifies the entry point and resource limits. [Models](models/tc1) · [Compiler](backends/arm64) · [Runtime](runtime/native) · [Execution profile](spec/native/standalone-v1.json)
