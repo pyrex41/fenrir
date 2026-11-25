@@ -12,6 +12,16 @@ The idea is to develop applications and their semantics together. Write down wha
 
 The directories are stages of one pipeline. [Walk the repository](docs/WALKTHROUGH.md) is a reading order and a map of those stages. Open [the drawn map](docs/walkthrough.html) in a browser if you want the same path as a picture.
 
+```mermaid
+flowchart TD
+  fen[".fen"] --> frontend["frontend"]
+  frontend --> artifact["artifact JSON"]
+  artifact --> model["Shen model"]
+  artifact --> native["ARM64 image"]
+  model --> harness["harness compares them"]
+  native --> harness
+```
+
 1. **Read the source.** The frontend is written in Shen. It reads a `.fen` file, resolves names, checks types and effects, and emits a JSON representation of the program. Source locations travel with it so a trap can point back to the expression that caused it. [Frontend](frontend)
 2. **Run the rules or build an executable.** Two independent Shen implementations read the validated program. The model executes its rules one step at a time. The compiler selects ARM64 instructions and emits assembly. The target toolchain assembles and links that code with the C runtime to produce a Mac executable or a Solo5 guest image. The standalone profile specifies the entry point and resource limits. [Models](models/tc1) · [Compiler](backends/arm64) · [Runtime](runtime/native) · [Execution profile](spec/native/standalone-v1.json)
 3. **Compare executions.** Gleipnir explores bounded sets of programs and schedules, checks observations against the model, and retains counterexamples for replay. The harness also runs deliberately broken implementations to check whether its tests can detect the difference. [Gleipnir harness](harness/README.md)
